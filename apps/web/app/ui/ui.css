@@ -48,7 +48,6 @@
 /* Matches the height of the plain selects beside it, so a row of filters is a
    row rather than a row with one taller thing in it. */
 .asset-filters .search-select-trigger { min-height: 32px; padding: 6px 8px; border-color: var(--line); font-size: 12px; }
-.asset-filters select { width: 100%; min-width: 0; min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 8px; color: var(--text); background: var(--panel); font: inherit; }
 /* The search takes what is left of the row, since a title is longer than a
  * facet name and truncating it hides the thing being searched for. */
 .asset-filter-search { flex: 3 1 220px; }
@@ -285,9 +284,9 @@ a.ui-button { text-decoration: none; }
 .ui-field-label i { color: var(--muted); font-style: normal; font-size: 11px; font-weight: 400; }
 .ui-field-note { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
 .ui-field-row { display: flex; gap: 6px; }
-.ui-field-row > input, .ui-field-row > select { flex: 1 1 auto; min-width: 0; }
-.ui-field > input, .ui-field > select, .ui-field > textarea,
-.ui-field-row > input, .ui-field-row > select {
+.ui-field-row > input { flex: 1 1 auto; min-width: 0; }
+.ui-field > input, .ui-field > textarea,
+.ui-field-row > input {
   width: 100%;
   min-height: 34px;
   border: 1px solid var(--line-strong);
@@ -298,7 +297,7 @@ a.ui-button { text-decoration: none; }
   font: inherit;
 }
 .ui-field > textarea { min-height: 88px; resize: vertical; }
-.ui-field :is(input, select, textarea):focus-visible { outline: 2px solid var(--green); outline-offset: -1px; border-color: var(--green); }
+.ui-field :is(input, textarea):focus-visible { outline: 2px solid var(--green); outline-offset: -1px; border-color: var(--green); }
 
 /* --- choice row ------------------------------------------------------------ */
 .ui-choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

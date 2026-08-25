@@ -252,7 +252,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .console-heading { display: flex; justify-content: space-between; gap: 32px; align-items: end; padding: 16px 16px 16px; background: var(--panel); border-bottom: 1px solid var(--line); margin-bottom: 24px; }
 .console-heading > div > p:last-child { margin: 0; color: var(--muted); }
 .section-kicker, .step-label { margin: 0; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-.field-label input, .field-label select, .field-label textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 12px; background: var(--panel); color: var(--text); }
+.field-label input, .field-label textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 12px; background: var(--panel); color: var(--text); }
 
 .pipeline-steps { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
 .pipeline-steps > * { display: flex; align-items: center; gap: 11px; min-height: 56px; padding: 12px 16px; border-inline-end: 1px solid var(--line); color: var(--muted); text-decoration: none; }
@@ -277,7 +277,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .source-tabs small { margin-inline-start: 4px; color: var(--muted); font-size: 11px; font-weight: normal; }
 .field-label { display: grid; gap: 6px; color: var(--text); font-size: 12px; font-weight: 500; }
 .field-label textarea { resize: vertical; min-height: 120px; line-height: 1.5; font-family: monospace; }
-.field-label input:focus, .field-label select:focus, .field-label textarea:focus { outline: none; border-color: var(--link); box-shadow: 0 0 0 2px rgba(56, 88, 152, 0.2); }
+.field-label input:focus, .field-label textarea:focus { outline: none; border-color: var(--link); box-shadow: 0 0 0 2px rgba(56, 88, 152, 0.2); }
 .compact-fields { display: grid; grid-template-columns: 1fr 150px; gap: 12px; margin: 16px 0; }
 .acquire-card > .ui-button { width: 100%; margin-top: 8px; }
 .rights-note { display: block; margin-top: 12px; color: var(--muted); text-align: center; font-size: 11px; }
@@ -582,7 +582,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .query-mode-switch button.selected, .feed-filter button.selected { color: var(--green); background: var(--panel); box-shadow: 0 1px 4px rgba(28, 43, 51, .12); }
 .research-query-form { display: grid; grid-template-columns: minmax(0, 1fr) 150px 150px; gap: 10px; align-items: end; }
 .research-query-form label, .research-advanced label, .account-validation-form label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .035em; text-transform: uppercase; }
-.research-query-form input, .research-query-form select, .research-advanced select, .account-validation-form input, .account-validation-form select { width: 100%; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 9px 11px; color: var(--text); background: var(--panel); font: inherit; font-size: 13px; letter-spacing: normal; text-transform: none; }
+.research-query-form input, .account-validation-form input { width: 100%; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 9px 11px; color: var(--text); background: var(--panel); font: inherit; font-size: 13px; letter-spacing: normal; text-transform: none; }
 .research-query-form > label:first-child input { font-size: 15px; }
 .research-run-button, .account-validation-form button { min-height: 34px; border: 1px solid var(--green); border-radius: var(--radius-sm); padding: 9px 14px; color: white; background: var(--green); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
 .research-run-button:disabled, .account-validation-form button:disabled { border-color: var(--line); background: var(--muted); cursor: not-allowed; opacity: .6; }
@@ -686,7 +686,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .campaign-create summary, .plan-create summary { color: var(--link); font-weight: 600; cursor: pointer; }
 .campaign-create form, .plan-create form { display: grid; gap: 10px; margin-top: 14px; }
 .campaign-create label, .plan-create label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
-.campaign-create input, .campaign-create textarea, .plan-create input, .plan-create textarea, .plan-create select { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); }
+.campaign-create input, .campaign-create textarea, .plan-create input, .plan-create textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); }
 .campaign-workspace { display: grid; gap: 16px; min-width: 0; }
 .campaign-summary { display: flex; justify-content: space-between; gap: 24px; padding: 14px; }
 .campaign-summary p { margin: 6px 0; color: var(--muted); }
@@ -827,7 +827,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .download-options summary span { color: var(--muted); font-weight: 400; }
 .download-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 0 12px; }
 .download-options-grid label { display: grid; gap: 6px; font-weight: 600; }
-.download-options-grid select { min-height: 34px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 10px; color: var(--text); background: var(--panel); }
 .download-options fieldset { min-width: 0; margin: 0; border: 0; padding: 0; }
 .download-options legend { margin-bottom: 6px; font-weight: 600; }
 .limit-presets { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); }
@@ -1067,7 +1066,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
 .autopilot-settings { display: grid; gap: 12px; }
 .autopilot-settings > label, .autopilot-numbers > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
-.autopilot-settings input, .autopilot-settings select, .autopilot-numbers input, .autopilot-numbers select { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
+.autopilot-settings input, .autopilot-numbers input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
 .autopilot-settings small, .autopilot-numbers small { color: var(--muted); font-weight: 400; line-height: 1.4; }
 /* Three shared rows - caption, control, help - so the controls sit on one line
    however many lines the captions around them take. Each cell used to stack
@@ -1099,7 +1098,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-product-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .campaign-product-controls > input[type="search"] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 7px 9px; font: inherit; font-size: 11px; }
 .campaign-product-controls > label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 10px; font-weight: 600; }
-.campaign-product-controls select { border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px; font: inherit; font-size: 11px; }
 /* Count, selection and paginator on one line: each is a few words about the
    list, and none of them earns a row of its own. */
 .campaign-product-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block-end: 2px; border-block-end: 1px solid var(--line); }
@@ -1391,24 +1389,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* Styled like the search-select trigger, so every dropdown in the app is the
    same object: flat field, soft border, its own chevron instead of the
    platform's. */
-.autopilot-placement-choice select {
-  max-width: 250px;
-  min-height: 30px;
-  padding: 5px 28px 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--panel) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23667085' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 10px center;
-  font: inherit;
-  font-size: 12px;
-  appearance: none;
-  cursor: pointer;
-  transition: border-color 120ms ease;
-}
-.autopilot-placement-choice select:hover { border-color: color-mix(in srgb, var(--link) 45%, var(--line-strong)); }
-.autopilot-placement-choice select:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; border-color: var(--link); }
-[dir="rtl"] .autopilot-placement-choice select { padding: 5px 10px 5px 28px; background-position: left 10px center; }
-
 /* Named posting presets are only useful when their real wall-clock times are
    available at the decision. A small leading disclosure keeps the menu terse;
    hover/focus previews it, while tap pins it until outside click or Escape. */
@@ -1747,8 +1727,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-sidebar .card-heading { padding: 2px 4px 8px; }
 .campaign-sidebar .card-heading { align-items: end; gap: 8px; }
 .campaign-scope-filter { min-width: 0; }
-.campaign-scope-filter select { width: 100%; max-width: 112px; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 4px 24px 4px 8px; color: var(--text); background: var(--panel); font: inherit; font-size: 11px; }
-.campaign-scope-filter select:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .campaign-sidebar > .ui-button { width: 100%; margin-top: 10px; }
 .campaign-list { gap: 3px; }
 .campaign-list > button { min-height: 52px; border-color: transparent; border-radius: var(--radius); padding: 8px 10px; }
@@ -1859,7 +1837,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* The same flat field with its own chevron the rest of the app's dropdowns
    use, rather than the platform's control, which is a different height and a
    different grey beside the inputs next to it. */
-.campaign-dialog-form select { appearance: none; padding-inline-end: 30px; background: var(--panel) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23667085' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 10px center; }
 .campaign-dialog-form label > small { color: var(--muted); font-weight: 400; line-height: 1.45; }
 /* The typed alternative sits under the list it belongs to. */
 .campaign-dialog-form textarea { resize: vertical; }
@@ -1910,7 +1887,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .campaign-layout, .campaign-workspace, .campaign-summary, .autopilot,
   .campaign-one-off-handoff, .autopilot-run-row, .autopilot-delivery { min-inline-size: 0; }
   .autopilot-delivery { display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; }
-  .autopilot-delivery select { inline-size: 100%; min-inline-size: 0; }
   .campaign-dialog-grid { grid-template-columns: 1fr; }
   .campaign-media-grid { grid-template-columns: 1fr; }
   .campaign-work-tabs { flex-wrap: nowrap; }
@@ -1941,15 +1917,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .autopilot-delivery { display: flex; align-items: center; gap: 8px; margin: 0; }
 .autopilot-delivery > span { color: var(--muted); font-size: 13px; font-weight: 600; }
-.autopilot-delivery select {
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: inherit;
-  font: inherit;
-}
-
 /* Keep the paired selectors inside the mobile card. This must follow the
    desktop flex rule above so the cascade cannot restore their min-content
    width after the narrow-screen layout has already opted into stacking. */
@@ -2045,11 +2012,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 }
 .autopilot-destinations li > .autopilot-destination-controls .ui-select,
 .autopilot-destinations li > .autopilot-destination-controls .posting-preset-select,
-.autopilot-destinations li > .autopilot-destination-controls select {
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-}
 .autopilot-schedule-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .autopilot-schedule-reason strong { color: var(--ink); font-weight: 600; }
 .campaign-account-schedule { color: var(--muted); }

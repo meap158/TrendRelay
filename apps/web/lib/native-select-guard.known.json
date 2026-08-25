@@ -1,0 +1,10 @@
+[
+  "discover.css: .discovery-feed-controls select",
+  "discover.css: .popular-posts-filters select",
+  "styles.css: .research-form input, .research-form select, .research-form button",
+  "styles.css: .auth-card input, .stack-form input, .stack-form select",
+  "styles.css: .publish-form input, .publish-form select, .publish-form textarea",
+  "styles.css: .publish-form .slot-add input, .publish-form .slot-add select",
+  "styles.css: .publish-page button:focus-visible, .publish-page a:focus-visible, .publish-page input:focus-visible, .publish-page textarea:focus-visible, .publish-page select:focus-visible",
+  "styles.css: .engine-login-name select"
+]

@@ -8,7 +8,7 @@
 .library-heading > div > p:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-heading p { margin: 0; color: var(--muted); }
 .library-heading label { display: grid; gap: 5px; min-width: 230px; color: var(--muted); font-size: 11px; font-weight: 600; }
-.library-heading select, .library-search input, .library-search select, .library-import input, .library-import textarea, .library-import select, .library-compact-form input, .library-compact-form textarea, .library-compact-form select, .library-enrichment input, .library-enrichment textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
+.library-search input, .library-import input, .library-import textarea, .library-compact-form input, .library-compact-form textarea, .library-enrichment input, .library-enrichment textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
 .library-status-dots { display: flex; gap: 3px; align-items: center; }
 .library-status-dot { position: relative; display: grid; width: 20px; height: 20px; place-items: center; border-radius: var(--radius-sm); cursor: help; }
 .library-status-dot.ready { color: var(--green); background: var(--green-dark); }
@@ -269,7 +269,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-category-tabs button.selected { color: var(--on-ink); background: var(--text); }
 .library-category-tabs button span { margin-inline-start: 3px; color: inherit; opacity: 0.68; font-size: 9px; font-variant-numeric: tabular-nums; }
 .library-category-bar label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 600; }
-.library-category-bar select { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 7px; color: var(--text); background: var(--panel); font: inherit; }
 .library-collection-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
 .library-collection-toolbar > strong { color: var(--muted); font-size: 11px; font-weight: 600; }
 .library-collection-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
@@ -346,7 +345,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .library-category-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; overflow: visible; }
   .library-category-tabs button { min-width: 0; }
   .library-category-bar label { justify-content: space-between; }
-  .library-category-bar select { min-width: 120px; }
   .library-browser-toolbar > [role="group"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .library-browser-toolbar > [role="group"] label { min-width: 0; }
   .library-collection-toolbar { align-items: stretch; flex-direction: column; gap: 7px; }
@@ -359,7 +357,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .library-category-tabs { gap: 4px; }
   .library-category-tabs button { min-height: 34px; border-radius: var(--radius); padding-inline: 6px; }
   .library-category-bar label { min-height: 34px; }
-  .library-category-bar select { flex: 1; min-height: 34px; }
   .library-collection-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
   .library-collection-actions .ui-segmented button { width: 40px; min-width: 40px; height: 40px; }
 }
@@ -389,7 +386,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .blur-actions button { min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0 12px; color: var(--text); background: var(--panel); font: inherit; cursor: pointer; }
 .blur-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .blur-use { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
-.blur-use select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; font: inherit; }
 .blur-use small { color: var(--muted); font-weight: 400; line-height: 1.45; }
 .blur-result { display: grid; gap: 5px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 12px; }
 .blur-result small { color: var(--muted); }
@@ -595,7 +591,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .effect-param { display: grid; gap: 4px; min-width: 0; }
 .effect-param > span { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; color: var(--muted); font-size: 11px; font-weight: 600; }
 .effect-param > span b { color: var(--text); font-variant-numeric: tabular-nums; }
-.effect-param select { width: 100%; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
 .effect-param input[type="range"] { width: 100%; }
 .effect-param small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .effect-param-toggle { grid-template-columns: auto 1fr; align-items: center; }
@@ -755,7 +750,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* Only the select's label grows: the upload control is a label too, and this
    is what keeps it the fixed icon button it is drawn as. */
 .overlay-import label:not(.overlay-upload) { flex: 1; min-width: 0; }
-.overlay-import select { width: 100%; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
 .overlay-skipped { display: block; margin-top: 3px; color: var(--bad); }
 
 /* The control that stands in for a dropdown in the recipe: what is on the face
@@ -909,7 +903,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-place-fields label[data-off] { opacity: .5; }
 .caption-place-fields input { width: 100%; min-width: 0; min-height: 30px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
 .caption-place-fields .ui-select { min-inline-size: 0; }
-.caption-place-fields .search-select-trigger { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 5px 7px; font-size: 12px; }
+.caption-place-fields { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 5px 7px; }
 .caption-place-fields .ui-button { flex: 0 0 auto; }
 .caption-look { display: inline-block; max-width: 92%; color: white; line-height: 1.12; text-align: center; white-space: normal; overflow-wrap: anywhere; paint-order: stroke fill; }
 .caption-look-line { display: block; }
@@ -1001,12 +995,18 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
  * it. A dialog switches to `overflow: visible` while a popover is open, so
  * that is the moment the excess became visible. */
 .caption-editor-language .ui-select, .caption-editor-source .ui-select { max-inline-size: 420px; }
-.caption-editor-language .search-select-trigger, .caption-editor-source .search-select-trigger { --search-select-trigger-padding: 7px 9px; font-size: 13px; }
+.caption-editor-language, .caption-editor-source { --search-select-trigger-padding: 7px 9px; }
 .caption-editor-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 /* One line per choice: the label a quiet caption, the control carrying the
    value - the same shape as the Deliver control in the footer. */
-.caption-cover-row { display: flex; align-items: center; gap: 8px; min-inline-size: 0; margin-top: 8px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.caption-cover-row > span { flex: none; }
+/* The uppercase label styling sits on the label, not on the row.
+ *
+ * On the row it inherited into the dropdown beside it, which then needed three
+ * declarations undoing it - and undoing them meant naming a shared component's
+ * class from a page stylesheet, which is the collision `stylesheet-scope`
+ * exists to catch. Styling only what this file owns removes the need. */
+.caption-cover-row { display: flex; align-items: center; gap: 8px; min-inline-size: 0; margin-top: 8px; font-size: 12px; }
+.caption-cover-row > span { font-size: 11px; flex: none; color: var(--muted); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 /* `flex: 1` already asks it to take the space left over; `min-inline-size: 0`
    is what lets it give space back. Without the second half the widest option
    is a floor, and `max-width` only caps the other end. */
@@ -1014,7 +1014,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    lets it give space back; the cap stops it taking the whole row when there is
    room. The trigger's own text already truncates with an ellipsis. */
 .caption-cover-row .ui-select { flex: 1; min-inline-size: 0; max-inline-size: 300px; }
-.caption-cover-row .search-select-trigger { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 6px 8px; color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+/* Set on the row, which this file owns, and inherited down: they are the
+   component's own hooks, so nothing here has to name its classes. */
+.caption-cover-row { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 6px 8px; }
 .caption-editor-problem { margin: 0 0 8px; color: var(--bad); font-size: 12px; }
 
 /* The cue list is the preview. Times and reading speed are fixed columns so
@@ -1042,9 +1044,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .caption-media-preview { position: static; }
   .caption-media-frame, .caption-media-frame video, .caption-media-placeholder, .caption-audio-preview { min-height: 300px; }
 }
-.caption-delivery { display: inline-flex; align-items: center; gap: 7px; margin-inline-end: auto; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.caption-delivery { display: inline-flex; align-items: center; gap: 7px; margin-inline-end: auto; font-size: 12px; --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 6px 8px; }
+.caption-delivery > span { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .caption-delivery .ui-select { min-inline-size: 0; max-inline-size: 300px; }
-.caption-delivery .search-select-trigger { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 6px 8px; color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+
 .caption-editor-queued { margin: 0 0 8px; color: var(--link); font-size: 12px; }
 .caption-file-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .caption-file-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: var(--radius); }
