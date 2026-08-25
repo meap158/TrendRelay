@@ -1384,6 +1384,7 @@ export const en = {
     noWebgl: "This browser cannot show the 3D view. The settings below still work.",
     turnsWithHead: "Turns with the head",
     chooseFile: "Choose a PNG…",
+    dropHint: "Or drop a file into {directory}.",
   },
 
   ui: {

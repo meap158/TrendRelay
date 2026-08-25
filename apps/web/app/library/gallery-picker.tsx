@@ -2,6 +2,7 @@
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { FolderInput, Upload } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
@@ -611,61 +612,79 @@ export function GalleryPanel({
               from the grid above is the only other sign of it. */}
           {folder && (
             <div className="overlay-folder">
-              {/* The library is where an operator's pictures already are, so
-                  the first way offered to add one is from there. Naming the
-                  folder as well, because a bulk drop is the other real case. */}
-              {folder.import_from_library && (
-                <div className="overlay-import">
-                  <label>
-                    <span className="sr-only">{t("overlayPicker.addFromLibrary")}</span>
-                    <Select
-                      value={importing}
+              {/* One row for the three ways in, because this is supporting
+                  chrome under the grid people actually came for: the library
+                  is where an operator's pictures already are, so it gets the
+                  words; a file from disk and the bulk-drop folder are the
+                  rarer cases and each folds into an icon whose tooltip says
+                  the sentence the row no longer spends a line on. */}
+              <div className="overlay-import">
+                {folder.import_from_library && (
+                  <>
+                    <label>
+                      <span className="sr-only">{t("overlayPicker.addFromLibrary")}</span>
+                      <Select
+                        value={importing}
+                        disabled={!canEdit || adding}
+                        onChange={(event) => setImporting(event.target.value)}
+                      >
+                        <option value="">{t("overlayPicker.addFromLibrary")}</option>
+                        {pictures.map((asset) => (
+                          <option key={asset.id} value={asset.id}>{asset.title}</option>
+                        ))}
+                      </Select>
+                    </label>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      busy={adding}
+                      disabled={!canEdit || !importing}
+                      onClick={() => void addFromLibrary()}
+                    >{t("overlayPicker.add")}</Button>
+                  </>
+                )}
+                {/* A file on their own machine, which is where a sticker they
+                    have just exported actually is. */}
+                {folder.upload && (
+                  <label className="overlay-upload" title={t("overlayPicker.chooseFile")}>
+                    <input
+                      type="file"
+                      accept={(folder.accepts ?? [".png"]).join(",")}
                       disabled={!canEdit || adding}
-                      onChange={(event) => setImporting(event.target.value)}
-                    >
-                      <option value="">{t("overlayPicker.addFromLibrary")}</option>
-                      {pictures.map((asset) => (
-                        <option key={asset.id} value={asset.id}>{asset.title}</option>
-                      ))}
-                    </Select>
+                      onChange={(event) => {
+                        const [chosen] = event.target.files ?? [];
+                        // Cleared so choosing the same file twice fires again,
+                        // which it will after a rejection somebody has fixed.
+                        event.target.value = "";
+                        void addFromDisk(chosen);
+                      }}
+                    />
+                    <Upload size={14} aria-hidden />
+                    <span className="sr-only">{t("overlayPicker.chooseFile")}</span>
                   </label>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    busy={adding}
-                    disabled={!canEdit || !importing}
-                    onClick={() => void addFromLibrary()}
-                  >{t("overlayPicker.add")}</Button>
-                </div>
-              )}
-              {/* A file on their own machine, which is where a sticker they
-                  have just exported actually is. */}
-              {folder.upload && (
-                <label className="overlay-upload">
-                  <input
-                    type="file"
-                    accept={(folder.accepts ?? [".png"]).join(",")}
-                    disabled={!canEdit || adding}
-                    onChange={(event) => {
-                      const [chosen] = event.target.files ?? [];
-                      // Cleared so choosing the same file twice fires again,
-                      // which it will after a rejection somebody has fixed.
-                      event.target.value = "";
-                      void addFromDisk(chosen);
-                    }}
-                  />
-                  <span>{t("overlayPicker.chooseFile")}</span>
-                </label>
-              )}
-              <p>
-                Or drop a file into <code>{folder.directory}</code>.
-                {folder.skipped.map((item) => (
-                  <span key={item.file} className="overlay-skipped">
-                    <strong>{item.file}</strong> {item.reason}
+                )}
+                <span
+                  className="overlay-drop-hint"
+                  title={t("overlayPicker.dropHint").replace("{directory}", folder.directory)}
+                >
+                  <FolderInput size={14} aria-hidden />
+                  <span className="sr-only">
+                    {t("overlayPicker.dropHint").replace("{directory}", folder.directory)}
                   </span>
-                ))}
-                {addFailure && <span className="overlay-skipped">{addFailure}</span>}
-              </p>
+                </span>
+              </div>
+              {/* Failures keep their own line: a rejection folded into a
+                  tooltip is a rejection nobody sees. */}
+              {(folder.skipped.length > 0 || addFailure) && (
+                <p>
+                  {folder.skipped.map((item) => (
+                    <span key={item.file} className="overlay-skipped">
+                      <strong>{item.file}</strong> {item.reason}
+                    </span>
+                  ))}
+                  {addFailure && <span className="overlay-skipped">{addFailure}</span>}
+                </p>
+              )}
             </div>
           )}
         </div>

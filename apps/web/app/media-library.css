@@ -689,29 +689,32 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: var(--warn-bg); color: var(--text); font-size: 11px; line-height: 1.45; }
 .overlay-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .overlay-folder { display: grid; gap: 6px; }
-/* The native file input, dressed as the button beside it. Its own control is
-   an unstyleable "Choose file / no file chosen" pair, so the input is hidden
-   inside the label and the label is what gets drawn. */
+/* The native file input, dressed as the icon button beside the select. Its own
+   control is an unstyleable "Choose file / no file chosen" pair, so the input
+   is hidden inside the label and the label is what gets drawn - as an icon,
+   because the row's words belong to the common case and the tooltip carries
+   this one's. */
 .overlay-upload {
-  justify-self: start; display: inline-flex; align-items: center; min-height: 28px;
-  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-  padding: 4px 10px; background: var(--panel); color: var(--text);
-  font-size: 11px; font-weight: 600; cursor: pointer;
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; min-height: 30px; border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--panel); color: var(--text);
+  cursor: pointer;
 }
 .overlay-upload:hover { background: var(--panel-raised); }
 .overlay-upload:has(input:disabled) { opacity: .5; cursor: not-allowed; }
 /* Focus lands on the input, so the ring has to be drawn on the label. */
 .overlay-upload:has(input:focus-visible) { outline: 2px solid var(--link); outline-offset: 2px; }
 .overlay-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-/* Not a grid: the sentence has an inline `code` in the middle of it, and a grid
-   would break it onto a row of its own and strand the full stop after it. */
+/* The bulk-drop folder, folded to a quiet icon whose tooltip names the path. */
+.overlay-drop-hint { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; min-height: 30px; color: var(--muted); }
 .overlay-folder p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-/* The library first, because that is where the operator's pictures already are;
-   the folder is named underneath for the bulk case. */
+/* The library first, because that is where the operator's pictures already
+   are; a disk file and the drop folder sit beside it as icons. */
 .overlay-import { display: flex; gap: 6px; align-items: center; }
-.overlay-import label { flex: 1; min-width: 0; }
+/* Only the select's label grows: the upload control is a label too, and this
+   is what keeps it the fixed icon button it is drawn as. */
+.overlay-import label:not(.overlay-upload) { flex: 1; min-width: 0; }
 .overlay-import select { width: 100%; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
-.overlay-folder code { overflow-wrap: anywhere; font-size: 10px; }
 .overlay-skipped { display: block; margin-top: 3px; color: var(--bad); }
 
 /* The control that stands in for a dropdown in the recipe: what is on the face

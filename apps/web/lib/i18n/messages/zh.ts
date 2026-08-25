@@ -1356,6 +1356,7 @@ export const zh: Messages = {
     noWebgl: "此浏览器无法显示 3D 视图。下方的设置仍然可用。",
     turnsWithHead: "随头部转动",
     chooseFile: "选择 PNG 文件…",
+    dropHint: "或将文件放入 {directory}。",
   },
 
   ui: {

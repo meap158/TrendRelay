@@ -1381,6 +1381,7 @@ export const vi: Messages = {
     noWebgl: "Trình duyệt này không hiển thị được chế độ xem 3D. Các thiết lập bên dưới vẫn dùng được.",
     turnsWithHead: "Xoay theo đầu",
     chooseFile: "Chọn tệp PNG…",
+    dropHint: "Hoặc thả tệp vào {directory}.",
   },
 
   ui: {

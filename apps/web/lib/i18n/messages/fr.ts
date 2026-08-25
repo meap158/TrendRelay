@@ -1401,6 +1401,7 @@ export const fr: Messages = {
     noWebgl: "Ce navigateur ne peut pas afficher la vue 3D. Les réglages ci-dessous fonctionnent toujours.",
     turnsWithHead: "Pivote avec la tête",
     chooseFile: "Choisir un PNG…",
+    dropHint: "Ou déposez un fichier dans {directory}.",
   },
 
   ui: {

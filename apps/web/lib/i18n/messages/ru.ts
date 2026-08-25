@@ -1400,6 +1400,7 @@ export const ru: Messages = {
     noWebgl: "Этот браузер не показывает 3D-вид. Настройки ниже по-прежнему работают.",
     turnsWithHead: "Поворачивается с головой",
     chooseFile: "Выбрать PNG…",
+    dropHint: "Или положите файл в {directory}.",
   },
 
   ui: {

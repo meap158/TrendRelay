@@ -1384,6 +1384,7 @@ export const ar: Messages = {
     noWebgl: "هذا المتصفح لا يعرض العرض ثلاثي الأبعاد. الإعدادات أدناه ما زالت تعمل.",
     turnsWithHead: "يدور مع الرأس",
     chooseFile: "اختر ملف PNG…",
+    dropHint: "أو ضع ملفًا في {directory}.",
   },
 
   ui: {

@@ -1374,6 +1374,7 @@ export const ja: Messages = {
     noWebgl: "このブラウザーでは3D表示ができません。下の設定はそのまま使えます。",
     turnsWithHead: "頭と一緒に回る",
     chooseFile: "PNGを選ぶ…",
+    dropHint: "または {directory} にファイルを入れてください。",
   },
 
   ui: {
