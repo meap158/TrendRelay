@@ -2262,14 +2262,16 @@ export function AutopilotPanel({
       // Every action goes through here, so this is the one place it belongs -
       // an action that forgot to say so is the bug this replaces, and a list
       // of which actions count is a list that goes stale.
-      if (label !== "preview") await onCampaignChanged();
+      if (label !== "preview") {
+        await Promise.all([loadExceptions(), onCampaignChanged()]);
+      }
       if (replanning) await loadPreview(false);
     } catch (reason) {
       fail(explainFailure(reason, "That did not work."));
     } finally {
       setBusy("");
     }
-  }, [refresh, succeed, fail, loadPreview, onCampaignChanged]);
+  }, [refresh, succeed, fail, loadPreview, loadExceptions, onCampaignChanged]);
 
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
