@@ -48,7 +48,7 @@ export const MEDIA_DRAG_TYPE = "application/x-trendrelay-media";
  * file and offering one only to refuse it later is the worse half of the
  * choice.
  */
-export const PICKER_BASE: AssetFilterValues = {};
+export const PICKER_BASE: AssetFilterValues = { mediaKind: "video" };
 /** The same dialog opened straight onto a carousel's frames. */
 export const IMAGE_PICKER_BASE: AssetFilterValues = { mediaKind: "image" };
 
@@ -201,6 +201,7 @@ export function MediaPicker({
 }) {
   const t = useT();
   const images = mediaKind === "image";
+  const singleImage = images && capacity === 1;
   /** Where each chosen path sits in the swipe order, by path. */
   const order = new Map(chosen.map((path, index) => [path, index + 1]));
   const full = capacity > 0 && chosen.length >= capacity;
@@ -216,7 +217,7 @@ export function MediaPicker({
     workspaceId, apiFetch,
     baseline: base,
     enabled: open,
-    keep: (asset) => asset.media_kind !== "audio",
+    keep: (asset) => asset.media_kind === mediaKind,
   });
   const { assets, filters } = picker;
   const loading = picker.loading !== "";
@@ -237,12 +238,15 @@ export function MediaPicker({
     <Dialog
       open={open}
       size="wide"
-      title={images ? t("composer.chooseImages") : t("composer.chooseMedia")}
-      description={images
-        ? "Images in this workspace's library. Pick them in the order they are"
-          + " swiped, and click a picked one to take it out again."
-        : "Clips and pictures in this workspace's library. A clip fills the video "
-          + "slot; a picture starts a carousel."}
+      title={singleImage
+        ? "Choose an image"
+        : images ? t("composer.chooseImages") : t("composer.chooseMedia")}
+      description={singleImage
+        ? "Images in this workspace's library. Choose the one this post will use."
+        : images
+          ? "Images in this workspace's library. Pick them in display order, and click "
+            + "a picked one to take it out again."
+          : "Videos in this workspace's library. The chosen clip fills the video slot."}
       onClose={onClose}
     >
       {/* The same control the Library uses, media kind included. It used to be
@@ -252,7 +256,7 @@ export function MediaPicker({
       <AssetFilters
         values={filters}
         facets={postable}
-        fields={["query", "mediaKind", "effect", "channel", "platform", "length"]}
+        fields={["query", "effect", "channel", "platform", "length"]}
         cleared={base}
         onChange={(next) => picker.setFilters(next)}
       />
@@ -263,7 +267,7 @@ export function MediaPicker({
         <p className="picker-tally" role="status" aria-live="polite">
           {chosen.length === 0
             ? "Nothing picked yet."
-            : `${chosen.length} picked, in swipe order.`}
+            : singleImage ? "Image selected." : `${chosen.length} picked, in display order.`}
           {capacity > 0 && (
             <span className={full ? "picker-tally-full" : undefined}>
               {full

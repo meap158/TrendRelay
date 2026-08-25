@@ -42,7 +42,6 @@ import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
 import {
   allRoutesSpent,
-  carouselCapacity,
   mediaProblem,
   moveImage,
   preferredRoute,
@@ -158,6 +157,10 @@ type PostTypeOption = { id: string; label: string; help: string };
 type PlatformLimit = { caption: number; title: number | null; carousel?: number };
 type Provider = {
   post_types: Record<string, PostTypeOption[]>;
+  /** Legacy platform-level image capability for older API responses. */
+  photo_carousel_platforms?: string[];
+  /** Maximum images for each exact network post surface. */
+  image_post_limits?: Record<string, Record<string, number>>;
   /** Platforms this engine can attach a topic to. Threads, where it can. */
   topic_platforms?: string[];
   limits: Record<string, PlatformLimit>;
@@ -446,6 +449,10 @@ export default function PublishPage() {
    */
   const [schedulingOpen, setSchedulingOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<"video" | "images">("video");
+  // Networks such as Facebook use one ordinary post type for both videos and
+  // image galleries. Remember that choice separately; TikTok and Instagram
+  // already expose it through their own post-type tabs.
+  const [flexibleMediaKind, setFlexibleMediaKind] = useState<"video" | "images">("video");
   /**
    * What each carousel image is called, keyed by the path that will be sent.
    *
@@ -713,6 +720,25 @@ export default function PublishPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chosenAccounts, postTypes],
   );
+  /** Image capacity for this exact engine, network, and selected post type. */
+  const accountImageLimit = (account: Account) => {
+    const options = postTypesFor(account.id);
+    const selectedType = postTypes[account.id] ?? options[0]?.id;
+    if (!selectedType) return 0;
+    return providerById.get(account.provider)?.image_post_limits
+      ?.[account.platform]?.[selectedType] ?? 0;
+  };
+  const accountTakesImages = (account: Account) => accountImageLimit(account) > 0;
+  /**
+   * Accounts without a separate photo post type need one composer-level media
+   * choice. Only offer it when every selected engine can honour either side.
+   */
+  const flexibleMediaChoice = chosenAccounts.length > 0
+    && chosenAccounts.every((account) => (
+      (postTypes[account.id] ?? postTypesFor(account.id)[0]?.id) !== "photo"
+      && accountTakesImages(account)
+    ));
+  const imageTargetCount = chosenAccounts.filter(accountTakesImages).length;
   /**
    * How many images every chosen destination will accept.
    *
@@ -722,16 +748,11 @@ export default function PublishPage() {
    * submit means picking fifteen and then deciding which five to lose.
    */
   const imageCapacity = useMemo(() => {
-    // Assembled from each destination's own engine rather than the first one's:
-    // a post can span engines, and a platform missing from one engine's map
-    // would otherwise read as a network that takes no carousel at all.
-    const caps: Record<string, PlatformLimit> = {};
-    for (const account of chosenAccounts) {
-      const limit = providerById.get(account.provider)?.limits?.[account.platform];
-      if (limit) caps[account.platform] = limit;
-    }
-    return carouselCapacity(chosenAccounts, caps);
-  }, [chosenAccounts, providerById]);
+    const caps = chosenAccounts.map(accountImageLimit).filter((limit) => limit > 0);
+    return caps.length ? Math.min(...caps) : 0;
+    // accountImageLimit reads both values listed below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenAccounts, postTypes, providerById]);
   /**
    * Whether this post can carry more than one picture.
    *
@@ -745,7 +766,8 @@ export default function PublishPage() {
    * appeared and a post to any of them could carry exactly one picture through
    * an engine that takes several.
    */
-  const wantsCarousel = carouselTargetCount > 0 || imageCapacity > 1;
+  const wantsImages = carouselTargetCount > 0
+    || (flexibleMediaChoice && flexibleMediaKind === "images");
   /**
    * Whether "carousel" is the right word for what is being attached.
    *
@@ -800,16 +822,16 @@ export default function PublishPage() {
     [workspaceId],
   );
   const carouselSources = useMemo(
-    () => (wantsCarousel ? imagePaths.map(mediaUrlFor).filter(Boolean) : []),
-    [wantsCarousel, imagePaths, mediaUrlFor],
+    () => (wantsImages ? imagePaths.map(mediaUrlFor).filter(Boolean) : []),
+    [wantsImages, imagePaths, mediaUrlFor],
   );
   const previewSource = useMemo(() => {
-    const local = wantsCarousel ? imagePaths[0] : videoPath;
-    if (!wantsCarousel && mediaUrl.trim()) return mediaUrl.trim();
+    const local = wantsImages ? imagePaths[0] : videoPath;
+    if (!wantsImages && mediaUrl.trim()) return mediaUrl.trim();
     if (!local || !workspaceId) return "";
     return `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
       + `?path=${encodeURIComponent(local)}`;
-  }, [wantsCarousel, imagePaths, videoPath, mediaUrl, workspaceId]);
+  }, [wantsImages, imagePaths, videoPath, mediaUrl, workspaceId]);
   /** The Pinterest destination, if this post has one. */
   const pinterestTarget = useMemo(
     () => chosenAccounts.find((account) => account.platform === "pinterest") ?? null,
@@ -1069,10 +1091,12 @@ export default function PublishPage() {
       // Before the caption, deliberately. This is a conflict between the
       // destinations just chosen, and burying it under "Write a caption" meant
       // finding out only after the post had been written.
-      : wantsCarousel && carouselTargetCount !== chosenAccounts.length
-        ? t("publish.carouselIsItsOwnPost")
+      : wantsImages && imageTargetCount !== chosenAccounts.length
+        ? isCarousel
+          ? t("publish.carouselIsItsOwnPost")
+          : "An image post cannot share one delivery with a video-only destination. Send those separately."
       : tooManyImages
-        ? `That carousel has ${imagePaths.length} images and the tightest destination takes ${imageCapacity}`
+        ? `This image post has ${imagePaths.length} images and the tightest destination takes ${imageCapacity}`
       : topicProblem
         ? topicProblem
       : !caption.trim()
@@ -1269,7 +1293,7 @@ export default function PublishPage() {
           caption,
           title,
           // The clip itself, which usually says more than a draft caption does.
-          media_path: wantsCarousel ? imagePaths[0] ?? "" : videoPath,
+          media_path: wantsImages ? imagePaths[0] ?? "" : videoPath,
           platforms: chosen,
         }),
       }));
@@ -1289,7 +1313,7 @@ export default function PublishPage() {
     } finally {
       setSuggesting(false);
     }
-  }, [workspaceId, apiFetch, caption, title, wantsCarousel, imagePaths, videoPath, chosen]);
+  }, [workspaceId, apiFetch, caption, title, wantsImages, imagePaths, videoPath, chosen]);
 
   const loadConnection = useCallback(async () => {
     const body = await json<{ connection: Connection }>(
@@ -1374,15 +1398,19 @@ export default function PublishPage() {
       hostsLocalMedia,
       localPath,
       mediaUrl,
-      carouselTargets: carouselTargetCount,
+      carouselTargets: wantsImages ? imageTargetCount : 0,
       totalTargets: selectedTargets.length,
       imageCount: imagePaths.length,
     });
     if (problem === "mixed-carousel") {
-      throw new Error(t("publish.carouselIsItsOwnPost"));
+      throw new Error(isCarousel
+        ? t("publish.carouselIsItsOwnPost")
+        : "An image post cannot share one delivery with a video-only destination. Send those separately.");
     }
     if (problem === "carousel-needs-images") {
-      throw new Error(t("publish.carouselNeedsImages"));
+      throw new Error(isCarousel
+        ? t("publish.carouselNeedsImages")
+        : "Choose at least one image from the Library.");
     }
     if (problem === "needs-public-url") {
       // Names the engine that actually needs it, which may not be the one that
@@ -1407,8 +1435,8 @@ export default function PublishPage() {
       // field was required for every post, which a carousel would now read as
       // a video it also carries - and which hid a post that had no media at all
       // behind a path that resolved to nothing.
-      video_path: wantsCarousel ? "" : localPath,
-      asset_id: wantsCarousel ? null : clip?.id ?? null,
+      video_path: wantsImages ? "" : localPath,
+      asset_id: wantsImages ? null : clip?.id ?? null,
       media_url: mediaUrl || null,
       caption: form.get("caption"),
       first_comment: firstComment.trim() || null,
@@ -1426,7 +1454,7 @@ export default function PublishPage() {
       // Only when a destination actually asked for one: images can be attached
       // and the post type then switched back, and sending them would make the
       // request look like a carousel that nobody chose.
-      image_paths: wantsCarousel ? imagePaths : [],
+      image_paths: wantsImages ? imagePaths : [],
       // Only where something can carry it: a topic left behind after switching
       // destinations would otherwise travel to an engine that rejects it.
       topic: topicTargets.length ? topic.trim() || null : null,
@@ -3063,27 +3091,33 @@ export default function PublishPage() {
                         const route = routeOf(page);
                         const kinds = postTypesFor(route.id);
                         if (kinds.length < 2) return null;
+                        const activeKind = kinds.find((kind) => (
+                          postTypes[route.id] ?? kinds[0]?.id
+                        ) === kind.id) ?? kinds[0];
                         return (
-                          <div
-                            className="post-types"
-                            key={page.key}
-                            role="tablist"
-                            aria-label={`${page.label} post type`}
-                          >
-                            {picked.length > 1 && <em className="post-types-for">{page.label}</em>}
-                            {kinds.map((kind) => {
-                              const active = (postTypes[route.id] ?? kinds[0]?.id) === kind.id;
-                              return (
-                                <button
-                                  type="button"
-                                  key={kind.id}
-                                  aria-pressed={active}
-                                  className={active ? "selected" : ""}
-                                  title={kind.help}
-                                  onClick={() => setPostTypes({ ...postTypes, [route.id]: kind.id })}
-                                >{kind.label}</button>
-                              );
-                            })}
+                          <div className="post-type-choice" key={page.key}>
+                            <div
+                              className="post-types"
+                              role="tablist"
+                              aria-label={`${page.label} post type`}
+                            >
+                              {picked.length > 1 && <em className="post-types-for">{page.label}</em>}
+                              {kinds.map((kind) => {
+                                const active = activeKind?.id === kind.id;
+                                return (
+                                  <button
+                                    type="button"
+                                    key={kind.id}
+                                    role="tab"
+                                    aria-selected={active}
+                                    className={active ? "selected" : ""}
+                                    title={kind.help}
+                                    onClick={() => setPostTypes({ ...postTypes, [route.id]: kind.id })}
+                                  >{kind.label}</button>
+                                );
+                              })}
+                            </div>
+                            {activeKind && <small className="post-type-help">{activeKind.help}</small>}
                           </div>
                         );
                       })}
@@ -3153,6 +3187,33 @@ export default function PublishPage() {
             </label>
           )}
 
+          {flexibleMediaChoice && (
+            <div className="publish-media-format">
+              <span>
+                <strong>Media format</strong>
+                <small>
+                  Choose video or {imageCapacity === 1 ? "one image" : `up to ${imageCapacity} images`}.
+                </small>
+              </span>
+              <div className="post-types" role="tablist" aria-label="Media format">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={flexibleMediaKind === "video"}
+                  className={flexibleMediaKind === "video" ? "selected" : ""}
+                  onClick={() => setFlexibleMediaKind("video")}
+                >Video</button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={flexibleMediaKind === "images"}
+                  className={flexibleMediaKind === "images" ? "selected" : ""}
+                  onClick={() => setFlexibleMediaKind("images")}
+                >{imageCapacity === 1 ? "Image" : "Images"}</button>
+              </div>
+            </div>
+          )}
+
           {/* The clip, once its constraints are known.
 
               Whether the media has to be publicly hosted depends on which
@@ -3163,7 +3224,7 @@ export default function PublishPage() {
               sends no video path at all, so offering a clip field - and a
               picker filtered to videos - invited choosing a file that would
               have been dropped from the request without a word. */}
-          {wantsCarousel ? null : needsPublicMedia && !hostsLocalMedia ? (
+          {wantsImages ? null : needsPublicMedia && !hostsLocalMedia ? (
             <div className="ui-field">
               {/* The picker belongs here too. This engine fetches rather than
                   uploads, but a clip still has to be chosen before anyone can
@@ -3247,7 +3308,7 @@ export default function PublishPage() {
                       value={videoPath}
                       onChange={(event) => setVideoPath(event.target.value)}
                       placeholder=".data\media\approved-clip.mp4"
-                      required={!wantsCarousel}
+                      required={!wantsImages}
                     />
                   </label>
                   <Button variant="quiet" onClick={() => openPicker()}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
@@ -3275,7 +3336,7 @@ export default function PublishPage() {
               offered a way to add images at all. The post type decides
               whether this is needed; how the engine collects the file does
               not. */}
-              {wantsCarousel && (
+              {wantsImages && (
                 <div className="carousel-field">
                   <span className="carousel-head">
                     <strong>{t(
@@ -3293,7 +3354,7 @@ export default function PublishPage() {
                       disabled={imageCapacity > 0 && imagePaths.length >= imageCapacity}
                       onClick={() => openPicker("images")}
                     >
-                      <ActionIcon name="clip" />{t("publish.addImages")}
+                      <ActionIcon name="grid" />{t("publish.chooseFromLibrary")}
                     </Button>
                   </span>
                   {imagePaths.length ? (
@@ -3302,7 +3363,13 @@ export default function PublishPage() {
                         <li key={path}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img alt="" className="carousel-thumb" src={mediaUrlFor(path)} />
-                          <code>{imageLabels[path]?.title ?? fileName(path)}</code>
+                          {/* The name is truncated to keep the row one line;
+                              the full title rides on hover for the cases the
+                              ellipsis swallows - which, for a saved download,
+                              is most of it. */}
+                          <code title={imageLabels[path]?.title ?? fileName(path)}>
+                            {imageLabels[path]?.title ?? fileName(path)}
+                          </code>
                           {imageLabels[path]?.blurred && (
                             <em className="blurred-tag">{t("publish.facesBlurred")}</em>
                           )}
@@ -3823,9 +3890,9 @@ export default function PublishPage() {
                 showsTitle={chosenLimits.some((entry) =>
                   entry.platform === previewPlatform && entry.title !== null)}
                 source={previewSource}
-                sourceIsImage={wantsCarousel}
+                sourceIsImage={wantsImages}
                 carousel={carouselSources}
-                wantsCarousel={wantsCarousel}
+                wantsCarousel={wantsImages}
               />
               {/* What the removed "What will be sent" card said that this one
                   did not: which file is playing. The panels showed the same
@@ -3834,13 +3901,13 @@ export default function PublishPage() {
                   it is described as what it is rather than borrowing the
                   wording for a clip. */}
               <p className="privacy-note">
-                {wantsCarousel
+                {wantsImages
                   ? "Showing the pictures this delivery will upload, in the order they are swiped. "
                   : mediaUrl
                     ? "Playing the public URL the engine will fetch. "
                     : "Playing the local file this delivery will upload — the blurred cut "
                       + "where one replaced the original. "}
-                A rehearsal of the caption and {wantsCarousel ? "pictures" : "frame"} against
+                A rehearsal of the caption and {wantsImages ? "pictures" : "frame"}{" "}against
                 this network&apos;s shape, not a render of what{" "}
                 {deliveringNames || activeProvider?.label} will produce.
               </p>

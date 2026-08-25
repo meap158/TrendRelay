@@ -52,6 +52,8 @@ MESH_RIGHT_EYE = 33  # outer corner of the subject's right eye
 MESH_NOSE_TIP = 1
 MESH_UPPER_LIP = 13
 MESH_LOWER_LIP = 14
+MESH_MOUTH_RIGHT = 61  # the subject's own right, image-left on a frontal face
+MESH_MOUTH_LEFT = 291
 MESH_CHIN = 152
 MESH_FOREHEAD = 10
 MESH_LEFT_CHEEK = 454
@@ -103,6 +105,14 @@ class FaceAnchors:
     eye_right: Point | None = None
     nose: Point | None = None
     mouth: Point | None = None
+    #: The mouth's own corners, kept beside the midpoint rather than folded
+    #: into it. Placement only ever needed the middle, so the corners used to
+    #: be averaged away at the door - but they are two of the six points a
+    #: head-pose solve is built from, and an average of them is one point that
+    #: says nothing about which way the mouth is turned. Sorted by their
+    #: position in the picture, as the eyes are, for the same reason.
+    mouth_left: Point | None = None
+    mouth_right: Point | None = None
     chin: Point | None = None
     source: Source = "box"
 
@@ -239,6 +249,7 @@ def anchors_from_yunet(box: Box, landmarks: list[Point]) -> FaceAnchors:
         return anchors_from_box(box)
     first, second, nose, mouth_a, mouth_b = landmarks[:5]
     eye_left, eye_right = sorted((first, second), key=lambda point: point[0])
+    mouth_left, mouth_right = sorted((mouth_a, mouth_b), key=lambda point: point[0])
     mouth = ((mouth_a[0] + mouth_b[0]) / 2, (mouth_a[1] + mouth_b[1]) / 2)
     return FaceAnchors(
         box=box,
@@ -246,6 +257,8 @@ def anchors_from_yunet(box: Box, landmarks: list[Point]) -> FaceAnchors:
         eye_right=eye_right,
         nose=nose,
         mouth=mouth,
+        mouth_left=mouth_left,
+        mouth_right=mouth_right,
         # Not measured by this detector. Estimated from the mouth rather than
         # from the box, so it follows the face when the head tilts.
         chin=(mouth[0], mouth[1] + (mouth[1] - nose[1]) * 1.6),
@@ -262,12 +275,17 @@ def anchors_from_mesh(box: Box, mesh: list[Point]) -> FaceAnchors:
         (mesh[MESH_RIGHT_EYE], mesh[MESH_LEFT_EYE]), key=lambda point: point[0]
     )
     upper, lower = mesh[MESH_UPPER_LIP], mesh[MESH_LOWER_LIP]
+    mouth_left, mouth_right = sorted(
+        (mesh[MESH_MOUTH_RIGHT], mesh[MESH_MOUTH_LEFT]), key=lambda point: point[0]
+    )
     return FaceAnchors(
         box=box,
         eye_left=eye_left,
         eye_right=eye_right,
         nose=mesh[MESH_NOSE_TIP],
         mouth=((upper[0] + lower[0]) / 2, (upper[1] + lower[1]) / 2),
+        mouth_left=mouth_left,
+        mouth_right=mouth_right,
         chin=mesh[MESH_CHIN],
         source="mediapipe",
     )
@@ -297,6 +315,8 @@ def interpolate(start: FaceAnchors, end: FaceAnchors, step: int, total: int) -> 
         eye_right=between(start.eye_right, end.eye_right),
         nose=between(start.nose, end.nose),
         mouth=between(start.mouth, end.mouth),
+        mouth_left=between(start.mouth_left, end.mouth_left),
+        mouth_right=between(start.mouth_right, end.mouth_right),
         chin=between(start.chin, end.chin),
         source=start.source,
     )

@@ -510,6 +510,8 @@ def _shifted(face: FaceAnchors, box: Box) -> FaceAnchors:
         eye_right=moved(face.eye_right),
         nose=moved(face.nose),
         mouth=moved(face.mouth),
+        mouth_left=moved(face.mouth_left),
+        mouth_right=moved(face.mouth_right),
         chin=moved(face.chin),
         source=face.source,
     )
