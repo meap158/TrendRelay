@@ -391,6 +391,7 @@ export function PostPreview({
   wantsCarousel,
   showsTitle: showsTitleProp,
   width = "mobile",
+  avatar,
 }: {
   platform: PublishingPlatform;
   /**
@@ -403,6 +404,14 @@ export function PostPreview({
   width?: "mobile" | "desktop";
   postTypeLabel: string;
   handle: string;
+  /**
+   * The account's own picture, where its engine sends one.
+   *
+   * Two of the four do. The rest fall back to the platform mark rather than to
+   * a grey circle: an empty ring reads as a picture that failed to load, and
+   * the mark at least says which network this is.
+   */
+  avatar?: string | null;
   caption: string;
   title: string;
   thumbnail: string;
@@ -551,10 +560,27 @@ export function PostPreview({
             {!story && (
               <div className="preview-surface-foot">
                 <span className="preview-surface-who">
-                  {/* The engines report a handle and no picture, so the circle
-                      carries the platform rather than pretending to a photo
-                      nobody supplied. */}
-                  <i><PlatformIcon platform={platform} size={13} /></i>
+                  {/* The account's own picture where its engine sends one,
+                      and the platform mark where it does not - which is half
+                      of them. Not a grey circle: an empty ring reads as a
+                      picture that failed rather than one nobody has.
+
+                      `no-referrer` because this is the engine's CDN rather
+                      than ours, and a preview is not a reason to tell it which
+                      page somebody is composing on. */}
+                  <i>
+                    {avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatar}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <PlatformIcon platform={platform} size={13} />
+                    )}
+                  </i>
                   <b>{handle || "your account"}</b>
                 </span>
                 {caption && <p className="preview-surface-caption">{caption}</p>}

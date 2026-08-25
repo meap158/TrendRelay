@@ -638,6 +638,8 @@ nav strong { color: var(--text); }
    and no picture, so this carries the platform rather than pretending to
    an avatar nobody supplied. */
 .preview-surface-who i { display: grid; place-items: center; inline-size: 22px; block-size: 22px; border: 1px solid rgba(255, 255, 255, .8); border-radius: 999px; background: rgba(0, 0, 0, .35); }
+/* Fills the ring, cropped square like every network crops it. */
+.preview-surface-who i img { inline-size: 100%; block-size: 100%; border-radius: 999px; object-fit: cover; }
 /* Two lines, like the real one: past that a caption is behind a More. */
 .preview-surface-caption { display: -webkit-box; overflow: hidden; margin: 0; font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .preview-surface-audio { display: flex; gap: 5px; align-items: center; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }

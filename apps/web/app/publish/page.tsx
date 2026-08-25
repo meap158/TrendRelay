@@ -121,6 +121,14 @@ type Account = {
   /** The engine that reaches this account, and so will deliver to it. */
   provider: PublishingProvider;
   provider_label: string;
+  /**
+   * The account's own picture, where its engine sends one.
+   *
+   * Buffer's channel carries `avatar` and WoopSocial's carries `imageUrl`;
+   * Zernio and bundle.social report none, so half the destinations here will
+   * never have one and the preview has to read well without it.
+   */
+  avatar?: string | null;
 };
 /** One connected channel, as the engine reports it. */
 type EngineChannel = {
@@ -1070,7 +1078,7 @@ export default function PublishPage() {
     "trendrelay.publish.previewWidth",
     "mobile",
     oneOf("mobile", "desktop"),
-  )
+  );
   const previewType = previewAccount
     ? postTypesFor(previewAccount.id).find(
         (kind) => kind.id === (postTypes[previewAccount.id]
@@ -4026,6 +4034,7 @@ export default function PublishPage() {
               </div>
               <PostPreview
                 width={previewWidth}
+                avatar={previewAccount?.avatar ?? null}
                 platform={previewPlatform}
                 postTypeLabel={previewType?.label ?? "Post"}
                 handle={previewHandle}

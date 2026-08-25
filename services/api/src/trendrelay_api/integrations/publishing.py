@@ -2148,6 +2148,7 @@ def _woopsocial_accounts() -> list[dict[str, str]]:
             "platform": platform,
             "label": label[:160],
             "handle": username or None,  # type: ignore[dict-item]
+            "avatar": _account_picture(account.get("imageUrl")),
         })
     return accounts
 
@@ -2341,8 +2342,30 @@ def _buffer_accounts() -> list[dict[str, str]]:
             "label": str(label).strip()[:160],
             # Buffer's `name` is the handle; `displayName` is the pretty one.
             "handle": channel.get("name"),
+            "avatar": _account_picture(channel.get("avatar")),
         })
     return accounts
+
+
+def _account_picture(raw: Any) -> str | None:
+    """The account's own picture, where the engine sends a usable address.
+
+    Two of the four report one and they call it different things: Buffer's
+    channel carries `avatar`, WoopSocial's social account carries `imageUrl`.
+    Zernio documents no picture on its account object and bundle.social's
+    reference is not reachable, so both simply have none - checked 2026-08-25.
+
+    Only `https`. An engine sending a `http://` address would have the browser
+    fetch it in the clear from a host nobody chose, and a preview is not worth
+    that; `data:` is refused for the same reason a path is - neither is an
+    address this can vouch for.
+    """
+    value = str(raw or "").strip()
+    if not value.lower().startswith("https://"):
+        return None
+    # Long enough to be an address rather than a fragment, short enough that a
+    # runaway field cannot be stored as one.
+    return value[:600] if len(value) > len("https://") else None
 
 
 def _buffer_platform(service: str | None) -> str:
