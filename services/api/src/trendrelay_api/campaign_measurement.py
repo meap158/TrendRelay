@@ -48,6 +48,24 @@ PROVIDER_METRIC_READERS: dict[
     str, Callable[[PublicationExecution], dict[str, Any] | None]
 ] = {}
 
+#: How a stored provider becomes the engine whose reader can answer for it.
+#:
+#: An execution stores what its destination stored, which is a *connection* -
+#: `zernio-zernio-2` for a second Zernio login - while the readers above are
+#: registered per engine. Looked up raw, a second login matched nothing, and
+#: every post it published sat at `published` for good: never measured, never
+#: retried, and reported as an engine that cannot be read.
+#:
+#: Injected rather than imported, like the readers, so this module still knows
+#: nothing about any engine. Identity until something registers otherwise,
+#: which keeps a single-login workspace working with no engine loaded at all.
+def _same_provider(provider: str) -> str | None:
+    """The default: a workspace with one login per engine resolves to itself."""
+    return provider
+
+
+PROVIDER_ENGINE_RESOLVER: Callable[[str], str | None] = _same_provider
+
 
 def reader_status() -> dict[str, Any]:
     """Which engines can be measured, said plainly for a screen."""
@@ -119,7 +137,8 @@ def collect_snapshots(
         )
     ).all()
     for execution in rows:
-        reader = PROVIDER_METRIC_READERS.get(execution.provider or "")
+        engine = PROVIDER_ENGINE_RESOLVER(execution.provider or "") or ""
+        reader = PROVIDER_METRIC_READERS.get(engine)
         if reader is None:
             if execution.provider:
                 unreadable.add(execution.provider)

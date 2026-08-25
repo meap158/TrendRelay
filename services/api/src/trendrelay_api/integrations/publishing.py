@@ -2181,6 +2181,10 @@ def _zernio_accounts() -> list[dict[str, str]]:
 def _zernio_metrics(execution: Any) -> dict[str, float] | None:
     """A published Zernio post's engagement, in the measurement pipeline's terms.
 
+    Read through the login that published it. Zernio's analytics answer for the
+    organisation the token belongs to, so asking the first login about a second
+    login's post returns nothing - which the collector reads as "still due" and
+    retries for ever. The connection is taken from what the execution stored.
     Reads Zernio's analytics report for the external post id stored at delivery
     and returns the newest figures as ``{views, likes, comments, shares, saves,
     watch_seconds}`` - whichever the platform reported. Returns None, which the
@@ -2190,8 +2194,12 @@ def _zernio_metrics(execution: Any) -> dict[str, float] | None:
     post_ids = [str(pid) for pid in (execution.remote_post_ids or []) if pid]
     if not post_ids:
         return None
+    connection = publishing_connections.find(PROVIDERS, getattr(execution, "provider", ""))
     try:
-        payload = _zernio_request("GET", f"/analytics?postId={quote(post_ids[0])}", timeout=30)
+        with using_connection(connection):
+            payload = _zernio_request(
+                "GET", f"/analytics?postId={quote(post_ids[0])}", timeout=30
+            )
     except Exception:
         return None
     if not payload:
@@ -2240,6 +2248,10 @@ def _register_metric_readers() -> None:
     from trendrelay_api import campaign_measurement
 
     campaign_measurement.PROVIDER_METRIC_READERS["zernio"] = _zernio_metrics
+    # And how to get from what an execution stored to the engine that can read
+    # it. A destination stores a connection id, so a second login's posts
+    # matched no reader at all until this was told how to resolve one.
+    campaign_measurement.PROVIDER_ENGINE_RESOLVER = _engine_of
 
 
 _register_metric_readers()

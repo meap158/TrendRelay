@@ -236,3 +236,63 @@ def test_engagement_reads_the_latest_snapshot_not_the_sum(session) -> None:
         "first two hours twice"
     )
     assert found["d1"]["posts_measured"] == 1
+
+
+# --- a second login of the same engine -------------------------------------------
+
+
+def test_a_second_login_is_measured_by_its_engines_reader(session) -> None:
+    """A destination stores a connection, and the readers are per engine.
+
+    Looked up raw, `buffer-team-b` matched nothing - so every post that login
+    published sat at `published` for good: never measured, never retried, and
+    reported as an engine that cannot be read.
+    """
+    from trendrelay_api import campaign_measurement
+
+    row = execution(session, "x1", "published", provider="buffer-team-b")
+    PROVIDER_METRIC_READERS["buffer"] = lambda _execution: {"views": 12}
+    resolver = campaign_measurement.PROVIDER_ENGINE_RESOLVER
+    campaign_measurement.PROVIDER_ENGINE_RESOLVER = (
+        lambda provider: "buffer" if provider.startswith("buffer") else provider
+    )
+    try:
+        result = collect_snapshots(session, now=NOW + timedelta(days=8))
+    finally:
+        campaign_measurement.PROVIDER_ENGINE_RESOLVER = resolver
+        PROVIDER_METRIC_READERS.pop("buffer", None)
+
+    assert result["captured"] > 0
+    assert result["unreadable_providers"] == []
+    assert row.state == "measured"
+
+
+def test_an_engine_with_no_reader_is_still_named_by_its_connection(session) -> None:
+    """What is reported is what the operator would recognise.
+
+    "buffer-team-b cannot be read" is a row they can find; "buffer" is an
+    engine they may have three logins for.
+    """
+    execution(session, "x1", "published", provider="buffer-team-b")
+
+    result = collect_snapshots(session, now=NOW + timedelta(days=8))
+
+    assert result["unreadable_providers"] == ["buffer-team-b"]
+
+
+def test_resolving_nothing_leaves_the_post_unmeasured_rather_than_guessing(session) -> None:
+    # An id no engine claims. Skipped, and named, rather than falling through
+    # to whichever reader happened to be registered first.
+    from trendrelay_api import campaign_measurement
+
+    execution(session, "x1", "published", provider="not-an-engine")
+    PROVIDER_METRIC_READERS["buffer"] = lambda _execution: {"views": 99}
+    resolver = campaign_measurement.PROVIDER_ENGINE_RESOLVER
+    campaign_measurement.PROVIDER_ENGINE_RESOLVER = lambda _provider: None
+    try:
+        result = collect_snapshots(session, now=NOW + timedelta(days=8))
+    finally:
+        campaign_measurement.PROVIDER_ENGINE_RESOLVER = resolver
+        PROVIDER_METRIC_READERS.pop("buffer", None)
+
+    assert result == {"captured": 0, "unreadable_providers": ["not-an-engine"]}
