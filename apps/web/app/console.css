@@ -1240,6 +1240,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 }
 .campaign-item-products { margin-top: 10px; border-color: var(--line-strong); }
 .campaign-product-actions { border-top: 1px solid var(--line); padding-top: 10px; }
+/* The chooser's closing note, now that it lives in a dialog: what saving will
+   do, said at the end of the list rather than beside the save itself. */
+.campaign-product-actions-note { display: block; margin-block-start: 10px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
 
 .autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .autopilot-destinations > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
@@ -1252,6 +1255,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    unconditionally would leave an empty column for a reader who cannot edit,
    and the checkbox is not rendered for them at all. */
 .autopilot-queue.selectable > li { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+/* The rehearsal, on its own row spanning every column. It holds a post preview
+   at its natural size, wider than the copy track that used to contain it - so
+   opening one drew across the status badge and the buttons beside it rather
+   than pushing them anywhere. Matched as the row's own `details` rather than by
+   its class, which belongs to another stylesheet. */
+.autopilot-queue > li > details { grid-column: 1 / -1; min-inline-size: 0; }
 /* The same bar the Library carries above its grid, in the same shape: a
    two-state box, what is picked, and the actions the rows already offer. */
 /* Tall enough for the buttons before they are there.
@@ -1353,7 +1362,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-queue-thumb .picker-thumb i { display: none; }
 /* A placeholder that will post as-is is a warning, not body copy. */
 .autopilot-needs-copy { color: var(--warn); }
-.autopilot-destinations > li > div, .autopilot-queue > li > div { display: grid; gap: 3px; min-width: 0; }
+/* `minmax(0, 1fr)` rather than the implicit `auto` column: an auto track
+   cannot go below its min-content, and the facts row floors that at a 320px
+   product name beside its rate. The track held itself 140px wider than the
+   column it sits in, so the title, the copy and the product line all ran out
+   over the badge and the buttons to their right. */
+.autopilot-destinations > li > div, .autopilot-queue > li > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; min-width: 0; }
 .autopilot-destinations > li > div > strong, .autopilot-queue > li > div > strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .autopilot-destinations > li > div > small, .autopilot-queue > li > div > small { color: var(--muted); font-size: 11px; }
 .autopilot-queue-copy { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -1558,7 +1572,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
 /* One approval row: the post as it will look beside the facts and the
    decision. The preview column is the width Publish rehearses at. */
-.campaign-approval-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.campaign-approval-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .campaign-approval-list > li { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 /* Where a held post lands, above the post itself. Several of them are often
    the same video for different accounts - same thumbnail, same caption - so
@@ -1586,7 +1600,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    right video and does the caption read", which a shorter frame answers just
    as well. */
 .campaign-approval-list .post-preview-frame { max-block-size: min(34vh, 260px); }
-.campaign-approval-facts { display: grid; gap: 8px; align-content: start; }
+.campaign-approval-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-content: start; min-width: 0; }
+.campaign-approval-facts > * { min-width: 0; max-width: 100%; }
+.campaign-approval-facts .campaign-exception-actions { flex-wrap: wrap; }
 .campaign-approval-facts pre { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 .campaign-approval-facts > small { color: var(--muted); font-size: 11px; }
 /* The source line ties the held post to its queue row; the name carries the
@@ -1612,7 +1628,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-approval-edit { display: grid; gap: 8px; }
 .campaign-approval-edit label { display: grid; gap: 3px; color: var(--muted); font-size: 11px; }
 .campaign-approval-edit input, .campaign-approval-edit textarea { inline-size: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
-@media (max-width: 900px) { .campaign-approval-list > li { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .campaign-approval-list > li { grid-template-columns: minmax(0, 1fr); } }
 
 /* The post's own media in the timeline, sized as a preview rather than a
    player: enough to recognise the clip, small enough to keep the list a list. */
@@ -1771,7 +1787,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-media-kinds button.selected { color: var(--on-ink); background: var(--text); }
 .campaign-media-kinds button span { margin-inline-start: 3px; color: inherit; opacity: 0.68; font-size: 9px; font-variant-numeric: tabular-nums; }
 .campaign-media-browser .asset-filters { margin: 0; border-block: 1px solid var(--line); padding: 9px 12px; background: var(--panel-raised); }
-.campaign-media-actions { flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.campaign-media-actions { justify-content: flex-start; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
 /* Named rather than written as `span:not(.library-pick)`. The bar holds two
    spans now - the select-all box and this summary - and only this one takes
    the `auto` margin that pushes the buttons to the end; the checkbox taking it
@@ -1950,10 +1966,49 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-destinations li > .autopilot-destination-controls {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) auto;
   align-items: end;
   gap: 10px;
 }
+.campaign-account-dialog-summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-block-end: 10px; }
+.campaign-account-dialog-summary strong { font-size: 12px; }
+.campaign-account-dialog-summary small,
+.campaign-source-note { color: var(--muted); font-size: 11px; }
+.campaign-account-picker-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.campaign-account-loading { min-height: 320px; }
+.campaign-account-load-error { display: grid; min-height: 180px; place-content: center; justify-items: center; gap: 10px; color: var(--muted); text-align: center; }
+.campaign-account-picker-list > li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .45fr); gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.campaign-account-picker-list > li:has(input:checked) { border-color: var(--line-strong); background: var(--panel-raised); }
+/* A card per network, the way Publish groups its destinations. The flat list
+   this replaces made twenty accounts a different amount of work here than on
+   the screen they came from. */
+.campaign-account-network { display: grid; gap: 2px; margin-block-end: 10px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.campaign-account-network-head { display: flex; gap: 8px; align-items: center; padding-block-end: 6px; border-bottom: 1px solid var(--line); }
+.campaign-account-network-head strong { font-size: 12px; }
+.campaign-account-network-head span { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+/* The reach-everything action, pushed to the end of its own row. */
+.campaign-account-network-all { margin-inline-start: auto; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 9px; background: var(--panel); color: var(--text); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
+.campaign-account-network-all:hover { background: var(--panel-raised); }
+.campaign-account-entry { display: grid; gap: 4px; padding-block: 3px; }
+/* Listed rather than hidden: an account the engine refused is shown with its
+   reason, because absent-with-no-explanation is what this replaced. */
+.campaign-account-picker-row.is-spent { opacity: .55; cursor: not-allowed; }
+.campaign-account-spent { color: var(--red); }
+
+.autopilot-media-picker .campaign-account-picker-row { display: flex; gap: 9px; align-items: center; min-width: 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.autopilot-media-picker .campaign-account-picker-row:hover,
+.autopilot-media-picker .campaign-account-picker-row:has(input:checked) { border: 0; background: transparent; }
+.campaign-account-picker-row > span { display: grid; gap: 1px; min-width: 0; }
+.campaign-account-picker-row strong,
+.campaign-account-picker-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-account-picker-row small { color: var(--muted); font-size: 11px; }
+.autopilot-media-picker .campaign-account-format { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px; align-items: center; padding: 0; border: 0; color: var(--muted); background: transparent; font-size: 11px; cursor: default; }
+.campaign-account-format > span { white-space: nowrap; }
+.campaign-account-format .ui-select { width: 100%; min-width: 0; }
+.campaign-format-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+.campaign-format-grid label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .65fr); gap: 8px; align-items: center; }
+.campaign-format-grid label > span { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text); font-weight: 600; }
+.campaign-format-grid .ui-select { min-width: 0; width: 100%; }
 .autopilot-destinations li > .autopilot-destination-controls > .autopilot-placement-choice {
   display: grid;
   gap: 4px;
@@ -2005,6 +2060,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .autopilot-destinations li > .autopilot-destination-controls {
     grid-template-columns: minmax(0, 1fr);
   }
+  .campaign-account-picker-list > li { grid-template-columns: minmax(0, 1fr); }
+  .autopilot-media-picker .campaign-account-format { grid-template-columns: minmax(0, 1fr); padding-inline-start: 35px; }
+  .campaign-format-grid { grid-template-columns: minmax(0, 1fr); }
+  .campaign-format-grid label { grid-template-columns: minmax(0, 1fr); }
   .autopilot-destinations li > .autopilot-destination-controls > .ui-button {
     justify-self: start;
   }
@@ -2057,12 +2116,33 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-work-main, .campaign-work-side { display: grid; gap: 16px; min-width: 0; align-content: start; }
 /* Sticky so the accounts and the caps stay in view while a long queue scrolls
    past them - the pairing is the reason they share a pane. */
-.campaign-work-side { position: sticky; top: 16px; }
+/* Capped to the viewport and scrollable in its own right, so turning the wheel
+   over the settings scrolls the settings; uncapped, the rail had nothing to
+   scroll and every wheel tick went straight to the queue beside it. */
+/* Pinned beneath the same measured sticky stack the queue's own heading hangs
+   from. At a bare `top: 16px` the sticky page heading covered the rail's first
+   card once the page moved, and no amount of internal scrolling brought it
+   back - the rail was already at its top, just underneath the heading. */
+.campaign-work-side {
+  position: sticky;
+  top: var(--app-toolbar-offset, 52px);
+  max-height: calc(100vh - var(--app-toolbar-offset, 52px) - 16px);
+  overflow-y: auto;
+}
+@media (min-width: 901px) {
+  /* Above 900px the campaign heading is sticky too, and `--page-heading-offset`
+     is its measured bottom (toolbar included). The 12px is the card's gap
+     below that stack; the height gives the same 16px at the viewport floor. */
+  .campaign-work-side {
+    top: calc(var(--page-heading-offset, calc(var(--app-toolbar-offset, 52px) + 74px)) + 12px);
+    max-height: calc(100vh - var(--page-heading-offset, calc(var(--app-toolbar-offset, 52px) + 74px)) - 28px);
+  }
+}
 /* Below this the two columns are narrower than the queue's own rows, and a
    side column of 300px stops being a column and starts being a gutter. */
 @media (max-width: 1180px) {
   .campaign-work-split { grid-template-columns: minmax(0, 1fr); }
-  .campaign-work-side { position: static; }
+  .campaign-work-side { position: static; max-height: none; }
 }
 /* What the offer pays, on the review row. Beside the name because that is the
    pair being compared - which product, and for how much. */

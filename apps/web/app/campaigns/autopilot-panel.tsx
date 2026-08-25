@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, MessageCircle, Share2 } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { readTabSnapshot, refreshTabSnapshot } from "../../lib/tab-snapshots";
 import { AUTHORITIES } from "./authority-options";
 
 import { Button } from "../ui/button";
@@ -30,7 +31,15 @@ import { SegmentedControl } from "../ui/segmented";
 import { FilterChipStrip } from "../ui/filter-strip";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
+import { clipBounds } from "../ui/search-select";
 import { WaitingBlock } from "../ui/waiting-block";
+import {
+  accountKey,
+  groupByPlatform,
+  stillOffered,
+  toggleAccount,
+  toggleGroup,
+} from "../../lib/account-groups";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { SortableHeader, nextSort } from "../ui/sortable-header";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
@@ -107,7 +116,18 @@ type Account = {
   available?: boolean;
   unavailable_reason?: string | null;
   page_key?: string;
+  post_types?: { id: string; label: string; help: string }[];
 };
+
+/** An engine as the inventory reports it, for saying why accounts are absent. */
+type AccountEngine = {
+  id: string;
+  label: string;
+  reachable?: boolean;
+  reason?: string | null;
+};
+
+type CampaignAccountsSnapshot = { accounts: Account[]; engines?: AccountEngine[] };
 
 type PostingPreset = {
   id: string;
@@ -179,7 +199,24 @@ function PostingPresetSelect({
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [side, setSide] = useState<"above" | "below">("below");
+  /**
+   * Where the menu may sit, measured against whatever would clip it.
+   *
+   * The menu is wider than the column it is chosen in - a campaign row's
+   * picker sits in a rail about half the menu's width - so both the side it
+   * opens on and the side it grows toward are decided from the clip box, and
+   * its width stops at what remains. Measured rather than assumed: the rail's
+   * width is a fraction of the viewport, and the viewport is anybody's.
+   */
+  type MenuPlacement = {
+    side: "above" | "below";
+    align: "start" | "end";
+    inlineSize: number;
+    maxBlockSize: number;
+  };
+  const [placement, setPlacement] = useState<MenuPlacement>({
+    side: "below", align: "end", inlineSize: 320, maxBlockSize: 420,
+  });
   const [shownInfo, setShownInfo] = useState<string | null>(null);
   const [pinnedInfo, setPinnedInfo] = useState<string | null>(null);
   const pagePreset = presets.find((preset) => preset.id === pagePresetId);
@@ -228,10 +265,33 @@ function PostingPresetSelect({
   }
 
   function reveal() {
-    const rect = trigger.current?.getBoundingClientRect();
-    if (rect) {
-      const below = window.innerHeight - rect.bottom;
-      setSide(below < 260 && rect.top > below ? "above" : "below");
+    const anchor = trigger.current;
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      const bounds = clipBounds(anchor);
+      // Vertical: open on whichever side has room inside what clips us - the
+      // rail on Campaigns, the viewport anywhere else.
+      const below = bounds.bottom - rect.bottom;
+      const above = rect.top - bounds.top;
+      const side = below < 260 && above > below ? "above" : "below";
+      // Horizontal: the menu grows away from the edge it is anchored to, so
+      // pick the anchor whose direction has room, and stop short of the clip.
+      const rtl = getComputedStyle(anchor).direction === "rtl";
+      const towardStart = rtl ? bounds.right - rect.left : rect.right - bounds.left;
+      const towardEnd = rtl ? rect.right - bounds.left : bounds.right - rect.left;
+      const align = towardStart >= Math.min(320, towardEnd) ? "end" : "start";
+      setPlacement({
+        side,
+        align,
+        inlineSize: Math.max(
+          240,
+          Math.floor(Math.min(320, align === "end" ? towardStart : towardEnd)),
+        ),
+        maxBlockSize: Math.max(
+          180,
+          Math.floor(Math.min(420, (side === "below" ? below : above) - 8)),
+        ),
+      });
     }
     setOpen(true);
   }
@@ -289,7 +349,17 @@ function PostingPresetSelect({
         <ChevronDown size={15} aria-hidden="true" />
       </button>
       {open && (
-        <div className="posting-preset-menu" data-side={side}>
+        <div
+          className="posting-preset-menu"
+          data-side={placement.side}
+          style={{
+            insetInlineEnd: placement.align === "end" ? 0 : "auto",
+            insetInlineStart: placement.align === "start" ? 0 : "auto",
+            inlineSize: placement.inlineSize,
+            minInlineSize: 0,
+            maxBlockSize: placement.maxBlockSize,
+          }}
+        >
           {/* The list and the detail are siblings, not nested.
             *
             * Expanding the times inside the hovered row pushed every row under
@@ -393,6 +463,8 @@ type Destination = {
   enabled: boolean;
   /** What this account posts as - a Reel, a Story - where it has been set. */
   post_type?: string | null;
+  resolved_post_type?: string;
+  post_types?: { id: string; label: string; help: string }[];
   /** The stored configuration; 'auto' lets the network decide. */
   link_placement_setting: "auto" | "caption" | "first_comment" | "bio";
   /** What the configuration resolves to today. */
@@ -405,6 +477,8 @@ type QueueItem = {
   asset_id?: string | null;
   video_path: string;
   image_paths: string[];
+  /** Sparse destination-id overrides; absent destinations inherit defaults. */
+  post_type_overrides: Record<string, string>;
   /** The body is still the placeholder nobody wrote; the card says so. */
   needs_copy: boolean;
   title: string | null;
@@ -428,6 +502,15 @@ type QueueItem = {
     chosen_offer_ids?: string[];
   };
 };
+
+function compatiblePostTypes(destination: Destination, item: QueueItem) {
+  const choices = destination.post_types ?? [];
+  if (!item.image_paths.length) return choices.filter((kind) => kind.id !== "photo");
+  const photo = choices.filter((kind) => kind.id === "photo");
+  if (photo.length) return photo;
+  const ordinary = choices.filter((kind) => kind.id === "post");
+  return ordinary.length ? ordinary : choices.slice(0, 1);
+}
 
 type Autopilot = {
   enabled: boolean;
@@ -1664,8 +1747,40 @@ export function AutopilotPanel({
   // nothing - which is why changing a filter needs no page reset of its own.
   const queuePages = Math.max(1, Math.ceil(shownQueue.length / QUEUE_PAGE_SIZE));
   const safeQueuePage = Math.min(queuePage, queuePages - 1);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const accountSnapshotKey = `campaign-accounts:${workspaceId}:${campaignId}`;
+  const [accounts, setAccounts] = useState<Account[]>(() =>
+    readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey)?.accounts ?? []);
+  const [accountsLoaded, setAccountsLoaded] = useState(() =>
+    readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey) !== null);
+  const [accountEngines, setAccountEngines] = useState<AccountEngine[]>(() =>
+    readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey)?.engines ?? []);
+  const [accountsBusy, setAccountsBusy] = useState(false);
+  const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
+  const accountsPrimed = useRef(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  /**
+   * The accounts on offer, grouped by network.
+   *
+   * Already-added destinations are left out because they are not a choice any
+   * more; an account the engine has refused is kept, disabled, with its reason
+   * - dropping it made a page visible in Publish simply absent here, with
+   * nothing to explain the difference.
+   */
+  /** Engines the inventory could not read, which is why their accounts are absent. */
+  const unreadableEngines = useMemo(
+    () => accountEngines.filter((engine) => engine.reachable === false),
+    [accountEngines],
+  );
+  const accountGroups = useMemo(
+    () => groupByPlatform(
+      accounts.filter((account) => !destinations.some(
+        (item) => item.integration_id === account.id && item.provider === account.provider,
+      )),
+      selectedAccounts,
+    ),
+    [accounts, destinations, selectedAccounts],
+  );
+  const [accountPostTypes, setAccountPostTypes] = useState<Record<string, string>>({});
   const [offers, setOffers] = useState<Offer[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendations | null>(null);
   const [productItem, setProductItem] = useState<QueueItem | null>(null);
@@ -1835,6 +1950,7 @@ export function AutopilotPanel({
   const [selectionAction, setSelectionAction] = useState<LibrarySelectionActionId | null>(null);
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
+  const [editingPostTypes, setEditingPostTypes] = useState<Record<string, string>>({});
   // The campaign's own wording, overridden for this post. Empty means the
   // campaign's, which is why these are strings rather than nullable: the field
   // shows the campaign's text and clearing it is how you go back to it.
@@ -2139,30 +2255,78 @@ export function AutopilotPanel({
     }
   }
 
-  async function loadAccounts() {
-    setBusy("accounts");
+  async function loadAccounts({ quiet = false }: { quiet?: boolean } = {}) {
+    setAccountsBusy(true);
+    setAccountLoadError(null);
     try {
-      const body = await json<{ accounts: Array<Omit<Account, "id"> & {
-        integration_id: string;
-      }> }>(await apiFetch(
-        `${base}/autopilot/account-recommendations`,
-        { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
-      ));
-      setAccounts(body.accounts.map((account) => ({
-        ...account, id: account.integration_id,
-      })));
+      const snapshot = await refreshTabSnapshot<CampaignAccountsSnapshot>(
+        accountSnapshotKey,
+        async () => {
+          const body = await json<{
+            accounts: Array<Omit<Account, "id"> & { integration_id: string }>;
+            engines?: AccountEngine[];
+          }>(await apiFetch(
+            `${base}/autopilot/account-recommendations`,
+            { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+          ));
+          return {
+            accounts: body.accounts.map((account) => ({
+              ...account, id: account.integration_id,
+            })),
+            // Kept, so an engine that could not be read can be named. It was
+            // being discarded here, which is what made an account visible in
+            // Publish simply absent in this dialog with nothing to say why.
+            engines: body.engines ?? [],
+          };
+        },
+      );
+      setAccounts(snapshot.accounts);
+      setAccountEngines(snapshot.engines ?? []);
+      // The list reloads behind the open dialog. An account can be
+      // disconnected, or run out of quota, between being ticked and Add being
+      // pressed - and a selection still carrying it sends a request that fails
+      // on something the operator can no longer see.
+      setSelectedAccounts((current) => stillOffered(snapshot.accounts, current));
+      setAccountsLoaded(true);
       // Account discovery is also when legacy destinations learn the stable
-      // consolidated page key. Refresh so their inherited schedule is shown
-      // immediately, rather than on the next visit.
-      await refresh();
-      setSelectedAccounts(new Set());
-      setAdding(true);
+      // consolidated page key. It no longer blocks opening the picker: the
+      // account inventory is already useful, and this refresh only updates
+      // details behind the dialog.
+      void refresh().catch(() => undefined);
     } catch (reason) {
-      fail(explainFailure(reason, "Could not load accounts."));
+      const message = explainFailure(reason, "Could not load accounts.");
+      setAccountLoadError(message);
+      if (!quiet) fail(message);
     } finally {
-      setBusy("");
+      setAccountsBusy(false);
     }
   }
+
+  /** Open immediately; account discovery continues inside the stable dialog. */
+  function openAccountPicker() {
+    setSelectedAccounts(new Set());
+    setAccountPostTypes({});
+    setAdding(true);
+    void loadAccounts({ quiet: accountsLoaded });
+  }
+
+  /** A hover or keyboard focus usually finishes discovery before the click. */
+  function primeAccounts() {
+    if (!accountsLoaded && !accountsBusy) void loadAccounts({ quiet: true });
+  }
+
+  // Publish begins account discovery as soon as its configured workspace is
+  // known. Campaigns follows the same pattern so the picker is normally warm
+  // before somebody reaches it; the instant dialog remains the fallback for
+  // a click that beats the background read.
+  useEffect(() => {
+    if (!canEdit || accountsPrimed.current) return;
+    accountsPrimed.current = true;
+    queueMicrotask(() => void loadAccounts({ quiet: true }));
+    // One background read per mounted campaign. The snapshot and request
+    // coalescing handle subsequent opens without another cold wait.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEdit]);
 
   /** Open the picker. The shared hook fetches on open and on every filter
       change; what stays here is only what this surface adds - the composer
@@ -2638,22 +2802,6 @@ export function AutopilotPanel({
   }
 
   /**
-   * Bring a panel that has just opened into view.
-   *
-   * Both editors render after the whole queue, so pressing Edit content or
-   * Review products on a row near the top opened something below the fold and
-   * read as a button that did nothing. The next frame, because the panel does
-   * not exist until this render commits.
-   */
-  function revealPanel(id: string) {
-    window.requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({
-        behavior: "smooth", block: "center",
-      });
-    });
-  }
-
-  /**
    * Open the post editor as a modal, loaded from a queue item.
    *
    * The editor's markup lives in the content view, so opening it from the
@@ -2668,6 +2816,7 @@ export function AutopilotPanel({
     setView("content");
     setEditing(item);
     setEditingReplies(item.thread.length ? item.thread : [""]);
+    setEditingPostTypes(item.post_type_overrides ?? {});
     openEditorWording(item);
   }
 
@@ -2763,7 +2912,6 @@ export function AutopilotPanel({
       setRecommendations(body);
       setProductItem(item);
       setPinnedOffers(new Set(item?.offer_ids ?? []));
-      if (item) revealPanel("campaign-products");
     } catch (reason) {
       fail(explainFailure(reason, "Products could not be analyzed."));
     } finally {
@@ -4523,27 +4671,36 @@ export function AutopilotPanel({
           </>
         )}
         {productItem && recommendations?.item_id === productItem.id && (
-          <div className="campaign-item-products" id="campaign-products">
-            <div className="campaign-product-heading">
-              <div>
-                <strong>Products for {productItem.title ?? "this queued post"}</strong>
-                {/* What it carries today, before anything is changed. Opening
-                    this on a post with nothing pinned showed twelve empty
-                    boxes and no sign of what smart matching had already
-                    settled on, so the panel read as a chooser for a decision
-                    that had in fact been made. */}
-                <small>{pinnedOffers.size
-                  ? `Pinned: ${pinnedOffers.size} product${pinnedOffers.size === 1 ? "" : "s"}. Untick every box to hand this back to smart matching.`
-                  : recommendations.chosen_offer_ids?.length
-                    ? `Smart matching attaches ${recommendations.matches
-                        .filter((match) => recommendations.chosen_offer_ids?.includes(match.offer_id))
-                        .map((match) => match.product_name).join(", ")}. Tick a box to pin something else instead.`
-                    : "Smart matching has nothing to attach here. Tick a box to pin one."}</small>
-              </div>
-              <Button variant="quiet" size="sm" onClick={() => {
-                setProductItem(null); setRecommendations(null); setPinnedOffers(new Set());
-              }}>Close</Button>
-            </div>
+          /* A modal rather than a panel below the queue: the row that opened
+             it is often pages up, and a panel that arrives by scrolling read
+             as a button that did nothing. The same door the post editor uses. */
+          <Dialog
+            open
+            size="wide"
+            onClose={() => {
+              setProductItem(null); setRecommendations(null); setPinnedOffers(new Set());
+            }}
+            title={`Products for ${productItem.title ?? "this queued post"}`}
+            description={pinnedOffers.size
+              ? `Pinned: ${pinnedOffers.size} product${pinnedOffers.size === 1 ? "" : "s"}. Untick every box to hand this back to smart matching.`
+              : recommendations.chosen_offer_ids?.length
+                ? `Smart matching attaches ${recommendations.matches
+                    .filter((match) => recommendations.chosen_offer_ids?.includes(match.offer_id))
+                    .map((match) => match.product_name).join(", ")}. Tick a box to pin something else instead.`
+                : "Smart matching has nothing to attach here. Tick a box to pin one."}
+            headerAction={
+              <Button variant="primary" size="sm" busy={busy === "pin-products"}
+                onClick={() => void run("pin-products", async () => {
+                  await json(await apiFetch(`${base}/queue/${productItem.id}`, {
+                    method: "PATCH",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ offer_ids: [...pinnedOffers] }),
+                  }));
+                  setProductItem(null); setRecommendations(null);
+                  return pinnedOffers.size ? "Products pinned to this post." : "This post now uses smart product matching.";
+                })}>Save product choice</Button>
+            }
+          >
             <ul className="campaign-product-matches selectable">
               {recommendations.matches.map((match) => (
                 <li key={match.offer_id}>
@@ -4594,25 +4751,13 @@ export function AutopilotPanel({
                 </li>
               ))}
             </ul>
-            <div className="campaign-product-actions">
-              <small>{pinnedOffers.size
-                ? `${pinnedOffers.size} pinned product${pinnedOffers.size === 1 ? "" : "s"}; these override smart matching for this post.`
-                : recommendations.chosen_offer_ids?.length
-                  ? `Smart matching would attach the ${recommendations.chosen_offer_ids.length === 1
-                      ? "product" : `${recommendations.chosen_offer_ids.length} products`} marked above.`
-                  : "Nothing here is confident enough to attach unattended. Pin a product, or leave this post organic."}</small>
-              <Button variant="primary" size="sm" busy={busy === "pin-products"}
-                onClick={() => void run("pin-products", async () => {
-                  await json(await apiFetch(`${base}/queue/${productItem.id}`, {
-                    method: "PATCH",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ offer_ids: [...pinnedOffers] }),
-                  }));
-                  setProductItem(null); setRecommendations(null);
-                  return pinnedOffers.size ? "Products pinned to this post." : "This post now uses smart product matching.";
-                })}>Save product choice</Button>
-            </div>
-          </div>
+            <small className="campaign-product-actions-note">{pinnedOffers.size
+              ? `${pinnedOffers.size} pinned product${pinnedOffers.size === 1 ? "" : "s"}; these override smart matching for this post.`
+              : recommendations.chosen_offer_ids?.length
+                ? `Smart matching would attach the ${recommendations.chosen_offer_ids.length === 1
+                    ? "product" : `${recommendations.chosen_offer_ids.length} products`} marked above.`
+                : "Nothing here is confident enough to attach unattended. Pin a product, or leave this post organic."}</small>
+          </Dialog>
         )}
         {editing && (
           <Dialog
@@ -4642,6 +4787,7 @@ export function AutopilotPanel({
                   // with a product attached may not have.
                   disclosure: editingDisclosure.trim() || null,
                   bio_hint: editingBioHint.trim() || null,
+                  post_type_overrides: editingPostTypes,
                 }),
               }));
               closePostEditor();
@@ -4669,6 +4815,42 @@ export function AutopilotPanel({
             <label>{t("autopilot.hashtags")}
               <input name="hashtags" defaultValue={editing.hashtags.join(" ")} />
             </label>
+            {destinations.some((destination) => (
+              compatiblePostTypes(destination, editing).length > 1
+            )) && (
+              <details className="campaign-dialog-more campaign-format-overrides">
+                <summary>
+                  <strong>Post formats</strong>
+                  <small>Uses each account&apos;s default unless you override this post.</small>
+                </summary>
+                <div className="campaign-format-grid">
+                  {destinations.filter((destination) => (
+                    compatiblePostTypes(destination, editing).length > 1
+                  ))
+                    .map((destination) => {
+                      const options = compatiblePostTypes(destination, editing);
+                      return (
+                        <label key={destination.id}>
+                          <span><PlatformIcon platform={destination.platform} size={16} />
+                            {destination.label}</span>
+                          <Select value={editingPostTypes[destination.id] ?? ""}
+                            onChange={(event) => setEditingPostTypes((current) => {
+                              const next = { ...current };
+                              if (event.target.value) next[destination.id] = event.target.value;
+                              else delete next[destination.id];
+                              return next;
+                            })}>
+                            <option value="">Default — {destination.resolved_post_type ?? "recommended"}</option>
+                            {options.map((kind) => (
+                              <option key={kind.id} value={kind.id}>{kind.label}</option>
+                            ))}
+                          </Select>
+                        </label>
+                      );
+                    })}
+                </div>
+              </details>
+            )}
             {/* Named for the networks it will actually land on. Calling this
                 a first comment on a campaign that only posts to Threads
                 describes a comment box that network does not have. */}
@@ -4835,8 +5017,10 @@ export function AutopilotPanel({
         eyebrow={t("autopilot.whereEyebrow")}
         title={t("autopilot.destinations", { count: destinations.length })}
         aside={canEdit ? (
-          <Button variant="secondary" size="sm" busy={busy === "accounts"}
-            onClick={() => void loadAccounts()}>{t("autopilot.addAccount")}</Button>
+          <Button variant="secondary" size="sm"
+            onPointerEnter={primeAccounts}
+            onFocus={primeAccounts}
+            onClick={openAccountPicker}>{t("autopilot.addAccount")}</Button>
         ) : undefined}
       >
         {/* The campaign's own rhythm, above the accounts it applies to.
@@ -4946,6 +5130,30 @@ export function AutopilotPanel({
                       })}
                     />
                   </label>
+                  {(item.post_types ?? []).filter((kind) => kind.id !== "photo").length > 1 && (
+                    <label className="autopilot-placement-choice">
+                      Default format
+                      <Select
+                      value={item.post_type ?? ""}
+                      onChange={(event) => void run("post-type", async () => {
+                        await json(await apiFetch(
+                          `${base}/destinations/${item.id}/post-type`,
+                          {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ post_type: event.target.value || null }),
+                          },
+                        ));
+                        return `Default format updated for ${item.label}.`;
+                      })}
+                      >
+                        <option value="">Automatic — network recommended</option>
+                        {(item.post_types ?? []).filter((kind) => kind.id !== "photo").map((kind) => (
+                          <option key={kind.id} value={kind.id}>{kind.label}</option>
+                        ))}
+                      </Select>
+                    </label>
+                  )}
                   <label className="autopilot-placement-choice">
                     Link placement
                     <Select
@@ -5022,22 +5230,17 @@ export function AutopilotPanel({
         )}
 
         {adding && (
-          <div className="autopilot-account-picker">
-            <div className="autopilot-picker-head">
-              <strong>{selectedAccounts.size
-                ? `${selectedAccounts.size} accounts selected`
-                : t("autopilot.chooseAccounts")}</strong>
-              <Button variant="quiet" size="sm" onClick={() => setAdding(false)}>
-                {t("common.close")}
-              </Button>
-            </div>
-            <div className="autopilot-picker-tools">
+          <Dialog open size="wide" onClose={() => setAdding(false)}
+            title={t("autopilot.addAccountsTitle")}
+            description={t("autopilot.addAccountsHelp")}
+            headerAction={(
               <Button variant="primary" size="sm" disabled={!selectedAccounts.size}
                 busy={busy === "add-accounts"} onClick={() => void run("add-accounts", async () => {
                   const chosen = accounts.filter((account) =>
                     selectedAccounts.has(`${account.provider}:${account.id}`));
-                  await Promise.all(chosen.map(async (account) => json(await apiFetch(
-                    `${base}/destinations`, {
+                  await Promise.all(chosen.map(async (account) => {
+                    const key = `${account.provider}:${account.id}`;
+                    return json(await apiFetch(`${base}/destinations`, {
                       method: "POST",
                       headers: { "content-type": "application/json" },
                       body: JSON.stringify({
@@ -5046,61 +5249,157 @@ export function AutopilotPanel({
                         platform: account.platform,
                         label: account.label,
                         page_key: account.page_key,
+                        post_type: accountPostTypes[key] || null,
                       }),
-                    }))));
+                    }));
+                  }));
                   setSelectedAccounts(new Set());
+                  setAccountPostTypes({});
                   setAdding(false);
-                  // The product decision is in this same area now, so the
-                  // only move left is on to the schedule.
                   if (slots.length || chosen.some((account) => (
                     Boolean(pageAssignments[account.page_key ?? ""])
                   ))) void loadRecommendations();
                   else jumpTo("schedule");
                   return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
-                })}>Assign selected accounts</Button>
+                })}>{selectedAccounts.size
+                  ? t("autopilot.addAccountsAction", { count: selectedAccounts.size })
+                  : t("autopilot.addAccountsNone")}</Button>
+            )}
+          >
+            <div className="campaign-account-dialog-summary">
+              <strong>{selectedAccounts.size
+                ? t("autopilot.accountsSelected", { count: selectedAccounts.size })
+                : t("autopilot.selectSomeAccounts")}</strong>
+              <small>{accountsBusy && accountsLoaded
+                ? t("autopilot.refreshingAccounts")
+                : t("autopilot.automaticHelp")}</small>
             </div>
-            <ul className="autopilot-media-picker">
-              {accounts
-                .filter((account) => account.available !== false)
-                .filter((account) => !destinations.some(
-                  (item) => item.integration_id === account.id
-                    && item.provider === account.provider))
-                .map((account) => (
-                  <li key={`${account.provider}:${account.id}`}>
-                    <label>
-                      <input type="checkbox"
-                        checked={selectedAccounts.has(`${account.provider}:${account.id}`)}
-                        onChange={() => setSelectedAccounts((current) => {
-                          const key = `${account.provider}:${account.id}`;
-                          const next = new Set(current);
-                          if (next.has(key)) next.delete(key); else next.add(key);
-                          return next;
-                        })} />
-                      <PlatformIcon platform={account.platform} size={28} />
-                      <span>
-                        <strong>{account.label}</strong>
-                        {/* Which login carries it, not just which engine. Two
-                            Buffer connections put the same engine name on every
-                            row; the account the engine reports is the thing
-                            that tells them apart. */}
-                        <small>{platformLabels[account.platform]} · {account.provider_label}
-                          {accountIdentity({ account: account.connection_account })
-                            ? ` · ${accountIdentity({ account: account.connection_account })}`
-                            : ""}</small>
-                        <small className="campaign-account-schedule">
-                          Posting schedule: {postingPresets.find((preset) => (
-                            preset.id === pageAssignments[account.page_key ?? ""]
-                          ))?.label ?? "Workspace posting times"}
-                        </small>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              {!accounts.some((account) => account.available !== false)
-                && <li>{t("autopilot.noAccounts")}</li>}
-            </ul>
+            {/* One line naming the engines that could not be read, the way
+                Publish does it. Without this an engine with no key saved took
+                its accounts with it and the dialog simply had fewer rows than
+                the screen they came from - which reads as accounts having gone
+                away rather than as an engine needing attention. */}
+            {unreadableEngines.length > 0 && (
+              <p className="engine-note" role="status">
+                {t("autopilot.enginesUnreadable", {
+                  engines: unreadableEngines
+                    .map((engine) => `${engine.label}${engine.reason ? ` (${engine.reason})` : ""}`)
+                    .join(", "),
+                })}
+              </p>
+            )}
+            {!accountsLoaded && accountsBusy ? (
+              <WaitingBlock
+                className="waiting-block-compact campaign-account-loading"
+                message="Loading connected accounts…"
+              />
+            ) : accountLoadError && !accounts.length ? (
+              <div className="campaign-account-load-error" role="alert">
+                <strong>Connected accounts could not be loaded.</strong>
+                <Button variant="secondary" size="sm"
+                  busy={accountsBusy}
+                  onClick={() => void loadAccounts()}>Try again</Button>
+              </div>
+            ) : (
+              <ul className="autopilot-media-picker campaign-account-picker-list">
+              {accountGroups.map((group) => (
+                <li key={group.platform} className="campaign-account-network">
+                  {/* A card per network, the way Publish groups its
+                      destinations. Twenty accounts flat is the same twenty
+                      accounts, and a different amount of work depending on
+                      which screen somebody is standing on. */}
+                  <div className="campaign-account-network-head">
+                    <PlatformIcon platform={group.platform} size={20} />
+                    <strong>{platformLabels[group.platform]}</strong>
+                    <span>{group.chosen
+                      ? t("publish.pagesChosen", {
+                          chosen: group.chosen, total: group.accounts.length,
+                        })
+                      : t("publish.pagesConnected", { count: group.accounts.length })}</span>
+                    {/* One reach-everything action per network, again from
+                        Publish: choosing eight accounts one at a time is the
+                        work a picker exists to remove. Only where there is
+                        more than one to reach. */}
+                    {group.selectable > 1 && (
+                      <button type="button" className="campaign-account-network-all"
+                        onClick={() => setSelectedAccounts(
+                          (current) => toggleGroup(group, current),
+                        )}>
+                        {group.allChosen ? t("publish.selectNone") : t("publish.selectAll")}
+                      </button>
+                    )}
+                  </div>
+                  {group.accounts.map((account) => {
+                    const key = accountKey(account);
+                    const spent = account.available === false;
+                    return (
+                      <div key={key} className="campaign-account-entry">
+                        {/* Listed rather than hidden. The picker used to drop
+                            an account the engine had refused, so a page the
+                            operator could see in Publish simply was not here
+                            and nothing said why. Publish shows it disabled
+                            with the reason; so does this. */}
+                        <label
+                          className={`campaign-account-picker-row${spent ? " is-spent" : ""}`}
+                          title={spent ? account.unavailable_reason ?? undefined : undefined}
+                        >
+                          <input type="checkbox"
+                            checked={selectedAccounts.has(key)}
+                            disabled={spent}
+                            onChange={() => setSelectedAccounts(
+                              (current) => toggleAccount(account, current),
+                            )} />
+                          <PlatformIcon platform={account.platform} size={28} />
+                          <span>
+                            <strong>{account.label}</strong>
+                            {/* Which login carries it, not just which engine. Two
+                                Buffer connections put the same engine name on every
+                                row; the account the engine reports is the thing
+                                that tells them apart. */}
+                            <small>{platformLabels[account.platform]} · {account.provider_label}
+                              {accountIdentity({ account: account.connection_account })
+                                ? ` · ${accountIdentity({ account: account.connection_account })}`
+                                : ""}</small>
+                            {spent ? (
+                              <small className="campaign-account-spent">
+                                {account.unavailable_reason ?? t("publish.noQuotaLeft")}
+                              </small>
+                            ) : (
+                              <small className="campaign-account-schedule">
+                                {t("autopilot.postingSchedule", {
+                                  preset: postingPresets.find((preset) => (
+                                    preset.id === pageAssignments[account.page_key ?? ""]
+                                  ))?.label ?? t("autopilot.workspacePostingTimes"),
+                                })}
+                              </small>
+                            )}
+                          </span>
+                        </label>
+                        {selectedAccounts.has(key)
+                          && (account.post_types?.length ?? 0) > 1 && (
+                          <label className="campaign-account-format">
+                            <span>{t("autopilot.defaultFormat")}</span>
+                            <Select value={accountPostTypes[key] ?? ""}
+                              onChange={(event) => setAccountPostTypes((current) => ({
+                                ...current, [key]: event.target.value,
+                              }))}>
+                              <option value="">{t("autopilot.automaticFormat")}</option>
+                              {(account.post_types ?? []).map((kind) => (
+                                <option key={kind.id} value={kind.id}>{kind.label}</option>
+                              ))}
+                            </Select>
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </li>
+              ))}
+              {!accountGroups.length && <li>{t("autopilot.noAccounts")}</li>}
+              </ul>
+            )}
             <small className="campaign-source-note">Source: available connected accounts in Publish.</small>
-          </div>
+          </Dialog>
         )}
       </Card>}
         {<div className="autopilot-settings">
