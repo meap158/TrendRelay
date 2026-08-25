@@ -1042,7 +1042,7 @@ _SUNGLASSES_3D = Overlay(
 # and a visor are in this batch at all - nothing in the pack suited the second
 # biggest thing this library posts about.
 #
-# See `docs/architecture/0026-adding-overlay-objects.md` for the process.
+# See `docs/architecture/0026-keeping-the-object-pack-current.md`.
 
 BUTTERFLY_WING: RGBA = (146, 112, 232, 255)
 BUTTERFLY_EDGE: RGBA = (86, 62, 168, 255)
