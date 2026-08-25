@@ -162,6 +162,27 @@ def session():
         yield active
 
 
+@pytest.fixture(autouse=True)
+def keep_the_reader_registry():
+    """Give every test the real readers back, whatever it swapped in.
+
+    These tests register a stand-in reader and drop it again on the way out,
+    which was harmless while no engine had a real one. Three engines do now, and
+    a `pop` that used to remove a test's own fixture removes the shipped reader
+    instead - leaving every later test in the run looking at an engine the rest
+    of the codebase insists is readable. Restoring here rather than in each test
+    means the next one written this way is safe without knowing any of that.
+    """
+    from trendrelay_api import campaign_measurement
+
+    readers = dict(PROVIDER_METRIC_READERS)
+    resolver = campaign_measurement.PROVIDER_ENGINE_RESOLVER
+    yield
+    PROVIDER_METRIC_READERS.clear()
+    PROVIDER_METRIC_READERS.update(readers)
+    campaign_measurement.PROVIDER_ENGINE_RESOLVER = resolver
+
+
 def execution(session, identifier: str, state: str, **overrides) -> PublicationExecution:
     fields: dict = {
         "workspace_id": "ws", "media_path": "clip.mp4", "provider": "buffer",
@@ -185,18 +206,20 @@ def test_a_failure_can_never_become_a_positive_observation(session) -> None:
 
 
 def test_collection_says_which_providers_cannot_be_read(session) -> None:
-    execution(session, "x1", "published")
+    # WoopSocial is the only engine that cannot be read at all: its API reports
+    # delivery and not engagement. Buffer used to sit here too, and no longer
+    # does - reading back is now a condition of supporting an engine.
+    execution(session, "x1", "published", provider="woopsocial")
 
     result = collect_snapshots(session, now=NOW + timedelta(days=8))
 
-    assert result == {"captured": 0, "unreadable_providers": ["buffer"]}
-    # Zernio exposes a post-metrics read, so the interface no longer says that
-    # nothing can be measured: it names the engine that cannot be read - Buffer -
-    # while listing the one that can.
+    assert result == {"captured": 0, "unreadable_providers": ["woopsocial"]}
+    # So the interface names the engine that cannot be read while listing those
+    # that can, rather than claiming nothing is measurable.
     status = reader_status()
     assert status["note"] is None
-    assert "zernio" in status["readable_providers"]
-    assert "buffer" not in status["readable_providers"]
+    assert {"zernio", "buffer", "bundle_social"} <= set(status["readable_providers"])
+    assert "woopsocial" not in status["readable_providers"]
 
 
 def test_a_registered_reader_fills_each_window_once(session) -> None:
@@ -209,7 +232,7 @@ def test_a_registered_reader_fills_each_window_once(session) -> None:
         second = collect_snapshots(session, now=NOW + timedelta(hours=3))
         late = collect_snapshots(session, now=NOW + timedelta(days=8))
     finally:
-        del PROVIDER_METRIC_READERS["buffer"]
+        PROVIDER_METRIC_READERS.pop("buffer", None)
 
     assert first["captured"] == 1, "the 2h window was due"
     assert second["captured"] == 0, "a captured window is not captured again"

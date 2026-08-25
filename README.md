@@ -59,6 +59,8 @@ Social publishing runs entirely against a hosted API. Pick Bundle.social, Zernio
 
 Buffer has no upload endpoint, so it needs media already hosted at a public URL; the other three accept the approved local file directly.
 
+Campaigns read engagement back from the engine that published, which is a requirement of supporting an engine rather than an extra: Bundle.social, Zernio and Buffer all report views, likes, comments, shares and saves. WoopSocial does not, because its API has no analytics at all — it reports whether a post was delivered, not how it did — and it says so in its own definition rather than reading zero and looking measured. A figure that cannot be read is left blank and asked for again later; it is never recorded as nought. See [ADR 0011](docs/architecture/0011-governed-social-publishing.md).
+
 If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
 
 ### Running it as an app rather than a dev server

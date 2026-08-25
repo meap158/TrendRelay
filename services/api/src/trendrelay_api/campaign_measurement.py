@@ -68,12 +68,20 @@ PROVIDER_ENGINE_RESOLVER: Callable[[str], str | None] = _same_provider
 
 
 def reader_status() -> dict[str, Any]:
-    """Which engines can be measured, said plainly for a screen."""
+    """Which engines can be measured, said plainly for a screen.
+
+    An empty registry used to be the ordinary state, and the note said so. It
+    is now a fault: reading back is a condition of supporting an engine, so
+    nothing registered means registration did not run rather than that no engine
+    can report. The note says the thing that is actually true, because the
+    screen it reaches is the one an operator checks when the figures are missing.
+    """
     return {
         "readable_providers": sorted(PROVIDER_METRIC_READERS),
         "note": (
-            "No publishing engine currently exposes a post-metrics read; "
-            "performance snapshots start when one does."
+            "No engine is registered for reading post metrics, which should not "
+            "happen - every supported engine either reads back or records why it "
+            "cannot. Snapshots stay empty until this is repaired."
             if not PROVIDER_METRIC_READERS else None
         ),
     }

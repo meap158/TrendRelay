@@ -2631,3 +2631,207 @@ def test_a_post_with_no_delivered_id_is_never_asked_about(monkeypatch) -> None:
     execution.remote_post_ids = []
 
     assert publishing._zernio_metrics(execution) is None
+
+
+# --- every engine has to report, not just publish -----------------------------
+
+
+def test_every_engine_reports_what_it_published() -> None:
+    """The mandate, enforced rather than remembered.
+
+    An engine that publishes without reporting leaves its campaigns reading
+    zero, and zero on screen is indistinguishable from a post nobody saw - so
+    the gap hides exactly where it costs most. Adding an engine therefore means
+    adding a reader, or writing down why its API cannot support one.
+
+    Both together is also a failure: a reason beside a working reader is a
+    stale note, and stale notes are how the next person concludes the engine
+    cannot be read.
+    """
+    from trendrelay_api.campaign_measurement import PROVIDER_METRIC_READERS
+
+    for engine, provider in publishing.PROVIDERS.items():
+        readable = engine in PROVIDER_METRIC_READERS
+        excused = bool(provider.no_metrics_reason)
+        assert readable != excused, (
+            f"{engine} needs exactly one of a metrics reader or a written reason "
+            f"it cannot have one (reader={readable}, reason={excused})."
+        )
+
+
+def test_an_engine_that_cannot_be_read_says_why_in_full() -> None:
+    """A reason has to carry its evidence.
+
+    "No analytics API" is not checkable a year later; naming the document that
+    says so is. WoopSocial's own OpenAPI spec is the evidence, and the next
+    person needs to know where to look to find out whether it still holds.
+    """
+    for provider in publishing.PROVIDERS.values():
+        if not provider.no_metrics_reason:
+            continue
+        assert len(provider.no_metrics_reason) > 120, provider.id
+        assert provider.no_metrics_reason.rstrip().endswith("."), provider.id
+
+
+# --- reading a Buffer post's engagement back ----------------------------------
+
+
+class _BufferExecution:
+    def __init__(self, post_id: str = "buffer-post") -> None:
+        self.remote_post_ids = [post_id]
+        self.provider = "buffer"
+        self.platform = "facebook"
+        self.published_at = datetime(2026, 8, 25, 17, 0, tzinfo=UTC)
+
+
+def _buffer_post(metrics: list[dict]) -> dict:
+    return {"post": {"id": "buffer-post", "metricsUpdatedAt": "2026-08-26T00:00:00Z",
+                     "metrics": metrics}}
+
+
+def test_buffer_prefers_the_count_that_means_the_same_everywhere(monkeypatch) -> None:
+    """`reactions`, not `likes`.
+
+    Buffer means the Like subcount on Facebook by `likes`, where `reactions` is
+    its unified count across networks. A campaign putting a Facebook post beside
+    an Instagram one is comparing reactions, so taking `likes` would quietly
+    understate every Facebook post in the comparison.
+    """
+    monkeypatch.setattr(publishing, "_buffer_requests_left", lambda: 200)
+    monkeypatch.setattr(publishing, "_buffer_graphql", lambda *a, **k: _buffer_post([
+        {"type": "likes", "unit": "count", "value": 3},
+        {"type": "reactions", "unit": "count", "value": 11},
+        {"type": "comments", "unit": "count", "value": 2},
+    ]))
+
+    metrics = publishing._buffer_metrics(_BufferExecution())
+
+    assert metrics == {"likes": 11.0, "comments": 2.0}
+
+
+def test_buffer_does_not_count_a_showing_as_a_watching(monkeypatch) -> None:
+    """`views` outranks `impressions`, and only stands in when views are absent."""
+    monkeypatch.setattr(publishing, "_buffer_requests_left", lambda: 200)
+    monkeypatch.setattr(publishing, "_buffer_graphql", lambda *a, **k: _buffer_post([
+        {"type": "impressions", "unit": "count", "value": 900},
+        {"type": "views", "unit": "count", "value": 120},
+    ]))
+
+    assert publishing._buffer_metrics(_BufferExecution())["views"] == 120.0
+
+    monkeypatch.setattr(publishing, "_buffer_graphql", lambda *a, **k: _buffer_post([
+        {"type": "impressions", "unit": "count", "value": 900},
+    ]))
+
+    assert publishing._buffer_metrics(_BufferExecution())["views"] == 900.0
+
+
+def test_buffer_watch_time_is_stored_in_seconds(monkeypatch) -> None:
+    """Buffer reports minutes; a snapshot is seconds, and nothing says so at rest."""
+    monkeypatch.setattr(publishing, "_buffer_requests_left", lambda: 200)
+    monkeypatch.setattr(publishing, "_buffer_graphql", lambda *a, **k: _buffer_post([
+        {"type": "totalTimeWatched", "unit": "count", "value": 4},
+    ]))
+
+    assert publishing._buffer_metrics(_BufferExecution()) == {"watch_seconds": 240.0}
+
+
+def test_buffer_will_not_spend_the_requests_publishing_needs(monkeypatch) -> None:
+    """Measurement can wait; publishing cannot.
+
+    Buffer allows 250 requests a day across the whole key. A campaign that reads
+    yesterday's likes with its last requests and then cannot post today has made
+    the wrong trade, so the reader stops while there is still room to publish.
+    """
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("spent a request from the publishing reserve")
+
+    monkeypatch.setattr(publishing, "_buffer_graphql", refuse)
+    monkeypatch.setattr(publishing, "_buffer_requests_left", lambda: 5)
+
+    assert publishing._buffer_metrics(_BufferExecution()) is None
+
+
+def test_buffer_reads_the_budget_out_of_the_header_it_already_has(monkeypatch) -> None:
+    """The remaining count rides on every response, so asking would waste one."""
+    monkeypatch.setattr(
+        publishing, "buffer_rate_limit_header", lambda: '"250-in-1day"; r=137; t=34394'
+    )
+
+    assert publishing._buffer_requests_left() == 137
+
+    monkeypatch.setattr(publishing, "buffer_rate_limit_header", lambda: None)
+
+    # Not zero. Nothing has been asked yet this process, which is not the same
+    # as an exhausted budget and must not stop a reader that could have run.
+    assert publishing._buffer_requests_left() is None
+
+
+def test_a_buffer_post_with_no_figures_yet_reads_as_nothing(monkeypatch) -> None:
+    """Buffer answers with an empty list until the network reports.
+
+    Recording that as zeros would fill the window, and a filled window is never
+    filled again - the post would read nought for the rest of its life.
+    """
+    monkeypatch.setattr(publishing, "_buffer_requests_left", lambda: 200)
+    monkeypatch.setattr(publishing, "_buffer_graphql", lambda *a, **k: _buffer_post([]))
+
+    assert publishing._buffer_metrics(_BufferExecution()) is None
+
+
+def test_a_buffer_percentage_is_never_filed_as_a_tally(monkeypatch) -> None:
+    monkeypatch.setattr(publishing, "_buffer_requests_left", lambda: 200)
+    monkeypatch.setattr(publishing, "_buffer_graphql", lambda *a, **k: _buffer_post([
+        {"type": "views", "unit": "percentage", "value": 4.2},
+        {"type": "comments", "unit": "count", "value": 1},
+    ]))
+
+    assert publishing._buffer_metrics(_BufferExecution()) == {"comments": 1.0}
+
+
+# --- reading a bundle.social post's engagement back ---------------------------
+
+
+class _BundleExecution:
+    def __init__(self) -> None:
+        self.remote_post_ids = ["bundle-post"]
+        self.provider = "bundle_social"
+        self.platform = "facebook"
+        self.published_at = datetime(2026, 8, 25, 17, 0, tzinfo=UTC)
+
+
+def test_bundle_finds_figures_wherever_the_network_put_them(monkeypatch) -> None:
+    """Nine networks, one mapping.
+
+    bundle.social hands back each network's own shape under `raw`, so the same
+    figure sits at a different depth with a different parent depending on who
+    answered. The names are distinctive enough to read without the path.
+    """
+    monkeypatch.setattr(publishing, "_bundle_request", lambda *a, **k: {
+        "items": [{"raw": {"insights": {"like_count": 12, "commentCount": 3},
+                           "video": {"views": 480}}}],
+    })
+
+    assert publishing._bundle_metrics(_BundleExecution()) == {
+        "views": 480.0, "likes": 12.0, "comments": 3.0,
+    }
+
+
+def test_bundle_reads_nothing_out_of_a_shape_it_does_not_recognise(monkeypatch) -> None:
+    monkeypatch.setattr(publishing, "_bundle_request", lambda *a, **k: {
+        "items": [{"raw": {"somethingElse": 4}}],
+    })
+
+    assert publishing._bundle_metrics(_BundleExecution()) is None
+
+
+def test_bundle_needs_the_network_as_well_as_the_post(monkeypatch) -> None:
+    """One post on three networks has three answers, and this is one of them."""
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("asked without knowing which network to ask about")
+
+    monkeypatch.setattr(publishing, "_bundle_request", refuse)
+    execution = _BundleExecution()
+    execution.platform = "not-a-network"
+
+    assert publishing._bundle_metrics(execution) is None

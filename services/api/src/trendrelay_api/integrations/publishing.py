@@ -1,16 +1,25 @@
 """Durable, dry-run-first adapter for social publishing via hosted provider APIs.
 
-Three provider engines are supported and selected by the operator:
+Four provider engines are supported and selected by the operator:
 
 * ``bundle_social`` - multi-tenant SaaS engine; uploads media, verbose errors.
 * ``zernio`` - single-tenant engine with a static bearer token and presigned
   media uploads.
 * ``buffer`` - GraphQL queue engine; media must already be hosted publicly.
+* ``woopsocial`` - agent-oriented API; media uploaded directly, delivery
+  reported per destination.
+
+Publishing is only half of an engine's job. Every engine here must also read
+back what its posts earned, or say in its definition why its API cannot - see
+``ProviderDefinition.no_metrics_reason`` and ``_register_metric_readers``. An
+engine that publishes without reporting leaves a campaign showing zeros that
+look like a result.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -224,6 +233,19 @@ class ProviderDefinition:
     #: declare outright - so this is a list of what has been read in a schema,
     #: not of what seems likely.
     topic_platforms: tuple[str, ...] = ()
+    #: Why this engine has no metrics reader, empty when it has one.
+    #:
+    #: Reading back what a post earned is not optional. An engine that can
+    #: publish but not report leaves its campaigns showing zero for ever, and
+    #: zero is indistinguishable on screen from a post nobody saw - so the gap
+    #: is invisible exactly where it matters. Every engine here therefore either
+    #: has a reader registered in `_register_metric_readers` or says here, in
+    #: writing, why its API cannot support one.
+    #:
+    #: A test enforces the pair: exactly one of the two, never both, never
+    #: neither. The reason belongs to the engine's API rather than to our
+    #: appetite for the work, and "not implemented yet" is not one of them.
+    no_metrics_reason: str = ""
 
 
 PROVIDERS: dict[str, ProviderDefinition] = {
@@ -420,6 +442,15 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         media_note=(
             "The approved local MP4 is uploaded to WoopSocial before the post is "
             "created. Single-request uploads are capped at 100 MB."
+        ),
+        no_metrics_reason=(
+            "WoopSocial's API does not report engagement. Its own OpenAPI 1.0.0 "
+            "document, served at /openapi.json, lists twenty-three operations and "
+            "not one of them is analytics: the words likes, views, shares, "
+            "impressions and engagement do not appear in the document at all. "
+            "What it does carry is DeliveryStatus - NOT_STARTED, SENDING, "
+            "PUBLISHED, FAILED - which says whether the post went out, not how it "
+            "did. Re-check the spec before assuming this is still true."
         ),
     ),
 }
@@ -1689,6 +1720,112 @@ def _bundle_publish(request: PublishRequest, video: Path | None) -> dict[str, An
     }
 
 
+# --- reading a bundle.social post's engagement back ------------------------ #
+
+
+#: bundle.social's metric names, and ours.
+#:
+#: Their post-level schema names impressions, unique impressions, views, unique
+#: views, likes, dislikes, comments, shares and saves. The unique variants are
+#: deliberately not preferred: a campaign comparing posts across engines wants
+#: the same quantity everywhere, and no other engine here reports uniques.
+#:
+#: Names are matched case- and separator-insensitively, because the same field
+#: arrives as `likeCount`, `like_count` or `likes` depending on which network's
+#: payload it was parsed from.
+BUNDLE_METRIC_NAMES: dict[str, tuple[str, ...]] = {
+    "views": ("views", "videoviews", "impressions", "reach"),
+    "likes": ("likes", "likecount", "reactions", "favorites"),
+    "comments": ("comments", "commentcount", "replies"),
+    "shares": ("shares", "sharecount", "reposts", "retweets"),
+    "saves": ("saves", "savecount", "bookmarks"),
+    "watch_seconds": ("watchseconds", "totaltimewatched", "videowatchtime"),
+}
+
+
+def _flatten_numbers(payload: Any, into: dict[str, float], depth: int = 0) -> None:
+    """Every number in a nested payload, keyed by its name alone.
+
+    bundle.social returns each network's own shape under `raw`, so the figures
+    sit at different depths with different parents depending on which network
+    answered. The names themselves are distinctive enough to read without the
+    path, and reading them by name is what lets one mapping serve nine networks
+    instead of nine mappings serving one each.
+    """
+    if depth > 6:
+        return
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                name = re.sub(r"[^a-z0-9]+", "", str(key).casefold())
+                # First writer wins: the outermost occurrence of a name is the
+                # post's own, and a nested repeat belongs to something smaller.
+                into.setdefault(name, float(value))
+            else:
+                _flatten_numbers(value, into, depth + 1)
+    elif isinstance(payload, list):
+        for item in payload:
+            _flatten_numbers(item, into, depth + 1)
+
+
+def _bundle_metrics(execution: Any) -> dict[str, float] | None:
+    """What a bundle.social post earned, or None when it cannot be read.
+
+    Their analytics are per post *and* per network, so the platform has to be
+    sent alongside the id - one post published to three networks has three
+    answers, and this execution is one of them.
+
+    The parsed report is asked for first and the raw platform payload second.
+    Raw is where a network's own field names survive, and it is worth reading
+    because their documentation is explicit that the parsed schema does not
+    cover every network's figures.
+
+    Two constraints are theirs, not ours, and both argue for reading rather than
+    forcing a refresh: analytics refresh on their side every 24 hours, and a
+    forced refresh is rate limited to five per team per day. This never forces
+    one. It also cannot reach back further than thirty days, which is their
+    retention limit - a post older than that reads as unmeasurable rather than
+    as zero.
+
+    Nothing recognisable in the answer returns None. A window left unread is
+    retried; a window filled with zeros is not, and would be wrong for ever.
+
+    Written from bundle.social's published API reference and not yet exercised
+    against a live account: the configured key is refused with 403 on every
+    path, analytics included. That is why the mapping reads by name at any depth
+    rather than following a path this has seen - and why "nothing recognisable"
+    has to mean None. The first successful account will confirm the shape or
+    show it reading nothing, and reading nothing is the safe half of that.
+    """
+    post_ids = [str(value) for value in getattr(execution, "remote_post_ids", []) or []]
+    platform = str(getattr(execution, "platform", "") or "")
+    platform_type = BUNDLE_TYPES.get(platform)
+    if not post_ids or not platform_type:
+        return None
+    query = f"?postId={quote(post_ids[0])}&platformType={quote(platform_type)}"
+    numbers: dict[str, float] = {}
+    for path in (f"/analytics/post{query}", f"/analytics/post/raw{query}"):
+        try:
+            payload = _bundle_request("GET", path, timeout=30)
+        except Exception:
+            continue
+        if payload:
+            _flatten_numbers(payload, numbers)
+        if numbers:
+            break
+    if not numbers:
+        return None
+    metrics: dict[str, float] = {}
+    for field, candidates in BUNDLE_METRIC_NAMES.items():
+        for candidate in candidates:
+            if candidate in numbers:
+                metrics[field] = numbers[candidate]
+                break
+    return metrics or None
+
+
 def _bundle_accounts() -> list[dict[str, str]]:
     teams = _bundle_request("GET", "/team/", timeout=30) or {}
     items = teams.get("items", [teams] if isinstance(teams, dict) else [])
@@ -2300,16 +2437,26 @@ def _zernio_metrics(execution: Any) -> dict[str, float] | None:
 # knows it has a reader for a provider. Registering here keeps that module free
 # of any engine import - it discovers the reader rather than depending on it.
 def _register_metric_readers() -> None:
+    """Every engine that can be read, and how.
+
+    One entry per engine, and an engine missing from here has to say why in its
+    definition instead - `test_every_engine_reports_what_it_published` fails on
+    an engine that appears in neither place. The call is at the foot of the
+    module because the readers are defined beside the engines they belong to.
+    """
     from trendrelay_api import campaign_measurement
 
-    campaign_measurement.PROVIDER_METRIC_READERS["zernio"] = _zernio_metrics
+    campaign_measurement.PROVIDER_METRIC_READERS.update({
+        "zernio": _zernio_metrics,
+        "buffer": _buffer_metrics,
+        "bundle_social": _bundle_metrics,
+        # woopsocial has no reader: its API reports delivery, not engagement.
+        # The evidence is in `no_metrics_reason` on the definition.
+    })
     # And how to get from what an execution stored to the engine that can read
     # it. A destination stores a connection id, so a second login's posts
     # matched no reader at all until this was told how to resolve one.
     campaign_measurement.PROVIDER_ENGINE_RESOLVER = _engine_of
-
-
-_register_metric_readers()
 
 
 # --------------------------------------------------------------------------- #
@@ -2590,6 +2737,139 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
             raise RuntimeError(f"Buffer did not return a post for {target.platform}.")
         post_ids.append(str(post["id"]))
     return {"post_ids": post_ids, "media_url": request.media_url, "post_status": None}
+
+
+# --- reading a Buffer post's engagement back ------------------------------- #
+
+
+#: Buffer's metric names, and ours.
+#:
+#: Each of ours lists the Buffer metrics that can stand for it, best first. The
+#: alternatives are not synonyms and the order is the judgement:
+#:
+#: `reactions` before `likes` because Buffer means something narrower by `likes`
+#: than every other engine does - the Like subcount on Facebook, where
+#: `reactions` is the unified count across networks and is what a campaign is
+#: comparing when it puts a Facebook post next to an Instagram one.
+#:
+#: `views` before `impressions` because an impression is a showing, not a
+#: watching, and counting one as the other would quietly inflate every video
+#: post against every photo post.
+#:
+#: `shares` before `reposts` because they are different acts on different
+#: networks - forwarding versus retweeting - and no network reports both, so
+#: taking the first that appears is exact rather than approximate.
+BUFFER_METRIC_NAMES: dict[str, tuple[str, ...]] = {
+    "views": ("views", "impressions"),
+    "likes": ("reactions", "likes"),
+    "comments": ("comments",),
+    "shares": ("shares", "reposts"),
+    "saves": ("saves",),
+    "watch_seconds": ("totalTimeWatched",),
+}
+
+#: Requests held back from measurement, out of Buffer's daily allowance.
+#:
+#: Buffer grants 250 requests a day for the whole key - publishing, channel
+#: listing and measurement out of one pot - and measurement is the only one of
+#: the three that can wait. A campaign that spends its last requests reading
+#: yesterday's likes and then cannot publish today has made the wrong trade, so
+#: the reader stops while there is still room to post.
+#:
+#: An unread window stays due and is retried on the next pass, which is the
+#: behaviour the collector already relies on for an engine that is briefly
+#: unreachable.
+BUFFER_METRICS_RESERVE = 40
+
+#: Buffer reports watch time in minutes; snapshots are in seconds.
+BUFFER_MINUTES_TO_SECONDS = 60
+
+
+def _buffer_requests_left() -> int | None:
+    """How much of Buffer's daily allowance is left, if it has said.
+
+    Read from the `RateLimit` header of whatever call happened most recently -
+    `"250-in-1day"; r=0; t=34394` - so knowing the budget costs nothing. None
+    when no call has been made yet this process, which is not the same as zero
+    and must not be treated as empty.
+    """
+    header = buffer_rate_limit_header()
+    if not header:
+        return None
+    for part in header.split(";"):
+        name, separator, value = part.strip().partition("=")
+        if separator and name.strip() == "r":
+            try:
+                return int(value.strip())
+            except ValueError:
+                return None
+    return None
+
+
+def _buffer_metrics(execution: Any) -> dict[str, float] | None:
+    """What a Buffer post earned, or None when it cannot be read yet.
+
+    Buffer keeps its own id for every post it sends, and that is what is stored
+    at delivery, so this is a direct lookup rather than a search through a
+    report - none of the matching that reading Zernio back requires.
+
+    Three things return None rather than a figure, because each of them means
+    "not known yet" and recording a zero would freeze that into the campaign as
+    an observation:
+
+    - the budget is nearly spent, and publishing needs what is left;
+    - the post has no metrics yet, which is Buffer's answer until the network
+      reports and `metricsUpdatedAt` is set;
+    - the lookup fails or the post is gone.
+
+    A metric Buffer does report is recorded as it stands, zero included: Buffer
+    is explicit that a metric the network did not supply reads 0, and the
+    difference between that and a real zero is not visible from here. What is
+    visible is the difference between having figures and having none, and that
+    is the distinction this keeps.
+    """
+    post_ids = [str(value) for value in getattr(execution, "remote_post_ids", []) or []]
+    if not post_ids:
+        return None
+    left = _buffer_requests_left()
+    if left is not None and left <= BUFFER_METRICS_RESERVE:
+        return None
+    query = (
+        "query { post(input: { id: %s }) { id metricsUpdatedAt "
+        "metrics { type unit value } } }" % _graphql_literal(post_ids[0])
+    )
+    try:
+        payload = _buffer_graphql(query, timeout=30)
+    except Exception:
+        return None
+    post = payload.get("post") if isinstance(payload, dict) else None
+    if not isinstance(post, dict):
+        return None
+    reported: dict[str, float] = {}
+    for metric in post.get("metrics") or []:
+        if not isinstance(metric, dict):
+            continue
+        # A percentage is not a count. `engagementRate` is the one Buffer sends
+        # that way and nothing here maps it, but the guard is cheap and stops a
+        # new percentage metric from being filed as a tally.
+        if str(metric.get("unit") or "").casefold().startswith("percent"):
+            continue
+        try:
+            reported[str(metric.get("type") or "")] = float(metric.get("value") or 0)
+        except (TypeError, ValueError):
+            continue
+    if not reported:
+        return None
+    metrics: dict[str, float] = {}
+    for field, candidates in BUFFER_METRIC_NAMES.items():
+        for candidate in candidates:
+            if candidate in reported:
+                value = reported[candidate]
+                if field == "watch_seconds":
+                    value *= BUFFER_MINUTES_TO_SECONDS
+                metrics[field] = value
+                break
+    return metrics or None
 
 
 # --------------------------------------------------------------------------- #
@@ -3745,3 +4025,7 @@ def publish_job(job_id: str) -> dict[str, Any]:
 
 def list_publish_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
     return list_job_records(workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY)
+
+
+# Registered last, once every engine's reader above has been defined.
+_register_metric_readers()

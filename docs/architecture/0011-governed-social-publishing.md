@@ -19,6 +19,28 @@ Publishing targets four hosted engines. `PUBLISHING_PROVIDER` names the default,
 
 An engine declares the platforms it publishes to, and a request naming an unsupported platform is rejected before any network call.
 
+### Publishing without reporting is not enough
+
+**Every engine must read back what its posts earned, or state in its own definition why its API cannot.** This is a requirement of adding an engine, not a later enhancement, and a test enforces it: `ProviderDefinition.no_metrics_reason` must be set exactly when no reader is registered in `_register_metric_readers` — never both, never neither.
+
+The rule exists because the failure is silent. An engine that publishes but never reports leaves its campaigns reading zero, and a zero on screen is indistinguishable from a post nobody saw. The gap hides precisely where it costs most: in the numbers a campaign is steered by. A missing reader is not a missing feature, it is a wrong answer.
+
+"Not implemented yet" is not an acceptable reason. The reason must belong to the engine's API, and it must carry the evidence that will let the next person re-check it.
+
+| Engine | Reads back | How, and what it costs |
+| --- | --- | --- |
+| `zernio` | Yes | A dated analytics report, paged. The post is matched on `latePostId`; the report's own `_id` is a per-platform row and matches nothing we store |
+| `buffer` | Yes | `post(input: {id})` returns `metrics { type unit value }` — a direct lookup, since Buffer's own post id is what delivery stored. Its `reactions` is preferred over its `likes`, which means only the Facebook Like subcount. Bounded by a hard 250 requests per day for the whole key |
+| `bundle_social` | Yes, unverified | `GET /analytics/post` per post *and* network, falling back to the raw platform payload. Their side refreshes every 24h and retains 30 days. Written from their published reference; the configured key is refused with 403 on every path, so it has never run against a live account |
+| `woopsocial` | No | Its published OpenAPI 1.0.0 document has no analytics operation, and the words likes, views, shares, impressions and engagement do not occur in it. It reports `DeliveryStatus` — whether the post went out, not how it did |
+
+Two rules govern what a reader may record, and both exist because of a bug that recorded another post's figures as this one's:
+
+- **A failed read is never an observation.** Not found, not reachable, not measured yet, and not enough budget all return `None`, which leaves the window due and retried. Writing zeros instead is permanent: a captured window is never captured again, so a guessed zero outlives the outage that caused it.
+- **A figure the network reported is recorded as it stands**, zero included. What the reader must not do is invent the distinction between "reported nothing" and "was not asked".
+
+Measurement is also the lowest-priority caller of any engine. Buffer's allowance is shared between publishing, listing channels, and reading metrics, and only the last of those can wait — so its reader stops while requests remain (`BUFFER_METRICS_RESERVE`) rather than spending the budget a campaign needs to post at all.
+
 Because the engines disagree about media, `PublishRequest` carries both an approved local `video_path` and an optional public `media_url`, and each engine declares two separate capabilities rather than one. `requires_public_media` means it cannot accept an upload at all; `ingests_media_url` means it can fetch a URL instead of being handed the file. The pair matters because one post spans several engines: a URL supplied so Buffer can publish must not excuse WoopSocial, which has no endpoint that takes a URL, from reading the local file.
 
 Credentials are operator-supplied through the Publish screen. The API writes them to the project's local `.env` from a loopback-only, role-gated, explicitly confirmed endpoint, then clears the cached settings. Only fixed, allow-listed keys may be written.

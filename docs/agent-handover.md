@@ -170,6 +170,17 @@ existed still resolves with no migration. Credentials resolve through a
 **Connection ids are capped at 32 characters** to fit the `provider` columns.
 SQLite would accept longer silently; Postgres would not.
 
+**An engine that cannot be read back does not ship.** Adding an engine means
+adding a metrics reader in `_register_metric_readers`, or writing the reason its
+API cannot support one into `ProviderDefinition.no_metrics_reason` - exactly one
+of the two, enforced by a test. Publishing without reporting is not a missing
+feature, it is a campaign reading zero and looking measured. Two rules bind the
+readers: a failed read returns `None` so the window stays due, and a reported
+figure is stored as it stands. A captured window is never captured again, so a
+guessed zero outlives whatever caused it - which is how sixty-nine executions
+came to hold another post's figures. WoopSocial is the one engine with no
+reader, and its own OpenAPI document is the evidence.
+
 **The campaign timeline is one list.** Delivered and planned posts are
 normalised into a flat `TimelineEntry` and grouped by day. Keep it that way -
 they were two lists with two designs, and the delivered half did not even name
