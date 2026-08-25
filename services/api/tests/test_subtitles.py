@@ -366,3 +366,69 @@ def test_nothing_to_align_against_is_nothing_rather_than_a_guess() -> None:
     assert retimed_segments("some words", []) == []
     assert retimed_segments("", spoken()) == []
     assert retimed_segments("   ", spoken()) == []
+
+
+# --- what a "word" is, per script ---------------------------------------------
+
+
+def test_a_spaceless_script_paces_by_the_character() -> None:
+    """The unit every timing distribution stands on.
+
+    A Chinese sentence has no spaces, so splitting on them returned the whole
+    line as one "word" - and a reviewed transcript timed as one unit showed
+    the entire text at once in a one-word caption.
+    """
+    from trendrelay_api.subtitles import pacing_tokens
+
+    assert pacing_tokens("这是测试") == ["这", "是", "测", "试"]
+    # Spaced scripts keep their words; Korean spaces between words already.
+    assert pacing_tokens("hello there") == ["hello", "there"]
+    assert pacing_tokens("안녕하세요 세계") == ["안녕하세요", "세계"]
+    # Mixed text splits each script its own way.
+    assert pacing_tokens("看看iPhone吧") == ["看", "看", "iPhone", "吧"]
+    # Punctuation takes no time to say, so it rides with the token before it.
+    assert pacing_tokens("你好。") == ["你", "好。"]
+
+
+def test_tokens_join_back_the_way_the_script_writes() -> None:
+    from trendrelay_api.subtitles import join_tokens
+
+    assert join_tokens(["这", "是", "测", "试"]) == "这是测试"
+    assert join_tokens(["hello", "there"]) == "hello there"
+    assert join_tokens(["看", "看", "iPhone", "吧"]) == "看看 iPhone 吧"
+
+
+def test_an_untimed_spaceless_segment_is_estimated_per_character() -> None:
+    found = words_from_segments([
+        {"text": "这是测试", "start_ms": 0, "end_ms": 2000},
+    ])
+
+    assert [word.text for word in found] == ["这", "是", "测", "试"]
+    assert found[0].start_ms == 0
+    assert found[-1].end_ms == 2000
+    # Four syllables share the span rather than one blob holding all of it.
+    assert all(word.end_ms > word.start_ms for word in found)
+
+
+def test_a_reviewed_spaceless_transcript_keeps_the_measured_clock() -> None:
+    """The transcriber times Chinese a couple of characters at a time; a
+    correction arrives as unspaced text. Both are cut to the same per-character
+    units, so the runs that agree keep measured timing instead of the whole
+    span being one estimated word."""
+    draft = [{
+        "text": "这是测试", "start_ms": 0, "end_ms": 2000,
+        "words": [
+            {"text": "这是", "start_ms": 0, "end_ms": 900},
+            {"text": "测试", "start_ms": 900, "end_ms": 2000},
+        ],
+    }]
+
+    fixed = retimed_segments("这是测验", draft)
+
+    assert len(fixed) == 1
+    words = fixed[0]["words"]
+    assert [word["text"] for word in words] == ["这", "是", "测", "验"]
+    # The untouched characters keep the measured split point.
+    assert words[0]["start_ms"] == 0
+    assert words[1]["end_ms"] == 900
+    assert fixed[0]["text"] == "这是测验"

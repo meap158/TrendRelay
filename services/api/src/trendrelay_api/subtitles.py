@@ -158,6 +158,80 @@ class Cue:
         return len(self.text.replace("\n", " ")) / seconds
 
 
+# --- what a "word" is, per script ---------------------------------------------
+
+
+def _is_cjk(character: str) -> bool:
+    """Han, Hiragana or Katakana - the scripts written without spaces.
+
+    Not everything east-asian-wide: Hangul is wide too, but Korean puts spaces
+    between words, so its chunks are already words and splitting them per
+    syllable would over-segment. The spaceless scripts are the ones where a
+    character is the pacing unit.
+    """
+    code = ord(character)
+    return (
+        0x4E00 <= code <= 0x9FFF      # CJK Unified Ideographs
+        or 0x3400 <= code <= 0x4DBF   # Extension A
+        or 0xF900 <= code <= 0xFAFF   # Compatibility Ideographs
+        or 0x20000 <= code <= 0x2FA1F  # Extensions B and beyond
+        or 0x3040 <= code <= 0x30FF   # Hiragana and Katakana
+        or 0x31F0 <= code <= 0x31FF   # Katakana phonetic extensions
+    )
+
+
+def pacing_tokens(text: str) -> list[str]:
+    """The units a line is paced and timed by, script by script.
+
+    Splitting on spaces is the whole tokenizer for languages that have them,
+    and no tokenizer at all for the ones that do not: a Chinese sentence has
+    no spaces, so `.split()` returned it as one giant "word" - and every
+    length-weighted distribution built on it collapsed. A reviewed Chinese
+    transcript timed as one word, a one-word caption showing the entire text
+    at once. In the spaceless scripts each character is a syllable, so each
+    becomes its own token; everything else keeps its space-separated words.
+
+    Trailing punctuation with no letters of its own rides with the token
+    before it rather than becoming a timed unit - a full stop takes no time
+    to say.
+    """
+    tokens: list[str] = []
+    for chunk in (text or "").split():
+        run = ""
+        for character in chunk:
+            if _is_cjk(character):
+                if run:
+                    tokens.append(run)
+                    run = ""
+                tokens.append(character)
+            else:
+                run += character
+        if run:
+            tokens.append(run)
+    merged: list[str] = []
+    for token in tokens:
+        if merged and not any(ch.isalnum() for ch in token):
+            merged[-1] += token
+        else:
+            merged.append(token)
+    return merged
+
+
+def join_tokens(tokens: Sequence[str]) -> str:
+    """Tokens back into a line, with spaces only where the script writes them.
+
+    The inverse `pacing_tokens` needs: joining Chinese characters with spaces
+    would print a sentence no reader writes, and joining English words without
+    them would print no sentence at all.
+    """
+    line = ""
+    for token in tokens:
+        if line and not (_is_cjk(line[-1]) and _is_cjk(token[0])):
+            line += " "
+        line += token
+    return line
+
+
 # --- reading the transcriber's records ----------------------------------------
 
 
@@ -209,7 +283,9 @@ def _estimate_words(segment: dict[str, Any]) -> list[Word]:
         end = int(segment["end_ms"])
     except (KeyError, TypeError, ValueError):
         return []
-    pieces = text.split()
+    # Script-aware, not space-split: a Chinese segment has no spaces, and
+    # split() timed the whole sentence as one word.
+    pieces = pacing_tokens(text)
     total = sum(len(piece) for piece in pieces) or 1
     span = max(0, end - start)
     words: list[Word] = []
@@ -257,8 +333,15 @@ def retimed_segments(text: str, draft: Sequence[dict[str, Any]]) -> list[dict[st
     and what a transcript stores - one segment, since the correction has no
     sentence structure of its own to preserve.
     """
-    spoken = words_from_segments(draft)
-    reviewed = [piece for piece in (text or "").split() if piece]
+    # Both sides in the same units, script-aware. The draft's measured words
+    # arrive at whatever grain the transcriber chose - often two characters at
+    # a time for Chinese - so they are re-cut to pacing tokens with each
+    # word's measured span shared across its own characters. Without this, a
+    # reviewed spaceless transcript was one giant "word": nothing matched, the
+    # whole span was estimated as a single unit, and a one-word caption showed
+    # the entire text at once.
+    spoken = _paced(words_from_segments(draft))
+    reviewed = pacing_tokens(text or "")
     if not spoken or not reviewed:
         return []
 
@@ -301,12 +384,32 @@ def retimed_segments(text: str, draft: Sequence[dict[str, Any]]) -> list[dict[st
     return [{
         "start_ms": timed[0].start_ms,
         "end_ms": timed[-1].end_ms,
-        "text": " ".join(word.text for word in timed),
+        "text": join_tokens([word.text for word in timed]),
         "words": [
             {"text": word.text, "start_ms": word.start_ms, "end_ms": word.end_ms}
             for word in timed
         ],
     }] if timed else []
+
+
+def _paced(words: Sequence[Word]) -> list[Word]:
+    """Measured words, re-cut to pacing tokens with their spans shared out.
+
+    A word whose text is one pacing token keeps its measured timing exactly.
+    One holding several - a two-character Chinese word - has its own span
+    divided across them by length, so the units line up with what a reviewed
+    text tokenizes to and the measured clock is kept at the finest grain the
+    transcriber gave.
+    """
+    paced: list[Word] = []
+    for word in words:
+        tokens = pacing_tokens(word.text)
+        if len(tokens) <= 1:
+            paced.append(word)
+            continue
+        for piece in _shared_span(tokens, word.start_ms, word.end_ms):
+            paced.append(replace(piece, probability=word.probability))
+    return paced
 
 
 def _shared_span(words: Sequence[str], start: int, end: int) -> list[Word]:

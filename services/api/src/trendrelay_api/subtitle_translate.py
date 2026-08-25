@@ -119,8 +119,12 @@ def _word_paced(
     translated track.
     """
     from trendrelay_api.subtitle_formats import em_width
+    from trendrelay_api.subtitles import join_tokens, pacing_tokens
 
-    tokens = rendered.split()
+    # Script-aware: a translation *into* Chinese or Japanese has no spaces,
+    # and split() would hand the whole cue back as one "word" - the exact
+    # collapse this function exists to prevent.
+    tokens = pacing_tokens(rendered)
     if not tokens:
         return []
     step = max(1, rules.max_words or 1)
@@ -153,7 +157,7 @@ def _word_paced(
             index=index_from + len(paced),
             start_ms=at,
             end_ms=end,
-            lines=[" ".join(chunk)],
+            lines=[join_tokens(chunk)],
             words=words,
         ))
         at = end

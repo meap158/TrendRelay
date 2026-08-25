@@ -96,6 +96,34 @@ def test_a_word_paced_style_stays_word_paced_when_translated() -> None:
     assert all(item.words for item in translated)
 
 
+def test_a_translation_into_a_spaceless_script_still_paces_word_by_word() -> None:
+    """Translating *into* Chinese produces text with no spaces; split() handed
+    it back as one token and the one-word style showed the whole line at
+    once. Paced per character, the way the script is read."""
+    _, layout = PRESETS["one-word"]
+    translated, _ = translate_cues(
+        [cue("one two", 0, 2000)],
+        lambda _text: "这是测试",
+        layout=layout,
+    )
+
+    assert [item.text for item in translated] == ["这", "是", "测", "试"]
+    assert translated[0].start_ms == 0
+    assert translated[-1].end_ms == 2000
+
+
+def test_a_word_pop_chunk_joins_without_inventing_spaces() -> None:
+    _, layout = PRESETS["word-pop"]
+    translated, _ = translate_cues(
+        [cue("one two", 0, 2000)],
+        lambda _text: "这是测试吧",
+        layout=layout,
+    )
+
+    # max_words=3: two chunks, each printed the way the script writes.
+    assert [item.text for item in translated] == ["这是测", "试吧"]
+
+
 def test_a_paced_chunk_shares_time_by_width_not_by_count() -> None:
     """A long word holds longer than a short one, the way a re-timer would."""
     _, layout = PRESETS["one-word"]
