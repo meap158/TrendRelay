@@ -105,6 +105,17 @@ class OverlaySettings:
     opacity: float = 1.0
     #: Whether the object leans with a tilted head.
     follow_tilt: bool = True
+    #: How the object sits on the head before the head is taken into account,
+    #: in degrees. `turn` swings it left and right, `tilt` rocks it forwards
+    #: and back - a cap worn pushed back, shades resting up on the forehead.
+    #:
+    #: Only an object with depth can answer to these: turning a flat sprite
+    #: about a vertical axis is either nothing or a horizontal squash, and
+    #: neither is what somebody asking for it means. They are added to the
+    #: head's own angles rather than replacing them, so the object keeps
+    #: tracking and this is where it tracks *to*.
+    turn: float = 0.0
+    tilt: float = 0.0
     confidence: float = 0.6
 
 
@@ -261,16 +272,29 @@ class _SpriteCache:
     and the cache does not gain a third continuously varying axis.
     """
 
-    def __init__(self, cv2: Any, np: Any, overlay: Overlay) -> None:
+    def __init__(
+        self,
+        cv2: Any,
+        np: Any,
+        overlay: Overlay,
+        resting: tuple[float, float] = (0.0, 0.0),
+    ) -> None:
         self._cv2, self._np, self._overlay = cv2, np, overlay
         self._sprites: dict[tuple[int, float, float], Any] = {}
         self._solid = overlay.mesh is not None
+        #: How the object sits before the head is considered. Held here rather
+        #: than passed per call because it does not change within a clip, and
+        #: it belongs in the cache key either way.
+        self._resting = resting if self._solid else (0.0, 0.0)
 
     def at(self, width: int, pose: Any | None = None) -> Any:
-        yaw = pitch = 0.0
+        yaw, pitch = self._resting
         if self._solid and pose is not None:
-            yaw = round(pose.yaw / POSE_STEP) * POSE_STEP
-            pitch = round(pose.pitch / POSE_STEP) * POSE_STEP
+            # Rounded after the resting angle is added, not before: a cap worn
+            # at seven degrees and a head at three should share a sprite with a
+            # cap at eight and a head at two, because they are the same picture.
+            yaw = round((pose.yaw + yaw) / POSE_STEP) * POSE_STEP
+            pitch = round((pose.pitch + pitch) / POSE_STEP) * POSE_STEP
         key = (width, yaw, pitch)
         if key not in self._sprites:
             self._sprites[key] = overlay_catalogue.render_sprite(
@@ -789,7 +813,7 @@ def render_overlaid(
     out_size = (
         (int(width * out_scale), int(height * out_scale)) if out_scale < 1.0 else (width, height)
     )
-    sprites = _SpriteCache(cv2, np, overlay)
+    sprites = _SpriteCache(cv2, np, overlay, (settings.turn, settings.tilt))
 
     from trendrelay_api.integrations.face_blur import FFMPEG
     from trendrelay_api.video_encoding import open_h264_stream_writer
@@ -990,7 +1014,7 @@ def apply_to_image(
         if faces and settings.target == "largest"
         else faces
     )
-    sprites = _SpriteCache(cv2, np, overlay)
+    sprites = _SpriteCache(cv2, np, overlay, (settings.turn, settings.tilt))
     placed = 0
     for face in drawn:
         placement = place(face, overlay, settings)

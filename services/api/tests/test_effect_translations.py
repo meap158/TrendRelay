@@ -48,6 +48,10 @@ OPTION_KEYS = {
     "skull": "skull", "ghost": "ghost", "censor_bar": "censorBar",
     "sunglasses": "sunglasses", "face_mask": "faceMask", "moustache": "moustache",
     "cat_ears": "catEars", "crown": "crown", "party_hat": "partyHat",
+    # The objects with depth, registered the same way and for the same reason.
+    "cap_3d": "capSolid", "top_hat_3d": "topHatSolid",
+    "party_cone_3d": "partyConeSolid", "crown_3d": "crownSolid",
+    "sunglasses_3d": "shadesSolid",
 }
 
 

@@ -340,6 +340,21 @@ FACE_OVERLAY = Effect(
             id="follow_tilt", label="Lean with the head", kind="toggle", default=True,
             help="Off keeps the object upright however the head is tilted.",
         ),
+        # Only an object with depth can answer to these. A flat sprite turned
+        # about a vertical axis is either unchanged or squashed, and neither is
+        # what somebody dragging it means.
+        EffectParam(
+            id="turn", label="Turn", kind="number", default=0.0,
+            minimum=-70, maximum=70, step=1, unit="°",
+            help="How the object sits before the head is taken into account: "
+                 "swung left or right. Objects that turn with the head only.",
+        ),
+        EffectParam(
+            id="tilt", label="Tilt", kind="number", default=0.0,
+            minimum=-60, maximum=60, step=1, unit="°",
+            help="Rocked forwards or back — a cap worn pushed back, shades "
+                 "resting up. Objects that turn with the head only.",
+        ),
         EffectParam(
             id="confidence", label="Detector confidence", kind="number", default=0.6,
             minimum=0.1, maximum=0.95, step=0.05,
@@ -533,6 +548,8 @@ def _overlay_settings(values: dict[str, Any]) -> face_overlays.OverlaySettings:
         mirror=bool(values["mirror"]),
         opacity=float(values["opacity"]),
         follow_tilt=bool(values["follow_tilt"]),
+        turn=float(values["turn"]),
+        tilt=float(values["tilt"]),
         confidence=float(values["confidence"]),
     )
 
