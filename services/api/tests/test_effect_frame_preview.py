@@ -11,6 +11,21 @@ from trendrelay_api.integrations import effect_render
 from trendrelay_api.integrations.effects import FFMPEG, EffectError, read_recipe
 
 
+@pytest.fixture(autouse=True)
+def identity_runtime_present(monkeypatch):
+    """The InsightFace runtime, present wherever these tests run.
+
+    Every gate probed here - the licence, the model, the portrait, the
+    consent - sits behind the runtime check, and on a machine without the
+    optional extra that check answered first: sixteen tests about later gates
+    failed with "InsightFace ... not installed". The probe is stubbed at its
+    seam so the gates under test are what answers, on any machine.
+    """
+    from trendrelay_api.integrations import face_identity
+
+    monkeypatch.setattr(face_identity, "_runtime_present", lambda: (True, None))
+
+
 @pytest.fixture
 def clip(tmp_path: Path) -> Path:
     if not FFMPEG.is_file():

@@ -25,6 +25,21 @@ def unit(*values: float) -> np.ndarray:
 # --- the licence gate -----------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def identity_runtime_present(monkeypatch):
+    """The InsightFace runtime, present wherever these tests run.
+
+    Every gate probed here - the licence, the model, the portrait, the
+    consent - sits behind the runtime check, and on a machine without the
+    optional extra that check answered first: sixteen tests about later gates
+    failed with "InsightFace ... not installed". The probe is stubbed at its
+    seam so the gates under test are what answers, on any machine.
+    """
+    from trendrelay_api.integrations import face_identity
+
+    monkeypatch.setattr(face_identity, "_runtime_present", lambda: (True, None))
+
+
 @pytest.fixture
 def acknowledgement(tmp_path, monkeypatch):
     path = tmp_path / "licence.json"
