@@ -1382,6 +1382,7 @@ export const en = {
     dragToTurn: "Drag to turn it, or use the arrow keys.",
     turnedTo: "Turned {turn}°, tilted {tilt}°",
     noWebgl: "This browser cannot show the 3D view. The settings below still work.",
+    turnsWithHead: "Turns with the head",
   },
 
   ui: {
@@ -1629,6 +1630,7 @@ export const en = {
       reactions: "Reactions and accents",
       creator_ui: "Creator UI",
       faces: "Faces",
+      solid: "Turns with the head",
     },
   },
 

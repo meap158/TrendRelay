@@ -548,6 +548,14 @@ export function GalleryPanel({
                       {/* Said on the tile, because whether a thing covers a face
                           is the reason most people are choosing one at all. */}
                       {option.occludes && <em>{t("overlayPicker.hidesTheFace")}</em>}
+                      {/* And whether it has a back as well as a front, which a
+                          thumbnail of it cannot show and is the whole reason
+                          to pick one of these over the sticker beside it. */}
+                      {option.dimensional && (
+                        <em className="overlay-solid">
+                          {t("overlayPicker.turnsWithHead")}
+                        </em>
+                      )}
                     </button>
                   ))}
                 </div>

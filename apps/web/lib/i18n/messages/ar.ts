@@ -1382,6 +1382,7 @@ export const ar: Messages = {
     dragToTurn: "اسحب لإدارته، أو استخدم مفاتيح الأسهم.",
     turnedTo: "التفاف {turn}°، إمالة {tilt}°",
     noWebgl: "هذا المتصفح لا يعرض العرض ثلاثي الأبعاد. الإعدادات أدناه ما زالت تعمل.",
+    turnsWithHead: "يدور مع الرأس",
   },
 
   ui: {
@@ -1629,6 +1630,7 @@ export const ar: Messages = {
       reactions: "التفاعلات واللمسات",
       creator_ui: "واجهة صانع المحتوى",
       faces: "الوجوه",
+      solid: "يدور مع الرأس",
     },
   },
 

@@ -1399,6 +1399,7 @@ export const fr: Messages = {
     dragToTurn: "Faites glisser pour pivoter, ou utilisez les flèches.",
     turnedTo: "Pivoté de {turn}°, incliné de {tilt}°",
     noWebgl: "Ce navigateur ne peut pas afficher la vue 3D. Les réglages ci-dessous fonctionnent toujours.",
+    turnsWithHead: "Pivote avec la tête",
   },
 
   ui: {
@@ -1646,6 +1647,7 @@ export const fr: Messages = {
       reactions: "Réactions et accents",
       creator_ui: "Interface créateur",
       faces: "Visages",
+      solid: "Pivote avec la tête",
     },
   },
 

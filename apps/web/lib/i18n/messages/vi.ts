@@ -1379,6 +1379,7 @@ export const vi: Messages = {
     dragToTurn: "Kéo để xoay, hoặc dùng phím mũi tên.",
     turnedTo: "Xoay {turn}°, ngả {tilt}°",
     noWebgl: "Trình duyệt này không hiển thị được chế độ xem 3D. Các thiết lập bên dưới vẫn dùng được.",
+    turnsWithHead: "Xoay theo đầu",
   },
 
   ui: {
@@ -1626,6 +1627,7 @@ export const vi: Messages = {
       reactions: "Phản ứng và điểm nhấn",
       creator_ui: "Giao diện nhà sáng tạo",
       faces: "Khuôn mặt",
+      solid: "Xoay theo đầu",
     },
   },
 

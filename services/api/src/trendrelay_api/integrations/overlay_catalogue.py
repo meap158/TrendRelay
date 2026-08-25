@@ -201,6 +201,15 @@ FEATURES = "Eyes and mouth"
 HEADWEAR = "On the head"
 REACTIONS = "Reactions and accents"
 CREATOR_UI = "Creator UI"
+#: The objects with depth, kept together rather than filed among the flat ones.
+#:
+#: They were first placed in the groups their flat cousins are in, on the
+#: reasoning that somebody looking for a hat wants every hat in front of them.
+#: That is true and it is not the question being asked here: turning with the
+#: head is the reason to choose one of these at all, it is invisible in a
+#: thumbnail of a face looking straight ahead, and a solid cap sitting between
+#: two stickers reads as one more sticker.
+SOLID = "Turns with the head"
 
 #: A stable id per group, alongside the English name.
 #:
@@ -214,6 +223,7 @@ GROUP_IDS = {
     HEADWEAR: "headwear",
     REACTIONS: "reactions",
     CREATOR_UI: "creator_ui",
+    SOLID: "solid",
 }
 
 
@@ -948,7 +958,7 @@ def _solid_sunglasses() -> Any:
 _CAP_3D = Overlay(
     id="cap_3d",
     label="Cap",
-    group=HEADWEAR,
+    group=SOLID,
     anchor="forehead",
     width_in_faces=1.30,
     aspect=1.0,
@@ -960,7 +970,7 @@ _CAP_3D = Overlay(
 _TOP_HAT_3D = Overlay(
     id="top_hat_3d",
     label="Top hat",
-    group=HEADWEAR,
+    group=SOLID,
     anchor="forehead",
     width_in_faces=1.20,
     aspect=1.0,
@@ -972,7 +982,7 @@ _TOP_HAT_3D = Overlay(
 _PARTY_CONE_3D = Overlay(
     id="party_cone_3d",
     label="Party cone",
-    group=HEADWEAR,
+    group=SOLID,
     anchor="forehead",
     width_in_faces=0.85,
     aspect=1.15,
@@ -984,7 +994,7 @@ _PARTY_CONE_3D = Overlay(
 _CROWN_3D = Overlay(
     id="crown_3d",
     label="Solid crown",
-    group=HEADWEAR,
+    group=SOLID,
     anchor="forehead",
     width_in_faces=1.10,
     aspect=1.0,
@@ -996,7 +1006,7 @@ _CROWN_3D = Overlay(
 _SUNGLASSES_3D = Overlay(
     id="sunglasses_3d",
     label="Solid shades",
-    group=FEATURES,
+    group=SOLID,
     anchor="eyes",
     width_in_faces=1.24,
     aspect=1.0,
@@ -1052,7 +1062,11 @@ BUILT_IN: tuple[Overlay, ...] = (
 
 #: The order groups appear in the picker: the ones that hide a face first,
 #: because hiding a face is what someone opens this to do.
-GROUP_ORDER = (COVER, FEATURES, HEADWEAR, REACTIONS, CREATOR_UI)
+# Second. Hiding a face still leads, because that is the job somebody most
+# often opens this to do and the ordering is a privacy decision rather than a
+# fashion; the solid objects sit directly behind it, where the newest thing in
+# the pack is seen without displacing the reason the pack exists.
+GROUP_ORDER = (COVER, SOLID, FEATURES, HEADWEAR, REACTIONS, CREATOR_UI)
 
 
 # --------------------------------------------------------------------------- #

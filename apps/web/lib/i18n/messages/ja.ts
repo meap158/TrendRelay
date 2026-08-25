@@ -1372,6 +1372,7 @@ export const ja: Messages = {
     dragToTurn: "ドラッグして回す、または矢印キーで調整します。",
     turnedTo: "向き {turn}°、傾き {tilt}°",
     noWebgl: "このブラウザーでは3D表示ができません。下の設定はそのまま使えます。",
+    turnsWithHead: "頭と一緒に回る",
   },
 
   ui: {
@@ -1619,6 +1620,7 @@ export const ja: Messages = {
       reactions: "リアクションとアクセント",
       creator_ui: "クリエイターUI",
       faces: "顔",
+      solid: "頭と一緒に回る",
     },
   },
 

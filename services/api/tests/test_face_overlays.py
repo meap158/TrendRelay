@@ -93,7 +93,11 @@ def test_the_curated_pack_has_depth_and_clear_management_categories() -> None:
     """A gallery should be a useful collection, not twelve miscellaneous props."""
     assert len(overlay_catalogue.BUILT_IN) >= 30
     assert overlay_catalogue.GROUP_ORDER == (
+        # Covering a face still leads: that is the job somebody most often
+        # opens this to do, and the ordering is a privacy decision rather than
+        # a fashion. The objects with depth sit directly behind it.
         overlay_catalogue.COVER,
+        overlay_catalogue.SOLID,
         overlay_catalogue.FEATURES,
         overlay_catalogue.HEADWEAR,
         overlay_catalogue.REACTIONS,
