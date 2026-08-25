@@ -115,6 +115,25 @@ def test_two_connections_named_the_same_do_not_collide() -> None:
     assert len({row.id for row in connections.for_provider(PROVIDERS, "buffer")}) == 3
 
 
+def test_a_name_that_repeats_the_engine_does_not_say_it_twice() -> None:
+    # "Buffer 2" is the obvious thing to call a second Buffer login, and it used
+    # to mint `buffer-buffer-2`. The id is never rewritten afterwards, so it
+    # outlived every later renaming of the label and surfaced wherever the label
+    # was missing.
+    added = connections.add(PROVIDERS, "buffer", "Buffer 2")
+
+    assert added.id == "buffer-2"
+
+
+def test_a_name_that_only_starts_like_the_engine_keeps_it() -> None:
+    # `buffering` is not `buffer` followed by anything; only a whole word is
+    # stripped, or a brand that happens to begin with the engine's name loses
+    # its first syllable.
+    added = connections.add(PROVIDERS, "buffer", "Buffering Co")
+
+    assert added.id == "buffer-buffering-co"
+
+
 def test_a_name_that_slugs_to_the_engine_does_not_shadow_the_default() -> None:
     added = connections.add(PROVIDERS, "buffer", "Buffer")
 

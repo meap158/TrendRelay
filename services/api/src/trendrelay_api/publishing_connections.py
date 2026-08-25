@@ -178,9 +178,14 @@ def next_id(providers: dict[str, Any], provider_id: str, label: str) -> str:
     Derived from the operator's own label where that yields something usable,
     because `buffer-brand-b` is worth more in a log line than `buffer-3`. Falls
     back to counting, and counts past anything already taken.
+
+    A label that already begins with the engine's name does not get it twice.
+    Calling the second Zernio login "Zernio 2" is the obvious thing to type, and
+    it used to mint `zernio-zernio-2` - an id that reads as a bug, is never
+    rewritten afterwards, and outlives any later renaming of the label.
     """
     taken = {row.id for row in connections(providers)}
-    slug = slugify(label)
+    slug = slugify(label).removeprefix(f"{provider_id}-")
     if slug and slug != provider_id:
         candidate = f"{provider_id}-{slug}"[:MAX_ID_LENGTH].rstrip("-")
         if candidate not in taken and candidate != provider_id:
