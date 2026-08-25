@@ -1732,7 +1732,14 @@ export function UploadPreview({
     if (privateSource && problem) return <p className="privacy-note">{problem}</p>;
     if (!resolved) return <p className="privacy-note">{t("library.loadingPreview")}</p>;
     return (
+      // Muted only when it started on its own. A browser refuses to autoplay
+      // sound before somebody has touched the page, and a draft restored on
+      // load has not been touched - so an unmuted autostart is a player that
+      // sits there paused, which is the state this was meant to remove. Every
+      // one of these networks autoplays its feed silently too. A clip somebody
+      // pressed play on keeps its sound, because they asked for it.
       <video className="blur-preview" controls controlsList="nodownload" autoPlay
+        muted={autoStart}
         preload="none" poster={poster || undefined} src={resolved}
         onLoadedMetadata={(event) => {
           const { videoWidth, videoHeight } = event.currentTarget;
