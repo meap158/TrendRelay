@@ -4035,6 +4035,11 @@ export default function PublishPage() {
               <PostPreview
                 width={previewWidth}
                 avatar={previewAccount?.avatar ?? null}
+                // The clip is already chosen - it is in the field above this
+                // panel - so the panel shows it rather than asking a second
+                // time. The gate belongs to surfaces that list media, where
+                // it stops every clip scrolled past being read.
+                autoPlay
                 platform={previewPlatform}
                 postTypeLabel={previewType?.label ?? "Post"}
                 handle={previewHandle}

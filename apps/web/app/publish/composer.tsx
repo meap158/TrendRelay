@@ -387,6 +387,7 @@ export function PostPreview({
   thumbnail,
   source,
   sourceIsImage,
+  autoPlay,
   carousel,
   wantsCarousel,
   showsTitle: showsTitleProp,
@@ -419,6 +420,13 @@ export function PostPreview({
   source?: string;
   /** True when `source` is an image: a carousel frame rather than a clip. */
   sourceIsImage?: boolean;
+  /**
+   * Play the clip without waiting to be asked.
+   *
+   * Set by the surface that shows one preview of media somebody has already
+   * picked; left off where previews sit in a list.
+   */
+  autoPlay?: boolean;
   /** Every frame of a carousel, in swipe order, so the preview can be swiped. */
   carousel?: string[];
   /**
@@ -518,7 +526,8 @@ export function PostPreview({
           // This panel used to sit beside a separate "What will be sent" card
           // that played the identical file, so the page asked the same question
           // twice and answered it two different ways.
-          <UploadPreview key={showing} source={showing} poster={thumbnail} onNaturalRatio={setMeasured} />
+          <UploadPreview key={showing} source={showing} poster={thumbnail}
+            onNaturalRatio={setMeasured} autoStart={autoPlay} />
         ) : showing ? (
           <OpaqueImage alt="" src={showing} onLoad={(event) => {
             const { naturalWidth, naturalHeight } = event.currentTarget;
@@ -1692,14 +1701,27 @@ export function UploadPreview({
   source,
   poster,
   onNaturalRatio,
+  autoStart = false,
 }: {
   source: string;
   poster?: string;
   /** The media's own width/height, once the browser knows it. */
   onNaturalRatio?: (ratio: number) => void;
+  /**
+   * Read the file straight away instead of waiting to be asked.
+   *
+   * For the caller that has exactly one clip on screen and it is the one
+   * somebody just chose. The gate is there so a list does not pull down every
+   * clip scrolled past; where there is no list, it is a click charged for
+   * nothing in front of the answer somebody asked for.
+   *
+   * Read once, at mount. Callers key this component on the source, so picking
+   * different media mounts a fresh one rather than leaving a stale request.
+   */
+  autoStart?: boolean;
 }) {
   const t = useT();
-  const [requested, setRequested] = useState(false);
+  const [requested, setRequested] = useState(autoStart);
   const privateSource = isPrivateApiSource(source);
   const { objectUrl: sourceBlob, problem } = useOpaqueMedia(
     source, source, "video/mp4", requested && privateSource,
