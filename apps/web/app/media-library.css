@@ -807,7 +807,21 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .batch-transcribe-note { display: block; margin: 0 0 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .batch-transcribe-note.problem { padding: 8px 11px; border-inline-start: 3px solid var(--bad); border-radius: var(--radius-sm); background: var(--bad-bg); color: var(--bad); }
 .caption-editor-workspace { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(380px, 1.1fr); gap: 18px; align-items: start; }
+/* Both columns, and everything stacked inside the left one.
+ *
+ * A grid or flex item is `min-width: auto` by default, which means it refuses
+ * to shrink below its own min-content width - and a `<select>`'s min-content
+ * width is its *widest option*, not the one on show. So one long line in a
+ * dropdown ("On-screen text — what is written on the picture") set a floor
+ * under this whole column, and the panel widened to honour it. The control
+ * that appeared to do it was whichever one happened to be visible.
+ *
+ * `min-width` was already on `.caption-editor-controls` for exactly this
+ * reason; it does not reach the sections inside it, which is where the
+ * dropdowns are. */
+.caption-editor-workspace > * { min-inline-size: 0; }
 .caption-editor-controls { display: grid; gap: 18px; min-width: 0; }
+.caption-editor-controls > * { min-inline-size: 0; }
 .caption-media-preview { position: sticky; top: 0; min-width: 0; }
 .caption-media-preview > header { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-block-end: 8px; }
 .caption-media-preview > header h4 { margin-block-end: 3px; }
@@ -893,7 +907,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-place-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-block-start: 8px; }
 .caption-place-fields label { display: grid; gap: 3px; flex: 1 1 96px; min-width: 0; color: var(--muted); font-size: 10px; font-weight: 600; }
 .caption-place-fields label[data-off] { opacity: .5; }
-.caption-place-fields input, .caption-place-fields select { width: 100%; min-width: 0; min-height: 30px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+.caption-place-fields input { width: 100%; min-width: 0; min-height: 30px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+.caption-place-fields .ui-select { min-inline-size: 0; }
+.caption-place-fields .search-select-trigger { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 5px 7px; font-size: 12px; }
 .caption-place-fields .ui-button { flex: 0 0 auto; }
 .caption-look { display: inline-block; max-width: 92%; color: white; line-height: 1.12; text-align: center; white-space: normal; overflow-wrap: anywhere; paint-order: stroke fill; }
 .caption-look-line { display: block; }
@@ -973,13 +989,32 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-style-choice strong { font-size: 12px; }
 .caption-style-choice small { color: var(--muted); font-size: 10px; line-height: 1.35; }
 
-.caption-editor-language select, .caption-editor-source select { width: 100%; max-width: 420px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
+/* The dropdowns in this panel, capped and sized.
+ *
+ * These rules used to target `select`. This panel has seven `<Select>`
+ * components and no bare `<select>`, and that component renders a *hidden*
+ * native select for form semantics beside the visible `SearchSelect` trigger -
+ * so every one of these declarations was landing on an element with
+ * `clip-path: inset(50%)` and a one-pixel box. The caps in particular never
+ * applied, which is why the control stretched to whatever the row gave it and
+ * the popover, being `min-inline-size: 100%` of the trigger, stretched with
+ * it. A dialog switches to `overflow: visible` while a popover is open, so
+ * that is the moment the excess became visible. */
+.caption-editor-language .ui-select, .caption-editor-source .ui-select { max-inline-size: 420px; }
+.caption-editor-language .search-select-trigger, .caption-editor-source .search-select-trigger { --search-select-trigger-padding: 7px 9px; font-size: 13px; }
 .caption-editor-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 /* One line per choice: the label a quiet caption, the control carrying the
    value - the same shape as the Deliver control in the footer. */
-.caption-cover-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.caption-cover-row { display: flex; align-items: center; gap: 8px; min-inline-size: 0; margin-top: 8px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .caption-cover-row > span { flex: none; }
-.caption-cover-row select { flex: 1; max-width: 300px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+/* `flex: 1` already asks it to take the space left over; `min-inline-size: 0`
+   is what lets it give space back. Without the second half the widest option
+   is a floor, and `max-width` only caps the other end. */
+/* `flex: 1` asks it for the leftover space and `min-inline-size: 0` is what
+   lets it give space back; the cap stops it taking the whole row when there is
+   room. The trigger's own text already truncates with an ellipsis. */
+.caption-cover-row .ui-select { flex: 1; min-inline-size: 0; max-inline-size: 300px; }
+.caption-cover-row .search-select-trigger { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 6px 8px; color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .caption-editor-problem { margin: 0 0 8px; color: var(--bad); font-size: 12px; }
 
 /* The cue list is the preview. Times and reading speed are fixed columns so
@@ -1008,7 +1043,8 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .caption-media-frame, .caption-media-frame video, .caption-media-placeholder, .caption-audio-preview { min-height: 300px; }
 }
 .caption-delivery { display: inline-flex; align-items: center; gap: 7px; margin-inline-end: auto; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.caption-delivery select { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.caption-delivery .ui-select { min-inline-size: 0; max-inline-size: 300px; }
+.caption-delivery .search-select-trigger { --search-select-trigger-min-height: 30px; --search-select-trigger-padding: 6px 8px; color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .caption-editor-queued { margin: 0 0 8px; color: var(--link); font-size: 12px; }
 .caption-file-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .caption-file-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: var(--radius); }
