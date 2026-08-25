@@ -33,7 +33,15 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from trendrelay_api.subtitles import Cue, Layout, Word, wrap_lines
+from trendrelay_api.subtitles import (
+    Cue,
+    Layout,
+    Word,
+    _fit_timings,
+    join_tokens,
+    pacing_tokens,
+    wrap_lines,
+)
 
 #: What TrendRelay's own interface speaks, and so the translations most likely
 #: to be asked for. Not a limit: any pair Argos has a package for will work.
@@ -63,7 +71,11 @@ def translate_cues(
     crowded: list[str] = []
 
     for cue in cues:
-        source = cue.text.replace("\n", " ").strip()
+        # Re-joined script-aware before it meets the translator: the cue text
+        # was assembled by joining words with spaces, and for a spaceless
+        # script that hands the translator "你 究竟 是" - a sentence no writer
+        # writes. Latin text round-trips unchanged.
+        source = join_tokens(pacing_tokens(cue.text.replace("\n", " ")))
         if not source:
             continue
         rendered = " ".join(str(translate(source)).split())
@@ -95,6 +107,14 @@ def translate_cues(
                 "the layout allows."
             )
         translated.append(moved)
+
+    if rules.max_words is not None and translated:
+        # Held the way the style holds. A proportional share of a sentence can
+        # be a hundred milliseconds, which is a flash rather than a caption;
+        # the same fitting the measured track gets extends each cue into the
+        # room before its neighbour and never over it - across the whole
+        # track, so a sentence's last word cannot overrun the next sentence.
+        translated = _fit_timings(translated, rules)
 
     return translated, crowded
 

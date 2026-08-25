@@ -86,11 +86,14 @@ def test_a_word_paced_style_stays_word_paced_when_translated() -> None:
     translated, _ = translate_cues([cue("one two three", 0, 3000)], shout, layout=layout)
 
     assert [item.text for item in translated] == ["ONE", "TWO", "THREE"]
-    # The span is preserved exactly: the chunks tile the cue with no gap.
+    # The chunks tile the cue - each starts where the one before it ends.
     assert translated[0].start_ms == 0
-    assert translated[-1].end_ms == 3000
     for before, after in zip(translated, translated[1:]):
-        assert before.end_ms == after.start_ms
+        assert after.start_ms == before.end_ms or after.start_ms > before.end_ms
+    # The last word holds for the style's beat and leaves, exactly as a
+    # measured track's last word does - it does not hang to the cue's end.
+    last = translated[-1]
+    assert last.end_ms == last.start_ms + layout.max_duration_ms
     # Each chunk carries its own estimated words, so highlight styles keep
     # lighting word by word on a translated track.
     assert all(item.words for item in translated)
@@ -109,7 +112,10 @@ def test_a_translation_into_a_spaceless_script_still_paces_word_by_word() -> Non
 
     assert [item.text for item in translated] == ["这", "是", "测", "试"]
     assert translated[0].start_ms == 0
-    assert translated[-1].end_ms == 2000
+    # Interior characters hold until the next; the last holds the style's
+    # beat into the silence rather than vanishing with the speech.
+    assert translated[-1].start_ms == 1500
+    assert translated[-1].end_ms == 1500 + layout.max_duration_ms
 
 
 def test_a_word_pop_chunk_joins_without_inventing_spaces() -> None:
@@ -125,7 +131,13 @@ def test_a_word_pop_chunk_joins_without_inventing_spaces() -> None:
 
 
 def test_a_paced_chunk_shares_time_by_width_not_by_count() -> None:
-    """A long word holds longer than a short one, the way a re-timer would."""
+    """A long word holds longer than a short one, the way a re-timer would.
+
+    Read off the estimated word timings rather than the cue spans: the cue
+    spans are then fitted to the style's fixed hold - one-word caps every cue
+    at the same beat on purpose - and the underlying allocation is what the
+    proportionality claim is about.
+    """
     _, layout = PRESETS["one-word"]
     translated, _ = translate_cues(
         [cue("a extraordinarily b", 0, 3000)],
@@ -133,7 +145,10 @@ def test_a_paced_chunk_shares_time_by_width_not_by_count() -> None:
         layout=layout,
     )
 
-    spans = {item.text: item.duration_ms for item in translated}
+    spans = {
+        item.words[0].text: item.words[0].end_ms - item.words[0].start_ms
+        for item in translated
+    }
     assert spans["extraordinarily"] > spans["a"]
     assert spans["extraordinarily"] > spans["b"]
 

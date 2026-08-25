@@ -323,6 +323,17 @@ def build(
     if translate_to:
         if translator is None:
             raise ValueError("A translation was asked for without a translator.")
+        if layout.max_words is not None:
+            # A word-paced layout cuts the track into single words *before*
+            # anything else - and a single word is not something a translator
+            # can translate. Asking word by word produced a track of salad:
+            # each Chinese character rendered alone ("I", "do.", "Money."),
+            # each crammed into its source word's few hundred milliseconds.
+            # So for a translated word-paced track the translation happens at
+            # sentence granularity - the unit a translator understands - and
+            # the translated sentence is then word-paced across the sentence's
+            # measured span by `translate_cues` itself.
+            cues = build_cues(segments, layout=Layout())
         cues, crowded = translate_cues(cues, translator, layout=layout)
         notes.extend(crowded)
         if layout.max_words is not None:

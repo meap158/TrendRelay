@@ -96,6 +96,35 @@ def test_building_returns_cues_and_what_was_used() -> None:
     assert isinstance(built["layout"], Layout)
 
 
+def test_a_word_paced_style_translates_sentences_not_words() -> None:
+    """The order of operations the style must not change.
+
+    A word-paced layout cuts the track into single words before anything
+    else, and a single word is not something a translator can translate:
+    asking word by word produced a track of salad - each Chinese character
+    rendered alone, each crammed into its source word's few hundred
+    milliseconds. The translator must see the sentence; the pacing happens
+    to what it returns.
+    """
+    asked: list[str] = []
+
+    def translator(text: str) -> str:
+        asked.append(text)
+        return "ONE TWO THREE FOUR"
+
+    built = captions.build(
+        [segment("hello there my old friend", 0, 3000)],
+        style_id="one-word",
+        translate_to="vi",
+        translator=translator,
+    )
+
+    # One call, carrying the whole sentence.
+    assert asked == ["hello there my old friend"]
+    # And the answer paced the way the style paces: one word per cue.
+    assert [cue.text for cue in built["cues"]] == ["ONE", "TWO", "THREE", "FOUR"]
+
+
 def test_translation_says_word_timing_is_estimated_on_a_paced_style() -> None:
     """The paced styles keep their rhythm when translated, and say the timing
     is estimated rather than measured - silence would claim a precision the
