@@ -712,6 +712,11 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    because the row's words belong to the common case and the tooltip carries
    this one's. */
 .overlay-upload {
+  /* Positioned so the hidden input below anchors inside this button. Without
+     it the input escapes to whatever ancestor happens to be positioned, which
+     is invisible either way at 1px and no opacity, but puts the real control
+     somewhere other than the thing drawn for it. */
+  position: relative;
   flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 30px; min-height: 30px; border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--panel); color: var(--text);
