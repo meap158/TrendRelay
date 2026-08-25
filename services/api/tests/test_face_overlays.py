@@ -1664,3 +1664,103 @@ def test_a_solid_object_reaches_most_of_the_sprite_it_is_given() -> None:
             for axis in (0, 1)
         ]
         assert max(spans) > 0.7, f"{overlay.id} uses little of its own sprite"
+
+
+# --- steadying a solved pose over time -----------------------------------------
+
+
+def _pose(yaw: float, pitch: float = 0.0) -> "face_pose.HeadPose":
+    from trendrelay_api.integrations import face_pose
+
+    return face_pose.HeadPose(yaw=yaw, pitch=pitch, roll=0.0, points=4)
+
+
+def test_landmark_noise_does_not_survive_the_smoothing() -> None:
+    """The flutter was the noise, not the head.
+
+    A still head's solved yaw wobbles by a few degrees frame to frame, and
+    every wobble across a sprite cell's boundary redrew the object at a
+    visibly different angle. Smoothed over the timeline, a wobble around one
+    angle has to come out as roughly that angle on every frame.
+    """
+    raw = [_pose(23.0 + (2.5 if index % 2 else -2.5)) for index in range(40)]
+
+    smoothed = face_overlays.smooth_poses(raw)
+
+    # A five-degree wobble - a whole sprite cell - comes out well inside one,
+    # where the cache's hysteresis holds it to a single drawing.
+    yaws = [pose.yaw for pose in smoothed]
+    assert max(yaws) - min(yaws) < 2.0
+    assert all(abs(yaw - 23.0) < 2.0 for yaw in yaws)
+
+
+def test_a_real_turn_still_comes_through() -> None:
+    """Smoothing must not hold a genuinely turning head at its old angle."""
+    raw = [_pose(index * 40.0 / 59) for index in range(60)]
+
+    smoothed = face_overlays.smooth_poses(raw)
+
+    assert smoothed[0].yaw < 5.0
+    assert smoothed[-1].yaw > 35.0
+    # And it moves through the middle rather than jumping.
+    assert 15.0 < smoothed[30].yaw < 25.0
+
+
+def test_a_gap_in_the_solve_is_bridged_rather_than_snapped_square() -> None:
+    """A pose the solver refused for a few frames mid-turn is not a head
+    snapping to square-on and back - which is exactly what drawing None as
+    "unposed" did to the object."""
+    raw = [_pose(20.0)] * 10 + [None] * 5 + [_pose(20.0)] * 10
+
+    smoothed = face_overlays.smooth_poses(raw)
+
+    assert all(pose is not None for pose in smoothed)
+    assert abs(smoothed[12].yaw - 20.0) < 1.0
+
+
+def test_the_ends_of_a_timeline_hold_the_nearest_measurement() -> None:
+    raw = [None] * 5 + [_pose(10.0)] * 10 + [None] * 5
+
+    smoothed = face_overlays.smooth_poses(raw)
+
+    assert smoothed[0] is not None and abs(smoothed[0].yaw - 10.0) < 1.0
+    assert smoothed[-1] is not None and abs(smoothed[-1].yaw - 10.0) < 1.0
+
+
+def test_a_timeline_never_measured_stays_unmeasured() -> None:
+    """Nothing is guessed: no measurement anywhere means square-on throughout."""
+    assert face_overlays.smooth_poses([None] * 8) == [None] * 8
+
+
+def test_an_angle_hovering_at_a_cell_boundary_does_not_dither() -> None:
+    """The cache's hysteresis, which catches what smoothing leaves.
+
+    Residual sub-degree drift around a cell boundary would still round across
+    it and back, and each hop is a redraw at a different angle. The held cell
+    wins until the angle commits to another cell.
+    """
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get("cap_3d")
+    cache = face_overlays._SpriteCache(cv2, numpy, overlay)
+
+    for yaw in (2.3, 2.7, 2.3, 2.7, 2.4, 2.6):
+        cache.at(120, _pose(yaw))
+
+    assert len(cache._sprites) == 1, "a boundary hover redrew the object"
+
+    # A committed turn still switches cells.
+    cache.at(120, _pose(9.0))
+    assert len(cache._sprites) == 2
+
+
+def test_each_face_holds_its_own_cell() -> None:
+    """Two people at different angles must not share one hysteresis state."""
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get("cap_3d")
+    cache = face_overlays._SpriteCache(cv2, numpy, overlay)
+
+    cache.at(120, _pose(2.0), slot=0)
+    cache.at(120, _pose(22.0), slot=1)
+    cache.at(120, _pose(2.0), slot=0)
+
+    assert len(cache._sprites) == 2

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import statistics
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -147,6 +148,116 @@ def _pose_for(overlay: Overlay, face: FaceAnchors, frame: Any) -> Any | None:
         return None
     height, width = frame.shape[:2]
     return face_pose.estimate(face, width, height)
+
+
+#: The pose smoothing windows, in frames. The solve behind each frame's pose
+#: fits four to six noisy landmark points, and its yaw and pitch wobble by
+#: several degrees frame to frame even on a still head - enough to hop the
+#: sprite cache's five-degree cells many times a second, which is what made a
+#: solid object flutter where a flat sticker sat still. The median pass kills
+#: single-frame spikes; the mean pass takes the wobble below a degree. Nine
+#: Eleven frames is around a third of a second at thirty fps: short enough
+#: that a real head turn is followed, long enough that noise is not.
+POSE_MEDIAN_WINDOW = 5
+POSE_MEAN_WINDOW = 11
+
+
+def pose_timeline(
+    faces: Sequence[FaceAnchors | None], frame_width: int, frame_height: int
+) -> list[Any | None]:
+    """Each frame's measured head pose, for one face's timeline."""
+    return [
+        face_pose.estimate(face, frame_width, frame_height) if face else None
+        for face in faces
+    ]
+
+
+def smooth_poses(raw: Sequence[Any | None]) -> list[Any | None]:
+    """The same timeline, steadied the way the anchors already are.
+
+    A flat sticker is calm because everything it follows is calm: the box is
+    tracked and interpolated, and roll comes off the eye line. The solved yaw
+    and pitch had neither treatment - every frame's noise went straight into
+    which sprite was drawn. This gives them the same two courtesies:
+
+    * Gaps between measured frames are interpolated and the ends are held,
+      exactly as `continuous` does for the anchors, because a pose the solver
+      refused for three frames mid-turn is not a head snapping square-on and
+      back.
+    * The measured signal is filtered - a median to drop single-frame spikes,
+      then a mean to settle the wobble - which is legitimate here in a way a
+      causal filter's lag is not, because the whole clip is read before the
+      first frame is drawn.
+
+    A timeline with no measured pose at all stays None throughout: nothing is
+    guessed, the object draws square on, and that is the same honest fallback
+    a single unreadable frame gets.
+    """
+    from trendrelay_api.integrations.face_pose import HeadPose
+
+    measured = [index for index, pose in enumerate(raw) if pose is not None]
+    if not measured:
+        return list(raw)
+
+    # One continuous signal per angle: interior gaps interpolated between the
+    # sightings either side, the ends held at the nearest measurement.
+    yaws: list[float] = [0.0] * len(raw)
+    pitches: list[float] = [0.0] * len(raw)
+    for index in measured:
+        yaws[index] = raw[index].yaw
+        pitches[index] = raw[index].pitch
+    for previous, following in zip(measured, measured[1:], strict=False):
+        span = following - previous
+        for offset in range(1, span):
+            blend = offset / span
+            yaws[previous + offset] = yaws[previous] * (1 - blend) + yaws[following] * blend
+            pitches[previous + offset] = (
+                pitches[previous] * (1 - blend) + pitches[following] * blend
+            )
+    for index in range(measured[0]):
+        yaws[index], pitches[index] = yaws[measured[0]], pitches[measured[0]]
+    for index in range(measured[-1] + 1, len(raw)):
+        yaws[index], pitches[index] = yaws[measured[-1]], pitches[measured[-1]]
+
+    yaws = _filtered(yaws)
+    pitches = _filtered(pitches)
+
+    smoothed: list[Any | None] = []
+    nearest = 0
+    for index in range(len(raw)):
+        # Roll and the point count are reported from the nearest measured
+        # frame: roll is not read by the sprite cache, and the count is only
+        # ever shown, but a made-up value in either would still be a lie.
+        if nearest + 1 < len(measured) and abs(measured[nearest + 1] - index) < abs(
+            measured[nearest] - index
+        ):
+            nearest += 1
+        reference = raw[measured[nearest]]
+        smoothed.append(
+            HeadPose(
+                yaw=yaws[index],
+                pitch=pitches[index],
+                roll=reference.roll,
+                points=reference.points,
+            )
+        )
+    return smoothed
+
+
+def _filtered(signal: list[float]) -> list[float]:
+    """A median then a mean over the timeline, both centred and bounded."""
+    if len(signal) <= 2:
+        return signal
+    half = POSE_MEDIAN_WINDOW // 2
+    despiked = [
+        statistics.median(signal[max(0, index - half) : index + half + 1])
+        for index in range(len(signal))
+    ]
+    half = POSE_MEAN_WINDOW // 2
+    return [
+        statistics.fmean(despiked[max(0, index - half) : index + half + 1])
+        for index in range(len(despiked))
+    ]
 
 
 def place(anchors: FaceAnchors, overlay: Overlay, settings: OverlaySettings) -> Placement:
@@ -286,15 +397,34 @@ class _SpriteCache:
         #: than passed per call because it does not change within a clip, and
         #: it belongs in the cache key either way.
         self._resting = resting if self._solid else (0.0, 0.0)
+        #: The cell each face drew from last, for the hysteresis in `at`.
+        self._held: dict[int, tuple[float, float]] = {}
 
-    def at(self, width: int, pose: Any | None = None) -> Any:
+    def at(self, width: int, pose: Any | None = None, slot: int = 0) -> Any:
         yaw, pitch = self._resting
         if self._solid and pose is not None:
-            # Rounded after the resting angle is added, not before: a cap worn
-            # at seven degrees and a head at three should share a sprite with a
-            # cap at eight and a head at two, because they are the same picture.
-            yaw = round((pose.yaw + yaw) / POSE_STEP) * POSE_STEP
-            pitch = round((pose.pitch + pitch) / POSE_STEP) * POSE_STEP
+            # Added before rounding, not after: a cap worn at seven degrees and
+            # a head at three should share a sprite with a cap at eight and a
+            # head at two, because they are the same picture.
+            yaw += pose.yaw
+            pitch += pose.pitch
+            # With hysteresis, per face (`slot`): an angle drifting near a cell
+            # boundary would otherwise round across it and back frame after
+            # frame, and each hop redraws the object at a visibly different
+            # angle - the flutter is the boundary, not the head. The last cell
+            # is kept until the angle is closer to another cell's centre than
+            # its own boundary, which a real turn crosses in a frame or two and
+            # noise around a boundary never does.
+            held = self._held.get(slot)
+            if held is not None and (
+                abs(yaw - held[0]) < POSE_STEP * 0.75
+                and abs(pitch - held[1]) < POSE_STEP * 0.75
+            ):
+                yaw, pitch = held
+            else:
+                yaw = round(yaw / POSE_STEP) * POSE_STEP
+                pitch = round(pitch / POSE_STEP) * POSE_STEP
+                self._held[slot] = (yaw, pitch)
         key = (width, yaw, pitch)
         if key not in self._sprites:
             self._sprites[key] = overlay_catalogue.render_sprite(
@@ -807,6 +937,24 @@ def render_overlaid(
         if any(index in track.observed for track in chosen)
     ) if single else sum(1 for row in per_frame if row)
 
+    # The pose each frame will draw at, worked out over the whole timeline
+    # before anything is drawn. Solved per frame it wobbled by several degrees
+    # on a still head - landmark noise through a four-point fit - and every
+    # wobble redrew the object at a new angle. Smoothed along the track it
+    # moves the way the head moves. Not computed for a flat object, which has
+    # nowhere to put the answer.
+    solid = overlay.mesh is not None
+    subject_poses: list[Any | None] = []
+    track_poses: list[list[Any | None]] = []
+    if solid:
+        if single:
+            subject_poses = smooth_poses(pose_timeline(subject, width, height))
+        else:
+            track_poses = [
+                smooth_poses(pose_timeline(track.frames, width, height))
+                for track in chosen
+            ]
+
     destination.parent.mkdir(parents=True, exist_ok=True)
     silent = destination.with_suffix(".silent.mp4")
     out_scale = min(1.0, PREVIEW_WIDTH / float(width)) if preview_seconds and width else 1.0
@@ -856,17 +1004,22 @@ def render_overlaid(
                 drawing.at(index, len(per_frame))
                 landed = False
                 # One face for the subject, or one per person when everybody was
-                # asked for.
-                here = (
-                    [subject[index]] if single and subject[index]
-                    else [] if single
-                    else [track.frames[index] for track in chosen if track.frames[index]]
-                )
-                for face in here:
-                    placement = place(face, overlay, settings)
-                    sprite = sprites.at(
-                        placement.sprite_width(), _pose_for(overlay, face, frame),
+                # asked for - each with the pose its own smoothed timeline says,
+                # and a slot so the cache's hysteresis is held per face.
+                if single:
+                    here = (
+                        [(subject[index], subject_poses[index] if solid else None, 0)]
+                        if subject[index] else []
                     )
+                else:
+                    here = [
+                        (track.frames[index], track_poses[at][index] if solid else None, at)
+                        for at, track in enumerate(chosen)
+                        if track.frames[index]
+                    ]
+                for face, pose, slot in here:
+                    placement = place(face, overlay, settings)
+                    sprite = sprites.at(placement.sprite_width(), pose, slot=slot)
                     if paste(
                         cv2, np, frame, sprite, placement, settings.opacity, settings.mirror
                     ):
