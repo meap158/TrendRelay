@@ -528,10 +528,10 @@ def test_auto_draft_delivers_only_engine_drafts(session, tmp_path, monkeypatch) 
     assert execution.state == "queued"
 
 
-def test_a_low_confidence_pin_is_held_at_every_level(
+def test_autonomous_posts_a_low_confidence_pin_without_approval(
     session, tmp_path, engine_stub, monkeypatch
 ) -> None:
-    """Quality is not a policy an authority level can waive."""
+    """The explicit Autonomous promise wins over an advisory match score."""
     campaign_setup(session, tmp_path)
     low_confidence_match(session, monkeypatch)
     pilot = autopilot(session, authority="autonomous")
@@ -540,22 +540,16 @@ def test_a_low_confidence_pin_is_held_at_every_level(
     session.commit()
 
     execution = executions(session)[0]
-    assert execution.state == "proposed"
-    assert "low confidence" in execution.held_reason
-    assert engine_stub == []
-    assert result["held"]
+    assert execution.state == "queued"
+    assert execution.held_reason is None
+    assert len(engine_stub) == 1
+    assert result["held"] == []
 
 
-def test_a_weak_smart_match_is_not_blamed_on_a_pin(
+def test_autonomous_posts_a_weak_smart_match_without_approval(
     session, tmp_path, engine_stub, monkeypatch
 ) -> None:
-    """The same hold, with the remedy that matches how it happened.
-
-    Smart matching attaches the best available when nothing clears the evidence
-    bar, so this is now the commoner way a weak product reaches the inbox - and
-    telling somebody to change a pin they never made sends them looking for a
-    control that is not set.
-    """
+    """Smart fallback is visible evidence, not a hidden approval override."""
     campaign_setup(session, tmp_path)
     low_confidence_match(
         session, monkeypatch, selection="smart content match, best available"
@@ -566,10 +560,65 @@ def test_a_weak_smart_match_is_not_blamed_on_a_pin(
     session.commit()
 
     execution = executions(session)[0]
+    assert execution.state == "queued"
+    assert execution.held_reason is None
+    assert len(engine_stub) == 1
+
+
+def test_non_autonomous_still_holds_a_low_confidence_match(
+    session, tmp_path, engine_stub, monkeypatch
+) -> None:
+    campaign_setup(session, tmp_path)
+    low_confidence_match(session, monkeypatch)
+    pilot = autopilot(session, authority="run_by_exception")
+
+    result = run_campaign(session, pilot, now=NOW)
+
+    execution = executions(session)[0]
     assert execution.state == "proposed"
-    assert "pinned" not in execution.held_reason
-    assert "best available product is attached" in execution.held_reason
+    assert "low confidence" in execution.held_reason
     assert engine_stub == []
+    assert result["held"]
+
+
+def test_existing_hold_is_released_when_campaign_becomes_autonomous(
+    session, tmp_path, engine_stub
+) -> None:
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    held = executions(session)[0]
+    assert held.state == "proposed"
+
+    pilot.authority = "autonomous"
+    result = run_campaign(session, pilot, now=NOW)
+
+    assert held.state == "queued"
+    assert held.held_reason is None
+    assert len(engine_stub) == 1
+    assert result["released_holds"] == 1
+    assert result["held"] == []
+
+
+def test_unfinished_autonomous_post_needs_attention_not_approval(
+    session, tmp_path, engine_stub
+) -> None:
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+
+    campaign_setup(session, tmp_path)
+    item = session.get(CampaignQueueItem, "q1")
+    item.body = PLACEHOLDER_BODY
+    pilot = autopilot(session, authority="autonomous")
+
+    result = run_campaign(session, pilot, now=NOW)
+
+    # The planner leaves an unwritten queue item visible where its copy can be
+    # fixed; it never freezes an execution merely to call it an approval.
+    assert executions(session) == []
+    assert item.state == "approved"
+    assert engine_stub == []
+    assert result["held"] == []
 
 
 # --- the inbox ------------------------------------------------------------------

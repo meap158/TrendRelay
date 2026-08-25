@@ -1558,6 +1558,7 @@ export function AutopilotPanel({
   succeed,
   fail,
   onCampaignChanged,
+  onHeldCountChanged,
 }: {
   workspaceId: string;
   campaignId: string;
@@ -1567,6 +1568,7 @@ export function AutopilotPanel({
   succeed: (message: string) => void;
   fail: (message: string) => void;
   onCampaignChanged: () => Promise<void>;
+  onHeldCountChanged: (campaignId: string, count: number) => void;
   /** Hand-planned posts, rendered inside the posting timeline so what will
       post and what has posted is one story in one place. */
 }) {
@@ -1998,10 +2000,11 @@ export function AutopilotPanel({
         await apiFetch(`${base}/autopilot/exceptions`),
       );
       setExceptions(body.exceptions);
+      onHeldCountChanged(campaignId, body.exceptions.length);
     } catch {
       // The inbox is supplementary; a failed read leaves the last answer.
     }
-  }, [apiFetch, base]);
+  }, [apiFetch, base, campaignId, onHeldCountChanged]);
 
 
   useEffect(() => {
@@ -2047,7 +2050,7 @@ export function AutopilotPanel({
   // on a gentle interval, paused whenever the tab is not being looked at.
   useEffect(() => {
     if (!autopilot?.enabled) return;
-    void loadExceptions();
+    queueMicrotask(() => { void loadExceptions(); });
     const tick = () => {
       if (document.visibilityState !== "hidden") void loadExceptions();
     };
@@ -2093,6 +2096,7 @@ export function AutopilotPanel({
           ? "Approved and publishing now."
           : "Approved. The post is queued exactly as you approved it.");
       await loadExceptions();
+      await onCampaignChanged();
       // The queue shows the paused post, so it has to be re-read to show it.
       if (stopProposing) await refresh();
     } catch (reason) {

@@ -338,6 +338,19 @@ export default function CampaignsPage() {
     ? loadedCampaignWorkspaceId === workspaceId
     : !workspaceLoading;
 
+  /** Keep the sidebar's attention badge in lockstep with the live inbox.
+      Returning the same array when nothing changed avoids turning the panel's
+      gentle polling into parent-page rerenders. */
+  const syncCampaignHeldCount = useCallback((changedCampaignId: string, count: number) => {
+    setCampaigns((current) => {
+      const campaign = current.find((item) => item.id === changedCampaignId);
+      if (!campaign || (campaign.held_count ?? 0) === count) return current;
+      return current.map((item) => item.id === changedCampaignId
+        ? { ...item, held_count: count }
+        : item);
+    });
+  }, []);
+
   const refresh = useCallback(async (nextWorkspaceId: string) => {
     if (!nextWorkspaceId) return;
     const snapshot = await refreshTabSnapshot<CampaignsSnapshot>(
@@ -810,6 +823,7 @@ export default function CampaignsPage() {
                 succeed={succeed}
                 fail={fail}
                 onCampaignChanged={() => refresh(workspaceId)}
+                onHeldCountChanged={syncCampaignHeldCount}
               />
 
               {/* All that survives of the manual workflow: a way to reach the

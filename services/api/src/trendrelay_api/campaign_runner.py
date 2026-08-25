@@ -287,12 +287,16 @@ def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | Non
     level's: below earned autonomy, every frozen post waits in the inbox and
     a person approves the exact record that will be sent. Autonomous - earned
     through the graduation gate, revocable by the kill switch - is the one
-    level that posts without a person, and even it holds what the
-    completeness check refuses.
+    level that posts without a person. A completeness failure is routed to
+    attention as a failed package rather than turned into an approval request.
 
-    A low-confidence product holds at every authority level: quality is not a
-    policy an authority level can waive.
+    Autonomous means exactly what its control says: a finished post never
+    enters an approval inbox. Match confidence remains recorded on the frozen
+    post and visible in the timeline, but it is advisory once the operator has
+    explicitly granted earned autonomy.
     """
+    if autopilot.authority == "autonomous":
+        return None
     if any(confidence == "low" for confidence in post.offer_confidences):
         # How the product was chosen decides what there is to do about it. The
         # message assumed a pin, because until smart matching learned to attach
@@ -315,12 +319,10 @@ def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | Non
             "the best available product is attached. Approve to post it, or "
             "pin a product to this post yourself."
         )
-    if autopilot.authority != "autonomous":
-        return (
-            "Waiting for approval: this exact frozen post reaches its engine "
-            "only after a person approves it."
-        )
-    return None
+    return (
+        "Waiting for approval: this exact frozen post reaches its engine "
+        "only after a person approves it."
+    )
 
 
 #: What a held post says, and therefore what changing it has to reach.
@@ -550,6 +552,117 @@ def _media_ready(execution: PublicationExecution) -> str | None:
     return None
 
 
+def _release_autonomous_holds(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    destinations: dict[str, CampaignDestination],
+    *,
+    now: datetime,
+) -> dict[str, Any]:
+    """Move legacy approval rows forward after autonomy has been granted.
+
+    Earlier policy held weak product matches even under Autonomous. Merely
+    fixing new plans would leave those frozen rows occupying their slots and
+    displaying approval badges forever. The next save/run therefore evaluates
+    each existing hold once: complete posts are queued, incomplete posts become
+    actionable failures, and a destination with no capacity releases its hold
+    so the queue can try again when the provider recovers.
+    """
+    if autopilot.authority != "autonomous":
+        return {"posts": [], "failures": [], "deferred": [], "released": 0}
+
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+    from trendrelay_api.integrations.publishing import delivery_block
+
+    rows = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state == "proposed",
+        )
+    ).all()
+    created: list[dict[str, Any]] = []
+    failures: list[str] = []
+    deferred: list[str] = []
+
+    def fail_execution(execution: PublicationExecution, reason: str, kind: str) -> None:
+        execution.state = "failed"
+        execution.failure_class = kind
+        execution.error = reason[:1000]
+        execution.held_reason = None
+        execution.reconciled_at = now
+        execution.updated_at = now
+        item = session.get(CampaignQueueItem, execution.queue_item_id)
+        if item and item.state == "approved":
+            item.state = "paused"
+            item.updated_at = now
+
+    for execution in rows:
+        destination = destinations.get(execution.destination_id or "")
+        label = (
+            execution.destination_label
+            or (destination.label if destination else "Destination")
+        )
+        if destination is None:
+            reason = "The campaign destination no longer exists."
+            fail_execution(execution, reason, "validation")
+            failures.append(f"{label}: {reason}")
+            continue
+
+        blocked = delivery_block(destination.provider, destination.integration_id)
+        if blocked:
+            # No approval is needed and no broken row should occupy the slot.
+            # Cancelling only this frozen attempt leaves the queue item approved
+            # for a later scheduler tick.
+            execution.state = "cancelled"
+            execution.error = f"Waiting for engine capacity: {blocked}"[:1000]
+            execution.held_reason = None
+            execution.reconciled_at = now
+            execution.updated_at = now
+            deferred.append(f"{label}: {blocked}")
+            continue
+
+        media_problem = _media_ready(execution)
+        unfinished = finalization_problems(autopilot, execution, engine_check=False)
+        if media_problem or unfinished:
+            reason = media_problem or "Not finished: " + " ".join(unfinished)
+            fail_execution(execution, reason, "media" if media_problem else "validation")
+            failures.append(f"{label}: {reason}")
+            continue
+
+        try:
+            scheduled = _as_utc(execution.scheduled_at)
+            delivery_at = scheduled if scheduled and scheduled > now else now
+            job = _publish_execution(session, autopilot, execution, at=delivery_at)
+            execution.job_id = job["id"]
+            execution.state = "queued"
+            execution.held_reason = None
+            execution.scheduled_at = delivery_at
+            execution.queued_at = now
+            execution.updated_at = now
+            created.append({
+                "job_id": job["id"],
+                "execution_id": execution.id,
+                "destination_id": execution.destination_id,
+                "at": delivery_at,
+                "placement": execution.placement,
+                "offer_ids": list(execution.offer_ids or []),
+                "products": [],
+                "reason": execution.reason,
+                "released_from_approval": True,
+            })
+        except Exception as error:  # noqa: BLE001 - one stale hold cannot stop the run
+            message = str(error)
+            fail_execution(execution, message, _classify_failure(message))
+            failures.append(f"{label}: {message}")
+
+    return {
+        "posts": created,
+        "failures": failures,
+        "deferred": deferred,
+        "released": len(rows),
+    }
+
+
 def run_campaign(
     session: Session, autopilot: CampaignAutopilot, *, now: datetime | None = None
 ) -> dict[str, Any]:
@@ -612,6 +725,16 @@ def run_campaign(
     deferred: list[str] = []
     held: list[dict[str, Any]] = []
     reserved: list[ScheduledPost] = []
+
+    # Plan first so the rows being released still reserve their original slot
+    # during this tick. That prevents a second post being planned into it before
+    # the frozen one is queued.
+    released = _release_autonomous_holds(
+        session, autopilot, destinations, now=moment
+    )
+    created.extend(released["posts"])
+    failures.extend(released["failures"])
+    deferred.extend(released["deferred"])
     for post in posts:
         destination = destinations.get(post.destination_id)
         if not destination:
@@ -652,13 +775,27 @@ def run_campaign(
             continue
         hold = _hold_reason(autopilot, post)
         if hold is None:
-            # Even earned autonomy does not publish an unfinished post: what
-            # the approve gate would refuse, the unattended path holds.
+            # Autonomous never asks for approval. An unfinished package needs
+            # attention, so fail and pause it by name instead of disguising a
+            # content problem as an approval decision.
             unfinished = finalization_problems(
                 autopilot, execution, engine_check=False
             )
             if unfinished:
-                hold = "Not finished: " + " ".join(unfinished)
+                reason = "Not finished: " + " ".join(unfinished)
+                execution.state = "failed"
+                execution.failure_class = "validation"
+                execution.error = reason[:1000]
+                execution.reconciled_at = moment
+                execution.updated_at = moment
+                from trendrelay_api.autopilot_models import CampaignQueueItem
+
+                item = session.get(CampaignQueueItem, post.queue_item_id)
+                if item and item.state == "approved":
+                    item.state = "paused"
+                    item.updated_at = moment
+                failures.append(f"{destination.label}: {reason}")
+                continue
         if hold:
             # Held for a person, not failed: a `proposed` execution keeps its
             # slot and its queue item, so approving it later delivers exactly
@@ -726,6 +863,7 @@ def run_campaign(
         "held": held,
         "failures": failures,
         "deferred": deferred,
+        "released_holds": released["released"],
     }
 
 

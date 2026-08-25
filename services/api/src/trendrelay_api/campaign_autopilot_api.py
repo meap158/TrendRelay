@@ -492,6 +492,7 @@ def save_autopilot(
     ensure_profile(session, user)
     autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
     was_enabled = autopilot.enabled
+    previous_authority = autopilot.authority
 
     # Confirmation belongs to the transition that hands accounts to the
     # scheduler. The web form sends the complete settings document, including
@@ -604,7 +605,10 @@ def save_autopilot(
     autopilot.weekly_post_cap = body.weekly_post_cap
     autopilot.posting_preset_id = body.posting_preset_id
     autopilot.updated_at = datetime.now(UTC)
-    if body.enabled and not was_enabled:
+    if body.enabled and (
+        not was_enabled
+        or (body.authority == "autonomous" and previous_authority != "autonomous")
+    ):
         # Switching on IS deploying: the campaign activates and the first run
         # happens now, with holds and failures reported per post in the
         # timeline rather than a preflight refusing the switch. An empty
