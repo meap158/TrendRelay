@@ -1380,6 +1380,7 @@ export const zh: Messages = {
     dropHint: "或将文件放入 {directory}。",
     suggested: "为这个视频推荐",
     noPictures: "素材库中还没有图片。",
+    picturesShown: "共 {total} 张图片，显示 {shown} 张",
   },
 
   ui: {

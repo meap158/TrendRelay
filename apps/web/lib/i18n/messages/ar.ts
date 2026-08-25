@@ -1408,6 +1408,7 @@ export const ar: Messages = {
     dropHint: "أو ضع ملفًا في {directory}.",
     suggested: "مقترح لهذا المقطع",
     noPictures: "لا توجد صور في المكتبة بعد.",
+    picturesShown: "‏{shown} من {total} صورة",
   },
 
   ui: {

@@ -1425,6 +1425,7 @@ export const fr: Messages = {
     dropHint: "Ou déposez un fichier dans {directory}.",
     suggested: "Suggéré pour ce clip",
     noPictures: "Aucune image dans la bibliothèque pour l'instant.",
+    picturesShown: "{shown} images sur {total}",
   },
 
   ui: {

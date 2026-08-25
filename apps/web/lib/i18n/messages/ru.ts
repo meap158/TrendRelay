@@ -1424,6 +1424,7 @@ export const ru: Messages = {
     dropHint: "Или положите файл в {directory}.",
     suggested: "Подходит этому клипу",
     noPictures: "В библиотеке пока нет изображений.",
+    picturesShown: "{shown} из {total} изображений",
   },
 
   ui: {

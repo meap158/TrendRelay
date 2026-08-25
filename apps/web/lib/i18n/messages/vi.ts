@@ -1405,6 +1405,7 @@ export const vi: Messages = {
     dropHint: "Hoặc thả tệp vào {directory}.",
     suggested: "Gợi ý cho video này",
     noPictures: "Thư viện chưa có ảnh nào.",
+    picturesShown: "{shown}/{total} ảnh",
   },
 
   ui: {

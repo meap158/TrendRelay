@@ -1408,6 +1408,7 @@ export const en = {
     dropHint: "Or drop a file into {directory}.",
     suggested: "Suggested for this clip",
     noPictures: "No pictures in the library yet.",
+    picturesShown: "{shown} of {total} pictures",
   },
 
   ui: {

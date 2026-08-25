@@ -14,6 +14,7 @@ import type { EffectDefinition, EffectParam, ParamOption } from "./effect-params
 import { optionGroup, optionLabel } from "../../lib/i18n/effects";
 import { useT } from "../i18n-provider";
 import { useLibraryAssets } from "../../lib/use-library-assets";
+import { AssetFilters } from "../ui/asset-filters";
 import { AssetThumbnail, IMAGE_PICKER_BASE } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
 
@@ -751,6 +752,33 @@ export function GalleryPanel({
                   so a separate Add press would be a second click for nothing. */}
               {browsing && folder.import_from_library && (
                 <div className="overlay-library">
+                  {/* The same control the Library page and the Publish picker
+                      use, on the same terms. Library's own set exactly, plus
+                      the search it keeps in a form of its own - minus length,
+                      which is a duration and means nothing about a picture.
+
+                      Everything else is facet-driven, so an image-only list
+                      offers only the channels, platforms, effects and workflow
+                      states that images here actually have. */}
+                  <AssetFilters
+                    values={libraryPictures.filters}
+                    facets={libraryPictures.facets}
+                    fields={["query", "channel", "platform", "effect", "processing", "downloaded"]}
+                    cleared={IMAGE_PICKER_BASE}
+                    onChange={(next) => libraryPictures.setFilters(next)}
+                  />
+                  {/* How much of the library is being looked at. Without it a
+                      filter that matches nothing is indistinguishable from a
+                      library that holds nothing. */}
+                  <p className="overlay-library-tally" role="status" aria-live="polite">
+                    {t("overlayPicker.picturesShown", {
+                      shown: libraryPictures.assets.length,
+                      total: libraryPictures.total,
+                    })}
+                  </p>
+                  {libraryPictures.failure && (
+                    <p className="console-error" role="alert">{libraryPictures.failure}</p>
+                  )}
                   {libraryPictures.loading === "list" && !libraryPictures.assets.length ? (
                     <p className="overlay-note">{t("common.loading")}</p>
                   ) : libraryPictures.assets.length ? (

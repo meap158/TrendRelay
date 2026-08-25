@@ -1398,6 +1398,7 @@ export const ja: Messages = {
     dropHint: "または {directory} にファイルを入れてください。",
     suggested: "このクリップへのおすすめ",
     noPictures: "ライブラリにまだ画像がありません。",
+    picturesShown: "{total}枚中{shown}枚",
   },
 
   ui: {
