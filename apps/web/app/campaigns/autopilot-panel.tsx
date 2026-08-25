@@ -3783,27 +3783,35 @@ export function AutopilotPanel({
             {pickedQueue.length > 0 && (
               <>
                 {pickedQueue.some((item) => item.state !== "approved") && (
-                  <Button variant="secondary" size="sm"
-                    busy={busy === "queue-batch-approve"}
-                    onClick={() => void batchQueue("approve")}>
-                    {t("autopilot.approve")}
-                  </Button>
+                  <Tooltip content="Put the selected posts into rotation, so the campaign may publish them.">
+                    <Button variant="secondary" size="sm"
+                      busy={busy === "queue-batch-approve"}
+                      onClick={() => void batchQueue("approve")}>
+                      {t("autopilot.approve")}
+                    </Button>
+                  </Tooltip>
                 )}
                 {pickedQueue.some((item) => item.state === "approved") && (
-                  <Button variant="quiet" size="sm"
-                    busy={busy === "queue-batch-hold"}
-                    onClick={() => void batchQueue("hold")}>
-                    Hold back
-                  </Button>
+                  <Tooltip content="Take the selected posts out of rotation. They stay in the queue as drafts until approved again.">
+                    <Button variant="quiet" size="sm"
+                      busy={busy === "queue-batch-hold"}
+                      onClick={() => void batchQueue("hold")}>
+                      Hold back
+                    </Button>
+                  </Tooltip>
                 )}
-                <Button variant="danger" size="sm"
-                  busy={busy === "queue-batch-remove"}
-                  onClick={() => void batchQueue("remove")}>
-                  {t("common.delete")}
-                </Button>
-                <Button variant="quiet" size="sm" onClick={() => setQueuePicked(new Set())}>
-                  Clear selection
-                </Button>
+                <Tooltip content="Remove the selected posts from this campaign's queue. Posts already published are not affected.">
+                  <Button variant="danger" size="sm"
+                    busy={busy === "queue-batch-remove"}
+                    onClick={() => void batchQueue("remove")}>
+                    {t("common.delete")}
+                  </Button>
+                </Tooltip>
+                <Tooltip content="Untick everything. The posts themselves are left as they are.">
+                  <Button variant="quiet" size="sm" onClick={() => setQueuePicked(new Set())}>
+                    Clear selection
+                  </Button>
+                </Tooltip>
               </>
             )}
           </div>

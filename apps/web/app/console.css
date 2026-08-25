@@ -1243,7 +1243,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
 .autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .autopilot-destinations > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.autopilot-queue > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+/* The start border is three pixels on every row, not only the striped
+   states: draft and approved recolour it, and rows without a stripe keeping
+   the one-pixel edge sat their checkboxes two pixels left of everyone
+   else's. */
+.autopilot-queue > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-inline-start-width: 3px; border-radius: var(--radius-sm); background: var(--panel); }
 /* A fifth column only when the rows are selectable. Widening the template
    unconditionally would leave an empty column for a reader who cannot edit,
    and the checkbox is not rendered for them at all. */
@@ -1259,7 +1263,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
  *
  * The padding and border are added on because everything here is border-box,
  * so `min-height` is the outer height rather than the content's. */
-.campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+/* Two extra start pixels, so the select-all box sits exactly over the row
+   checkboxes below it - their rows open with a three-pixel state edge where
+   this bar keeps a one-pixel border. */
+.campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); margin-bottom: 8px; padding: 7px 10px; padding-inline-start: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
 .campaign-queue-bar > strong { margin-inline-end: auto; font-size: 11px; font-weight: 600; }
 /* The strip lives in the card's heading, beside "Add from library".
