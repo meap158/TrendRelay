@@ -25,6 +25,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { AUTHORITIES } from "./authority-options";
 
 import { Button } from "../ui/button";
+import { Tooltip } from "../ui/tooltip";
 import { SegmentedControl } from "../ui/segmented";
 import { FilterChipStrip } from "../ui/filter-strip";
 import { ActionIcon } from "../ui/action-icons";
@@ -3641,35 +3642,43 @@ export function AutopilotPanel({
                       {canEdit && (
                         <>
                           <span className="campaign-exception-actions">
-                            <Button variant="primary" size="sm"
-                              busy={busy === `approve-${item.id}`}
-                              onClick={() => void decideException(item.id, "approve")}
-                            >Approve</Button>
-                            <Button variant="secondary" size="sm"
-                              busy={busy === `approve-${item.id}`}
-                              onClick={() => {
-                                if (!window.confirm(
-                                  `Publishes to ${item.destination_label ?? item.platform} immediately instead of waiting for the slot. Continue?`,
-                                )) return;
-                                void decideException(item.id, "approve", { publishNow: true });
-                              }}
-                            >Publish now</Button>
-                            <Button variant="quiet" size="sm"
-                              onClick={() => setEditingHeld(item)}>Edit</Button>
+                            <Tooltip content="Queue this exact post for its scheduled campaign time.">
+                              <Button variant="primary" size="sm"
+                                busy={busy === `approve-${item.id}`}
+                                onClick={() => void decideException(item.id, "approve")}
+                              >Approve</Button>
+                            </Tooltip>
+                            <Tooltip content="Send this exact post immediately instead of waiting for its scheduled time.">
+                              <Button variant="secondary" size="sm"
+                                busy={busy === `approve-${item.id}`}
+                                onClick={() => {
+                                  if (!window.confirm(
+                                    `Publishes to ${item.destination_label ?? item.platform} immediately instead of waiting for the slot. Continue?`,
+                                  )) return;
+                                  void decideException(item.id, "approve", { publishNow: true });
+                                }}
+                              >Publish now</Button>
+                            </Tooltip>
+                            <Tooltip content="Change the post copy. The selected media stays frozen.">
+                              <Button variant="quiet" size="sm"
+                                onClick={() => setEditingHeld(item)}>Edit</Button>
+                            </Tooltip>
                             {/* The hold reason often points at a weak product
                                 match; this opens that post's products so the
                                 advice has a control beside it rather than
                                 sending the operator to hunt for the row. */}
                             {item.queue_item_id
                               && queue.some((row) => row.id === item.queue_item_id) && (
-                              <Button variant="quiet" size="sm"
-                                onClick={() => {
-                                  const row = queue.find((entry) => entry.id === item.queue_item_id);
-                                  if (!row) return;
-                                  jumpTo("media");
-                                  void loadRecommendations(row);
-                                }}
-                              >Review products</Button>
+                              <Tooltip content="Inspect or change the products and affiliate links attached to this post.">
+                                <Button variant="quiet" size="sm"
+                                  onClick={() => {
+                                    const row = queue.find((entry) => entry.id === item.queue_item_id);
+                                    if (!row) return;
+                                    jumpTo("media");
+                                    void loadRecommendations(row);
+                                  }}
+                                >Review products</Button>
+                              </Tooltip>
                             )}
                             {/* Both answers to "no", because they are not the
                                 same answer. Skipping frees this outing and the
@@ -3679,21 +3688,25 @@ export function AutopilotPanel({
                                 cycle. Only "Skip" used to exist, under a name
                                 that read like the milder of two options with
                                 no second option to be milder than. */}
-                            <Button variant="quiet" size="sm"
-                              busy={busy === `dismiss-${item.id}`}
-                              onClick={() => void decideException(item.id, "dismiss")}
-                            >Skip this time</Button>
-                            <Button variant="quiet" size="sm"
-                              busy={busy === `dismiss-${item.id}`}
-                              onClick={() => {
-                                if (!window.confirm(
-                                  "Decline this post? It is cancelled and paused, "
-                                  + "so it stops being proposed until you put it "
-                                  + "back in the queue.",
-                                )) return;
-                                void decideException(item.id, "dismiss", { stopProposing: true });
-                              }}
-                            >Decline</Button>
+                            <Tooltip content="Free this slot and return the post to the queue for a future cycle.">
+                              <Button variant="quiet" size="sm"
+                                busy={busy === `dismiss-${item.id}`}
+                                onClick={() => void decideException(item.id, "dismiss")}
+                              >Skip this time</Button>
+                            </Tooltip>
+                            <Tooltip content="Cancel this proposal and pause the post until you restore it.">
+                              <Button variant="quiet" size="sm"
+                                busy={busy === `dismiss-${item.id}`}
+                                onClick={() => {
+                                  if (!window.confirm(
+                                    "Decline this post? It is cancelled and paused, "
+                                    + "so it stops being proposed until you put it "
+                                    + "back in the queue.",
+                                  )) return;
+                                  void decideException(item.id, "dismiss", { stopProposing: true });
+                                }}
+                              >Decline</Button>
+                            </Tooltip>
                           </span>
                         </>
                       )}

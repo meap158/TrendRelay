@@ -145,6 +145,51 @@ a.ui-button { text-decoration: none; }
 .ui-button-pair > .ui-button:hover:not(:disabled),
 .ui-button-pair > .ui-button:focus-visible { position: relative; z-index: 1; }
 
+/* Explanations for dense action rows. The trigger remains the real control;
+   this wrapper only positions a hint and never replaces its accessible name. */
+.ui-tooltip { position: relative; display: inline-flex; max-width: 100%; }
+.ui-tooltip-content {
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-end: calc(100% + 8px);
+  z-index: 120;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--on-ink);
+  box-shadow: 0 5px 16px rgb(20 28 38 / 22%);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-50%, 2px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+.ui-tooltip-content::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: 50%;
+  border: 5px solid transparent;
+  border-block-start-color: var(--text);
+  transform: translateX(-50%);
+}
+.ui-tooltip:hover > .ui-tooltip-content,
+.ui-tooltip:focus-within > .ui-tooltip-content {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-tooltip-content { transition: none; }
+}
+
 /* --- action menu ---------------------------------------------------------- */
 /* Commands, not a selected value. The panel overlays the page so revealing
  * more actions never moves the selected rows underneath it. */
