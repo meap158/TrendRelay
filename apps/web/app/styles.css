@@ -612,7 +612,21 @@ nav strong { color: var(--text); }
    into a 4:5 box - which is the whole question this panel answers. The value
    here is only what is used before the media has loaded, and the cap stops a
    tall vertical from pushing everything below it off the screen. */
-.post-preview-frame { display: grid; place-items: center; justify-self: center; max-inline-size: 100%; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
+/* The width is worked out from the height cap and the ratio, rather than
+   left to the content.
+
+   `justify-self: center` stopped the frame stretching to its column, which
+   also stopped it having a width at all: everything inside it is sized at
+   100%, so the box sized itself from children that were sizing themselves
+   from the box, and settled on nothing. A preview with a chosen clip in it
+   rendered a play button nought pixels tall.
+
+   Multiplying the cap by the ratio gives the widest the frame can be
+   without growing past the cap, and `min(100%, ...)` hands a landscape clip
+   back to the column when that is narrower. Both halves of the ratio
+   variable work in `calc`, whether it arrives as `4 / 5` from here or as a
+   measured decimal from the media. */
+.post-preview-frame { display: grid; place-items: center; justify-self: center; inline-size: min(100%, calc(min(56vh, 440px) * var(--preview-ratio, 4 / 5))); max-inline-size: 100%; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
 .post-preview.story .post-preview-frame { --preview-ratio: 9 / 16; }
 
 /* The surface's own furniture, over the media.
