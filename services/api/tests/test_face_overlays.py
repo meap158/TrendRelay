@@ -1570,17 +1570,18 @@ def test_no_pose_is_solved_for_a_flat_object() -> None:
 
 
 def test_nearby_angles_share_one_sprite() -> None:
-    """Rounded to `POSE_STEP`, so a head drifting by a fraction of a degree
-    reuses what it drew last frame instead of rasterising afresh."""
+    """Held to `POSE_STEP` cells with hysteresis, so a head drifting by a
+    fraction of a degree reuses what it drew last frame instead of
+    rasterising afresh."""
     cv2, numpy = _vision()
     overlay = overlay_catalogue.get("cap_3d")
     cache = face_overlays._SpriteCache(cv2, numpy, overlay)
     frame = numpy.zeros((1920, 1080, 3), dtype=numpy.uint8)
 
-    for yaw in (20.0, 20.4, 21.0, 21.9):
+    for yaw in (20.0, 20.3, 20.6, 20.9):
         cache.at(120, face_overlays._pose_for(overlay, _posed_face(yaw=yaw), frame))
 
-    assert len(cache._sprites) == 1, "a drift under the step drew a new sprite"
+    assert len(cache._sprites) == 1, "a drift under the hold drew a new sprite"
 
 
 def test_a_face_with_no_measurable_pose_draws_the_object_square_on() -> None:
@@ -1743,13 +1744,16 @@ def test_an_angle_hovering_at_a_cell_boundary_does_not_dither() -> None:
     overlay = overlay_catalogue.get("cap_3d")
     cache = face_overlays._SpriteCache(cv2, numpy, overlay)
 
-    for yaw in (2.3, 2.7, 2.3, 2.7, 2.4, 2.6):
+    # These straddle the boundary between the first two cells: without the
+    # hold, each pair of frames would round to different cells and back.
+    boundary = face_overlays.POSE_STEP / 2
+    for yaw in (boundary - 0.2, boundary + 0.2) * 3:
         cache.at(120, _pose(yaw))
 
     assert len(cache._sprites) == 1, "a boundary hover redrew the object"
 
     # A committed turn still switches cells.
-    cache.at(120, _pose(9.0))
+    cache.at(120, _pose(boundary + face_overlays.POSE_STEP * 3))
     assert len(cache._sprites) == 2
 
 

@@ -363,10 +363,15 @@ def paste(
 
 #: Yaw and pitch are rounded to this before a solid object is drawn, so a head
 #: drifting by a fraction of a degree reuses the sprite it drew last frame
-#: instead of rasterising a new one. Five degrees is under the noise in the
-#: landmarks the angle came from, and a hundred and eight cells at a given size
-#: is a bounded cache rather than one entry per frame.
-POSE_STEP = 5.0
+#: instead of rasterising a new one. This was five degrees when the angle
+#: arrived raw from the solver - anything finer just rasterised the noise -
+#: but the smoothed timeline moves half a degree a frame, so the cells can be
+#: half the size: each redraw during a real turn is a step small enough to
+#: read as motion rather than as a pop, the cache stays bounded because a
+#: smooth trajectory visits cells in order instead of scattering across them,
+#: and the hysteresis in `_SpriteCache.at` still stops a boundary from
+#: dithering.
+POSE_STEP = 2.5
 
 
 class _SpriteCache:

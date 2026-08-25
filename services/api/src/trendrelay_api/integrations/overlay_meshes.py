@@ -297,17 +297,6 @@ def _rotation(np: Any, yaw: float, pitch: float, roll: float) -> Any:
     return rz @ ry @ rx
 
 
-def _shade(normal: Any, colour: RGBA, np: Any) -> tuple[float, float, float]:
-    """A face's colour once the light has been applied, in BGR order."""
-    light = np.array(LIGHT, dtype=np.float32)
-    light = light / (np.linalg.norm(light) or 1.0)
-    lit = float(np.dot(normal, light))
-    # Lit from behind is not negative light, it is no light.
-    strength = AMBIENT + (1.0 - AMBIENT) * max(0.0, lit)
-    red, green, blue, _alpha = colour
-    return (blue * strength, green * strength, red * strength)
-
-
 def render(
     np: Any,
     mesh: Mesh,
@@ -329,7 +318,9 @@ def render(
     if not mesh.faces:
         return canvas
 
-    points = np.array(mesh.vertices, dtype=np.float32) @ _rotation(np, yaw, pitch, roll).T
+    rotation = _rotation(np, yaw, pitch, roll)
+    vertices = np.array(mesh.vertices, dtype=np.float32)
+    points = vertices @ rotation.T
     # The unit cube maps to the sprite box. Not the projected bounds: those
     # change with the angle, and scaling to them would resize the object every
     # time the head moved.
@@ -339,7 +330,45 @@ def render(
     depth = points[:, 2]
 
     z_buffer = np.full((height, width), -np.inf, dtype=np.float32)
+    # float32 like everything else here: the integer grid mgrid returns would
+    # upcast every barycentric array below to float64, which doubles the
+    # memory the inner loop pushes for precision a sprite cannot show.
     grid_y, grid_x = np.mgrid[0:height, 0:width]
+    grid_y = (grid_y + 0.5).astype(np.float32)
+    grid_x = (grid_x + 0.5).astype(np.float32)
+
+    # Every face's lit colour, worked out in one vectorised pass rather than
+    # once per triangle inside the loop - the loop's per-face normal, rotation
+    # and shading were most of a render's Python overhead, for answers that
+    # never depend on anything the loop learns.
+    corners = np.array(mesh.faces, dtype=np.intp)
+    normals = np.cross(
+        vertices[corners[:, 1]] - vertices[corners[:, 0]],
+        vertices[corners[:, 2]] - vertices[corners[:, 0]],
+    )
+    lengths = np.linalg.norm(normals, axis=1, keepdims=True)
+    normals = normals / np.where(lengths == 0.0, 1.0, lengths)
+    normals = normals @ rotation.T
+    # Pointed back at the camera rather than trusted to be. Which way `cross`
+    # faces depends on how the triangle happens to be wound, and a primitive
+    # wound the other way would light from underneath while still drawing
+    # correctly - visibility reads the screen-space area, not this. A face
+    # that gets drawn is visible, so its outward normal has some +z in it by
+    # definition.
+    normals = np.where(normals[:, 2:3] < 0.0, -normals, normals)
+    light = np.array(LIGHT, dtype=np.float32)
+    light = light / (np.linalg.norm(light) or 1.0)
+    # Lit from behind is not negative light, it is no light.
+    strengths = AMBIENT + (1.0 - AMBIENT) * np.maximum(0.0, normals @ light)
+    colours = np.array(
+        [
+            mesh.colours[index] if index < len(mesh.colours) else (255, 255, 255, 255)
+            for index in range(len(mesh.faces))
+        ],
+        dtype=np.float32,
+    )
+    # BGR out of RGBA, each face's colour under its own light.
+    shaded = colours[:, [2, 1, 0]] * strengths[:, None]
 
     for index, (a, b, c) in enumerate(mesh.faces):
         ax, ay, az = screen_x[a], screen_y[a], depth[a]
@@ -364,8 +393,8 @@ def render(
         bottom = min(int(math.ceil(max(ay, by, cy))) + 1, height)
         if left >= right or top >= bottom:
             continue
-        px = grid_x[top:bottom, left:right] + 0.5
-        py = grid_y[top:bottom, left:right] + 0.5
+        px = grid_x[top:bottom, left:right]
+        py = grid_y[top:bottom, left:right]
         # Barycentric coordinates, normalised by the same signed area, so the
         # inside test is the sign test and needs no winding special case.
         w0 = ((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / area
@@ -382,31 +411,13 @@ def render(
         nearer = inside & (here > z_buffer[top:bottom, left:right])
         if not nearer.any():
             continue
-        first = np.array(mesh.vertices[b], dtype=np.float32) - np.array(
-            mesh.vertices[a], dtype=np.float32
-        )
-        second = np.array(mesh.vertices[c], dtype=np.float32) - np.array(
-            mesh.vertices[a], dtype=np.float32
-        )
-        normal = np.cross(first, second)
-        length = float(np.linalg.norm(normal))
-        normal = normal / length if length else normal
-        normal = _rotation(np, yaw, pitch, roll) @ normal
-        # Pointed back at the camera rather than trusted to be. Which way
-        # `cross` faces depends on how the triangle happens to be wound, and a
-        # primitive wound the other way would light from underneath while still
-        # drawing correctly - the visibility test above reads the screen-space
-        # area, not this. A face that got here is visible, so its outward
-        # normal has some +z in it by definition.
-        if normal[2] < 0:
-            normal = -normal
-        colour = mesh.colours[index] if index < len(mesh.colours) else (255, 255, 255, 255)
-        blue, green, red = _shade(normal, colour, np)
+        blue, green, red = shaded[index]
+        alpha = colours[index, 3]
         target = canvas[top:bottom, left:right]
         target[..., 0] = np.where(nearer, blue, target[..., 0])
         target[..., 1] = np.where(nearer, green, target[..., 1])
         target[..., 2] = np.where(nearer, red, target[..., 2])
-        target[..., 3] = np.where(nearer, colour[3], target[..., 3])
+        target[..., 3] = np.where(nearer, alpha, target[..., 3])
         z_buffer[top:bottom, left:right] = np.where(
             nearer, here, z_buffer[top:bottom, left:right]
         )
