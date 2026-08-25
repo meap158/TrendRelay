@@ -373,6 +373,12 @@ def paste(
 #: dithering.
 POSE_STEP = 2.5
 
+#: The most rendered sprites one pass keeps. Sized so a normal clip never
+#: evicts anything - the head-shake clip that prompted the finer cells used
+#: 121 - while a long clip that varies both the face's size and its angle
+#: cannot grow the cache without limit.
+SPRITE_CACHE_LIMIT = 512
+
 
 class _SpriteCache:
     """One sprite per size, because a clip asks for the same size repeatedly.
@@ -432,6 +438,13 @@ class _SpriteCache:
                 self._held[slot] = (yaw, pitch)
         key = (width, yaw, pitch)
         if key not in self._sprites:
+            if len(self._sprites) >= SPRITE_CACHE_LIMIT:
+                # Oldest first, which insertion order gives for free. A long
+                # clip of a moving subject varies both the width and the angle,
+                # and the product is what this bounds: re-rendering a sprite
+                # that fell out costs a tenth of a second once in a while,
+                # where an unbounded cache costs memory for the whole render.
+                del self._sprites[next(iter(self._sprites))]
             self._sprites[key] = overlay_catalogue.render_sprite(
                 self._cv2,
                 self._np,
