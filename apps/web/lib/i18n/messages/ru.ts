@@ -503,6 +503,10 @@ export const ru: Messages = {
     chooseMediaFirst:
       "Выберите медиа выше, чтобы увидеть кадры, которые уйдут в публикацию.",
     howItWillLook: "Как это будет выглядеть",
+    previewWhich: "Какое направление показать",
+    previewMobile: "Телефон",
+    previewDesktop: "Компьютер",
+    previewWidthLabel: "Ширина просмотра",
     dryRunPlan: "План пробного запуска",
     when: "Когда",
     media: "Медиа",

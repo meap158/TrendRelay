@@ -506,6 +506,10 @@ export const fr: Messages = {
     chooseMediaFirst:
       "Choisissez un média ci-dessus pour voir les images qui seront publiées.",
     howItWillLook: "Aperçu du rendu",
+    previewWhich: "Quelle destination prévisualiser",
+    previewMobile: "Téléphone",
+    previewDesktop: "Bureau",
+    previewWidthLabel: "Largeur de l’aperçu",
     dryRunPlan: "Plan de simulation",
     when: "Quand",
     media: "Média",

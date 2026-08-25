@@ -581,7 +581,19 @@ nav strong { color: var(--text); }
 .feature-reach > .off { position: relative; opacity: 0.45; }
 .feature-reach > .off::after { content: ""; position: absolute; inset-block-start: 50%; inset-inline: -1px; border-top: 2px solid var(--bad); transform: rotate(-45deg); }
 
+/* The heading and its two controls on one row, so the preview keeps the
+   height it had. Wraps rather than shrinking the picker: a destination
+   named "Facebook · Tủ Xinh Của Nàng" is unreadable at half a column. */
+.preview-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-block-end: 8px; }
+.preview-head h2 { margin: 0; }
+.preview-head-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.preview-destination { max-inline-size: 240px; }
 .post-preview { display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
+/* A phone is the width these networks are read at, so it is the default and
+   the narrower of the two. Capped rather than stretched: a preview as wide
+   as the panel stops being a preview of anything somebody will see. */
+.post-preview[data-width="mobile"] { max-inline-size: 380px; }
+.post-preview[data-width="desktop"] { max-inline-size: none; }
 .post-preview figcaption { display: flex; align-items: center; gap: 8px; }
 .post-preview figcaption span { display: grid; gap: 1px; min-width: 0; }
 .post-preview figcaption strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }

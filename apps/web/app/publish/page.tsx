@@ -22,6 +22,7 @@ import {
 import { accountIdentity } from "../publishing-account";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
+import { SegmentedControl } from "../ui/segmented";
 import { AddToCampaign } from "./add-to-campaign";
 import {
   AffiliateLink,
@@ -1040,9 +1041,36 @@ export default function PublishPage() {
     return quickSlots.find((slot) => !taken.has(slot.value)) ?? null;
   }, [quickSlots, scheduledTimes]);
 
-  // The preview stands in for the first destination, which is the one being composed.
-  const previewAccount = chosenAccounts[0] ?? null;
+  /**
+   * Which chosen destination the preview is showing.
+   *
+   * It was always the first, which is fine for one and wrong for five: a post
+   * going to Facebook, TikTok and X reads three different ways, and the two
+   * that were not first went out unseen. The reference this follows puts a
+   * picker above the frame for exactly that.
+   *
+   * Held as an id and resolved against the current selection rather than kept
+   * as an object - unticking the destination being previewed would otherwise
+   * leave the panel showing an account this post no longer goes to.
+   */
+  const [previewFor, setPreviewFor] = useState("");
+  const previewAccount = chosenAccounts.find((item) => item.id === previewFor)
+    ?? chosenAccounts[0]
+    ?? null;
   const previewPlatform = previewAccount?.platform ?? null;
+  /**
+   * Which width the preview is drawn at.
+   *
+   * The same post is a different shape on a phone and a desktop - a caption
+   * that fits one wraps to four lines on the other - and every network here is
+   * read mostly on a phone. So that is the default, and the other is a click
+   * away rather than the only thing on offer.
+   */
+  const [previewWidth, setPreviewWidth] = usePersistedState<"mobile" | "desktop">(
+    "trendrelay.publish.previewWidth",
+    "mobile",
+    oneOf("mobile", "desktop"),
+  )
   const previewType = previewAccount
     ? postTypesFor(previewAccount.id).find(
         (kind) => kind.id === (postTypes[previewAccount.id]
@@ -3965,8 +3993,39 @@ export default function PublishPage() {
           />
           {previewPlatform && (
             <article>
-              <h2>{t("publish.howItWillLook")}</h2>
+              <div className="preview-head">
+                <h2>{t("publish.howItWillLook")}</h2>
+                <div className="preview-head-controls">
+                  {/* Only where there is a choice to make. One destination
+                      needs no picker, and a dropdown with one option in it is
+                      a control that cannot be used. */}
+                  {chosenAccounts.length > 1 && (
+                    <Select
+                      className="preview-destination"
+                      value={previewAccount?.id ?? ""}
+                      aria-label={t("publish.previewWhich")}
+                      onChange={(event) => setPreviewFor(event.target.value)}
+                    >
+                      {chosenAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {platformLabels[account.platform]} · {account.label}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  <SegmentedControl
+                    value={previewWidth}
+                    options={[
+                      { value: "mobile" as const, label: t("publish.previewMobile") },
+                      { value: "desktop" as const, label: t("publish.previewDesktop") },
+                    ]}
+                    onChange={setPreviewWidth}
+                    label={t("publish.previewWidthLabel")}
+                  />
+                </div>
+              </div>
               <PostPreview
+                width={previewWidth
                 platform={previewPlatform}
                 postTypeLabel={previewType?.label ?? "Post"}
                 handle={previewHandle}

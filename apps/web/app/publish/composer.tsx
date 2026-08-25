@@ -381,8 +381,17 @@ export function PostPreview({
   carousel,
   wantsCarousel,
   showsTitle: showsTitleProp,
+  width = "mobile",
 }: {
   platform: PublishingPlatform;
+  /**
+   * Which width to draw at.
+   *
+   * The same post is a different shape on a phone and a desktop - a caption
+   * that fits one wraps to four lines on the other - and these networks are
+   * read mostly on a phone, so that is the default.
+   */
+  width?: "mobile" | "desktop";
   postTypeLabel: string;
   handle: string;
   caption: string;
@@ -447,7 +456,10 @@ export function PostPreview({
     ?? (platform === "youtube" || platform === "reddit" || platform === "pinterest");
 
   return (
-    <figure className={`post-preview${story ? " story" : ""}`}>
+    <figure
+      className={`post-preview${story ? " story" : ""}`}
+      data-width={width}
+    >
       <figcaption>
         <PlatformIcon platform={platform} size={18} />
         <span>
