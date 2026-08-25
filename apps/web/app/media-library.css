@@ -640,6 +640,20 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* Placement only. The chips, the drag, the fades and the palette are the
    shared strip's - see `.filter-chip-*` in ui.css. This says where it sits. */
 .overlay-categories { min-width: 0; }
+/* The shortlist above the gallery. Deliberately unlike a section of it: a row
+   that scrolls rather than a grid that wraps, so it reads as a suggestion
+   sitting on top of the catalogue rather than as the first group in it. */
+.overlay-suggested { display: grid; gap: 5px; padding-block-end: 8px; border-bottom: 1px solid var(--line); }
+.overlay-suggested h4 { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.overlay-suggested-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.overlay-suggested-row::-webkit-scrollbar { display: none; }
+.overlay-suggested-row button { display: grid; flex: none; justify-items: center; gap: 3px; width: 92px; padding: 7px 5px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.overlay-suggested-row button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--panel-raised); }
+.overlay-suggested-row button:disabled { opacity: .5; cursor: not-allowed; }
+.overlay-suggested-row button.is-chosen { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.overlay-suggested-row span { max-width: 100%; overflow: hidden; font-size: 10px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.overlay-suggested-row .overlay-sprite, .overlay-suggested-row .overlay-sprite-empty { width: 52px; height: 52px; }
+
 .overlay-gallery { display: grid; align-content: start; gap: 12px; min-height: 0; padding-inline-end: 6px; overflow-y: auto; }
 .overlay-gallery h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 2px 0 5px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 /* Big enough to see what the thing is and to hit it without aiming. */

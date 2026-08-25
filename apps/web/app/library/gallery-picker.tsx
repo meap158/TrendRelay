@@ -44,6 +44,16 @@ import { useT } from "../i18n-provider";
 
 export type PickerValues = Record<string, unknown>;
 
+/** One object the API thinks suits the clip on screen, and the words it
+ *  matched on - shown, because a suggestion whose reason is invisible is a
+ *  suggestion nobody trusts a second time. */
+type Suggestion = {
+  value: string;
+  label: string;
+  score: number;
+  matched: string[];
+};
+
 /**
  * A thumbnail that this repository ships is the same bytes every time, and the
  * grid asks for a dozen at once each time it opens. Those are kept for the life
@@ -263,6 +273,7 @@ export function GalleryPanel({
   const folder = param.folder;
   const [pictures, setPictures] = useState<{ id: string; title: string }[]>([]);
   const [importing, setImporting] = useState("");
+  const [suggested, setSuggested] = useState<Suggestion[]>([]);
   const [adding, setAdding] = useState(false);
   const [addFailure, setAddFailure] = useState("");
 
@@ -327,6 +338,37 @@ export function GalleryPanel({
       setAdding(false);
     }
   }
+
+  /**
+   * What the API thinks suits this clip, and why.
+   *
+   * A shortlist above forty tiles rather than a reordering of them: the
+   * gallery's own order is a privacy decision - the things that cover a face
+   * lead - and quietly resorting it on a guess would move that.
+   *
+   * Only for a choice fed by a folder, which is how this component tells an
+   * overlay catalogue from a set of face-swap portraits without being told
+   * which one it is showing.
+   */
+  useEffect(() => {
+    if (!open || !folder || !assetPath) return undefined;
+    const controller = new AbortController();
+    apiFetch(
+      `${base}/face-overlay/objects/suggest`
+      + `?source_path=${encodeURIComponent(assetPath)}&limit=5`,
+      { signal: controller.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error("no suggestions");
+        const body = (await response.json()) as { suggestions?: Suggestion[] };
+        setSuggested(body.suggestions ?? []);
+      })
+      .catch(() => {
+        // A choice with no suggest endpoint behind it simply has no shortlist.
+        // Nothing is reported: the absence is the message.
+      });
+    return () => controller.abort();
+  }, [apiFetch, base, folder, assetPath, open]);
 
   /**
    * Add a picture from the operator's own machine.
@@ -542,6 +584,41 @@ export function GalleryPanel({
               />
             )}
           </div>
+
+          {/* Above the gallery rather than reordering it. The gallery's own
+              order is a decision - the objects that cover a face lead - and
+              quietly resorting forty tiles on a guess would move that without
+              anybody asking for it. A shortlist is additive: worth a glance,
+              costless to ignore. */}
+          {suggested.length > 0 && (
+            <div className="overlay-suggested">
+              <h4>{t("overlayPicker.suggested")}</h4>
+              <div className="overlay-suggested-row">
+                {suggested.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    disabled={!canEdit}
+                    className={item.value === chosen ? "is-chosen" : ""}
+                    /* The words the clip and the object turned out to share.
+                       On the tooltip rather than the chip: the chip has to
+                       stay glanceable, and the reason is what somebody wants
+                       when a suggestion looks wrong. */
+                    title={item.matched.join(" · ")}
+                    onClick={() => adjust({ [param.id]: item.value })}
+                  >
+                    <Thumbnail
+                      base={base}
+                      option={{ value: item.value, label: item.label,
+                                preview: `face-overlay/objects/${item.value}/sprite` }}
+                      apiFetch={apiFetch}
+                    />
+                    <span>{optionLabel(t, effect.id, item.value, item.label)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* One radio group across every section, because it is one choice.
               The sections are labelled subgroups of it rather than groups of

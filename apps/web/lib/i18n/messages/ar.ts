@@ -1385,6 +1385,7 @@ export const ar: Messages = {
     turnsWithHead: "يدور مع الرأس",
     chooseFile: "اختر ملف PNG…",
     dropHint: "أو ضع ملفًا في {directory}.",
+    suggested: "مقترح لهذا المقطع",
   },
 
   ui: {

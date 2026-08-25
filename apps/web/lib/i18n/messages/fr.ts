@@ -1402,6 +1402,7 @@ export const fr: Messages = {
     turnsWithHead: "Pivote avec la tête",
     chooseFile: "Choisir un PNG…",
     dropHint: "Ou déposez un fichier dans {directory}.",
+    suggested: "Suggéré pour ce clip",
   },
 
   ui: {

@@ -1357,6 +1357,7 @@ export const zh: Messages = {
     turnsWithHead: "随头部转动",
     chooseFile: "选择 PNG 文件…",
     dropHint: "或将文件放入 {directory}。",
+    suggested: "为这个视频推荐",
   },
 
   ui: {

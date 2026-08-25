@@ -1375,6 +1375,7 @@ export const ja: Messages = {
     turnsWithHead: "頭と一緒に回る",
     chooseFile: "PNGを選ぶ…",
     dropHint: "または {directory} にファイルを入れてください。",
+    suggested: "このクリップへのおすすめ",
   },
 
   ui: {

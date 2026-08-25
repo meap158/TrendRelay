@@ -1385,6 +1385,7 @@ export const en = {
     turnsWithHead: "Turns with the head",
     chooseFile: "Choose a PNG…",
     dropHint: "Or drop a file into {directory}.",
+    suggested: "Suggested for this clip",
   },
 
   ui: {

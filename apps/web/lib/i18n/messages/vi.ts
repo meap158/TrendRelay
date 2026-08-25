@@ -1382,6 +1382,7 @@ export const vi: Messages = {
     turnsWithHead: "Xoay theo đầu",
     chooseFile: "Chọn tệp PNG…",
     dropHint: "Hoặc thả tệp vào {directory}.",
+    suggested: "Gợi ý cho video này",
   },
 
   ui: {

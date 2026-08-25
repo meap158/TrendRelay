@@ -1417,6 +1417,62 @@ def face_overlay_objects(
     }
 
 
+@router.get("/face-overlay/objects/suggest")
+def suggest_face_overlay_objects(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    source_path: Annotated[str, Query(min_length=1, max_length=1200)],
+    limit: Annotated[int, Query(ge=1, le=12)] = 6,
+) -> dict[str, Any]:
+    """Which objects suit this clip, read from what the clip says about itself.
+
+    Addressed by path rather than by asset id because that is what the picker
+    holds - it hands a file to an engine, and it already names the same clip
+    the same way when it asks this router for a preview frame. Threading an id
+    through two components to reach one endpoint would be a second way of
+    saying the same thing.
+
+    A clip from outside the library matches nothing and says so, which is
+    correct rather than unfortunate: there is no caption or reading of it to
+    match on, so there is nothing to rank against.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.overlay_match import suggest
+
+    asset = session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.original_path == source_path.strip(),
+        )
+    )
+    if asset is None:
+        return {
+            "suggestions": [],
+            "read_from": [],
+            "advice": (
+                "This clip is not in the media library, so there is nothing "
+                "written about it to match on. Pick from the gallery."
+            ),
+        }
+    picks, how = suggest(session, workspace_id, asset.id, limit=limit)
+    return {
+        "suggestions": [
+            {
+                "value": item.overlay_id,
+                "label": item.label,
+                "group": item.group,
+                "score": item.score,
+                # Shown on the chip. A suggestion nobody can see the reason for
+                # is a suggestion nobody trusts twice.
+                "matched": list(item.matched),
+            }
+            for item in picks
+        ],
+        **how,
+    }
+
+
 @router.get("/face-overlay/objects/{overlay_id}/sprite")
 def face_overlay_sprite(
     workspace_id: str,

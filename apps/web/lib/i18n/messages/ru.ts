@@ -1401,6 +1401,7 @@ export const ru: Messages = {
     turnsWithHead: "Поворачивается с головой",
     chooseFile: "Выбрать PNG…",
     dropHint: "Или положите файл в {directory}.",
+    suggested: "Подходит этому клипу",
   },
 
   ui: {

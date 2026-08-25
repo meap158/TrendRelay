@@ -761,3 +761,84 @@ def test_the_picker_is_told_both_ways_of_adding_one(own_folder) -> None:
     assert body["upload"] == "face-overlay/objects/upload"
     assert body["import_from_library"] == "face-overlay/objects"
     assert body["accepts"] == [".png"]
+
+
+# --- suggesting one for the clip on screen --------------------------------------
+
+
+def _library_clip(caption: str, path: str, workspace: str) -> None:
+    """A clip in the library with something written about it.
+
+    Written through the same session the app is overridden onto, or it lands in
+    the real database and the request looks in the test one.
+    """
+    from trendrelay_api.media_models import MediaAsset
+
+    with TestingSession() as session:
+        session.add(MediaAsset(
+            workspace_id=workspace, title="clip", media_kind="video",
+            source_type="douyin", original_path=path,
+            original_sha256=(path.replace("\\", "") * 64)[:64],
+            mime_type="video/mp4", size_bytes=10, caption=caption,
+            hashtags=[tag.lstrip("#") for tag in caption.split() if tag.startswith("#")],
+            created_by="local-admin",
+        ))
+        session.commit()
+
+
+def test_the_picker_can_ask_what_suits_the_clip_on_screen() -> None:
+    workspace = create_workspace()
+    _library_clip("#健身 #腹肌", r"S:\media\gym.mp4", workspace)
+
+    body = request(
+        "GET", f"{base(workspace)}/objects/suggest", params={"source_path": r"S:\media\gym.mp4"}
+    ).json()
+
+    assert body["suggestions"], body["advice"]
+    assert "cap_3d" in {item["value"] for item in body["suggestions"]}
+    # Said, because a suggestion nobody can see the reason for is one nobody
+    # trusts twice.
+    assert body["suggestions"][0]["matched"]
+    assert "hashtags" in body["read_from"]
+
+
+def test_a_clip_from_outside_the_library_matches_nothing_and_says_why() -> None:
+    """Correct rather than unfortunate: there is no caption to match on."""
+    workspace = create_workspace()
+
+    body = request(
+        "GET", f"{base(workspace)}/objects/suggest",
+        params={"source_path": r"S:\somewhere\else.mp4"},
+    ).json()
+
+    assert body["suggestions"] == []
+    assert "not in the media library" in body["advice"]
+
+
+def test_another_workspaces_clip_is_not_reachable_by_its_path() -> None:
+    """The path is the caller's to name, so it is the workspace that decides
+    whether it resolves to anything."""
+    first = create_workspace()
+    _library_clip("#健身", r"S:\media\theirs.mp4", first)
+    other = request(
+        "POST", "/api/workspaces", json={"name": "Other", "slug": "other"}
+    ).json()["workspace"]["id"]
+
+    body = request(
+        "GET", f"{base(other)}/objects/suggest",
+        params={"source_path": r"S:\media\theirs.mp4"},
+    ).json()
+
+    assert body["suggestions"] == []
+
+
+def test_the_shortlist_is_capped_where_the_caller_asks() -> None:
+    workspace = create_workspace()
+    _library_clip("#变装 #健身 #生日 #音乐 #皇冠", r"S:\media\many.mp4", workspace)
+
+    body = request(
+        "GET", f"{base(workspace)}/objects/suggest",
+        params={"source_path": r"S:\media\many.mp4", "limit": 3},
+    ).json()
+
+    assert len(body["suggestions"]) <= 3
