@@ -716,6 +716,8 @@ export const ja: Messages = {
     addAccountsAction: "{count}件を追加",
     addAccountsNone: "選択したものを追加",
     enginesUnreadable: "現在アカウントを提供していません: {engines}。Publish 画面で設定してください。",
+    allAccountsAdded: "接続済みのアカウントはすべてこのキャンペーンに追加済みです。",
+    onlyFormat: "{format}のみ — このネットワークの形式は1つです",
   },
   campaigns: {
     loading: "キャンペーンを読み込み中…",

@@ -1818,6 +1818,13 @@ export function AutopilotPanel({
   const [slots, setSlots] = useState<Slot[]>([]);
   const [postingPresets, setPostingPresets] = useState<PostingPreset[]>([]);
   const [pageAssignments, setPageAssignments] = useState<Record<string, string>>({});
+  /** This account's own posting preset, or nothing when it keeps workspace hours. */
+  const accountPreset = useCallback(
+    (account: Account) => postingPresets.find((preset) => (
+      preset.id === pageAssignments[account.page_key ?? ""]
+    ))?.label ?? "",
+    [pageAssignments, postingPresets],
+  );
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
   /**
    * Every moment on this page is read on the workspace's clock.
@@ -5349,14 +5356,19 @@ export function AutopilotPanel({
                             onChange={() => setSelectedAccounts(
                               (current) => toggleAccount(account, current),
                             )} />
-                          <PlatformIcon platform={account.platform} size={28} />
                           <span>
                             <strong>{account.label}</strong>
                             {/* Which login carries it, not just which engine. Two
                                 Buffer connections put the same engine name on every
                                 row; the account the engine reports is the thing
-                                that tells them apart. */}
-                            <small>{platformLabels[account.platform]} · {account.provider_label}
+                                that tells them apart.
+
+                                The network is not repeated here. The card this
+                                row sits in is titled with it and carries its
+                                icon, so every row inside the Facebook card
+                                saying "Facebook" was one word of noise per
+                                account. */}
+                            <small>{account.provider_label}
                               {accountIdentity({ account: account.connection_account })
                                 ? ` · ${accountIdentity({ account: account.connection_account })}`
                                 : ""}</small>
@@ -5364,17 +5376,34 @@ export function AutopilotPanel({
                               <small className="campaign-account-spent">
                                 {account.unavailable_reason ?? t("publish.noQuotaLeft")}
                               </small>
-                            ) : (
+                            ) : accountPreset(account) ? (
+                              /* Only where this account keeps its own hours.
+                                 On the workspace default it said the same
+                                 sentence on every row, which is five lines
+                                 telling somebody nothing that distinguishes
+                                 one account from another - and the campaign's
+                                 own schedule step is where that is set. */
                               <small className="campaign-account-schedule">
                                 {t("autopilot.postingSchedule", {
-                                  preset: postingPresets.find((preset) => (
-                                    preset.id === pageAssignments[account.page_key ?? ""]
-                                  ))?.label ?? t("autopilot.workspacePostingTimes"),
+                                  preset: accountPreset(account),
                                 })}
                               </small>
-                            )}
+                            ) : null}
                           </span>
                         </label>
+                        {/* One format is not a choice, and showing nothing at
+                            all made it look like the control had failed to
+                            appear - the first question asked of this dialog
+                            was why TikTok had no post types. It has one, so it
+                            is stated rather than offered. */}
+                        {selectedAccounts.has(key)
+                          && (account.post_types?.length ?? 0) === 1 && (
+                          <p className="campaign-account-one-format">
+                            {t("autopilot.onlyFormat", {
+                              format: account.post_types?.[0]?.label ?? "",
+                            })}
+                          </p>
+                        )}
                         {selectedAccounts.has(key)
                           && (account.post_types?.length ?? 0) > 1 && (
                           <label className="campaign-account-format">
@@ -5395,7 +5424,13 @@ export function AutopilotPanel({
                   })}
                 </li>
               ))}
-              {!accountGroups.length && <li>{t("autopilot.noAccounts")}</li>}
+              {!accountGroups.length && (
+                <li className="campaign-account-empty">
+                  {accounts.length
+                    ? t("autopilot.allAccountsAdded")
+                    : t("autopilot.noAccounts")}
+                </li>
+              )}
               </ul>
             )}
             <small className="campaign-source-note">Source: available connected accounts in Publish.</small>

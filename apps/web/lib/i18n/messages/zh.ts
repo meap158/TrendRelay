@@ -706,6 +706,8 @@ export const zh: Messages = {
     addAccountsAction: "添加 {count} 个",
     addAccountsNone: "添加所选",
     enginesUnreadable: "当前未提供账号：{engines}。请在 Publish 页面进行设置。",
+    allAccountsAdded: "所有已连接的账号都已加入本活动。",
+    onlyFormat: "仅 {format} — 该平台只有一种格式",
   },
   campaigns: {
     loading: "正在加载广告系列…",

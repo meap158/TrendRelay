@@ -714,6 +714,8 @@ export const ar: Messages = {
     addAccountsAction: "إضافة {count}",
     addAccountsNone: "إضافة المحدد",
     enginesUnreadable: "لا توفّر حسابات حاليًا: {engines}. اضبطها من شاشة Publish.",
+    allAccountsAdded: "جميع الحسابات المتصلة موجودة بالفعل في هذه الحملة.",
+    onlyFormat: "‏{format} فقط — لهذه الشبكة تنسيق واحد",
   },
   campaigns: {
     loading: "جارٍ تحميل الحملات…",

@@ -717,6 +717,8 @@ export const vi: Messages = {
     addAccountsAction: "Thêm {count}",
     addAccountsNone: "Thêm mục đã chọn",
     enginesUnreadable: "Hiện chưa cung cấp tài khoản: {engines}. Thiết lập ở màn hình Publish.",
+    allAccountsAdded: "Mọi tài khoản đã kết nối đều đã có trong chiến dịch này.",
+    onlyFormat: "Chỉ {format} — nền tảng này chỉ có một định dạng",
   },
   campaigns: {
     loading: "Đang tải chiến dịch…",

@@ -727,6 +727,8 @@ export const fr: Messages = {
     addAccountsAction: "Ajouter {count}",
     addAccountsNone: "Ajouter la sélection",
     enginesUnreadable: "Ne proposent aucun compte pour l'instant : {engines}. Configurez-les sur l'écran Publish.",
+    allAccountsAdded: "Tous les comptes connectés sont déjà dans cette campagne.",
+    onlyFormat: "{format} uniquement — ce réseau n'a qu'un format",
   },
   campaigns: {
     loading: "Chargement des campagnes…",

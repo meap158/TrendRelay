@@ -724,6 +724,8 @@ export const ru: Messages = {
     addAccountsAction: "Добавить: {count}",
     addAccountsNone: "Добавить выбранные",
     enginesUnreadable: "Сейчас не предоставляют аккаунты: {engines}. Настройте их на экране Publish.",
+    allAccountsAdded: "Все подключённые аккаунты уже в этой кампании.",
+    onlyFormat: "Только {format} — у этой сети один формат",
   },
   campaigns: {
     loading: "Загружаем кампании…",

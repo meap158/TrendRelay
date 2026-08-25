@@ -721,6 +721,8 @@ export const en = {
     addAccountsAction: "Add {count}",
     addAccountsNone: "Add selected",
     enginesUnreadable: "Not offering accounts right now: {engines}. Set them up on the Publish screen.",
+    allAccountsAdded: "Every connected account is already in this campaign.",
+    onlyFormat: "{format} only — this network has one format",
   },
   campaigns: {
     loading: "Loading campaigns…",
