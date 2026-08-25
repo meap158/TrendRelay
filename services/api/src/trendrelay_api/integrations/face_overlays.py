@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from trendrelay_api.integrations import face_landmarks, overlay_catalogue
+from trendrelay_api.integrations import face_landmarks, face_pose, overlay_catalogue
 from trendrelay_api.integrations.face_landmarks import FaceAnchors
 from trendrelay_api.integrations.overlay_catalogue import Overlay
 from trendrelay_api.jobs import ProgressReporter
@@ -119,6 +119,23 @@ class Placement:
     def sprite_width(self) -> int:
         rounded = int(round(self.width / SPRITE_STEP)) * SPRITE_STEP
         return max(SPRITE_STEP * 2, rounded)
+
+
+def _pose_for(overlay: Overlay, face: FaceAnchors, frame: Any) -> Any | None:
+    """Which way this head faces, when there is an object that can use it.
+
+    Not computed for a flat object: it costs a solve per face per frame and a
+    sprite pasted with a rotation and a width has nowhere to put the answer.
+
+    None where the pose cannot be measured - too few landmarks, a box-only
+    detection, a head turned further than a face survives. A solid object then
+    draws square on, which is what it looked like before any of this and is a
+    better failure than a prop snapping to an angle nobody measured.
+    """
+    if overlay.mesh is None:
+        return None
+    height, width = frame.shape[:2]
+    return face_pose.estimate(face, width, height)
 
 
 def place(anchors: FaceAnchors, overlay: Overlay, settings: OverlaySettings) -> Placement:
@@ -222,24 +239,51 @@ def paste(
     return True
 
 
+#: Yaw and pitch are rounded to this before a solid object is drawn, so a head
+#: drifting by a fraction of a degree reuses the sprite it drew last frame
+#: instead of rasterising a new one. Five degrees is under the noise in the
+#: landmarks the angle came from, and a hundred and eight cells at a given size
+#: is a bounded cache rather than one entry per frame.
+POSE_STEP = 5.0
+
+
 class _SpriteCache:
     """One sprite per size, because a clip asks for the same size repeatedly.
 
     Drawing a sticker is cheap and drawing it a thousand times is not. Sizes are
     already rounded to a step, so a subject who is not moving towards or away
     from the camera draws exactly one.
+
+    A solid object is also drawn per angle, because that is what makes it solid.
+    Only yaw and pitch: roll is an in-plane turn, and under an orthographic
+    projection rolling the object and rotating the finished sprite are the same
+    picture - so `paste` keeps doing it, exactly as it does for a flat object,
+    and the cache does not gain a third continuously varying axis.
     """
 
     def __init__(self, cv2: Any, np: Any, overlay: Overlay) -> None:
         self._cv2, self._np, self._overlay = cv2, np, overlay
-        self._sprites: dict[int, Any] = {}
+        self._sprites: dict[tuple[int, float, float], Any] = {}
+        self._solid = overlay.mesh is not None
 
-    def at(self, width: int) -> Any:
-        if width not in self._sprites:
-            self._sprites[width] = overlay_catalogue.render_sprite(
-                self._cv2, self._np, self._overlay, width
+    def at(self, width: int, pose: Any | None = None) -> Any:
+        yaw = pitch = 0.0
+        if self._solid and pose is not None:
+            yaw = round(pose.yaw / POSE_STEP) * POSE_STEP
+            pitch = round(pose.pitch / POSE_STEP) * POSE_STEP
+        key = (width, yaw, pitch)
+        if key not in self._sprites:
+            self._sprites[key] = overlay_catalogue.render_sprite(
+                self._cv2,
+                self._np,
+                self._overlay,
+                width,
+                # A flat object ignores this; a solid one with no pose falls
+                # back to the gallery's three-quarter view, which is wrong on a
+                # face, so an unposed solid is drawn square on instead.
+                pose=(yaw, pitch, 0.0) if self._solid else None,
             )
-        return self._sprites[width]
+        return self._sprites[key]
 
 
 # --------------------------------------------------------------------------- #
@@ -796,7 +840,9 @@ def render_overlaid(
                 )
                 for face in here:
                     placement = place(face, overlay, settings)
-                    sprite = sprites.at(placement.sprite_width())
+                    sprite = sprites.at(
+                        placement.sprite_width(), _pose_for(overlay, face, frame),
+                    )
                     if paste(
                         cv2, np, frame, sprite, placement, settings.opacity, settings.mirror
                     ):
@@ -952,7 +998,7 @@ def apply_to_image(
             cv2,
             np,
             frame,
-            sprites.at(placement.sprite_width()),
+            sprites.at(placement.sprite_width(), _pose_for(overlay, face, frame)),
             placement,
             settings.opacity,
             settings.mirror,

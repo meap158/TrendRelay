@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from trendrelay_api.integrations import overlay_meshes as meshes
 from trendrelay_api.integrations.face_landmarks import AnchorName
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
@@ -154,6 +155,13 @@ class Overlay:
     #: Said in the picker, where somebody is deciding whether this is enough.
     note: str = ""
     shapes: tuple[Shape, ...] = ()
+    #: An object with depth, drawn instead of `shapes` when it is present.
+    #:
+    #: The two are alternatives rather than layers: a flat object is shapes in
+    #: a unit square and a solid one is triangles in a unit cube, and mixing
+    #: them would paste a drawing over a render at whatever depth the drawing
+    #: is imagined to be at. See `overlay_meshes`.
+    mesh: Any | None = None
     #: Drop-ins only: the PNG this is read from.
     image: Path | None = None
     extras: dict[str, Any] = field(default_factory=dict)
@@ -781,6 +789,207 @@ _CRT_HEAD = Overlay(
     ),
 )
 
+# --------------------------------------------------------------------------- #
+# Objects with depth
+# --------------------------------------------------------------------------- #
+#
+# Built from `overlay_meshes` primitives in a unit cube, the same way the flat
+# objects above are built from shapes in a unit square, and for the same three
+# reasons: one renderer, any resolution, and a diff somebody can read.
+#
+# They sit in the groups their flat cousins are in rather than in a group of
+# their own. Somebody looking for a hat wants every hat in front of them; that
+# one of them turns with the head is a property of the hat, said on its tile,
+# not a category of object.
+
+#: The colours these are painted in. Named separately from the flat palette
+#: above because a lit surface needs a base a shade darker than a drawn one -
+#: the light adds up to 45% on top, and a base picked to look right flat comes
+#: out washed once it is being shaded.
+CAP_CLOTH: RGBA = (44, 62, 116, 255)
+CAP_PEAK: RGBA = (32, 46, 88, 255)
+FELT: RGBA = (28, 28, 34, 255)
+BAND: RGBA = (176, 42, 58, 255)
+GOLD_SOLID: RGBA = (196, 148, 38, 255)
+JEWEL: RGBA = (188, 52, 74, 255)
+LENS_SOLID: RGBA = (26, 30, 42, 255)
+METAL: RGBA = (188, 194, 206, 255)
+CONE_PARTY: RGBA = (206, 66, 118, 255)
+POM: RGBA = (240, 226, 120, 255)
+
+
+def _cap() -> Any:
+    """A five-panel cap: a dome that fits a skull and a peak in front of it."""
+    dome = meshes.painted(
+        meshes.scaled(meshes.sphere(CAP_CLOTH, segments=24, rings=14), 0.86, 0.62, 0.86),
+        CAP_CLOTH,
+    )
+    # The lower half of a sphere is inside the head, so it is lifted until only
+    # the crown shows rather than being cut - a hemisphere would leave an open
+    # edge, and an open edge lit from behind reads as a hole.
+    dome = meshes.moved(dome, y=0.10)
+    peak = meshes.painted(
+        meshes.moved(
+            meshes.turned(
+                meshes.scaled(meshes.cylinder(CAP_PEAK, sides=28), 0.80, 0.045, 0.80),
+                x=12.0,
+            ),
+            y=-0.10, z=0.34,
+        ),
+        CAP_PEAK,
+    )
+    return dome + peak
+
+
+def _top_hat() -> Any:
+    """A crown and a brim, which is the whole of a top hat."""
+    crown = meshes.painted(
+        meshes.moved(meshes.scaled(meshes.cylinder(FELT, sides=30), 0.58, 0.78, 0.58), y=0.22),
+        FELT,
+    )
+    brim = meshes.painted(
+        meshes.moved(meshes.scaled(meshes.cylinder(FELT, sides=34), 1.0, 0.05, 1.0), y=-0.17),
+        FELT,
+    )
+    band = meshes.painted(
+        meshes.moved(meshes.scaled(meshes.cylinder(BAND, sides=30), 0.60, 0.14, 0.60), y=-0.08),
+        BAND,
+    )
+    return brim + crown + band
+
+
+def _party_cone() -> Any:
+    """A cone and a bobble, leaning the way a party hat actually sits."""
+    cone = meshes.painted(
+        meshes.scaled(meshes.cone(CONE_PARTY, sides=26), 0.62, 1.0, 0.62), CONE_PARTY
+    )
+    bobble = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.sphere(POM, segments=16, rings=10), 0.22, 0.22, 0.22),
+            y=0.54,
+        ),
+        POM,
+    )
+    return meshes.turned(cone + bobble, x=-10.0)
+
+
+def _solid_crown() -> Any:
+    """A band with points on it, and a stone in the middle of the front."""
+    band = meshes.painted(
+        meshes.scaled(meshes.cylinder(GOLD_SOLID, sides=28, caps=False), 0.86, 0.34, 0.86),
+        GOLD_SOLID,
+    )
+    points = meshes.Mesh()
+    for index in range(7):
+        angle = -70.0 + index * (140.0 / 6)
+        radians = math.radians(angle)
+        spike = meshes.painted(
+            meshes.scaled(meshes.cone(GOLD_SOLID, sides=10), 0.20, 0.34, 0.20), GOLD_SOLID
+        )
+        points = points + meshes.moved(
+            spike,
+            x=math.sin(radians) * 0.40,
+            y=0.32,
+            z=math.cos(radians) * 0.40,
+        )
+    stone = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.sphere(JEWEL, segments=14, rings=9), 0.17, 0.17, 0.10),
+            z=0.42,
+        ),
+        JEWEL,
+    )
+    return band + points + stone
+
+
+def _solid_sunglasses() -> Any:
+    """Two lenses, a bridge and the arms that go back past the ears.
+
+    The arms are the reason this is worth having in three dimensions: face the
+    camera and they are invisible, turn and they are most of what is seen.
+    """
+    lens = meshes.scaled(meshes.cylinder(LENS_SOLID, sides=22), 0.40, 0.035, 0.30)
+    lens = meshes.turned(lens, x=90.0)
+    left = meshes.painted(meshes.moved(lens, x=-0.26, z=0.20), LENS_SOLID)
+    right = meshes.painted(meshes.moved(lens, x=0.26, z=0.20), LENS_SOLID)
+    bridge = meshes.painted(
+        meshes.moved(meshes.scaled(meshes.box(METAL), 0.16, 0.035, 0.05), y=0.05, z=0.22),
+        METAL,
+    )
+    arms = meshes.Mesh()
+    for side in (-1.0, 1.0):
+        arm = meshes.painted(
+            meshes.moved(
+                meshes.scaled(meshes.box(METAL), 0.035, 0.035, 0.55),
+                x=side * 0.44, y=0.04, z=-0.06,
+            ),
+            METAL,
+        )
+        arms = arms + arm
+    return left + right + bridge + arms
+
+
+_CAP_3D = Overlay(
+    id="cap_3d",
+    label="Cap",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.30,
+    aspect=1.0,
+    offset=(0.0, 0.14),
+    note="Turns with the head — the peak swings round as the subject looks away.",
+    mesh=_cap(),
+)
+
+_TOP_HAT_3D = Overlay(
+    id="top_hat_3d",
+    label="Top hat",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.20,
+    aspect=1.0,
+    offset=(0.0, 0.30),
+    note="Turns with the head. The brim is a real disc, so it foreshortens.",
+    mesh=_top_hat(),
+)
+
+_PARTY_CONE_3D = Overlay(
+    id="party_cone_3d",
+    label="Party cone",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=0.85,
+    aspect=1.15,
+    offset=(0.0, 0.34),
+    note="Turns with the head, and leans the way one actually sits.",
+    mesh=_party_cone(),
+)
+
+_CROWN_3D = Overlay(
+    id="crown_3d",
+    label="Solid crown",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.10,
+    aspect=1.0,
+    offset=(0.0, 0.16),
+    note="Turns with the head, so the far points pass behind it.",
+    mesh=_solid_crown(),
+)
+
+_SUNGLASSES_3D = Overlay(
+    id="sunglasses_3d",
+    label="Solid shades",
+    group=FEATURES,
+    anchor="eyes",
+    width_in_faces=1.24,
+    aspect=1.0,
+    offset=(0.0, 0.0),
+    note="Turns with the head — the arms come into view as the subject turns.",
+    mesh=_solid_sunglasses(),
+)
+
+
 BUILT_IN: tuple[Overlay, ...] = (
     _CENSOR_BLOCK,
     _SMILEY,
@@ -794,6 +1003,11 @@ BUILT_IN: tuple[Overlay, ...] = (
     _CAT_EARS,
     _CROWN,
     _PARTY_HAT,
+    _CAP_3D,
+    _TOP_HAT_3D,
+    _PARTY_CONE_3D,
+    _CROWN_3D,
+    _SUNGLASSES_3D,
     _PIXEL_MASK,
     _ALIEN,
     _FLOWER_FACE,
@@ -1055,6 +1269,10 @@ def options() -> tuple[dict[str, Any], ...]:
             # could name — those keep the folder's English heading.
             "group_id": GROUP_IDS.get(item.group),
             "occludes": item.occludes,
+            # Said on the tile. Whether a prop turns with the head is the
+            # difference somebody is choosing between two hats for, and it is
+            # invisible in a thumbnail of a face looking straight ahead.
+            "dimensional": item.mesh is not None,
             "note": item.note,
             # Where to get a thumbnail, relative to the media-library base. The
             # option carries it so the gallery does not have to know what kind
@@ -1259,17 +1477,43 @@ def _over(base: Any, layer: Any) -> None:
     base += layer
 
 
-def render_sprite(cv2: Any, np: Any, overlay: Overlay, width: int) -> Any:
+#: How a solid object is turned for a thumbnail, when there is no face to take
+#: an angle from. Three-quarters rather than square on: it is the view that
+#: says "this one has depth" without a caption, and a gallery of solid objects
+#: drawn face-on is a gallery that looks exactly like the flat one.
+GALLERY_YAW = -28.0
+GALLERY_PITCH = 10.0
+
+
+def render_sprite(
+    cv2: Any,
+    np: Any,
+    overlay: Overlay,
+    width: int,
+    pose: tuple[float, float, float] | None = None,
+) -> Any:
     """The overlay as a straight-alpha BGRA image of the given width.
 
-    A drop-in is read from its PNG and resized; a built-in is drawn. Both come
-    back in the same form, so nothing downstream has to know which it got.
+    A drop-in is read from its PNG and resized; a flat built-in is drawn; a
+    solid one is rasterised at `pose`, which is the yaw, pitch and roll of the
+    head it is going on. All three come back in the same form, so nothing
+    downstream has to know which it got.
+
+    `pose` is ignored by everything without a mesh, and a solid object with no
+    pose is drawn at the gallery's three-quarter view - there is no face to
+    take an angle from when the picker is showing a catalogue.
     """
     width = max(8, min(int(width), MAX_SPRITE_WIDTH))
     height = max(8, int(round(width * overlay.aspect)))
 
     if overlay.image is not None:
         return _read_png(cv2, np, overlay.image, width, height)
+
+    if overlay.mesh is not None:
+        yaw, pitch, roll = pose if pose is not None else (GALLERY_YAW, GALLERY_PITCH, 0.0)
+        return meshes.render_sprite(
+            cv2, np, overlay.mesh, width, height, yaw=yaw, pitch=pitch, roll=roll
+        )
 
     factor = max(1, min(SUPERSAMPLE, MAX_DRAW_WIDTH // width))
     big_width, big_height = width * factor, height * factor

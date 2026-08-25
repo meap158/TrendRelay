@@ -81,7 +81,12 @@ def test_every_built_in_is_addressable_and_described() -> None:
         assert overlay.group in overlay_catalogue.GROUP_ORDER
         assert 0.05 < overlay.aspect < 8
         assert 0.1 < overlay.width_in_faces < 6
-        assert overlay.shapes, f"{overlay.id} would render as nothing"
+        # Shapes in a unit square or triangles in a unit cube. One or the
+        # other, never neither: an object with no geometry at all draws
+        # a transparent square and reads as a broken effect.
+        assert overlay.shapes or overlay.mesh is not None, (
+            f"{overlay.id} would render as nothing"
+        )
 
 
 def test_the_curated_pack_has_depth_and_clear_management_categories() -> None:
@@ -852,8 +857,17 @@ def _composited_over_the_whole_canvas(cv2, numpy, overlay, width: int):
 
 @pytest.mark.parametrize("width", [48, 192])
 def test_blending_only_where_a_shape_lands_draws_the_same_sprite(width: int) -> None:
+    """The flat renderer blends each shape only over the rectangle it reaches;
+    this proves that optimisation loses nothing against blending the lot.
+
+    Solid objects are not in scope. They have no shapes, so there is no bounds
+    optimisation to check and the comparison would be two blank canvases
+    agreeing - which is a passing test that proves nothing.
+    """
     cv2, numpy = _vision()
     for overlay in overlay_catalogue.BUILT_IN:
+        if overlay.mesh is not None:
+            continue
         assert numpy.array_equal(
             overlay_catalogue.render_sprite(cv2, numpy, overlay, width),
             _composited_over_the_whole_canvas(cv2, numpy, overlay, width),
@@ -1473,3 +1487,138 @@ def test_something_that_claims_to_hide_a_face_is_opaque_over_one(overlay_id: str
     ]
 
     assert float((middle > 200).mean()) > 0.9, f"{overlay_id} is see-through in the middle"
+
+
+# --- objects that turn with the head ------------------------------------------
+#
+# The thing a flat sprite cannot do, and the reason the pose solve exists. What
+# matters is not only that a solid object redraws per angle, but that a flat one
+# pays nothing for the feature - the pose is not solved for it and its sprite is
+# the same bytes at every angle.
+
+
+def _posed_face(yaw: float = 0.0, pitch: float = 0.0):
+    """A face at a known angle, projected the way `face_pose`'s tests build one."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    from test_face_pose import _face
+
+    return _face(yaw=yaw, pitch=pitch)
+
+
+def _sprite_at(overlay_id: str, yaw: float, width: int = 120):
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get(overlay_id)
+    cache = face_overlays._SpriteCache(cv2, numpy, overlay)
+    frame = numpy.zeros((1920, 1080, 3), dtype=numpy.uint8)
+    pose = face_overlays._pose_for(overlay, _posed_face(yaw=yaw), frame)
+    return cache.at(width, pose), cache
+
+
+def test_a_solid_object_is_redrawn_as_the_head_turns() -> None:
+    cv2, numpy = _vision()
+
+    facing, _ = _sprite_at("cap_3d", 0.0)
+    turned, _ = _sprite_at("cap_3d", 35.0)
+
+    assert not numpy.array_equal(facing, turned), "the cap did not turn"
+
+
+def test_turning_left_is_not_just_turning_right_mirrored() -> None:
+    """The light is fixed in the picture rather than carried by the object, so
+    the two turns are different images. A prop lit from whichever side it
+    happens to face reads as glowing rather than as lit."""
+    cv2, numpy = _vision()
+
+    left, _ = _sprite_at("cap_3d", -35.0)
+    right, _ = _sprite_at("cap_3d", 35.0)
+
+    difference = float(
+        numpy.abs(left.astype(int) - right[:, ::-1].astype(int)).mean()
+    )
+    assert difference > 0.5, "one turn is the other flipped, so nothing is lit"
+
+
+def test_a_flat_object_is_the_same_bytes_at_every_angle() -> None:
+    """It has nowhere to put an angle, so it must not pay for one."""
+    cv2, numpy = _vision()
+
+    facing, cache = _sprite_at("crown", 0.0)
+    turned, _ = _sprite_at("crown", 35.0)
+
+    assert numpy.array_equal(facing, turned)
+    assert len(cache._sprites) == 1, "a flat object grew a cache entry per angle"
+
+
+def test_no_pose_is_solved_for_a_flat_object() -> None:
+    """A solve per face per frame, for an answer that would be thrown away."""
+    cv2, numpy = _vision()
+    frame = numpy.zeros((1920, 1080, 3), dtype=numpy.uint8)
+
+    assert face_overlays._pose_for(
+        overlay_catalogue.get("crown"), _posed_face(yaw=30.0), frame
+    ) is None
+    assert face_overlays._pose_for(
+        overlay_catalogue.get("cap_3d"), _posed_face(yaw=30.0), frame
+    ) is not None
+
+
+def test_nearby_angles_share_one_sprite() -> None:
+    """Rounded to `POSE_STEP`, so a head drifting by a fraction of a degree
+    reuses what it drew last frame instead of rasterising afresh."""
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get("cap_3d")
+    cache = face_overlays._SpriteCache(cv2, numpy, overlay)
+    frame = numpy.zeros((1920, 1080, 3), dtype=numpy.uint8)
+
+    for yaw in (20.0, 20.4, 21.0, 21.9):
+        cache.at(120, face_overlays._pose_for(overlay, _posed_face(yaw=yaw), frame))
+
+    assert len(cache._sprites) == 1, "a drift under the step drew a new sprite"
+
+
+def test_a_face_with_no_measurable_pose_draws_the_object_square_on() -> None:
+    """Better than snapping to an angle nobody measured, and it is what the
+    object looked like before any of this."""
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get("cap_3d")
+    cache = face_overlays._SpriteCache(cv2, numpy, overlay)
+
+    unposed = cache.at(120, None)
+    square_on = overlay_catalogue.render_sprite(cv2, numpy, overlay, 120, pose=(0.0, 0.0, 0.0))
+
+    assert numpy.array_equal(unposed, square_on)
+
+
+def test_the_gallery_shows_a_solid_object_at_three_quarters() -> None:
+    """A catalogue of solid props drawn square on is a catalogue that looks
+    exactly like the flat one, and the difference is the reason to pick one."""
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get("cap_3d")
+
+    gallery = overlay_catalogue.render_sprite(cv2, numpy, overlay, 120)
+    square_on = overlay_catalogue.render_sprite(cv2, numpy, overlay, 120, pose=(0.0, 0.0, 0.0))
+
+    assert not numpy.array_equal(gallery, square_on)
+
+
+def test_the_picker_is_told_which_objects_turn() -> None:
+    """Invisible in a thumbnail of a face looking straight ahead, and the whole
+    reason somebody picks one hat over another."""
+    by_id = {option["value"]: option for option in overlay_catalogue.options()}
+
+    assert by_id["cap_3d"]["dimensional"] is True
+    assert by_id["crown"]["dimensional"] is False
+
+
+def test_every_solid_object_actually_has_triangles() -> None:
+    """An object declared with a mesh that builds to nothing renders a
+    transparent square, which looks like the effect silently failing."""
+    for overlay in overlay_catalogue.BUILT_IN:
+        if overlay.mesh is None:
+            continue
+        assert overlay.mesh.faces, overlay.id
+        assert overlay.mesh.vertices, overlay.id
+        assert not overlay.shapes, f"{overlay.id} declares both a mesh and shapes"

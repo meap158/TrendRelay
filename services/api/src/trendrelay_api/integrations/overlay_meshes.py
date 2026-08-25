@@ -424,10 +424,16 @@ def render_sprite(
     pitch: float = 0.0,
     roll: float = 0.0,
 ) -> Any:
-    """`render`, oversampled and averaged down so the silhouette is not stepped."""
+    """`render`, oversampled and averaged down so the silhouette is not stepped.
+
+    Returned as uint8, which is what the flat renderer returns: the two are
+    meant to be indistinguishable downstream, and a float sprite gets as far as
+    the PNG encoder before anything complains about the difference.
+    """
     factor = max(1, min(SUPERSAMPLE, MAX_DRAW_WIDTH // max(width, 1)))
     if factor == 1:
-        return render(np, mesh, width, height, yaw=yaw, pitch=pitch, roll=roll)
+        drawn = render(np, mesh, width, height, yaw=yaw, pitch=pitch, roll=roll)
+        return np.clip(drawn, 0, 255).round().astype(np.uint8)
     big = render(
         np, mesh, width * factor, height * factor, yaw=yaw, pitch=pitch, roll=roll
     )
@@ -437,4 +443,4 @@ def render_sprite(
     small = cv2.resize(big, (width, height), interpolation=cv2.INTER_AREA)
     alpha = np.clip(small[..., 3:4], 1e-6, None)
     small[..., :3] = np.clip(small[..., :3] / (alpha / 255.0), 0, 255)
-    return small
+    return np.clip(small, 0, 255).round().astype(np.uint8)
