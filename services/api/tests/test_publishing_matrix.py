@@ -70,16 +70,24 @@ def test_instagram_and_tiktok_are_the_networks_with_no_clickable_link() -> None:
         assert found[platform]["link"]["clickable"] is True, platform
 
 
-def test_a_ceiling_no_engine_can_reach_is_shown_as_such() -> None:
-    """Instagram takes ten images and nothing here can post them.
+def test_the_ceiling_and_the_engines_that_can_reach_it_are_separate_facts() -> None:
+    """The case the whole table exists for.
 
-    The case the whole table exists for: the network has the feature, so asking
-    only "does Instagram do carousels" gives an answer that gets a post refused.
+    "Does Instagram do carousels" and "can anything here post one" are
+    different questions, and answering the first when asked the second gets a
+    post refused at delivery. Instagram was the standing example of the two
+    diverging - the network took ten and no engine declared any - until the
+    exclusion turned out to rest on Buffer's refusal being read as Zernio's.
+
+    So it is pinned as two facts rather than one: the ceiling is the network's,
+    and the engine list is only those that declare it. Buffer reaches Instagram
+    and is absent here, which is the whole point.
     """
     instagram = rows()["instagram"]
 
     assert instagram["carousel_limit"] == 10
-    assert instagram["carousel_engines"] == []
+    assert instagram["carousel_engines"] == ["zernio"]
+    assert "buffer" in instagram["engines"], "Buffer posts here, just not galleries"
 
 
 def test_the_reachable_carousel_is_tiktok_through_two_engines() -> None:

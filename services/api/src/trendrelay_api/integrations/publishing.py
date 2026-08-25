@@ -288,13 +288,25 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         requires_public_media=False,
         ingests_media_url=True,
-        # Instagram is deliberately absent. Its carousel is a distinct post
-        # type rather than "several pictures", and an engine has already been
-        # recorded being refused one at publish time: "does not support the
-        # 'carousel' post type. Valid types are post, story, or reel." A
-        # documented figure is weaker evidence than a network saying no.
+        # Every network Zernio documents a picture count for, rather than the
+        # one somebody happened to test. Its media guide gives a figure per
+        # platform - four on X, ten on Facebook and Threads, twenty on LinkedIn
+        # - and only TikTok was recorded, so a post to any of the others could
+        # carry exactly one picture through an engine that takes several.
+        # Instagram included, on Zernio's own documentation: ten images per
+        # carousel, built from `mediaItems` with no content type of its own -
+        # which is the figure `CAROUSEL_LIMITS` already carried for it.
+        #
+        # It was excluded on the strength of a refusal quoted here as though it
+        # were Zernio's: "does not support the 'carousel' post type. Valid
+        # types are post, story, or reel." That is *Buffer's* error, from
+        # Buffer's shared PostType enum, and it says nothing about this engine.
+        # Zernio has no "carousel" post type to refuse - several pictures in
+        # `mediaItems` are simply a carousel, exactly as they are on the six
+        # networks below.
         photo_carousel_platforms=(
             "tiktok", "facebook", "twitter", "linkedin", "threads", "bluesky",
+            "instagram",
         ),
         media_note="The approved local MP4 is uploaded through a Zernio presigned URL.",
     ),
@@ -536,6 +548,23 @@ def follow_up_kind(platform: str | None) -> str:
     return "reply in the thread" if platform in THREAD_PLATFORMS else "first comment"
 
 
+def _engine_of(provider: str | None) -> str | None:
+    """The engine behind a stored `provider` value, which may be a connection.
+
+    A destination carries a connection id (`zernio-2`), and a capability
+    question is about the engine, not the login - the second Zernio publishes
+    first comments exactly as the first one does. An engine id answers itself;
+    anything else is looked up, and an unknown id answers None, which every
+    caller treats as "no".
+    """
+    if not provider:
+        return None
+    if provider in PROVIDERS:
+        return provider
+    connection = publishing_connections.find(PROVIDERS, provider)
+    return connection.provider if connection else None
+
+
 def first_comment_deliverable(provider: str | None, platform: str | None) -> bool:
     """Whether this destination's engine can put text after the post.
 
@@ -543,6 +572,9 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
     engine will post is not a placement, it is a lost link. It answers for both
     fields at once - a first comment and a thread reply are the same question of
     whether the link can go after the post, not which input carries it there.
+
+    `provider` is what a destination stores, so it may be a connection id
+    (`zernio-2`) rather than an engine id; `_engine_of` resolves either.
 
     Two engines reach it, and not the same networks. Buffer carries both fields,
     so it delivers on every follow-up network. Zernio has a `firstComment` per
@@ -558,9 +590,10 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
     asks about, one that spends the account's monthly comment quota and is not
     wired here - so a first comment through bundle.social is not promised.
     """
-    if provider == "buffer":
+    engine = _engine_of(provider)
+    if engine == "buffer":
         return platform in FOLLOW_UP_PLATFORMS
-    if provider == "zernio":
+    if engine == "zernio":
         return platform in FIRST_COMMENT_PLATFORMS or platform in ZERNIO_THREAD_PLATFORMS
     return False
 
@@ -605,7 +638,6 @@ CAROUSEL_LIMITS: dict[str, int] = {
     "twitter": 4,
     "bluesky": 4,
 }
-
 
 #: The most any network here takes, which is what bounds the request itself.
 #: The per-network limit is checked against the destinations actually chosen.
@@ -1786,7 +1818,14 @@ def _zernio_publish(
             specific["containsSyntheticMedia"] = request.made_with_ai
             specific["title"] = _post_title(request)[:100]
         if target.platform in {"instagram", "facebook"}:
-            specific["contentType"] = target.kind.id
+            # A carousel says nothing here. Zernio documents `contentType` as
+            # the story flag - "story", and on Instagram "saved_story" - and a
+            # post built from several `mediaItems` is a feed carousel by
+            # default. Instagram's own type id is "photo", which is not one of
+            # Zernio's words, so sending it would name a type the engine has
+            # never heard of on the one post shape that needs no naming.
+            if target.kind.id != "photo":
+                specific["contentType"] = target.kind.id
         if target.platform == "reddit":
             specific["subreddit"] = request.subreddit
             specific["title"] = _post_title(request)[:300]

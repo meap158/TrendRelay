@@ -2227,7 +2227,7 @@ def instagram_carousel(images: list[str], **overrides):
     return publishing.PublishRequest(**payload)
 
 
-def test_no_engine_claims_an_instagram_carousel() -> None:
+def test_buffer_claims_no_instagram_carousel() -> None:
     """The schema said yes and the network said no.
 
     Buffer's PostType enum declares `carousel`, but that enum is shared across
@@ -2235,9 +2235,13 @@ def test_no_engine_claims_an_instagram_carousel() -> None:
     answered: "does not support the 'carousel' post type. Valid types are post,
     story, or reel." A type existing in the schema is not a contract for the
     network being posted to, and this is the test that remembers that.
+
+    About Buffer, and only Buffer. This assertion used to run over every engine
+    in `PROVIDERS`, which turned one engine's refusal into a fact about the
+    network and kept Instagram off Zernio - an engine with no carousel post
+    type to refuse, and a documented ten pictures per Instagram gallery.
     """
-    for provider in publishing.PROVIDERS.values():
-        assert "instagram" not in provider.photo_carousel_platforms, provider.label
+    assert "instagram" not in publishing.PROVIDERS["buffer"].photo_carousel_platforms
 
 
 def test_a_network_refuses_more_images_than_it_swipes(
@@ -2247,8 +2251,7 @@ def test_a_network_refuses_more_images_than_it_swipes(
 
     The ceilings differ by network - TikTok takes thirty-five, Instagram's API
     ten - and only the largest bounds the request itself. This lowers TikTok's
-    for the length of the test rather than asserting against Instagram, which
-    no engine can post a carousel to today.
+    for the length of the test rather than leaning on any one network's figure.
     """
     monkeypatch.setattr(publishing, "CAROUSEL_LIMITS", {"tiktok": 2})
     body = carousel(carousel_images)  # three images
@@ -2453,14 +2456,85 @@ def test_several_pictures_are_an_ordinary_post_on_most_networks() -> None:
         assert fits, f"{platform}: {reason}"
 
 
-def test_the_network_that_said_no_is_still_refused() -> None:
-    """Instagram's carousel is a post type, and an engine has been told so.
+def test_instagram_is_a_gallery_on_the_engine_that_documents_one() -> None:
+    """The refusal that kept it out was another engine's.
 
     "does not support the 'carousel' post type. Valid types are post, story, or
-    reel." A figure in an engine's documentation is weaker evidence than a
-    network refusing a built post, so this stays out until something measures it.
+    reel." is Buffer answering about Buffer's shared PostType enum - see
+    `test_buffer_claims_no_instagram_carousel`. Zernio has no carousel post
+    type to be refused: several `mediaItems` are a gallery, and its
+    documentation gives Instagram ten of them, which is the figure
+    `CAROUSEL_LIMITS` already carried.
     """
     fits, reason = publishing.carousel_fits_destination("zernio", "instagram", 2)
 
+    assert fits, reason
+    # And the network's own ceiling still holds, which is lower than the
+    # engine-wide bound TikTok sets.
+    refused, why = publishing.carousel_fits_destination("zernio", "instagram", 11)
+    assert not refused
+    assert "at most 10" in why
+
+
+def test_buffer_is_still_refused_the_instagram_gallery() -> None:
+    """Enabling one engine must not read as enabling the network everywhere."""
+    fits, why = publishing.carousel_fits_destination("buffer", "instagram", 2)
+
     assert not fits
-    assert reason
+    assert "Buffer posts no photo carousels at all" in why
+
+
+def test_an_instagram_carousel_names_no_content_type(
+    monkeypatch, carousel_images: list[str]
+) -> None:
+    """Zernio documents `contentType` as the story flag - "story", and on
+    Instagram "saved_story". A post built from several `mediaItems` is a feed
+    carousel by default, and our own id for the type is "photo", which is not
+    one of Zernio's words. Naming it would name a type the engine never had.
+    """
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        sent["body"] = kwargs.get("body")
+        return {"post": {"_id": "p1", "status": "DRAFT"}}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(
+        publishing, "_zernio_upload", lambda media: f"https://cdn/{Path(media).name}"
+    )
+
+    publishing._zernio_publish(instagram_carousel(carousel_images), None)
+
+    assert [item["type"] for item in sent["body"]["mediaItems"]] == ["image"] * 3
+    assert [item["url"] for item in sent["body"]["mediaItems"]] == [
+        "https://cdn/frame0.jpg", "https://cdn/frame1.jpg", "https://cdn/frame2.jpg",
+    ], "the pictures did not go as a gallery, in swipe order"
+    assert "contentType" not in (
+        sent["body"]["platforms"][0].get("platformSpecificData") or {}
+    )
+
+
+def test_a_story_or_a_reel_still_names_its_type(monkeypatch, media_file: Path) -> None:
+    """Only the gallery goes unnamed; carrying the story flag is the field's
+    whole purpose, and a reel is a real choice the operator made."""
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        sent["body"] = kwargs.get("body")
+        return {"post": {"_id": "p1", "status": "DRAFT"}}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_zernio_upload", lambda media: "https://cdn/x.mp4")
+
+    for post_type in ("story", "reel", "post"):
+        body = publishing.PublishRequest(
+            workspace_id="workspace-1", video_path=str(media_file),
+            caption="Launch clip", date=datetime.now(UTC) + timedelta(hours=2),
+            targets=[publishing.PublishTarget(
+                platform="instagram", integration_id="c1", post_type=post_type,
+            )],
+        )
+        publishing._zernio_publish(body, media_file)
+        assert sent["body"]["platforms"][0]["platformSpecificData"][
+            "contentType"
+        ] == post_type
