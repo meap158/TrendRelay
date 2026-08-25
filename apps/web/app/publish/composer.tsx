@@ -3,6 +3,12 @@
 import { zonedInstant, zonedParts } from "../../lib/schedule-time";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
+import { apiBaseUrl } from "../../lib/api";
+import {
+  mediaTypeFor,
+  opaquePreviewUrl,
+  useOpaqueMedia,
+} from "../../lib/media-preview";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
@@ -87,13 +93,15 @@ export function useAssetPoster(
     if (!assetId) return;
     let active = true;
     let objectUrl = "";
-    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`)
+    // Asked opaque and retyped here, like every served byte: an honest
+    // image/* on a plain GET is a file to a picture-configured grabber.
+    apiFetch(opaquePreviewUrl(`/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`))
       .then((response) => {
         if (!response.ok) throw new Error("unavailable");
-        return response.blob();
+        return response.arrayBuffer();
       })
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
+      .then((bytes) => {
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
         if (active) setLoaded({ id: assetId, url: objectUrl });
         else URL.revokeObjectURL(objectUrl);
       })
@@ -470,8 +478,7 @@ export function PostPreview({
           // twice and answered it two different ways.
           <UploadPreview key={showing} source={showing} poster={thumbnail} onNaturalRatio={setMeasured} />
         ) : showing ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" src={showing} onLoad={(event) => {
+          <OpaqueImage alt="" src={showing} onLoad={(event) => {
             const { naturalWidth, naturalHeight } = event.currentTarget;
             measure(naturalWidth, naturalHeight);
           }} />
@@ -480,8 +487,7 @@ export function PostPreview({
           // carousel that has no pictures yet would otherwise show a frame of
           // whichever video was chosen before the post type changed - media
           // that is not going out, presented as though it were.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" src={thumbnail} onLoad={(event) => {
+          <OpaqueImage alt="" src={thumbnail} onLoad={(event) => {
             const { naturalWidth, naturalHeight } = event.currentTarget;
             measure(naturalWidth, naturalHeight);
           }} />
@@ -564,13 +570,15 @@ function UpcomingThumbnail({
     if (!key) return;
     let live = true;
     let objectUrl = "";
-    const endpoint = entry.assetId
+    const endpoint = opaquePreviewUrl(entry.assetId
       ? `/api/workspaces/${workspaceId}/media/library/assets/${entry.assetId}/content/thumbnail`
-      : `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(entry.mediaPath ?? "")}`;
+      : `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(entry.mediaPath ?? "")}`);
+    // Asked opaque and retyped here: a still served as image/jpeg over a plain
+    // GET is a file to a picture grabber, same as video is to a clip one.
     apiFetch(endpoint)
-      .then((response) => response.ok ? response.blob() : Promise.reject(new Error("unavailable")))
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
+      .then((response) => response.ok ? response.arrayBuffer() : Promise.reject(new Error("unavailable")))
+      .then((bytes) => {
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
         if (live) setLoaded({ key, url: objectUrl });
         else URL.revokeObjectURL(objectUrl);
       })
@@ -829,13 +837,20 @@ export function UpcomingPosts({
                   it every day looks the same until it is opened. It sits under
                   the date rather than over the corner, where at this width it
                   landed on top of the weekday. */}
-              <i aria-hidden="true" className={day.posts.length ? "" : "empty"}>
-                {day.posts.length || ""}
+              {/* While campaigns are still being gathered every day shows the
+                  same quiet skeleton where the count will sit: committed jobs
+                  arrive seconds before the planned posts do, and numbers that
+                  appear day by day read as days filling up rather than a count
+                  still settling. */}
+              <i aria-hidden="true" className={loadingCampaigns ? "pending" : day.posts.length ? "" : "empty"}>
+                {loadingCampaigns ? "" : day.posts.length || ""}
               </i>
               <span className="sr-only">
-                {day.posts.length
-                  ? `${day.posts.length} post${day.posts.length === 1 ? "" : "s"}`
-                  : "no posts"}
+                {loadingCampaigns
+                  ? "counting posts"
+                  : day.posts.length
+                    ? `${day.posts.length} post${day.posts.length === 1 ? "" : "s"}`
+                    : "no posts"}
               </span>
             </button>
           );
@@ -1092,6 +1107,7 @@ export function SlotEditor({
   onSave,
   onCreatePreset,
   onDeletePreset,
+  onEditPreset,
 }: {
   slots: Slot[];
   presets: SlotPreset[];
@@ -1101,12 +1117,26 @@ export function SlotEditor({
   onCreatePreset: (label: string, entries: { weekday: number; time: string }[]) => void;
   /** Offered on the workspace's own saved presets; built-ins have no delete. */
   onDeletePreset?: (preset: SlotPreset) => void;
+  /**
+   * Rename a saved preset, or point it at a different week.
+   *
+   * One callback for both, because they are one request and the API takes only
+   * what it is sent. Absent where the caller cannot edit, which is what keeps
+   * the buttons off a read-only view.
+   */
+  onEditPreset?: (
+    preset: SlotPreset,
+    changes: { label?: string; slots?: { weekday: number; time: string }[] },
+  ) => void;
 }) {
   const t = useT();
   const [draft, setDraft] = useState("");
   /** A weekday number, or one of the group values above. */
   const [weekday, setWeekday] = useState<string>(String(EVERY_DAY));
   const [presetName, setPresetName] = useState("");
+  /** The saved preset being renamed, and what it is being renamed to. */
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState("");
   /** The autofill: how many times, spread across which window. */
   const [spreadCount, setSpreadCount] = useState(4);
   const [spreadFrom, setSpreadFrom] = useState("08:00");
@@ -1389,6 +1419,38 @@ export function SlotEditor({
       {canEdit && (
         <div className="slot-presets">
           <span>{t("composer.startFromPreset")}</span>
+          {/* In place of the row of cards while a rename is open, rather than
+              beside them: the name being typed is about one of the cards, and
+              a field floating under twelve of them belongs to none. */}
+          {renaming && (
+            <form
+              className="slot-preset-rename"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const preset = presets.find((item) => item.id === renaming);
+                const next = renameTo.trim();
+                setRenaming(null);
+                if (preset && next && next !== preset.label) {
+                  onEditPreset?.(preset, { label: next });
+                }
+              }}
+            >
+              <input
+                value={renameTo}
+                autoFocus
+                aria-label="Preset name"
+                disabled={busy}
+                onChange={(event) => setRenameTo(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null); }}
+              />
+              <Button variant="secondary" size="sm" busy={busy} disabled={!renameTo.trim()}>
+                Rename
+              </Button>
+              <Button variant="quiet" size="sm" onClick={() => setRenaming(null)}>
+                Cancel
+              </Button>
+            </form>
+          )}
           <div>
             {presets.map((preset) => (
               <span className="slot-preset-card" key={preset.id}>
@@ -1407,9 +1469,38 @@ export function SlotEditor({
                       : `${DAY_NAMES[entry.weekday]} ${entry.time}`
                   )).join(" · ")}</small>
                 </button>
-                {/* Only what this workspace saved can be deleted: a built-in
-                    would resurrect on the next read, and a delete that does
-                    not delete is worse than no button. */}
+                {/* Only what this workspace saved can be edited or deleted: a
+                    built-in belongs to the catalogue, exists in every
+                    workspace, and a change here would be undone by the next
+                    read - a button that does not do what it says. */}
+                {preset.kind === "custom" && onEditPreset && (
+                  <>
+                    <button
+                      type="button"
+                      className="slot-preset-edit"
+                      aria-label={`Rename the ${preset.label} preset`}
+                      title={`Rename the ${preset.label} preset`}
+                      disabled={busy}
+                      onClick={() => {
+                        setRenaming(preset.id);
+                        setRenameTo(preset.label);
+                      }}
+                    ><ActionIcon name="edit" /></button>
+                    {/* Points the preset at the week currently on screen. The
+                        alternative was to load it, edit it, and save a second
+                        preset under a new name - which is how a workspace ends
+                        up with "Commute hours" and "Commute hours v2" and
+                        pages assigned to the wrong one. */}
+                    <button
+                      type="button"
+                      className="slot-preset-edit"
+                      aria-label={`Update the ${preset.label} preset to these times`}
+                      title={`Update ${preset.label} to the times above`}
+                      disabled={busy || !slots.length}
+                      onClick={() => onEditPreset(preset, { slots: entries })}
+                    ><ActionIcon name="confirm" /></button>
+                  </>
+                )}
                 {preset.kind === "custom" && onDeletePreset && (
                   <button
                     type="button"
@@ -1461,6 +1552,46 @@ export function SlotEditor({
  * Keyed on the source by its caller, so choosing different media puts the gate
  * back rather than autoplaying whatever was picked next.
  */
+/**
+ * True when a src points at this app's own API rather than at the open web.
+ *
+ * API-origin media is this workspace's private bytes and travels opaquely;
+ * an external `media_url` is by definition already public - the engine will
+ * fetch it itself - and a `blob:` URL never touched the wire at all.
+ */
+function isPrivateApiSource(source: string): boolean {
+  const base = apiBaseUrl();
+  return source.startsWith("/api/") || (!!base && source.startsWith(`${base}/api/`));
+}
+
+/**
+ * A still shown from whichever kind of URL it carries.
+ *
+ * API-origin paths are read opaque and shown from a blob - an honest image/*
+ * on a plain GET is exactly what a picture-configured grabber takes. Public
+ * URLs and local blob URLs render directly; there is nothing to hide them
+ * from and no second fetch spent on them. The hook is unconditional: the
+ * `wanted` flag is what switches it off, so a passthrough src never fetches.
+ */
+export function OpaqueImage({
+  src,
+  alt,
+  onLoad,
+}: {
+  src: string;
+  alt: string;
+  onLoad?: (event: React.SyntheticEvent<HTMLImageElement>) => void;
+}) {
+  const own = isPrivateApiSource(src);
+  const { objectUrl, problem } = useOpaqueMedia(src, src, "image/jpeg", own);
+  const resolved = own ? objectUrl : src;
+  if (!resolved) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- authenticated blob or already-public src
+    <img alt={alt} src={resolved} title={problem || undefined} onLoad={onLoad} />
+  );
+}
+
 export function UploadPreview({
   source,
   poster,
@@ -1473,11 +1604,18 @@ export function UploadPreview({
 }) {
   const t = useT();
   const [requested, setRequested] = useState(false);
+  const privateSource = isPrivateApiSource(source);
+  const { objectUrl: sourceBlob, problem } = useOpaqueMedia(
+    source, source, "video/mp4", requested && privateSource,
+  );
+  const resolved = privateSource ? sourceBlob : source;
 
   if (requested) {
+    if (privateSource && problem) return <p className="privacy-note">{problem}</p>;
+    if (!resolved) return <p className="privacy-note">{t("library.loadingPreview")}</p>;
     return (
       <video className="blur-preview" controls controlsList="nodownload" autoPlay
-        preload="none" poster={poster || undefined} src={source}
+        preload="none" poster={poster || undefined} src={resolved}
         onLoadedMetadata={(event) => {
           const { videoWidth, videoHeight } = event.currentTarget;
           if (videoWidth && videoHeight) onNaturalRatio?.(videoWidth / videoHeight);
@@ -1487,8 +1625,7 @@ export function UploadPreview({
   return (
     <button type="button" className="blur-preview-launch" onClick={() => setRequested(true)}>
       {poster
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img alt="" src={poster} onLoad={(event) => {
+        ? <OpaqueImage alt="" src={poster} onLoad={(event) => {
             // The poster is the first frame, so it has the clip's shape and
             // arrives long before anyone presses play.
             const { naturalWidth, naturalHeight } = event.currentTarget;

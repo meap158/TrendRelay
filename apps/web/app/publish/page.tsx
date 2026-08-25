@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { channelUrl, displayHandle } from "../../lib/channel-links";
+import { opaquePreviewUrl } from "../../lib/media-preview";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
@@ -918,6 +919,20 @@ export default function PublishPage() {
   const usableEngines = (connection?.providers ?? []).filter(
     (item) => ["ready", "no-accounts"].includes(engineState(item).state));
   /**
+   * Whether any engine holds a key at all.
+   *
+   * This, not "some engine is proven ready", is what separates first run from
+   * every later visit. The page-load status deliberately skips the probe, and
+   * account discovery lags it by seconds, so a fresh visit briefly proves no
+   * engine anything - reading that as "no engine" opened the whole setup grid
+   * on top of the composer each time, then snapped it shut when discovery
+   * came back.
+   */
+  const enginesConfigured = useMemo(
+    () => (connection?.providers ?? []).some((item) => item.configured),
+    [connection],
+  );
+  /**
    * Engines whose key works and that are switched on, channels or not.
    *
    * "Nothing is switched on" and "what is switched on has no channels yet" are
@@ -1145,6 +1160,7 @@ export default function PublishPage() {
       }
     });
   }, []);
+
   /**
    * Arriving from the Library's "Prepare to publish".
    *
@@ -1179,6 +1195,7 @@ export default function PublishPage() {
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per workspace on arrival
   }, [workspaceId]);
+
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -1634,6 +1651,50 @@ export default function PublishPage() {
     }
   }
 
+  /**
+   * Rename a saved preset, or point it at the times now on screen.
+   *
+   * Only what changed is sent. A rename that carried the times would make
+   * renaming a way to overwrite them with whatever happened to be in the
+   * editor at that moment.
+   *
+   * The snapshot the other tabs read from is dropped afterwards. Campaigns
+   * name the preset a destination follows and Publish shows the rhythm a page
+   * inherits; both restore from a cached copy on the way in, and a preset
+   * renamed here would still be its old name over there until something forced
+   * a read.
+   */
+  async function editSlotPreset(
+    preset: SlotPreset,
+    changes: { label?: string; slots?: { weekday: number; time: string }[] },
+  ) {
+    setBusy("slots");
+    setError(null);
+    try {
+      const body = await json<{
+        presets: SlotPreset[]; page_assignments?: Record<string, string>;
+      }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/slots/presets/${preset.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(changes),
+        },
+      ));
+      setSlotPresets(body.presets);
+      setPageAssignments(body.page_assignments ?? {});
+      clearTabSnapshots(`campaigns:${workspaceId}`);
+      clearTabSnapshots(`publish:${workspaceId}`);
+      setNotice(changes.label
+        ? `Renamed to “${changes.label}”.`
+        : `“${preset.label}” now uses these times. Every page on it follows.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The preset could not be changed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function deleteSlotPreset(preset: SlotPreset) {
     if (!window.confirm(
       `Delete the “${preset.label}” preset? Pages assigned to it fall back to `
@@ -1686,9 +1747,11 @@ export default function PublishPage() {
     setPickerOpen(false);
     setThumbnail("");
     if (!asset.versions.some((version) => version.kind === "thumbnail")) return;
-    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/content/thumbnail`)
-      .then((response) => (response.ok ? response.blob() : Promise.reject(new Error("no frame"))))
-      .then((blob) => setThumbnail(URL.createObjectURL(blob)))
+    // Asked opaque and retyped here, like every served byte: an honest
+    // image/* on a plain GET is a file to a picture-configured grabber.
+    apiFetch(opaquePreviewUrl(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/content/thumbnail`))
+      .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error("no frame"))))
+      .then((bytes) => setThumbnail(URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }))))
       .catch(() => undefined);
   }
 
@@ -2144,7 +2207,11 @@ export default function PublishPage() {
           </p>
         </div>
         <div className="publish-heading-side">
-          {!usableEngines.length && (
+          {/* Keyed to keys held, not engines proven: usableEngines is empty
+              for the first seconds of every visit, while discovery runs, and
+              a badge that says "No engine" beside working ones is a fault
+              reported from impatience. */}
+          {!enginesConfigured && (
             <span className="connection-badge">{checking ? "Checking…" : "No engine"}</span>
           )}
         </div>
@@ -2159,9 +2226,14 @@ export default function PublishPage() {
           all of them at once, so a summary naming one made the others look
           switched off - and hid the fact that their destinations were already
           in the picker below. */}
+      {/* Collapsed until asked for, wherever a key exists to summarise. The
+          grid used to open whenever no engine had been *proven* yet - which,
+          on every fresh visit, is the first few seconds - and covered the
+          composer with five cards before folding back up. With no key
+          anywhere there is nothing to summarise, so setup stays the page. */}
       {checking ? (
         <WaitingBlock className="publish-engine-wait" message={t("common.loading")} />
-      ) : usableEngines.length > 0 && !setupOpen ? (
+      ) : !setupOpen && enginesConfigured ? (
         <div className="engine-summary">
           <span className="engine-summary-marks">
             {(switchedOnEngines.length ? switchedOnEngines : usableEngines).map((provider) => (
@@ -2169,16 +2241,23 @@ export default function PublishPage() {
             ))}
           </span>
           <div>
+            {/* Discovery has not come back yet when keys exist but none is
+                proven; that is a wait, not "no engine switched on", which is
+                the answer to a decision nobody has made wrong. */}
             <strong>{switchedOnEngines.length
               ? engineNames(switchedOnEngines)
-              : t("publish.noEngineOn")}</strong>
+              : usableEngines.length
+                ? t("publish.noEngineOn")
+                : t("common.loading")}</strong>
             <span>
               {/* Three different situations, not one. Nothing switched on is a
                   switch to flip; switched on with no destinations is channels
                   to connect at the engine. Collapsing them sent you to a
                   control that was already in the right position. */}
               {!switchedOnEngines.length
-                ? t("publish.noEngineOnHelp")
+                ? usableEngines.length
+                  ? t("publish.noEngineOnHelp")
+                  : t("common.loading")
                 : accounts.length
                   ? t("publish.destinationsAcross", {
                       destinations: accounts.length, engines: switchedOnEngines.length,
@@ -2943,23 +3022,13 @@ export default function PublishPage() {
                   })
                 : t("publish.noneSelected")}</b>
             </legend>
-            {!connection?.authenticated ? (
-              <p className="picker-empty">
-                Save and activate an engine key above, then load its connected accounts.
-              </p>
-            ) : !accounts.length ? (
-              <div className="picker-empty">
-                <p>{accountsLoaded
-                  ? "No engine returned a connected account. Connect channels in an engine's dashboard, then load again."
-                  : "No destinations loaded yet."}</p>
-                <Button
-                  variant="quiet"
-                  disabled={!canExecute}
-                  busy={busy === "accounts"}
-                  onClick={() => void refreshAccounts()}
-                ><ActionIcon name="refresh" />{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
-              </div>
-            ) : (
+            {/* Accounts first, whenever any have been read back. The
+                connection's own `authenticated` is probed only when a key is
+                saved or tested - the page load asks for status without probing,
+                so on a fresh visit it reads false while every destination sits
+                loaded in `accounts`. Gating on it here hid all of them behind
+                "save a key" advice that was already obeyed. */}
+            {accounts.length ? (
               <>
                 {/* One line, not one block per engine. What is needed here is
                     which engines are missing and why in a word; the sentence
@@ -3157,6 +3226,22 @@ export default function PublishPage() {
                   >{busy === "accounts" ? "Refreshing" : "Refresh accounts"}</Button>
                 </div>
               </>
+            ) : (connection?.providers ?? []).some((item) => item.configured) ? (
+              <div className="picker-empty">
+                <p>{accountsLoaded
+                  ? "No engine returned a connected account. Connect channels in an engine's dashboard, then load again."
+                  : "No destinations loaded yet."}</p>
+                <Button
+                  variant="quiet"
+                  disabled={!canExecute}
+                  busy={busy === "accounts"}
+                  onClick={() => void refreshAccounts()}
+                ><ActionIcon name="refresh" />{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
+              </div>
+            ) : (
+              <p className="picker-empty">
+                Save and activate an engine key above, then load its connected accounts.
+              </p>
             )}
           </fieldset>
           {chosen.includes("reddit") && (
@@ -3756,6 +3841,9 @@ export default function PublishPage() {
                   onSave={(entries) => void saveSlots(entries)}
                   onCreatePreset={(label, entries) => void createSlotPreset(label, entries)}
                   onDeletePreset={(preset) => void deleteSlotPreset(preset)}
+                  onEditPreset={canExecute
+                    ? (preset, changes) => void editSlotPreset(preset, changes)
+                    : undefined}
                 />
                 {pages.length > 0 && (
                   <section className="page-schedule-assignments">

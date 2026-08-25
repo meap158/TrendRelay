@@ -166,6 +166,68 @@ def create_preset(
     return preset_by_id(workspace_id, item.id, session=session) or {}
 
 
+def update_preset(
+    workspace_id: str,
+    preset_id: str,
+    *,
+    session: Session,
+    label: str | None = None,
+    summary: str | None = None,
+    entries: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Rename a saved preset, re-time it, or both.
+
+    Only the workspace's own, for the same reason a built-in cannot be deleted:
+    it belongs to the catalogue rather than to this workspace, exists in every
+    one of them, and an edit here would be undone by the next read - a change
+    that does not change. Refused by name instead, with the thing to do about
+    it, which is to save a copy under a name of your own.
+
+    Every field is optional and only what is given is touched. A rename is the
+    common case and re-sending the times to perform one would make renaming a
+    way to lose them.
+
+    The pages assigned to it are not touched at all. That is the point of a
+    preset: three pages posting on "Commute hours" should all move when those
+    hours move, and having to reassign them afterwards is what a preset exists
+    to avoid.
+    """
+    if any(item["id"] == preset_id for item in _builtin_payload()):
+        raise ValueError(
+            "That preset is built in and cannot be edited. Save it under a "
+            "name of your own and change that one instead."
+        )
+    found = session.scalar(select(PostingSchedulePreset).where(
+        PostingSchedulePreset.workspace_id == workspace_id,
+        PostingSchedulePreset.id == preset_id,
+    ))
+    if not found:
+        raise LookupError("No such preset in this workspace.")
+
+    if label is not None:
+        clean = label.strip()
+        if not clean:
+            raise ValueError("Name this preset.")
+        # Its own name is not a clash. Checked against everything else so a
+        # rename cannot land on a built-in either, which would leave two rows
+        # answering to one name and the picker showing whichever sorted first.
+        if any(
+            item["label"].casefold() == clean.casefold() and item["id"] != preset_id
+            for item in preset_payload(workspace_id, session=session)
+        ):
+            raise ValueError("A preset with that name already exists.")
+        found.label = clean
+    if summary is not None:
+        found.summary = summary.strip()
+    if entries is not None:
+        # `_normalise_entries` already refuses an empty set, with the same
+        # words the create path uses. Repeating the check here would be a
+        # second message for one rule.
+        found.slots = _normalise_entries(entries)
+    session.flush()
+    return preset_by_id(workspace_id, preset_id, session=session) or {}
+
+
 def delete_preset(
     workspace_id: str, preset_id: str, *, session: Session
 ) -> None:

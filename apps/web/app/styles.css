@@ -794,10 +794,21 @@ nav strong { color: var(--text); }
 .slot-spread > small { flex-basis: 100%; color: var(--muted-soft); font-size: 10px; line-height: 1.4; }
 /* A preset and its delete, as one card: the delete belongs to the preset it
    removes, not to a row of controls somewhere else. */
-.slot-preset-card { position: relative; display: inline-flex; }
-.slot-preset-card .slot-preset { padding-inline-end: 30px; }
+/* The card and its buttons in one row, rather than a button floated over a
+   corner of it. One overlay fitted; three would have sat on top of the
+   times they act on. */
+.slot-preset-card { display: inline-flex; align-items: start; gap: 2px; }
 .slot-preset b em { margin-inline-start: 6px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; color: var(--muted); font-size: 9px; font-style: normal; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.slot-preset-delete { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 5px; padding: 0; background: transparent; color: var(--muted-soft); cursor: pointer; }
+/* Rename, re-point, remove. Only on this workspace's own saved presets - a
+   built-in would be undone by the next read. */
+.slot-preset-edit, .slot-preset-delete { display: grid; place-items: center; width: 22px; height: 22px; margin-block-start: 6px; border: 0; border-radius: 5px; padding: 0; background: transparent; color: var(--muted-soft); cursor: pointer; }
+.slot-preset-edit:hover:not(:disabled) { color: var(--text); background: var(--line); }
+.slot-preset-edit:disabled { cursor: not-allowed; opacity: .5; }
+.slot-preset-delete:hover:not(:disabled) { color: var(--bad); background: var(--bad-bg); }
+.slot-preset-delete:disabled { cursor: not-allowed; opacity: .5; }
+/* Takes the row the cards were on while it is open, because the name being
+   typed belongs to one of them and a field under twelve belongs to none. */
+.slot-preset-rename { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .slot-preset-delete:hover:not(:disabled) { color: var(--bad); background: var(--bad-bg); }
 .slot-preset-delete:disabled { cursor: not-allowed; opacity: .5; }
 .slot-preset-save { display: flex; gap: 6px; align-items: center; }

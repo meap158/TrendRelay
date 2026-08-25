@@ -210,3 +210,125 @@ def test_deleting_another_workspaces_preset_is_not_found(slots) -> None:
         )
         with pytest.raises(LookupError):
             posting_slots.delete_preset("w1", theirs["id"], session=session)
+
+
+# --- editing one -----------------------------------------------------------------
+
+
+def test_a_preset_can_be_renamed_without_retiming_it(slots) -> None:
+    """A rename is the common edit, and it must not be a way to lose the times.
+
+    Requiring them to be sent back to change a name is how a rename becomes a
+    re-timing nobody asked for.
+    """
+    with slots() as session, session.begin():
+        saved = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "10:00"}, {"time": "16:00"}],
+            session=session,
+        )
+
+        renamed = posting_slots.update_preset(
+            "w1", saved["id"], session=session, label="Shop hours",
+        )
+
+    assert renamed["label"] == "Shop hours"
+    assert renamed["slots"] == saved["slots"]
+
+
+def test_retiming_a_preset_leaves_the_pages_on_it(slots) -> None:
+    """The point of a preset: three pages on one rhythm move when it moves.
+
+    Reassigning them by hand afterwards is the work a preset exists to avoid.
+    """
+    with slots() as session, session.begin():
+        saved = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "10:00"}], session=session,
+        )
+        posting_slots.assign_page("w1", "facebook:@brand", saved["id"], session=session)
+
+        moved = posting_slots.update_preset(
+            "w1", saved["id"], session=session,
+            entries=[{"time": "08:00"}, {"time": "20:00"}],
+        )
+
+    assert [entry["time"] for entry in moved["slots"]] == ["08:00", "20:00"]
+    assert posting_slots.page_assignments("w1", session=session) == {
+        "facebook:@brand": saved["id"],
+    }
+
+
+def test_a_preset_keeps_its_own_name_when_renamed_to_it(slots) -> None:
+    # Its own name is not a clash with itself, which is what a plain
+    # "does this name exist" check would have said.
+    with slots() as session, session.begin():
+        saved = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "10:00"}], session=session,
+        )
+
+        same = posting_slots.update_preset(
+            "w1", saved["id"], session=session, label="Trial hours",
+        )
+
+    assert same["label"] == "Trial hours"
+
+
+def test_a_rename_cannot_land_on_another_preset(slots) -> None:
+    """Two rows answering to one name leaves the picker showing whichever
+    sorted first, which is not a choice anybody made."""
+    with slots() as session, session.begin():
+        posting_slots.create_preset(
+            "w1", "Shop hours", "", [{"time": "10:00"}], session=session,
+        )
+        other = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "11:00"}], session=session,
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            posting_slots.update_preset(
+                "w1", other["id"], session=session, label="Shop hours",
+            )
+
+
+def test_a_rename_cannot_land_on_a_built_in_either(slots) -> None:
+    with slots() as session, session.begin():
+        mine = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "10:00"}], session=session,
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            posting_slots.update_preset(
+                "w1", mine["id"], session=session, label="Commute hours",
+            )
+
+
+def test_a_built_in_preset_refuses_editing(slots) -> None:
+    """Same reason it refuses deletion: the next read would undo it."""
+    with slots() as session, session.begin():
+        with pytest.raises(ValueError, match="built in"):
+            posting_slots.update_preset(
+                "w1", "commute", session=session, label="My hours",
+            )
+
+
+def test_editing_another_workspaces_preset_is_not_found(slots) -> None:
+    with slots() as session, session.begin():
+        theirs = posting_slots.create_preset(
+            "w2", "Their hours", "", [{"time": "10:00"}], session=session,
+        )
+
+        with pytest.raises(LookupError):
+            posting_slots.update_preset(
+                "w1", theirs["id"], session=session, label="Mine now",
+            )
+
+
+def test_a_preset_cannot_be_emptied(slots) -> None:
+    # A preset with no times applies nothing, and a page assigned to it would
+    # silently stop posting.
+    with slots() as session, session.begin():
+        saved = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "10:00"}], session=session,
+        )
+
+        with pytest.raises(ValueError, match="at least one posting time"):
+            posting_slots.update_preset("w1", saved["id"], session=session, entries=[])

@@ -40,6 +40,11 @@ from trendrelay_api.integrations.publishing import (
 from trendrelay_api.integrations.publishing_matrix import capability_matrix
 from trendrelay_api.models import Workspace
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+# The type media travels under when it must not look like media on the wire -
+# defined in media_serving so every router that serves bytes shares it, and
+# imported here (rather than reached through the module) because existing
+# tests read publishing_api.OPAQUE_MEDIA_TYPE directly.
+from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
@@ -447,6 +452,19 @@ class PresetCreate(BaseModel):
     slots: list[SlotEntry] = Field(min_length=1, max_length=40)
 
 
+class PresetUpdate(BaseModel):
+    """A rename, a re-timing, or both.
+
+    Every field optional and only what is sent is touched. A rename is the
+    common edit, and requiring the times to be re-sent to perform one would
+    make renaming a way to lose them.
+    """
+
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+    summary: str | None = Field(default=None, max_length=300)
+    slots: list[SlotEntry] | None = Field(default=None, min_length=1, max_length=40)
+
+
 class PageScheduleUpdate(BaseModel):
     page_key: str = Field(min_length=1, max_length=300)
     preset_id: str | None = Field(default=None, max_length=64)
@@ -519,6 +537,51 @@ def create_posting_preset(
     return {
         "preset": preset,
         "presets": posting_slots.preset_payload(workspace_id, session=session),
+    }
+
+
+@router.patch("/slots/presets/{preset_id}")
+def update_posting_preset(
+    workspace_id: str,
+    preset_id: str,
+    body: PresetUpdate,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Rename a saved preset or change its times.
+
+    The pages assigned to it move with it, because that is what a preset is
+    for: three pages posting on one rhythm should all follow when the rhythm
+    changes, and reassigning them by hand afterwards is the work a preset
+    exists to avoid.
+
+    Built-ins are refused, as they are for a delete: they belong to the
+    catalogue rather than to this workspace, and an edit would be undone by
+    the next read.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        preset = posting_slots.update_preset(
+            workspace_id,
+            preset_id,
+            session=session,
+            label=body.label,
+            summary=body.summary,
+            entries=(
+                [entry.model_dump() for entry in body.slots]
+                if body.slots is not None else None
+            ),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {
+        "preset": preset,
+        "presets": posting_slots.preset_payload(workspace_id, session=session),
+        # Unchanged by this, and returned anyway: the caller refreshes both
+        # together, and leaving one out invites it being read from a stale copy.
+        "page_assignments": posting_slots.page_assignments(workspace_id, session=session),
     }
 
 
@@ -626,12 +689,6 @@ def publishing_integrations(
 #: nothing. Reading the bytes with `fetch` did not help: the response on the
 #: wire is what is watched, not what the page does with it afterwards.
 #:
-#: The caller asks for this deliberately and puts the real type back on the blob
-#: it builds, so the player still gets a `video/mp4` to play - it just never
-#: travels as one.
-OPAQUE_MEDIA_TYPE = "application/x-trendrelay-preview"
-
-
 @router.get("/media/preview")
 def preview_publishing_media(
     workspace_id: str,
@@ -663,7 +720,9 @@ def preview_publishing_media(
     if thumbnail:
         kind, _encoding = mimetypes.guess_type(resolved.name)
         if kind and kind.startswith("image/"):
-            return FileResponse(resolved, media_type=kind)
+            # Opaque applies to stills too: a picture-configured grabber takes
+            # an honest image/* exactly as a video one takes video/*.
+            return FileResponse(resolved, media_type=OPAQUE_MEDIA_TYPE if opaque else kind)
 
         known_paths = {path, str(resolved)}
         asset_id = session.scalar(
@@ -688,7 +747,7 @@ def preview_publishing_media(
         ) if asset_id else None
         if not still or not Path(still).is_file():
             raise HTTPException(status_code=404, detail="No thumbnail is available for this media.")
-        return FileResponse(Path(still), media_type="image/jpeg")
+        return FileResponse(Path(still), media_type=OPAQUE_MEDIA_TYPE if opaque else "image/jpeg")
     # Looked up rather than assembled from the suffix. Spelling the type by
     # hand turned `.jpg` into `image/jpg`, which is not a registered type - so
     # a browser handed one stops trying to display it and downloads the file
