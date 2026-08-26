@@ -48,6 +48,14 @@ from trendrelay_api.campaign_offer_matcher import tokens
 #: it usually says nothing about the subject at all.
 WEIGHTS = {
     "hashtags": 4.0,
+    # What the clip is a video of, as the vision reading tags it. Below the
+    # hashtags because those are the author saying what they made, and above
+    # the caption because the caption is as often a line of dialogue.
+    #
+    # It earns its place on this library in particular: the captions here are
+    # Chinese and this reading's vocabulary is English, so the two rarely score
+    # the same clip and a clip with no useful caption can still be read.
+    "what it shows": 3.0,
     "caption": 2.5,
     "title": 1.0,
     "on-screen text": 2.0,
@@ -145,7 +153,11 @@ def clip_evidence(session: Session, workspace_id: str, asset_id: str) -> dict[st
     # The readings when the clip has them. Reviewed before machine, and one of
     # each kind: a correction is what is actually in the clip, and counting
     # both would count the same words twice.
-    for kind, label in (("ocr", "on-screen text"), ("speech", "spoken words")):
+    for kind, label in (
+        ("vision", "what it shows"),
+        ("ocr", "on-screen text"),
+        ("speech", "spoken words"),
+    ):
         found = session.scalars(
             select(MediaTranscript)
             .where(

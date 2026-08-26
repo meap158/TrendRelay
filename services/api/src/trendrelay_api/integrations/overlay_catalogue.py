@@ -1746,7 +1746,8 @@ OBJECT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "爱心", "喜欢", "心动", "甜", "宠粉",
     ),
     "lightning": (
-        "energy", "power", "fast", "shock", "strong", "workout", "intense",
+        "energy", "power", "fast", "shock", "strong", "workout", "exercising",
+        "intense",
         "闪电", "力量", "爆发", "健身", "速度", "冲",
     ),
     "sparkles": (
@@ -1817,7 +1818,8 @@ OBJECT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "尴尬", "无语", "汗", "二次元", "紧张",
     ),
     "sweatband": (
-        "gym", "workout", "training", "fitness", "run", "sport", "sweat", "abs",
+        "gym", "workout", "training", "exercising", "fitness", "run", "sport",
+        "sports", "sweat", "abs",
         "健身", "运动", "训练", "腹肌", "马甲线", "跑步", "撸铁",
     ),
     "santa_hat": (
@@ -1829,7 +1831,8 @@ OBJECT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "火", "厉害", "牛", "绝了", "燃", "热",
     ),
     "music_notes": (
-        "music", "dance", "song", "sing", "beat", "rhythm", "sound", "audio",
+        "music", "dance", "dancing", "song", "sing", "singing", "concert",
+        "stage", "beat", "rhythm", "sound", "audio",
         "音乐", "跳舞", "唱歌", "歌", "节奏", "舞蹈", "卡点",
     ),
     "bucket_hat_3d": (
@@ -1842,10 +1845,12 @@ OBJECT_KEYWORDS: dict[str, tuple[str, ...]] = {
     ),
     "headphones_3d": (
         "music", "dj", "listen", "podcast", "gaming", "audio", "beat", "studio",
+        "headphones", "earbuds", "dancing",
         "耳机", "音乐", "听歌", "游戏", "电台", "节奏",
     ),
     "visor_3d": (
-        "gym", "training", "run", "tennis", "golf", "sport", "summer", "fitness",
+        "gym", "training", "exercising", "run", "tennis", "golf", "sport",
+        "sports", "summer", "fitness",
         "运动", "健身", "训练", "跑步", "网球", "遮阳",
     ),
     "cowboy_hat_3d": (

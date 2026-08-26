@@ -304,3 +304,80 @@ def test_a_suggestion_says_whether_the_object_turns_with_the_head(session) -> No
 
     assert by_id["crown_3d"].dimensional is True
     assert by_id["crown"].dimensional is False
+
+
+# --- what the clip shows --------------------------------------------------------
+#
+# The third reading, added after this matcher was written and unused by it until
+# now. It answers a question neither of the others does - not what the clip says
+# but what it is a video of - which is close to what somebody choosing a face
+# prop is actually asking.
+#
+# It also happens to be the reading that works on this library. The captions
+# here are Chinese and the vision vocabulary is English, so the two rarely score
+# the same clip, and a clip whose caption says nothing useful can still be read.
+
+
+def shown(session, text: str, *, title: str = "seen") -> str:
+    """A clip with a vision reading and nothing else written about it."""
+    asset = MediaAsset(
+        workspace_id=WORKSPACE, title="", media_kind="video", source_type="douyin",
+        original_path=rf"S:\media\{title}.mp4", original_sha256=(title * 64)[:64],
+        mime_type="video/mp4", size_bytes=10, created_by="owner",
+    )
+    session.add(asset)
+    session.flush()
+    session.add(MediaTranscript(
+        workspace_id=WORKSPACE, asset_id=asset.id, kind="vision", language="en",
+        provider="clip-vit-b-32", status="machine", text=text, segments=[],
+        created_by="owner",
+    ))
+    session.commit()
+    return asset.id
+
+
+def test_a_clip_with_only_a_vision_reading_still_gets_a_shortlist(session) -> None:
+    asset = shown(session, "a person exercising, a gym, sports equipment")
+
+    picks, how = suggest(session, WORKSPACE, asset)
+
+    assert "what it shows" in how["read_from"]
+    assert "sweatband" in names(picks)
+
+
+def test_what_a_clip_shows_reaches_objects_a_chinese_caption_cannot(session) -> None:
+    """The two readings are in different languages, which is the point.
+
+    The vocabulary is English whatever the clip speaks, so on this library it
+    is often the only thing an English keyword can match at all.
+    """
+    for text, wanted in (
+        ("a person dancing, a stage or concert", "music_notes"),
+        ("a cat, a living room", "cat_ears"),
+        ("a person applying makeup, makeup or cosmetics", "star_face"),
+    ):
+        asset = shown(session, text, title=wanted)
+        picks, _how = suggest(session, WORKSPACE, asset)
+        assert wanted in names(picks), f"{text} did not reach {wanted}"
+
+
+def test_a_clip_showing_nothing_a_prop_suits_still_offers_nothing(session) -> None:
+    """Most of the vocabulary describes things no face prop belongs on, and
+    that has to stay true once the reading is being scored - a bedroom is not
+    a reason to put a hat on somebody."""
+    asset = shown(session, "a bedroom, bedding or pillows, a slideshow of photos")
+
+    picks, _how = suggest(session, WORKSPACE, asset)
+
+    assert picks == []
+
+
+def test_what_a_clip_shows_outweighs_its_caption_but_not_its_hashtags(session) -> None:
+    """A hashtag is the author saying what they made; the reading is a machine
+    saying what it sees. The author wins, and both beat a caption that is as
+    often a line of dialogue."""
+    assert (
+        overlay_match.WEIGHTS["hashtags"]
+        > overlay_match.WEIGHTS["what it shows"]
+        > overlay_match.WEIGHTS["caption"]
+    )
