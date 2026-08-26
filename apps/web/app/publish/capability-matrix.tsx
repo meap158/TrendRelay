@@ -299,12 +299,12 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
             <tr>
               <th scope="col">Engine</th>
               <th scope="col" className="numeric">Networks</th>
+              <th scope="col">Media</th>
               {/* The free tier rather than the whole ladder: it is the row
                   somebody is on while deciding, and the only one whose numbers
                   change what they can do today. The rest is a click away on
                   the engine's own page, linked below. */}
               <th scope="col">Free plan</th>
-              <th scope="col">Media</th>
               <th scope="col">Approval</th>
               <th scope="col">Notes</th>
             </tr>
