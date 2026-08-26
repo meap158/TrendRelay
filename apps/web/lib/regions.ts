@@ -7,34 +7,50 @@
  * news sources all take as their geo - and the set matches the languages the
  * news source knows, so every country here returns news in its own language.
  */
-export const REGIONS: ReadonlyArray<readonly [string, string]> = [
-  ["US", "United States"],
-  ["GB", "United Kingdom"],
-  ["CA", "Canada"],
+/**
+ * Alphabetical by name, because that is the only order a reader can predict.
+ *
+ * The list used to run roughly by market size, which is an order the person
+ * scanning it cannot see: with twenty-six countries in a scrolling menu,
+ * "where is Malaysia" has no answer except reading all of them. Sorted, the
+ * menu is searchable by eye and the search box is a shortcut rather than the
+ * only way through.
+ *
+ * Sorted here rather than only written in order, so appending a country puts
+ * it in the right place without anyone having to notice that it should.
+ */
+const CATALOG: ReadonlyArray<readonly [string, string]> = [
   ["AU", "Australia"],
-  ["IN", "India"],
-  ["SG", "Singapore"],
-  ["PH", "Philippines"],
-  ["VN", "Vietnam"],
-  ["TH", "Thailand"],
-  ["ID", "Indonesia"],
-  ["MY", "Malaysia"],
-  ["JP", "Japan"],
-  ["KR", "South Korea"],
+  ["BR", "Brazil"],
+  ["CA", "Canada"],
   ["CN", "China"],
-  ["TW", "Taiwan"],
   ["FR", "France"],
   ["DE", "Germany"],
-  ["ES", "Spain"],
+  ["IN", "India"],
+  ["ID", "Indonesia"],
   ["IT", "Italy"],
-  ["BR", "Brazil"],
+  ["JP", "Japan"],
+  ["MY", "Malaysia"],
   ["MX", "Mexico"],
+  ["NG", "Nigeria"],
+  ["PH", "Philippines"],
   ["RU", "Russia"],
   ["SA", "Saudi Arabia"],
-  ["AE", "United Arab Emirates"],
-  ["NG", "Nigeria"],
+  ["SG", "Singapore"],
   ["ZA", "South Africa"],
+  ["KR", "South Korea"],
+  ["ES", "Spain"],
+  ["TW", "Taiwan"],
+  ["TH", "Thailand"],
+  ["AE", "United Arab Emirates"],
+  ["GB", "United Kingdom"],
+  ["US", "United States"],
+  ["VN", "Vietnam"],
 ];
+
+export const REGIONS: ReadonlyArray<readonly [string, string]> = [...CATALOG].sort(
+  ([, left], [, right]) => left.localeCompare(right),
+);
 
 export const REGION_CODES: readonly string[] = REGIONS.map(([code]) => code);
 
