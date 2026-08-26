@@ -44,6 +44,11 @@ WEIGHTS = {
     "title": 1.5,
     "spoken words": 4.0,
     "on-screen text": 3.5,
+    # What the clip is a video of. Level with the spoken words: for a post
+    # selling something, what is on screen is at least as good an answer as
+    # what is said about it - a clip that shows a handbag is selling a handbag
+    # whether or not anybody names it.
+    "what it shows": 4.0,
     "creative analysis": 4.0,
 }
 
@@ -92,7 +97,11 @@ def draft_evidence(
         # Reviewed before machine, and only one of each kind: a correction is
         # what is actually in the clip, and ranking against both would count
         # the same words twice.
-        for kind, label in (("speech", "spoken words"), ("ocr", "on-screen text")):
+        for kind, label in (
+            ("speech", "spoken words"),
+            ("ocr", "on-screen text"),
+            ("vision", "what it shows"),
+        ):
             found = session.scalars(
                 select(MediaTranscript).where(
                     MediaTranscript.asset_id == asset.id,

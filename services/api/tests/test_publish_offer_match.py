@@ -237,3 +237,41 @@ def test_tokens_still_skip_the_words_that_carry_no_meaning(session) -> None:
     """Unchanged, and worth pinning beside the new weighting."""
     assert "the" not in tokens("The best product")
     assert "fan" in tokens("The desk fan")
+
+
+# --- what the clip shows ---------------------------------------------------------
+
+
+def test_what_the_clip_shows_is_matched_on(session) -> None:
+    """The third reading answers what a clip is a video of.
+
+    For a post selling something that is at least as good an answer as what is
+    said about it: a clip that shows a handbag is selling a handbag whether or
+    not anybody names one out loud.
+    """
+    offer(session, "bag", "Leather handbag")
+    offer(session, "fan", "Desk fan")
+    path = clip(session)
+    session.add(MediaTranscript(
+        workspace_id=WORKSPACE, asset_id=session.query(MediaAsset).one().id,
+        kind="vision", language="en", provider="clip-vit-b-32", status="machine",
+        text="a handbag or purse, a shop interior, a person trying on clothes",
+        segments=[], created_by="owner",
+    ))
+    session.commit()
+
+    ranked, read = match_for_draft(session, WORKSPACE, media_path=path)
+
+    assert "what it shows" in read["read_from"]
+    assert ranked[0].product_name == "Leather handbag"
+
+
+def test_a_clip_with_no_vision_reading_is_unchanged(session) -> None:
+    """Adding a reading must not change what a clip without one matches."""
+    offer(session, "fan", "Desk fan")
+    path = clip(session, spoken="This little desk fan travels anywhere")
+
+    ranked, read = match_for_draft(session, WORKSPACE, media_path=path)
+
+    assert "what it shows" not in read["read_from"]
+    assert ranked[0].product_name == "Desk fan"

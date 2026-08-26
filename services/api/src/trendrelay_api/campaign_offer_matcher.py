@@ -209,15 +209,32 @@ def campaign_evidence(
             _append(evidence, f"{prefix} on-screen hook", analysis.text_hook, 2.0)
             _append(evidence, f"{prefix} call to action", analysis.call_to_action, 2.0)
             _append(evidence, f"{prefix} analyst notes", analysis.analyst_notes, 2.0)
-        transcripts = session.scalars(
+        # The best row of each kind, rather than the best two rows.
+        #
+        # This took the top two overall, which was right while a clip had two
+        # readings to give. There are three now - speech, on-screen text, and
+        # what the clip shows - and a clip can carry more than one row of a
+        # kind, so two-overall silently dropped a whole reading and which one
+        # depended on the order they happened to be written in. One asset in
+        # this library already has three rows.
+        #
+        # Bounded by the number of kinds rather than by a number: reviewed
+        # beats machine, newest beats older, and each kind is counted once so
+        # two revisions of the same speech cannot crowd out the rest.
+        seen_kinds: set[str] = set()
+        transcripts = []
+        for transcript in session.scalars(
             select(MediaTranscript)
             .where(MediaTranscript.asset_id == asset.id)
             .order_by(
                 (MediaTranscript.status == "reviewed").desc(),
                 MediaTranscript.created_at.desc(),
             )
-            .limit(2)
-        ).all()
+        ).all():
+            if transcript.kind in seen_kinds:
+                continue
+            seen_kinds.add(transcript.kind)
+            transcripts.append(transcript)
         for transcript in transcripts:
             _append(
                 evidence,
