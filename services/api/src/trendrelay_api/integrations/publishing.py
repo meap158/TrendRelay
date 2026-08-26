@@ -2475,9 +2475,15 @@ def _buffer_headers() -> dict[str, str]:
 #: request asking.
 #:
 #: `RateLimit-Policy` is kept beside it because the two answer different
-#: questions: `RateLimit` is the window about to bite, which is the same 100 on
-#: every Buffer plan, while the policy lists every window - and the 30-day one
-#: is the only figure that differs between Free, Essentials and Team.
+#: questions: `RateLimit` is the window about to bite, while the policy names
+#: the windows - and the 30-day one is the figure that differs between Free,
+#: Essentials and Team.
+#:
+#: Which window answers is not fixed. On one key both headers read
+#: `"250-in-1day"` while the daily allowance was spent, and `"3000-in-30days"`
+#: an hour later once it had reset. So a reader must take the remaining count
+#: from whatever window arrived rather than assuming a particular one, and must
+#: not treat a number sized for one window as though it described the other.
 _BUFFER_RATE_LIMIT: dict[str, str] = {}
 
 
@@ -2768,13 +2774,18 @@ BUFFER_METRIC_NAMES: dict[str, tuple[str, ...]] = {
     "watch_seconds": ("totalTimeWatched",),
 }
 
-#: Requests held back from measurement, out of Buffer's daily allowance.
+#: Requests held back from measurement, out of Buffer's allowance.
 #:
-#: Buffer grants 250 requests a day for the whole key - publishing, channel
-#: listing and measurement out of one pot - and measurement is the only one of
-#: the three that can wait. A campaign that spends its last requests reading
-#: yesterday's likes and then cannot publish today has made the wrong trade, so
-#: the reader stops while there is still room to post.
+#: One pot covers publishing, channel listing and measurement, and measurement
+#: is the only one of the three that can wait. A campaign that spends its last
+#: requests reading yesterday's likes and then cannot publish today has made
+#: the wrong trade, so the reader stops while there is still room to post.
+#:
+#: A floor on whatever window Buffer is currently reporting, rather than a
+#: fraction of a particular allowance - the header names 250-in-1day or
+#: 3000-in-30days depending on which is nearest exhaustion, and a reserve
+#: calculated against one of them would be wrong for the other. Forty is a
+#: day's posting on any of them.
 #:
 #: An unread window stays due and is retried on the next pass, which is the
 #: behaviour the collector already relies on for an engine that is briefly
@@ -2786,12 +2797,18 @@ BUFFER_MINUTES_TO_SECONDS = 60
 
 
 def _buffer_requests_left() -> int | None:
-    """How much of Buffer's daily allowance is left, if it has said.
+    """How much of Buffer's allowance is left, if it has said.
 
     Read from the `RateLimit` header of whatever call happened most recently -
-    `"250-in-1day"; r=0; t=34394` - so knowing the budget costs nothing. None
-    when no call has been made yet this process, which is not the same as zero
-    and must not be treated as empty.
+    `"250-in-1day"; r=0; t=34394`, or `"3000-in-30days"; r=875` - so knowing
+    the budget costs nothing. Which window it names varies with which is
+    nearest exhaustion, and the count is taken from whichever arrived rather
+    than from an assumed one.
+
+    None when no call has been made yet this process, which is not the same as
+    zero and must not be treated as empty. It costs one request to find out,
+    and that request is the first read of a pass rather than every read: after
+    it, the header is known and the reserve applies to the rest.
     """
     header = buffer_rate_limit_header()
     if not header:

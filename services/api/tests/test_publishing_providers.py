@@ -2760,6 +2760,16 @@ def test_buffer_reads_the_budget_out_of_the_header_it_already_has(monkeypatch) -
 
     assert publishing._buffer_requests_left() == 137
 
+    # The window that answers is not fixed: the same key reported the daily
+    # allowance while it was spent and the 30-day one an hour later. The count
+    # is taken from whichever arrived, so a reserve sized for one window is not
+    # silently compared against the other.
+    monkeypatch.setattr(
+        publishing, "buffer_rate_limit_header", lambda: '"3000-in-30days"; r=875; t=792634'
+    )
+
+    assert publishing._buffer_requests_left() == 875
+
     monkeypatch.setattr(publishing, "buffer_rate_limit_header", lambda: None)
 
     # Not zero. Nothing has been asked yet this process, which is not the same
