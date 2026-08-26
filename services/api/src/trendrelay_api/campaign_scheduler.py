@@ -99,6 +99,9 @@ class ScheduledPost:
     first_comment: str | None
     placement: str
     reason: str
+    #: The queue item's per-account choice, falling back to the account's
+    #: campaign default before the execution is frozen.
+    post_type: str | None = None
     thread: tuple[str, ...] = ()
     offer_ids: tuple[str, ...] = ()
     #: A carousel's pictures, in order. Empty for a video post; `video_path` is
@@ -106,12 +109,12 @@ class ScheduledPost:
     #: composed and what is published must not drift apart. Defaulted, because
     #: every post that existed before carousels is a video.
     image_paths: tuple[str, ...] = ()
-    product_names: tuple[str, ...] = ()
-    #: The matcher's confidence per attached offer, in the same order. What the
-    #: authority rules read: a low-confidence product never posts unattended.
     #: The Threads topic, already gated by `topic_deliverable` at planning so
     #: an execution never carries a tag its engine cannot attach.
     topic: str | None = None
+    product_names: tuple[str, ...] = ()
+    #: The matcher's confidence per attached offer, in the same order. What the
+    #: authority rules read: a low-confidence product never posts unattended.
     offer_confidences: tuple[str, ...] = ()
     #: How those offers were chosen, from the matcher's own strategy. Carried
     #: so the approval inbox can say whether a weak product was pinned by hand
@@ -662,10 +665,10 @@ def plan_campaign(
     #: Unwritten posts met during the run, by id, so each is counted once
     #: however many slots considered it. Summarised into a single note below.
     unwritten: dict[str, str] = {}
+    awaiting_media: dict[str, str] = {}
     counter = autopilot.posts_scheduled
     reserved: dict[tuple[str, str], datetime] = {}
     planned_per_day: dict[tuple[str, date], int] = {}
-    awaiting_media: dict[str, str] = {}
     # The same queue item can fill several slots in one horizon. Its content,
     # campaign context and offer catalogue do not change while this plan is
     # being assembled, so score it once and reuse the explainable result.
@@ -822,9 +825,6 @@ def plan_campaign(
                         candidate.id, _short_source_name(candidate.title or candidate.id)
                     )
                     continue
-                if candidate.id not in frozen_cache:
-                    frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
-                if candidate.image_paths:
                 if not candidate.video_path and not candidate.image_paths:
                     # The mirror case: copy written, media still to come. The
                     # same treatment for the same reason - a slot held for it
@@ -833,6 +833,9 @@ def plan_campaign(
                         candidate.id, _short_source_name(candidate.title or candidate.id)
                     )
                     continue
+                if candidate.id not in frozen_cache:
+                    frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
+                if candidate.image_paths:
                     # Asked the same question a video is asked, and for the same
                     # reason. A carousel used to be taken by any destination at all:
                     # only Zernio and WoopSocial post one, only to TikTok, so a
@@ -1014,9 +1017,6 @@ def plan_campaign(
                 title=item.title or _asset_title(session, item),
                 caption=post.caption,
                 first_comment=post.first_comment,
-                placement=post.placement.placement,
-                reason=(
-                    f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
                 # Only where the engine can attach it - see `topic_deliverable`
                 # - so the execution record never promises a tag that cannot
                 # be delivered.
@@ -1027,7 +1027,13 @@ def plan_campaign(
                     )
                     else None
                 ),
+                placement=post.placement.placement,
+                reason=(
+                    f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
                     f"{post.placement.reason} Product match: {match_reason}"
+                ),
+                post_type=(item.post_type_overrides or {}).get(
+                    destination.id, destination.post_type
                 ),
                 thread=post.thread,
                 offer_ids=tuple(match.offer_id for match in linked_matches),
@@ -1058,12 +1064,6 @@ def plan_campaign(
             f"{len(names)} post(s) still need copy written and are skipped "
             f"until it is: {shown}" + (f", and {rest} more." if rest > 0 else ".")
         )
-
-    return scheduled, _explain_run(scheduled, notes, len(upcoming))
-
-
-def _why_nothing_eligible(
-    queue: list[CampaignQueueItem],
     if awaiting_media:
         names = list(awaiting_media.values())
         shown = ", ".join(names[:2])
@@ -1072,6 +1072,12 @@ def _why_nothing_eligible(
             f"{len(names)} post(s) still need media attached and are skipped "
             f"until it is: {shown}" + (f", and {rest} more." if rest > 0 else ".")
         )
+
+    return scheduled, _explain_run(scheduled, notes, len(upcoming))
+
+
+def _why_nothing_eligible(
+    queue: list[CampaignQueueItem],
     approved: list[CampaignQueueItem],
     *,
     rested: list[CampaignQueueItem],

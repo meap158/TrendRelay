@@ -1178,6 +1178,52 @@ def test_a_usable_post_type_is_still_accepted(workspace) -> None:
     assert response.json()["destination"]["post_type"] == "story"
 
 
+def test_account_default_and_post_override_are_separate_settings(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    created = request("POST", f"{base}/destinations", json={
+        "provider": "buffer", "integration_id": "acct-format",
+        "platform": "instagram", "label": "Brand account",
+    })
+    assert created.status_code == 201, created.text
+    destination = created.json()["destination"]
+    assert destination["post_type"] is None
+    assert destination["resolved_post_type"] == "reel"
+    assert [kind["id"] for kind in destination["post_types"]] == [
+        "reel", "story", "post",
+    ]
+
+    changed = request(
+        "POST", f"{base}/destinations/{destination['id']}/post-type",
+        json={"post_type": "story"},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["destination"]["post_type"] == "story"
+
+    queued = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4",
+        "body": "Real copy.",
+        "post_type_overrides": {destination["id"]: "post"},
+    })
+    assert queued.status_code == 201, queued.text
+    assert queued.json()["item"]["post_type_overrides"] == {
+        destination["id"]: "post",
+    }
+
+
+def test_a_post_format_override_must_name_its_campaign_destination(workspace) -> None:
+    campaign_id = campaign(workspace)
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": r"S:\media\clip.mp4", "body": "Real copy.",
+            "post_type_overrides": {"not-on-this-campaign": "story"},
+        },
+    )
+    assert response.status_code == 422
+    assert "not on this campaign" in response.json()["detail"]
+
+
 def test_a_destination_names_an_engine_that_exists(workspace) -> None:
     campaign_id = campaign(workspace)
     response = request(

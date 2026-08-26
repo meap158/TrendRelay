@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from trendrelay_api.campaign_autopilot import (
     profile_url,
     resolve_placement,
 )
+from trendrelay_api.campaign_runner import held_posts
 from trendrelay_api.campaign_scheduler import campaign_status, plan_campaign
 from trendrelay_api.foundation import (
     AuthenticatedUser,
@@ -45,13 +46,13 @@ from trendrelay_api.integrations.publishing import (
     PROVIDERS,
     cached_identity,
     carousel_fits_destination,
+    post_types_for,
     resolve_post_type,
     resolve_provider,
 )
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
-from trendrelay_api.campaign_runner import held_posts
 from trendrelay_api.publication_models import PublicationExecution
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -192,6 +193,13 @@ class DestinationSchedule(BaseModel):
     posting_preset_id: str | None = Field(default=None, max_length=64)
 
 
+class DestinationPostType(BaseModel):
+    #: Null means the network's recommended format. Stored as null rather than
+    #: copying today's first option, so a provider capability update can improve
+    #: the default without rewriting every campaign.
+    post_type: str | None = Field(default=None, max_length=24)
+
+
 #: A caption is required by every network, so a package with none cannot post -
 #: and refusing to accept one at all would mean picking media and writing copy
 #: had to happen in the same sitting. Picking can happen now and writing later;
@@ -222,6 +230,13 @@ class QueueItemCreate(BaseModel):
     #: before anybody has written its copy; `PLACEHOLDER_BODY` stands in.
     body: str = Field(default="", max_length=4000)
 
+    #: A post may arrive before its media does - an assistant drafting copy
+    #: first and attaching the clip later mirrors media arriving before copy,
+    #: which the queue has always allowed. Explicit rather than inferred, so
+    #: an ordinary caller who forgot the media is still refused; a media-less
+    #: post is skipped by the scheduler with a note until media is attached.
+    media_later: bool = False
+
     @model_validator(mode="after")
     def one_kind_of_media(self) -> QueueItemCreate:
         video = self.video_path.strip()
@@ -230,19 +245,15 @@ class QueueItemCreate(BaseModel):
             raise ValueError("A package is either a video or pictures, not both.")
         if not video and not images and not self.media_later:
             raise ValueError("A package needs a video or at least one picture.")
-    #: A post may arrive before its media does - an assistant drafting copy
-    #: first and attaching the clip later mirrors media arriving before copy,
-    #: which the queue has always allowed. Explicit rather than inferred, so
-    #: an ordinary caller who forgot the media is still refused; a media-less
-    #: post is skipped by the scheduler with a note until media is attached.
-    media_later: bool = False
-
         return self
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
     hashtags: list[str] = Field(default_factory=list, max_length=30)
     first_comment: str | None = Field(default=None, max_length=2000)
     thread: list[str] = Field(default_factory=list, max_length=24)
+    #: Threads' topic tag, validated by the same rule Publish's request uses
+    #: so a campaign cannot store a topic the network will bounce.
+    topic: str | None = Field(default=None, max_length=60)
     offer_ids: list[str] = Field(default_factory=list, max_length=5)
     #: Bring the post's products onto the campaign if they are not there yet.
     #:
@@ -251,22 +262,11 @@ class QueueItemCreate(BaseModel):
     #: products it has, and a post pinned to a stray offer is refused.
     #:
     #: A post arriving whole is the case that rule reads wrong. Somebody who has
-    #: Threads' topic tag, validated by the same rule Publish's request uses
-    #: so a campaign cannot store a topic the network will bounce.
-    topic: str | None = Field(default=None, max_length=60)
     #: written a post in Publish around a particular product and then files it
     #: into a campaign has already chosen; refusing it and asking them to go and
     #: tag the product first is bookkeeping, not a decision. So the caller that
     #: means it says so, and the campaign learns the product from the post.
     carry_offers: bool = False
-
-
-class QueueItemUpdate(BaseModel):
-    state: str | None = Field(default=None, pattern=r"^(draft|approved|paused|retired)$")
-    title: str | None = Field(default=None, max_length=200)
-    body: str | None = Field(default=None, min_length=1, max_length=4000)
-    hashtags: list[str] | None = Field(default=None, max_length=30)
-    first_comment: str | None = Field(default=None, max_length=2000)
     post_type_overrides: dict[str, str] = Field(default_factory=dict, max_length=50)
 
     @field_validator("topic")
@@ -275,11 +275,10 @@ class QueueItemUpdate(BaseModel):
         from trendrelay_api.integrations.publishing import clean_topic
 
         return clean_topic(value)
-    thread: list[str] | None = Field(default=None, max_length=24)
-    offer_ids: list[str] | None = Field(default=None, max_length=5)
-    #: This post's own wording for what the campaign otherwise supplies. Sent
-    #: empty or null to go back to the campaign's - never stored as an empty
-    #: disclosure, which is the one value that must not reach a post.
+
+
+class QueueItemUpdate(BaseModel):
+    state: str | None = Field(default=None, pattern=r"^(draft|approved|paused|retired)$")
     #: Replacement media, in the same two shapes `QueueItemCreate` takes: a
     #: video or pictures, never both. Absent fields leave the media alone -
     #: which is what every existing caller sends - and a change replaces the
@@ -288,6 +287,7 @@ class QueueItemUpdate(BaseModel):
     #: names: a swap that keeps the old asset id would freeze the wrong clip.
     video_path: str | None = Field(default=None, max_length=1200)
     image_paths: list[str] | None = Field(default=None, max_length=MAX_CAROUSEL_IMAGES)
+    asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     hashtags: list[str] | None = Field(default=None, max_length=30)
@@ -298,8 +298,8 @@ class QueueItemUpdate(BaseModel):
     #: This post's own wording for what the campaign otherwise supplies. Sent
     #: empty or null to go back to the campaign's - never stored as an empty
     #: disclosure, which is the one value that must not reach a post.
-    asset_id: str | None = Field(default=None, max_length=64)
     disclosure: str | None = Field(default=None, max_length=300)
+    bio_hint: str | None = Field(default=None, max_length=120)
     post_type_overrides: dict[str, str] | None = Field(default=None, max_length=50)
 
     @field_validator("topic")
@@ -308,7 +308,6 @@ class QueueItemUpdate(BaseModel):
         from trendrelay_api.integrations.publishing import clean_topic
 
         return clean_topic(value)
-    bio_hint: str | None = Field(default=None, max_length=120)
 
 
 def _campaign(session: Session, workspace_id: str, campaign_id: str) -> Campaign:
@@ -369,8 +368,8 @@ def _destination_view(
 ) -> dict[str, Any]:
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
-        topic_deliverable,
         limits_for,
+        topic_deliverable,
     )
 
     placement = resolve_placement(
@@ -392,6 +391,12 @@ def _destination_view(
         override_preset_id=item.posting_preset_id,
         campaign_preset_id=campaign_preset_id,
     )
+    engine = resolve_provider(item.provider)
+    post_types = [
+        {"id": kind.id, "label": kind.label, "help": kind.help}
+        for kind in post_types_for(item.platform)
+        if kind.id != "photo" or item.platform in engine.photo_carousel_platforms
+    ]
     return {
         "id": item.id,
         "provider": item.provider,
@@ -412,14 +417,14 @@ def _destination_view(
         # here, so the package editor can show at a glance which destinations
         # a written comment will actually reach.
         "follow_up_deliverable": first_comment_deliverable(item.provider, item.platform),
+        # Whether a Threads topic can be attached here - Threads only, and only
+        # through an engine whose schema declares the field.
+        "topic_deliverable": topic_deliverable(item.provider, item.platform),
         # Whether this network has a title at all, read from the limits table
         # that decides it rather than from a second list: YouTube, Reddit and
         # Pinterest have one, and asking for a title on a campaign that posts
         # to none of them is asking for something nobody will ever see.
         "takes_title": limits_for(item.platform).title is not None,
-        # Whether a Threads topic can be attached here - Threads only, and only
-        # through an engine whose schema declares the field.
-        "topic_deliverable": topic_deliverable(item.provider, item.platform),
         "integration_id": item.integration_id,
         "platform": item.platform,
         "page_key": item.page_key,
@@ -427,6 +432,8 @@ def _destination_view(
         "posting_schedule": schedule,
         "label": item.label,
         "post_type": item.post_type,
+        "resolved_post_type": resolve_post_type(item.platform, item.post_type).id,
+        "post_types": post_types,
         "enabled": item.enabled,
         "last_posted_at": item.last_posted_at,
         # The stored setting and the resolved outcome, separately: 'auto' is a
@@ -445,6 +452,7 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "asset_id": item.asset_id,
         "video_path": item.video_path,
         "image_paths": list(item.image_paths or []),
+        "post_type_overrides": dict(item.post_type_overrides or {}),
         # So the interface can mark a package that still needs writing rather
         # than showing the placeholder as though somebody meant it.
         "needs_copy": item.body == PLACEHOLDER_BODY,
@@ -453,6 +461,7 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "hashtags": item.hashtags,
         "first_comment": item.first_comment,
         "thread": item.thread,
+        "topic": item.topic,
         # Null where this post uses the campaign's wording, so the editor can
         # show the campaign's text as the default rather than as an edit
         # somebody made.
@@ -461,11 +470,71 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "offer_ids": item.offer_ids,
         "offer_match": item.offer_match,
         "state": item.state,
-        "topic": item.topic,
         "position": item.position,
         "times_posted": item.times_posted,
         "last_posted_at": item.last_posted_at,
     }
+
+
+def _validated_post_type_overrides(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    requested: dict[str, str],
+    *,
+    has_images: bool,
+) -> dict[str, str]:
+    """Validate sparse per-post formats against this campaign's accounts.
+
+    Keys omitted by the caller inherit the account's campaign default. Unknown
+    destinations are refused rather than retained as inert configuration: a
+    misspelled id otherwise looks saved while changing no delivery.
+    """
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.workspace_id == workspace_id,
+        CampaignDestination.campaign_id == campaign_id,
+    )).all()
+    by_id = {item.id: item for item in destinations}
+    validated: dict[str, str] = {}
+    for destination_id, requested_type in requested.items():
+        destination = by_id.get(destination_id)
+        if not destination:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Destination {destination_id!r} is not on this campaign.",
+            )
+        try:
+            kind = resolve_post_type(destination.platform, requested_type)
+            engine = resolve_provider(destination.provider)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if kind.id == "photo" and (
+            not has_images
+            or destination.platform not in engine.photo_carousel_platforms
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{destination.label} cannot publish this post as {kind.label}.",
+            )
+        if has_images:
+            choices = post_types_for(destination.platform)
+            expected = (
+                "photo"
+                if destination.platform in engine.photo_carousel_platforms
+                and any(choice.id == "photo" for choice in choices)
+                else "post" if any(choice.id == "post" for choice in choices)
+                else None
+            )
+            if expected is None or kind.id != expected:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"{destination.label} cannot publish these images as "
+                        f"{kind.label}. Image media decides its compatible format."
+                    ),
+                )
+        validated[destination_id] = kind.id
+    return validated
 
 
 def offer_link_url(session: Session, offer_id: str | None) -> str | None:
@@ -898,6 +967,47 @@ def set_destination_schedule(
     )}
 
 
+@router.post("/{campaign_id}/destinations/{destination_id}/post-type")
+def set_destination_post_type(
+    workspace_id: str,
+    campaign_id: str,
+    destination_id: str,
+    body: DestinationPostType,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Set one account's campaign default format; individual posts may override."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    item = session.scalar(select(CampaignDestination).where(
+        CampaignDestination.id == destination_id,
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.workspace_id == workspace_id,
+    ))
+    if not item:
+        raise HTTPException(status_code=404, detail="Destination not found.")
+    try:
+        kind = resolve_post_type(item.platform, body.post_type)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if kind.id == "photo":
+        raise HTTPException(
+            status_code=422,
+            detail="Photo format is chosen on an image post, not as an account default.",
+        )
+    item.post_type = body.post_type
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.destination_post_type", "campaign_destination", item.id,
+        {"post_type": body.post_type, "resolved_post_type": kind.id},
+    )
+    session.flush()
+    return {"destination": _destination_view(
+        session, item, campaign_preset_id=_campaign_preset_id(session, campaign_id)
+    )}
+
+
 @router.delete("/{campaign_id}/destinations/{destination_id}")
 def remove_destination(
     workspace_id: str,
@@ -916,6 +1026,16 @@ def remove_destination(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Destination not found.")
+    # Remove stale overrides with the account. Leaving them behind makes a
+    # later edit appear to save a format for an account that no longer exists.
+    queue_items = session.scalars(select(CampaignQueueItem).where(
+        CampaignQueueItem.campaign_id == campaign_id,
+        CampaignQueueItem.workspace_id == workspace_id,
+    )).all()
+    for queue_item in queue_items:
+        overrides = dict(queue_item.post_type_overrides or {})
+        if overrides.pop(destination_id, None) is not None:
+            queue_item.post_type_overrides = overrides
     session.delete(item)
     return {"removed": destination_id}
 
@@ -968,6 +1088,10 @@ def create_queue_item(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
         video_path=body.video_path.strip(),
         image_paths=[path.strip() for path in body.image_paths if path.strip()],
+        post_type_overrides=_validated_post_type_overrides(
+            session, workspace_id, campaign_id, body.post_type_overrides,
+            has_images=bool(body.image_paths),
+        ),
         title=body.title,
         # Written later, or by something else, but never empty on the way out:
         # a network refuses a post with no caption at all.
@@ -975,6 +1099,7 @@ def create_queue_item(
         hashtags=[tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()],
         first_comment=(body.first_comment or "").strip() or None,
         thread=[part.strip() for part in body.thread if part.strip()],
+        topic=body.topic,
         offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
         # Ready on arrival, for the operator's own additions. Approval lives
         # where it belongs - the authority dial and its exception inbox, where
@@ -1051,6 +1176,7 @@ def apply_queue_item_edits(
     caller: they can carry an audit event and, for MCP, are refused outright -
     the boundary is that a model may write copy, never approve it.
     """
+    media_changed = _apply_media_change(session, workspace_id, campaign_id, item, body)
     if "title" in body.model_fields_set:
         item.title = (body.title or "").strip() or None
     if body.body is not None:
@@ -1059,6 +1185,9 @@ def apply_queue_item_edits(
         item.hashtags = [tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()]
     if "first_comment" in body.model_fields_set:
         item.first_comment = (body.first_comment or "").strip() or None
+    if "topic" in body.model_fields_set:
+        # Already cleaned by the model's validator; empty came back as None.
+        item.topic = body.topic
     if body.thread is not None:
         item.thread = [part.strip() for part in body.thread if part.strip()]
     # Cleared means "the campaign's", which is why an empty string becomes None
@@ -1068,6 +1197,11 @@ def apply_queue_item_edits(
         item.disclosure = (body.disclosure or "").strip() or None
     if "bio_hint" in body.model_fields_set:
         item.bio_hint = (body.bio_hint or "").strip() or None
+    if "post_type_overrides" in body.model_fields_set:
+        item.post_type_overrides = _validated_post_type_overrides(
+            session, workspace_id, campaign_id, body.post_type_overrides or {},
+            has_images=bool(item.image_paths),
+        )
     if body.offer_ids is not None:
         _require_offer_ids(
             session, workspace_id, body.offer_ids,
@@ -1088,6 +1222,60 @@ def apply_queue_item_edits(
     item.updated_at = datetime.now(UTC)
 
 
+def _apply_media_change(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    item: CampaignQueueItem,
+    body: QueueItemUpdate,
+) -> bool:
+    """Swap the item's media package, when the update carries one.
+
+    The queue froze media by omission - the editor simply had no way to send
+    any - and the remedy that kept the whole clip was re-creating the post and
+    losing its copy, its pins and its place in the rotation. A swap here keeps
+    all of that; what a *planned* execution carries stays frozen exactly as
+    before, because planning resolves and freezes media on its own clock.
+    """
+    if not ({"video_path", "image_paths"} & body.model_fields_set):
+        return False
+    video = (body.video_path or "").strip()
+    images = [path.strip() for path in (body.image_paths or []) if path.strip()]
+    # The same rule the package was created under, restated on the way in:
+    # one kind of media, and never none. An update that names neither is not
+    # "clear the media" - a post with no media is not a post this queue holds.
+    if video and images:
+        raise HTTPException(
+            status_code=422, detail="A package is either a video or pictures, not both."
+        )
+    if not video and not images:
+        raise HTTPException(
+            status_code=422, detail="A package needs a video or at least one picture."
+        )
+    if video == item.video_path and images == list(item.image_paths or []):
+        return False
+    item.video_path = video
+    item.image_paths = images
+    # The identity travels with the media, including to "none": keeping the
+    # old asset id under a raw replacement path would freeze the wrong clip
+    # at planning time.
+    item.asset_id = (body.asset_id or "").strip() or None
+    # Format overrides were chosen against the old package's shape. The ones
+    # the new shape still supports survive; a photo-carousel override on what
+    # is now a video would otherwise wedge every later edit of this post.
+    kept: dict[str, str] = {}
+    for destination_id, requested in (item.post_type_overrides or {}).items():
+        try:
+            kept.update(_validated_post_type_overrides(
+                session, workspace_id, campaign_id,
+                {destination_id: requested}, has_images=bool(images),
+            ))
+        except HTTPException:
+            continue
+    item.post_type_overrides = kept
+    return True
+
+
 def _refresh_item_match(
     session: Session, campaign_id: str, item: CampaignQueueItem
 ) -> None:
@@ -1099,7 +1287,6 @@ def _refresh_item_match(
     rotation that the preview had just spread across twenty rows vanished the
     moment those rows were added: the ranking does not change between items, so
     every one of them showed the same leading product.
-        topic=body.topic,
     """
     from trendrelay_api.campaign_offer_matcher import (
         last_promoted,
@@ -1185,9 +1372,6 @@ def _require_offer_ids(
                     "campaign's products first, here or in Attribution."
                 ),
             )
-    if "topic" in body.model_fields_set:
-        # Already cleaned by the model's validator; empty came back as None.
-        item.topic = body.topic
     # The campaign's own ceiling, refused rather than silently trimmed. The
     # scheduler takes the first N when it posts, so pinning five against a cap
     # of two used to store five and send two, with nothing saying which.
@@ -1198,7 +1382,6 @@ def _require_offer_ids(
                 f"This campaign attaches at most {autopilot.max_products_per_post} "
                 f"product(s) to a post; {len(wanted)} were pinned. Change the "
                 "limit in campaign settings, or pin fewer."
-    media_changed = _apply_media_change(session, workspace_id, campaign_id, item, body)
             ),
         )
 
@@ -1232,60 +1415,6 @@ def draft_offer_recommendations(
     source caption, the hashtags - all hang off the asset, which exists now.
     Reimplementing the scoring against a bare asset would be a second ranking
     to keep in step with the first.
-
-def _apply_media_change(
-    session: Session,
-    workspace_id: str,
-    campaign_id: str,
-    item: CampaignQueueItem,
-    body: QueueItemUpdate,
-) -> bool:
-    """Swap the item's media package, when the update carries one.
-
-    The queue froze media by omission - the editor simply had no way to send
-    any - and the remedy that kept the whole clip was re-creating the post and
-    losing its copy, its pins and its place in the rotation. A swap here keeps
-    all of that; what a *planned* execution carries stays frozen exactly as
-    before, because planning resolves and freezes media on its own clock.
-    """
-    if not ({"video_path", "image_paths"} & body.model_fields_set):
-        return False
-    video = (body.video_path or "").strip()
-    images = [path.strip() for path in (body.image_paths or []) if path.strip()]
-    # The same rule the package was created under, restated on the way in:
-    # one kind of media, and never none. An update that names neither is not
-    # "clear the media" - a post with no media is not a post this queue holds.
-    if video and images:
-        raise HTTPException(
-            status_code=422, detail="A package is either a video or pictures, not both."
-        )
-    if not video and not images:
-        raise HTTPException(
-            status_code=422, detail="A package needs a video or at least one picture."
-        )
-    if video == item.video_path and images == list(item.image_paths or []):
-        return False
-    item.video_path = video
-    item.image_paths = images
-    # The identity travels with the media, including to "none": keeping the
-    # old asset id under a raw replacement path would freeze the wrong clip
-    # at planning time.
-    item.asset_id = (body.asset_id or "").strip() or None
-    # Format overrides were chosen against the old package's shape. The ones
-    # the new shape still supports survive; a photo-carousel override on what
-    # is now a video would otherwise wedge every later edit of this post.
-    kept: dict[str, str] = {}
-    for destination_id, requested in (item.post_type_overrides or {}).items():
-        try:
-            kept.update(_validated_post_type_overrides(
-                session, workspace_id, campaign_id,
-                {destination_id: requested}, has_images=bool(images),
-            ))
-        except HTTPException:
-            continue
-    item.post_type_overrides = kept
-    return True
-
 
     `chosen_matches` rather than the ranking underneath it, so the preview is
     subject to everything the post will be: the campaign's ceiling on products

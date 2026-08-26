@@ -145,6 +145,17 @@ class MediaTranscript(Base):
             "job_id",
             name="unique_media_transcript_job_kind",
         ),
+        # One derived reading per source and language. This used to be a plain
+        # unique on the source alone, which said "a draft is reviewed once" -
+        # true, but it also said a transcript could be translated into exactly
+        # one language, ever. A review is the same language as its source and a
+        # translation is a different one, so the pair is what is actually
+        # unique.
+        UniqueConstraint(
+            "source_transcript_id",
+            "language",
+            name="unique_media_transcript_source_language",
+        ),
         CheckConstraint(
             "kind IN ('speech','ocr','vision')", name="valid_media_transcript_kind"
         ),
@@ -171,8 +182,11 @@ class MediaTranscript(Base):
     job_id: Mapped[str | None] = mapped_column(
         ForeignKey("durable_jobs.id", ondelete="SET NULL"), index=True
     )
+    #: The reading this one was derived from: the machine draft a review
+    #: corrects, or the transcript a translation was made from. Null for a
+    #: first reading of the media itself.
     source_transcript_id: Mapped[str | None] = mapped_column(
-        ForeignKey("media_transcripts.id", ondelete="SET NULL"), unique=True, index=True
+        ForeignKey("media_transcripts.id", ondelete="SET NULL"), index=True
     )
     reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("user_profiles.id"))
     reviewed_at: Mapped[datetime | None]

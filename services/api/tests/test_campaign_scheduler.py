@@ -1006,6 +1006,24 @@ def test_a_destination_with_evidence_is_ranked_and_says_so(session) -> None:
     assert "6 settled conversions over 20 clicks" in posts[0].reason
 
 
+# --- post formats --------------------------------------------------------------
+
+
+def test_a_posts_format_override_wins_over_the_account_default(session) -> None:
+    destination(session, "d-format", "instagram", post_type="reel")
+    slot(session, 12)
+    queue_item(
+        session,
+        "q-format",
+        post_type_overrides={"d-format": "story"},
+    )
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert note
+    assert posts[0].post_type == "story"
+
+
 # --- recording ----------------------------------------------------------------
 
 

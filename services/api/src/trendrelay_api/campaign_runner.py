@@ -129,8 +129,14 @@ def _post_type_for(execution: Any) -> str | None:
         return execution.post_type
     from trendrelay_api.integrations.publishing import post_types_for
 
-    if any(kind.id == "photo" for kind in post_types_for(execution.platform)):
+    choices = post_types_for(execution.platform)
+    if any(kind.id == "photo" for kind in choices):
         return "photo"
+    # Facebook, for example, has no separately named photo format: pictures
+    # ride an ordinary feed post. Do not inherit a Reel/Story video default for
+    # media that cannot be either of those.
+    if any(kind.id == "post" for kind in choices):
+        return "post"
     return execution.post_type
 
 
@@ -170,13 +176,13 @@ def _publish_execution(
         title=execution.title,
         first_comment=execution.first_comment,
         thread=list(execution.thread or []),
+        topic=execution.topic,
         date=at or _as_utc(execution.scheduled_at),
         delivery=delivery,
         schedule=delivery == "schedule",
         targets=[{
             "platform": execution.platform,
             "integration_id": execution.integration_id,
-        topic=execution.topic,
             "post_type": _post_type_for(execution),
             "provider": execution.provider,
         }],
@@ -268,13 +274,13 @@ def finalization_problems(
                 title=execution.title,
                 first_comment=execution.first_comment,
                 thread=list(execution.thread or []),
+                topic=execution.topic,
                 date=_as_utc(execution.scheduled_at) or datetime.now(UTC),
                 targets=[{
                     "platform": execution.platform,
                     "integration_id": execution.integration_id,
                     "post_type": _post_type_for(execution),
                     "provider": execution.provider,
-                topic=execution.topic,
                 }],
             ))
         except Exception as error:
@@ -516,16 +522,18 @@ def _freeze_execution(
         caption=post.caption,
         first_comment=post.first_comment,
         thread=list(post.thread),
+        topic=post.topic,
         placement=post.placement,
         reason=post.reason[:1000],
         offer_ids=list(post.offer_ids),
         tracking_links=links,
         provider=destination.provider,
         integration_id=destination.integration_id,
-        topic=post.topic,
         platform=destination.platform,
         destination_label=destination.label,
-        post_type=destination.post_type,
+        # Frozen from the planned post: a post-level per-account override wins,
+        # otherwise the destination's setup default was carried into the plan.
+        post_type=post.post_type,
         reserved_at=now,
         created_by=autopilot.created_by,
     )

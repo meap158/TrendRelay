@@ -219,11 +219,14 @@ class ProviderDefinition:
     #: post can carry destinations on several engines at once.
     ingests_media_url: bool
     media_note: str
-    #: Platforms this engine can post a photo carousel to, rather than a video.
-    #: Empty where the engine has no documented contract for one: offering the
-    #: choice and discovering mid-publish that it cannot is worse than not
-    #: offering it, because the post is already half-made by then.
-    photo_carousel_platforms: tuple[str, ...] = ()
+    #: Image-bearing post surfaces this engine has a documented route for.
+    #:
+    #: Each tuple is ``(platform, post_type, maximum_images)``. Platform-only
+    #: capability was too coarse: Facebook Feed accepts ten pictures, Story
+    #: accepts one, and Reel accepts none. TikTok instead exposes Photo carousel
+    #: as a separate post type. Keeping the surface in the capability prevents
+    #: a network-wide image limit from turning a Reel into a gallery.
+    image_post_limits: tuple[tuple[str, str, int], ...] = ()
     #: Platforms this engine can attach a topic to.
     #:
     #: Threads is the only network with one: a single tag per post that readers
@@ -246,6 +249,13 @@ class ProviderDefinition:
     #: neither. The reason belongs to the engine's API rather than to our
     #: appetite for the work, and "not implemented yet" is not one of them.
     no_metrics_reason: str = ""
+
+    @property
+    def photo_carousel_platforms(self) -> tuple[str, ...]:
+        """Platforms with a multi-image route, retained for matrix compatibility."""
+        return tuple(dict.fromkeys(
+            platform for platform, _, limit in self.image_post_limits if limit > 1
+        ))
 
 
 PROVIDERS: dict[str, ProviderDefinition] = {
@@ -319,11 +329,10 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         requires_public_media=False,
         ingests_media_url=True,
-        # Every network Zernio documents a picture count for, rather than the
-        # one somebody happened to test. Its media guide gives a figure per
-        # platform - four on X, ten on Facebook and Threads, twenty on LinkedIn
-        # - and only TikTok was recorded, so a post to any of the others could
-        # carry exactly one picture through an engine that takes several.
+        # Every exact surface Zernio documents a picture count for, rather than
+        # the one somebody happened to test. The surface matters: Facebook Feed
+        # takes ten, Story takes one, and Reel is video-only. Pinterest is the
+        # corresponding single-image case rather than a fake one-item carousel.
         # Instagram included, on Zernio's own documentation: ten images per
         # carousel, built from `mediaItems` with no content type of its own -
         # which is the figure `CAROUSEL_LIMITS` already carried for it.
@@ -335,9 +344,17 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # Zernio has no "carousel" post type to refuse - several pictures in
         # `mediaItems` are simply a carousel, exactly as they are on the six
         # networks below.
-        photo_carousel_platforms=(
-            "tiktok", "facebook", "twitter", "linkedin", "threads", "bluesky",
-            "instagram",
+        image_post_limits=(
+            ("tiktok", "photo", 35),
+            ("instagram", "photo", 10),
+            ("instagram", "story", 1),
+            ("facebook", "post", 10),
+            ("facebook", "story", 1),
+            ("twitter", "post", 4),
+            ("linkedin", "post", 20),
+            ("threads", "post", 10),
+            ("bluesky", "post", 4),
+            ("pinterest", "post", 1),
         ),
         media_note="The approved local MP4 is uploaded through a Zernio presigned URL.",
     ),
@@ -391,7 +408,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # "does not support the 'carousel' post type. Valid types are post,
         # story, or reel." A type existing in the schema is not a contract for
         # the network being posted to.
-        photo_carousel_platforms=(),
+        image_post_limits=(),
     ),
     "woopsocial": ProviderDefinition(
         id="woopsocial",
@@ -438,7 +455,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # engine from reading the local file, and saying otherwise would fail the
         # post at upload time.
         ingests_media_url=False,
-        photo_carousel_platforms=("tiktok",),
+        image_post_limits=(("tiktok", "photo", 35),),
         media_note=(
             "The approved local MP4 is uploaded to WoopSocial before the post is "
             "created. Single-request uploads are capped at 100 MB."
@@ -500,8 +517,8 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
     ),
     "facebook": (
         PostType("reel", "Reel", "Short vertical video in the Reels surface."),
-        PostType("story", "Story", "Disappears after 24 hours."),
-        PostType("post", "Feed post", "A normal timeline video post."),
+        PostType("story", "Story", "One image or video; disappears after 24 hours."),
+        PostType("post", "Feed post", "A normal timeline post with video or up to 10 images."),
     ),
     "youtube": (
         PostType("short", "Short", "Under 60 seconds and vertical; appears in Shorts."),
@@ -637,23 +654,6 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
         return platform in FIRST_COMMENT_PLATFORMS or platform in ZERNIO_THREAD_PLATFORMS
     return False
 
-# YouTube requires a category on create. 22 is People & Blogs, the general
-# bucket short-form creator video falls into; the rest are offered for choice.
-YOUTUBE_CATEGORIES: dict[str, str] = {
-    "1": "Film & Animation", "2": "Autos & Vehicles", "10": "Music",
-    "15": "Pets & Animals", "17": "Sports", "19": "Travel & Events",
-    "20": "Gaming", "22": "People & Blogs", "23": "Comedy",
-    "24": "Entertainment", "25": "News & Politics", "26": "Howto & Style",
-    "27": "Education", "28": "Science & Technology", "29": "Nonprofits & Activism",
-}
-DEFAULT_YOUTUBE_CATEGORY = "22"
-
-#: What a TikTok photo carousel may be built from. Deliberately short: these are
-#: uploaded to a network that will reject anything else, and an unfamiliar
-#: extension is better refused here than three minutes into a publish.
-IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
-
-#: Each network's ceiling on pictures in one post, which are not the same.
 
 def topic_deliverable(provider: str | None, platform: str | None) -> bool:
     """Whether this destination's engine can attach a Threads topic here.
@@ -690,6 +690,23 @@ def clean_topic(value: str | None) -> str | None:
         raise ValueError("A Threads topic is at most 50 characters.")
     return topic
 
+# YouTube requires a category on create. 22 is People & Blogs, the general
+# bucket short-form creator video falls into; the rest are offered for choice.
+YOUTUBE_CATEGORIES: dict[str, str] = {
+    "1": "Film & Animation", "2": "Autos & Vehicles", "10": "Music",
+    "15": "Pets & Animals", "17": "Sports", "19": "Travel & Events",
+    "20": "Gaming", "22": "People & Blogs", "23": "Comedy",
+    "24": "Entertainment", "25": "News & Politics", "26": "Howto & Style",
+    "27": "Education", "28": "Science & Technology", "29": "Nonprofits & Activism",
+}
+DEFAULT_YOUTUBE_CATEGORY = "22"
+
+#: What a TikTok photo carousel may be built from. Deliberately short: these are
+#: uploaded to a network that will reject anything else, and an unfamiliar
+#: extension is better refused here than three minutes into a publish.
+IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
+
+#: Each network's ceiling on pictures in one post, which are not the same.
 #:
 #: "Carousel" is the Instagram and TikTok word for it, and it is the wrong word
 #: for most of this list: four pictures on X and ten on Facebook are an ordinary
@@ -725,7 +742,9 @@ def carousel_limit(platform: str) -> int:
     return CAROUSEL_LIMITS.get(platform, 0)
 
 
-DEFAULT_POST_TYPE = PostType("post", "Post", "A standard post with the video attached.")
+DEFAULT_POST_TYPE = PostType(
+    "post", "Post", "A standard post with video, or images where the selected engine supports them."
+)
 
 
 def post_types_for(platform: str) -> tuple[PostType, ...]:
@@ -747,14 +766,24 @@ def resolve_post_type(platform: str, requested: str | None) -> PostType:
     )
 
 
-def _takes_pictures(target: "PublishTarget") -> bool:
+def image_post_limit(provider: ProviderDefinition, platform: str, post_type: str) -> int:
+    """Maximum images this engine accepts on this exact publishing surface."""
+    return next(
+        (
+            limit
+            for candidate, candidate_type, limit in provider.image_post_limits
+            if candidate == platform and candidate_type == post_type
+        ),
+        0,
+    )
+
+
+def _takes_pictures(target: PublishTarget) -> bool:
     """Whether this destination can carry a post made of pictures.
 
-    Two ways to be one, and only the first used to count. A "photo" post type
-    is the network asking for a gallery outright - Instagram's and TikTok's
-    word for it, and the only two that have the type. Everywhere else several
-    pictures are simply what a post holds, so the question is whether the
-    engine delivering it publishes them there.
+    TikTok and Instagram ask for a photo post explicitly. Other networks let an
+    ordinary Feed post carry pictures, and Facebook/Instagram Stories accept a
+    single image. The exact post type therefore has to be part of the question.
 
     An engine nobody recognises answers yes: not knowing a login is not
     evidence the post is wrong, and the delivery guard refuses what this cannot
@@ -765,13 +794,11 @@ def _takes_pictures(target: "PublishTarget") -> bool:
         chosen = target.kind.id
     except ValueError:
         return False
-    if any(kind.id == "photo" for kind in post_types_for(target.platform)):
-        # The network has a photo type, so which kind of post this is was a
-        # choice - and choosing "video" or "reel" means a video. Only Instagram
-        # and TikTok work this way.
-        return chosen == "photo"
-    # Everywhere else there is no such choice to make: several pictures are
-    # simply what a post holds. Whether they arrive is the engine's business.
+    # Only image-bearing surfaces are permissive while the request's engine is
+    # not yet resolved. Reel, Short and Video remain video even when another
+    # surface on the same network accepts pictures.
+    if chosen not in {"photo", "post", "story"}:
+        return False
     if not target.provider:
         # The request's own engine, resolved later against state a validator
         # should not be reading. Permissive here for the same reason
@@ -783,7 +810,7 @@ def _takes_pictures(target: "PublishTarget") -> bool:
         provider = resolve_provider(target.provider)
     except ValueError:
         return True
-    return target.platform in provider.photo_carousel_platforms
+    return image_post_limit(provider, target.platform, chosen) > 0
 
 
 class PublishTarget(BaseModel):
@@ -822,16 +849,14 @@ class PublishRequest(BaseModel):
     campaign_id: str | None = Field(default=None, max_length=64)
     queue_item_id: str | None = Field(default=None, max_length=64)
     destination_id: str | None = Field(default=None, max_length=64)
-    #: Optional only because a photo carousel has no video. Every other post
-    #: still needs one, which `media_matches_the_post_type` holds to.
+    #: Optional only because an image post has no video. Every video post still
+    #: needs one, which `media_matches_the_post_type` holds to.
     video_path: str = Field(default="", max_length=1000)
     # Kept with the durable job so compact schedule rows can use the Library's
     # existing still instead of reading a whole video merely to identify it.
     asset_id: str | None = Field(default=None, max_length=64)
-    #: A TikTok photo carousel's images, in swipe order. Empty for a video post,
-    #: which is still what almost every post here is - so `video_path` stays
-    #: required rather than becoming one of two optional media fields that a
-    #: caller has to know to pick between.
+    #: An image post's files, in display order. One for single-image surfaces,
+    #: several for feed galleries and explicit photo carousels.
     image_paths: list[str] = Field(default_factory=list, max_length=MAX_CAROUSEL_IMAGES)
     caption: str = Field(min_length=1, max_length=5000)
     title: str | None = Field(default=None, max_length=200)
@@ -917,8 +942,8 @@ class PublishRequest(BaseModel):
     def media_matches_the_post_type(self) -> PublishRequest:
         """A post carries the media its type is made of, and only that.
 
-        A carousel has images and no video; everything else has a video and no
-        images. Held here rather than left to each engine, because the request
+        An image post has images and no video; a video post has the reverse.
+        Held here rather than left to each engine, because the request
         that reaches them should already be a coherent post - and because a
         carousel that also names an MP4 is ambiguous about which one publishes.
         """
@@ -1364,30 +1389,30 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
         # Resolving raises if the network cannot accept the requested type, so a
         # bad choice is refused here rather than by the engine mid-delivery.
         kind = resolve_post_type(target.platform, target.post_type)
-        if kind.id != "photo":
-            continue
-        # A carousel is a different post, not a different setting: the media is
-        # images rather than a video, and an engine without a contract for one
-        # would otherwise be handed a video and asked to make a gallery of it.
-        if target.platform not in provider.photo_carousel_platforms:
+        allowed = image_post_limit(provider, target.platform, kind.id)
+        if kind.id == "photo" and not allowed:
             raise ValueError(
                 f"{provider.label} cannot post a "
                 f"{PLATFORM_LABELS[target.platform]} photo carousel. "
                 "Deliver this destination through another engine, or post a video."
             )
-        if not request.image_paths:
+        if request.image_paths and not allowed:
+            raise ValueError(
+                f"{provider.label} cannot attach images to the "
+                f"{PLATFORM_LABELS[target.platform]} {kind.label}. "
+                "Choose a compatible post type, or post a video."
+            )
+        if kind.id == "photo" and not request.image_paths:
             raise ValueError(
                 "A photo carousel needs at least one image. Choose them from the "
                 "Library, or switch the destination back to a video."
             )
-        # Each network has its own ceiling, and they are not close: TikTok takes
-        # thirty-five, Instagram's API takes ten. Refused here rather than by the
-        # network, which would reject the post after it was already half-built.
-        allowed = carousel_limit(target.platform)
-        if len(request.image_paths) > allowed:
+        if request.image_paths and len(request.image_paths) > allowed:
+            noun = "carousel" if kind.id == "photo" else kind.label.lower()
             raise ValueError(
-                f"{PLATFORM_LABELS[target.platform]} takes at most {allowed} images in a "
-                f"carousel, and this post has {len(request.image_paths)}. "
+                f"{PLATFORM_LABELS[target.platform]} takes at most {allowed} "
+                f"image{'s' if allowed != 1 else ''} in a "
+                f"{noun}, and this post has {len(request.image_paths)}. "
                 "Remove some, or send the rest as a second post."
             )
 
@@ -1460,7 +1485,7 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
     chosen = {target.platform for target in request.targets}
     # Media the network's API will refuse, said before anything uploads
     # instead of by a failed job hours later.
-    if request.video_path and not _is_photo_post(request):
+    if request.video_path and not _is_image_post(request):
         for platform in sorted(chosen):
             fits, why = video_fits_platform(platform, request.video_path)
             if not fits:
@@ -1529,7 +1554,13 @@ def carousel_fits_destination(
     except ValueError:
         return True, None
     label = PLATFORM_LABELS.get(platform, platform)
-    if platform not in provider.photo_carousel_platforms:
+    post_type = (
+        "photo"
+        if any(kind.id == "photo" for kind in post_types_for(platform))
+        else "post"
+    )
+    allowed = image_post_limit(provider, platform, post_type)
+    if not allowed:
         carries = sorted(provider.photo_carousel_platforms)
         instead = (
             f"{provider.label} posts photo carousels to "
@@ -1540,15 +1571,16 @@ def carousel_fits_destination(
             f"{provider.label} cannot post a photo carousel to {label}. {instead} "
             "Send this destination a video, or deliver it through an engine that can."
         )
-    allowed = carousel_limit(platform)
     if image_count > allowed:
+        format_name = "an image post" if allowed == 1 else "a carousel"
         return False, (
-            f"{label} takes at most {allowed} images in a carousel, and this "
+            f"{label} takes at most {allowed} image{'s' if allowed != 1 else ''} "
+            f"in {format_name}, and this "
             f"package has {image_count}. Remove some, or send the rest as a "
             "second package."
         )
     if not image_count:
-        return False, f"A {label} photo carousel needs at least one image."
+        return False, f"A {label} image post needs at least one image."
     return True, None
 
 
@@ -1576,14 +1608,9 @@ def carries_tracking_link(request: PublishRequest) -> bool:
     return any(marker in (part or "") for marker in markers for part in written)
 
 
-def _is_photo_post(request: PublishRequest) -> bool:
-    """Whether this request is a carousel rather than a video.
-
-    Asked of the targets rather than of `image_paths` being non-empty: images
-    can be attached and then the destination switched back to a video, and the
-    chosen post type is what the operator actually decided.
-    """
-    return any(target.kind.id == "photo" for target in request.targets)
+def _is_image_post(request: PublishRequest) -> bool:
+    """Whether this coherent, validated request is made from images."""
+    return bool(request.image_paths)
 
 
 def _post_title(request: PublishRequest) -> str:
@@ -1941,7 +1968,7 @@ def _zernio_upload(media: Path) -> str:
 def _zernio_publish(
     request: PublishRequest, video: Path | None, request_id: str | None = None
 ) -> dict[str, Any]:
-    carousel = _is_photo_post(request)
+    carousel = _is_image_post(request)
     if carousel:
         # Every image, in swipe order, each presigned and put separately. The
         # order is the post, so the uploads are not parallelised into whatever
@@ -1961,15 +1988,14 @@ def _zernio_publish(
             media_url = _zernio_upload(video)
         media_items = [{"type": "video", "url": media_url}]
     post: dict[str, Any] = {
-        # A photo post reads `content` as a 90-character title and takes the real
-        # caption from `description`; a video post has no description at all.
-        "content": (_post_title(request)[:90] if carousel else request.caption),
+        # Kept as the full caption for ordinary image posts. TikTok automatically
+        # truncates this value into its 90-character photo title and reads the
+        # actual caption from `tiktokSettings.description` below.
+        "content": request.caption,
         "mediaItems": media_items,
         "platforms": [],
         "timezone": "UTC",
     }
-    if carousel:
-        post["description"] = request.caption[:4000]
     if request.title:
         post["title"] = request.title
     if request.mode == "now":
@@ -1985,15 +2011,17 @@ def _zernio_publish(
             specific["visibility"] = request.visibility
             specific["containsSyntheticMedia"] = request.made_with_ai
             specific["title"] = _post_title(request)[:100]
-        if target.platform in {"instagram", "facebook"}:
+        if (
+            target.platform in {"instagram", "facebook"}
+            and target.kind.id != "photo"
+        ):
             # A carousel says nothing here. Zernio documents `contentType` as
             # the story flag - "story", and on Instagram "saved_story" - and a
             # post built from several `mediaItems` is a feed carousel by
             # default. Instagram's own type id is "photo", which is not one of
             # Zernio's words, so sending it would name a type the engine has
             # never heard of on the one post shape that needs no naming.
-            if target.kind.id != "photo":
-                specific["contentType"] = target.kind.id
+            specific["contentType"] = target.kind.id
         if target.platform == "reddit":
             specific["subreddit"] = request.subreddit
             specific["title"] = _post_title(request)[:300]
@@ -2034,6 +2062,7 @@ def _zernio_publish(
             # carousel; `media_type` is what makes it one.
             settings["media_type"] = "photo"
             settings["photo_cover_index"] = 0
+            settings["description"] = request.caption[:4000]
         else:
             settings["allow_duet"] = True
             settings["allow_stitch"] = True
@@ -2213,7 +2242,7 @@ _WOOPSOCIAL_POST_TYPES: dict[str, dict[str, str]] = {
 
 
 def _woopsocial_publish(request: PublishRequest, video: Path | None) -> dict[str, Any]:
-    carousel = _is_photo_post(request)
+    carousel = _is_image_post(request)
     if carousel:
         # In swipe order, one upload each: the media array is the carousel.
         media_ids = [
@@ -2420,6 +2449,7 @@ def _zernio_metrics(execution: Any) -> dict[str, float] | None:
     organisation the token belongs to, so asking the first login about a second
     login's post returns nothing - which the collector reads as "still due" and
     retries for ever. The connection is taken from what the execution stored.
+
     Reads Zernio's analytics report for the external post id stored at delivery
     and returns the newest figures as ``{views, likes, comments, shares, saves,
     watch_seconds}`` - whichever the platform reported. Returns None, which the
@@ -3491,6 +3521,22 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             }
             for platform in provider.platforms
         },
+        # A network limit says what the network accepts. This list says what
+        # this publishing engine can actually deliver, which the composer must
+        # know before it offers image media for an account.
+        "photo_carousel_platforms": list(provider.photo_carousel_platforms),
+        # The precise contract used by the composer. A platform-level boolean
+        # cannot represent Facebook Feed (10), Story (1), and Reel (0), while
+        # TikTok intentionally exposes Video and Photo carousel separately.
+        "image_post_limits": {
+            platform: {
+                post_type: limit
+                for candidate, post_type, limit in provider.image_post_limits
+                if candidate == platform
+            }
+            for platform in provider.platforms
+            if any(candidate == platform for candidate, _, _ in provider.image_post_limits)
+        },
         # Per engine, not per platform: a carousel is offered only where the
         # engine delivering that destination can actually post one. Filtering
         # here rather than refusing later means the choice never appears on an
@@ -3499,7 +3545,7 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             platform: [
                 {"id": kind.id, "label": kind.label, "help": kind.help}
                 for kind in post_types_for(platform)
-                if kind.id != "photo" or platform in provider.photo_carousel_platforms
+                if kind.id != "photo" or image_post_limit(provider, platform, kind.id) > 0
             ]
             for platform in provider.platforms
         },
@@ -3813,7 +3859,7 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
     if uses_local_media:
         # Whichever media this post is actually made of. Resolving the video for
         # a carousel would demand an MP4 the post does not have.
-        if _is_photo_post(request):
+        if _is_image_post(request):
             approved_image_paths(request.image_paths)
         else:
             approved_video_path(request.video_path)
@@ -3894,7 +3940,7 @@ def _dispatch(
     """Hand one engine the destinations that belong to it."""
     video = (
         approved_video_path(request.video_path)
-        if _needs_local_media(provider, request) and not _is_photo_post(request)
+        if _needs_local_media(provider, request) and not _is_image_post(request)
         else None
     )
     if provider.id == "bundle_social":

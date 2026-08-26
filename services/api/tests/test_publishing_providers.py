@@ -1729,7 +1729,8 @@ def test_zernio_posts_a_carousel_as_images_not_a_video(
     # Swipe order is the post: a carousel opens on its first image.
     assert uploaded == ["frame0.jpg", "frame1.jpg", "frame2.jpg"]
     assert body["tiktokSettings"]["media_type"] == "photo"
-    assert body["description"] == "Launch clip"
+    assert body["tiktokSettings"]["description"] == "Launch clip"
+    assert "description" not in body
     assert len(body["content"]) <= 90
     # Duet and stitch are video settings and have no meaning on a carousel.
     assert "allow_duet" not in body["tiktokSettings"]
@@ -2147,6 +2148,19 @@ def test_only_engines_with_a_topic_contract_advertise_one() -> None:
     assert publishing.provider_status("zernio", probe=False)["topic_platforms"] == []
 
 
+def test_provider_status_distinguishes_network_image_limits_from_engine_support() -> None:
+    zernio = publishing.provider_status("zernio", probe=False)
+    buffer = publishing.provider_status("buffer", probe=False)
+
+    assert "tiktok" in zernio["photo_carousel_platforms"]
+    assert "facebook" in zernio["photo_carousel_platforms"]
+    assert buffer["photo_carousel_platforms"] == []
+    assert zernio["image_post_limits"]["tiktok"] == {"photo": 35}
+    assert zernio["image_post_limits"]["facebook"] == {"post": 10, "story": 1}
+    assert zernio["image_post_limits"]["pinterest"] == {"post": 1}
+    assert "reel" not in zernio["image_post_limits"]["facebook"]
+
+
 # --- story and feed post ------------------------------------------------------
 
 
@@ -2175,6 +2189,72 @@ def test_a_feed_post_is_not_cross_posted_as_a_reel(media_file: Path) -> None:
 
     assert "type: post" in meta
     assert "shouldShareToFeed: false" in meta
+
+
+def image_request(images: list[str], platform: str, post_type: str = "post"):
+    return publishing.PublishRequest(
+        workspace_id="workspace-1",
+        image_paths=images,
+        caption="Image post",
+        date=datetime.now(UTC) + timedelta(hours=2),
+        provider="zernio",
+        board="board-1" if platform == "pinterest" else None,
+        targets=[publishing.PublishTarget(
+            platform=platform,
+            integration_id="account-1",
+            post_type=post_type,
+            provider="zernio",
+        )],
+    )
+
+
+def test_facebook_feed_accepts_multiple_images_but_reel_does_not() -> None:
+    carousel_images = [f"C:/approved/frame-{index}.jpg" for index in range(3)]
+    feed = image_request(carousel_images, "facebook", "post")
+    publishing._validate_request(publishing.PROVIDERS["zernio"], feed)
+    assert publishing._is_image_post(feed)
+
+    with pytest.raises(ValueError, match="no destination can carry them"):
+        image_request(carousel_images, "facebook", "reel")
+
+
+def test_zernio_delivers_feed_images_without_tiktok_caption_rules(monkeypatch) -> None:
+    images = ["C:/approved/one.jpg", "C:/approved/two.jpg"]
+    body = image_request(images, "facebook", "post").model_copy(
+        update={"caption": "A full Facebook image caption " * 8},
+    )
+    sent: dict[str, object] = {}
+    monkeypatch.setattr(
+        publishing,
+        "approved_image_paths",
+        lambda paths: [Path(path) for path in paths],
+    )
+    monkeypatch.setattr(publishing, "_zernio_upload", lambda path: f"https://cdn/{path.name}")
+    monkeypatch.setattr(
+        publishing,
+        "_zernio_request",
+        lambda method, path, **kwargs: sent.setdefault("body", kwargs["body"])
+        or {"post": {"_id": "post-1"}},
+    )
+
+    publishing._zernio_publish(body, None)
+
+    payload = sent["body"]
+    assert payload["content"] == body.caption
+    assert [item["type"] for item in payload["mediaItems"]] == ["image", "image"]
+    assert "tiktokSettings" not in payload
+
+
+def test_single_image_surfaces_enforce_one_image() -> None:
+    carousel_images = [f"C:/approved/frame-{index}.jpg" for index in range(2)]
+    surfaces = (("facebook", "story"), ("instagram", "story"), ("pinterest", "post"))
+    for platform, post_type in surfaces:
+        single = image_request(carousel_images[:1], platform, post_type)
+        publishing._validate_request(publishing.PROVIDERS["zernio"], single)
+
+        too_many = image_request(carousel_images[:2], platform, post_type)
+        with pytest.raises(ValueError, match="at most 1 image"):
+            publishing._validate_request(publishing.PROVIDERS["zernio"], too_many)
 
 
 @pytest.mark.parametrize(
@@ -2253,7 +2333,11 @@ def test_a_network_refuses_more_images_than_it_swipes(
     ten - and only the largest bounds the request itself. This lowers TikTok's
     for the length of the test rather than leaning on any one network's figure.
     """
-    monkeypatch.setattr(publishing, "CAROUSEL_LIMITS", {"tiktok": 2})
+    monkeypatch.setattr(
+        publishing,
+        "image_post_limit",
+        lambda provider, platform, post_type: 2 if platform == "tiktok" else 0,
+    )
     body = carousel(carousel_images)  # three images
 
     with pytest.raises(ValueError, match="at most 2 images"):
@@ -2845,3 +2929,4 @@ def test_bundle_needs_the_network_as_well_as_the_post(monkeypatch) -> None:
     execution.platform = "not-a-network"
 
     assert publishing._bundle_metrics(execution) is None
+

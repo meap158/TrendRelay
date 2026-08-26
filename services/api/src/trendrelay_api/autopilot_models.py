@@ -278,6 +278,11 @@ class CampaignQueueItem(Base):
     #: the first is the cover - so this is a list rather than a set, and the
     #: order somebody chose in the picker is the order that posts.
     image_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: Per-account format choices for this post. A queue item can be a Reel on
+    #: Instagram and a Short on YouTube, so this is keyed by destination id
+    #: rather than pretending one format can describe every delivery. Missing
+    #: keys inherit the destination's campaign default.
+    post_type_overrides: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     title: Mapped[str | None] = mapped_column(String(200))
     #: Copy a person wrote. Autopilot never generates it.
     body: Mapped[str] = mapped_column(String(4000))
