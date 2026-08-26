@@ -32,7 +32,7 @@ import type { ProviderKey } from "./transcription-setup";
  * usually never reached.
  */
 
-type Mode = "speech" | "ocr";
+type Mode = "speech" | "ocr" | "vision";
 
 type Target = {
   id: string;
@@ -41,15 +41,17 @@ type Target = {
 };
 
 /** The provider each mode needs, in the shape `useMediaAi` names them. */
-const MODE_PROVIDER: Record<Mode, ProviderKey> = { speech: "speech", ocr: "ocr" };
+const MODE_PROVIDER: Record<Mode, ProviderKey> = { speech: "speech", ocr: "ocr", vision: "vision" };
 
 const MODE_LABEL: Record<Mode, string> = {
   speech: "Transcribe speech",
   ocr: "Read on-screen text",
+  vision: "Recognise what it shows",
 };
 
 /** What each reading needs to exist at all. */
 function supports(mediaKind: string, mode: Mode): boolean {
+  // OCR and vision both read frames; only speech needs a soundtrack.
   return mode === "speech"
     ? mediaKind === "video" || mediaKind === "audio"
     : mediaKind === "video" || mediaKind === "image";
@@ -80,7 +82,7 @@ export function BatchTranscribe({
   const { refresh: refreshJobs } = useJobs();
   const { locale } = useLocale();
   const mediaAi = useMediaAi(apiFetch, open);
-  const [chosen, setChosen] = useState<Record<Mode, boolean>>({ speech: true, ocr: false });
+  const [chosen, setChosen] = useState<Record<Mode, boolean>>({ speech: true, ocr: false, vision: false });
   const [language, setLanguage] = useState("");
   // Named in the reader's own language, and only built when the model's list is
   // actually on screen.
@@ -100,6 +102,7 @@ export function BatchTranscribe({
   const reach = useMemo(() => ({
     speech: targets.filter((target) => supports(target.mediaKind, "speech")).length,
     ocr: targets.filter((target) => supports(target.mediaKind, "ocr")).length,
+    vision: targets.filter((target) => supports(target.mediaKind, "vision")).length,
   }), [targets]);
 
   /** Each asset paired with the readings it can actually answer. */
@@ -200,7 +203,7 @@ export function BatchTranscribe({
       }
     >
       <div className="batch-transcribe-modes">
-        {(["speech", "ocr"] as Mode[]).map((mode) => (
+        {(["speech", "ocr", "vision"] as Mode[]).map((mode) => (
           <label key={mode} className="batch-transcribe-mode">
             <input
               type="checkbox"

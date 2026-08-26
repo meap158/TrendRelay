@@ -30,7 +30,7 @@ import type { ProviderKey } from "./transcription-setup";
 
 type Transcript = {
   id: string;
-  kind: "speech" | "ocr";
+  kind: "speech" | "ocr" | "vision";
   language: string;
   text: string;
   provider?: string;
@@ -60,9 +60,10 @@ type EnrichmentJob = {
 const WATCH_MS = 2500;
 
 /** The provider each mode needs, in the shape `useMediaAi` names them. */
-const MODE_PROVIDER: Record<"speech" | "ocr", ProviderKey> = {
+const MODE_PROVIDER: Record<"speech" | "ocr" | "vision", ProviderKey> = {
   speech: "speech",
   ocr: "ocr",
+  vision: "vision",
 };
 
 function isRunning(job: EnrichmentJob | null): boolean {
@@ -77,7 +78,7 @@ export function AutoTranscribe({
   assetId,
   hasAudio,
   mediaKind,
-  modesAvailable = ["speech", "ocr"],
+  modesAvailable = ["speech", "ocr", "vision"],
   apiFetch,
   canEdit,
   onFinished,
@@ -86,7 +87,7 @@ export function AutoTranscribe({
   assetId: string;
   hasAudio: boolean;
   mediaKind: string;
-  modesAvailable?: ("speech" | "ocr")[];
+  modesAvailable?: ("speech" | "ocr" | "vision")[];
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   canEdit: boolean;
   /** A new draft landed, so the asset needs re-reading to show it. */
@@ -99,9 +100,13 @@ export function AutoTranscribe({
   const speechPossible = modesAvailable.includes("speech") && hasAudio;
   const ocrPossible = modesAvailable.includes("ocr")
     && (mediaKind === "video" || mediaKind === "image");
-  const [modes, setModes] = useState<Record<"speech" | "ocr", boolean>>({
+  // The third reading: what the clip shows, for the clip nobody has watched.
+  const visionPossible = modesAvailable.includes("vision")
+    && (mediaKind === "video" || mediaKind === "image");
+  const [modes, setModes] = useState<Record<"speech" | "ocr" | "vision", boolean>>({
     speech: speechPossible,
     ocr: false,
+    vision: false,
   });
   const [job, setJob] = useState<EnrichmentJob | null>(null);
   const [failure, setFailure] = useState("");
@@ -112,7 +117,8 @@ export function AutoTranscribe({
   const running = useRef(false);
   const settled = useRef<string | null>(null);
 
-  const chosen = (Object.keys(modes) as ("speech" | "ocr")[]).filter((mode) => modes[mode]);
+  const chosen = (Object.keys(modes) as ("speech" | "ocr" | "vision")[])
+    .filter((mode) => modes[mode]);
 
   const read = useCallback(async () => {
     const response = await apiFetch(
@@ -185,7 +191,7 @@ export function AutoTranscribe({
   const missing = chosen.filter((mode) => !providerOf(mediaAi.state, MODE_PROVIDER[mode])?.ready);
   const working = busy || isRunning(job);
 
-  if (!speechPossible && !ocrPossible) return null;
+  if (!speechPossible && !ocrPossible && !visionPossible) return null;
 
   return (
     <div className="auto-transcribe">
@@ -214,6 +220,17 @@ export function AutoTranscribe({
               On-screen text
             </label>
           )}
+          {visionPossible && (
+            <label>
+              <input
+                type="checkbox"
+                checked={modes.vision}
+                disabled={working}
+                onChange={(event) => setModes((c) => ({ ...c, vision: event.target.checked }))}
+              />
+              What it shows
+            </label>
+          )}
         </span>
         <Button
           variant="secondary"
@@ -236,7 +253,9 @@ export function AutoTranscribe({
       {missing.map((mode) => (
         <ProviderSwitch
           key={mode}
-          label={mode === "speech" ? "Transcribe speech" : "Read on-screen text"}
+          label={mode === "speech"
+            ? "Transcribe speech"
+            : mode === "ocr" ? "Read on-screen text" : "Recognise what it shows"}
           provider={MODE_PROVIDER[mode]}
           state={mediaAi.state}
           busy={mediaAi.busy}
@@ -283,10 +302,11 @@ export function TranscriptDraft({
   onRead,
 }: {
   transcripts: Transcript[];
-  kind: "speech" | "ocr";
+  kind: "speech" | "ocr" | "vision";
   onUse: (text: string) => void;
-  /** Open the full reading, with its times and a translation. */
-  onRead: (draft: Transcript) => void;
+  /** Open the full reading, with its times and a translation. Absent for a
+   *  reading whose segments are tags rather than timed lines. */
+  onRead?: (draft: Transcript) => void;
 }) {
   const draft = transcripts.find((item) => item.kind === kind && item.status === "machine");
   if (!draft || !draft.text.trim()) return null;
@@ -305,9 +325,11 @@ export function TranscriptDraft({
           <small>{draft.provider} · {draft.language}</small>
         </span>
         <span className="transcript-draft-actions">
-          <Button variant="quiet" size="sm" onClick={() => onRead(draft)}>
-            Read it
-          </Button>
+          {onRead && (
+            <Button variant="quiet" size="sm" onClick={() => onRead(draft)}>
+              Read it
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => onUse(draft.text)}>
             Use draft
           </Button>

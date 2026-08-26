@@ -42,7 +42,10 @@ export type TranscriptSegment = {
 
 export type ReadableTranscript = {
   id: string;
-  kind: "speech" | "ocr";
+  // `vision` never reaches this dialog - its segments are tags rather than
+  // timed lines - but the drafts that do come through a control whose
+  // transcript type includes it, and the type must accept what it forwards.
+  kind: "speech" | "ocr" | "vision";
   language: string;
   text: string;
   provider?: string;

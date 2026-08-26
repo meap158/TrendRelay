@@ -56,19 +56,25 @@ export type MediaAiJob = {
 };
 
 export type MediaAiState = {
-  providers: { speech: MediaAiProvider; ocr: MediaAiProvider; translation: MediaAiProvider };
+  providers: {
+    speech: MediaAiProvider;
+    ocr: MediaAiProvider;
+    vision: MediaAiProvider;
+    translation: MediaAiProvider;
+  };
   setup_jobs: Record<string, MediaAiJob | undefined>;
 };
 
 /** How often to ask again while a download is running. */
 const WATCH_MS = 2000;
 
-export type ProviderKey = "speech" | "ocr" | "translate";
+export type ProviderKey = "speech" | "ocr" | "vision" | "translate";
 
 /** Which key of `providers` a provider is filed under. Only translate differs. */
 const STATUS_KEY: Record<ProviderKey, keyof MediaAiState["providers"]> = {
   speech: "speech",
   ocr: "ocr",
+  vision: "vision",
   translate: "translation",
 };
 

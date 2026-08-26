@@ -511,7 +511,7 @@ function EffectActivity({
  */
 type Transcript = {
   id: string;
-  kind: "speech" | "ocr";
+  kind: "speech" | "ocr" | "vision";
   language: string;
   text: string;
   provider: string;
@@ -1144,6 +1144,7 @@ function LibraryContent() {
   // what the submit will pick up.
   const speechField = useRef<HTMLTextAreaElement | null>(null);
   const ocrField = useRef<HTMLTextAreaElement | null>(null);
+  const notesField = useRef<HTMLTextAreaElement | null>(null);
   const [viewMode, setViewMode] = usePersistedState<ViewMode>(
     "trendrelay.library.view", "gallery", isViewMode,
   );
@@ -2347,7 +2348,25 @@ function LibraryContent() {
                         <h4>Campaign metadata</h4>
                         <label>{t("recipe.productShown")}<input name="product_shown" defaultValue={selected.analysis?.product_shown ?? ""} placeholder="Product or offer visible in the clip" /></label>
                         <label>{t("recipe.creativeFormat")}<input name="creative_format" defaultValue={selected.analysis?.creative_format ?? ""} placeholder="Demo, testimonial, comparison…" /></label>
-                        <label>{t("recipe.analystNotes")}<textarea name="analyst_notes" rows={4} defaultValue={selected.analysis?.analyst_notes ?? ""} placeholder="Context that should influence search or product matching" /></label>
+                        <label>{t("recipe.analystNotes")}<textarea ref={notesField} name="analyst_notes" rows={4} defaultValue={selected.analysis?.analyst_notes ?? ""} placeholder="Context that should influence search or product matching" /></label>
+                        {/* What the machine recognised in the frames - the
+                            subjects, scenes, products and formats. Offered
+                            into the analyst notes rather than a field of its
+                            own, because that is the free-text context search
+                            and matching already read; appended rather than
+                            poured, so it cannot overwrite what a person
+                            wrote. No "Read it": these segments are tags, not
+                            timed lines the reading dialog knows how to show. */}
+                        <TranscriptDraft
+                          transcripts={selected.transcripts}
+                          kind="vision"
+                          onUse={(text) => {
+                            const field = notesField.current;
+                            if (!field) return;
+                            const existing = field.value.trim();
+                            field.value = existing ? `${existing}\n${text}` : text;
+                          }}
+                        />
                         <details className="library-analysis-advanced">
                           <summary>Timing and analysis details</summary>
                           <p>Optional metadata for deeper analysis. Most clips do not need these fields.</p>
