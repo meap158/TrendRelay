@@ -1672,6 +1672,18 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* Pick the clip, then write for it. The copy field gets the room because it is
    the part that is actually being authored; the path never appears. */
 .autopilot-compose { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
+/* The post's media, previewed at the top of the editor. The video is bounded
+   rather than natural-size - a portrait clip at full height is the whole
+   dialog - and the carousel scrolls sideways in posting order. */
+.campaign-edit-media { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.campaign-edit-media-head { display: flex; align-items: center; gap: 8px; }
+.campaign-edit-media-head strong { font-size: 12px; }
+.campaign-edit-media-head small { margin-inline-end: auto; color: var(--muted); font-size: 11px; }
+.campaign-edit-media-actions { display: inline-flex; flex: none; gap: 6px; }
+.campaign-edit-media-video { display: block; width: 100%; max-height: 300px; border-radius: var(--radius-sm); background: var(--ink); object-fit: contain; }
+.campaign-edit-media-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.campaign-edit-media-strip img { height: 110px; flex: none; border-radius: var(--radius-sm); object-fit: cover; }
+.campaign-media-picker { display: grid; gap: 10px; }
 .autopilot-compose label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .autopilot-compose textarea, .autopilot-compose input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }

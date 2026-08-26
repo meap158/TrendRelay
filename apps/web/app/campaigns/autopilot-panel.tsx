@@ -1993,6 +1993,19 @@ export function AutopilotPanel({
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
   const [editingPostTypes, setEditingPostTypes] = useState<Record<string, string>>({});
+  /**
+   * A media replacement staged in the editor. Null means the post keeps what
+   * it has - which is what saving has always meant, and still the default.
+   * Staged rather than saved on pick, so closing without saving changes
+   * nothing and the swap rides the same Save as every other field.
+   */
+  const [editingMedia, setEditingMedia] = useState<{
+    video_path: string;
+    image_paths: string[];
+    asset_id: string | null;
+    label: string;
+  } | null>(null);
+  const [swappingMedia, setSwappingMedia] = useState(false);
   // The campaign's own wording, overridden for this post. Empty means the
   // campaign's, which is why these are strings rather than nullable: the field
   // shows the campaign's text and clearing it is how you go back to it.
@@ -2859,6 +2872,8 @@ export function AutopilotPanel({
     setEditing(item);
     setEditingReplies(item.thread.length ? item.thread : [""]);
     setEditingPostTypes(item.post_type_overrides ?? {});
+    setEditingMedia(null);
+    setSwappingMedia(false);
     openEditorWording(item);
   }
 
@@ -4830,12 +4845,76 @@ export function AutopilotPanel({
                   disclosure: editingDisclosure.trim() || null,
                   bio_hint: editingBioHint.trim() || null,
                   post_type_overrides: editingPostTypes,
+                  // Only when a replacement was staged: an absent field
+                  // leaves the media exactly as it was, which is what saving
+                  // this form has always meant.
+                  ...(editingMedia ? {
+                    video_path: editingMedia.video_path,
+                    image_paths: editingMedia.image_paths,
+                    asset_id: editingMedia.asset_id,
+                  } : {}),
                 }),
               }));
               closePostEditor();
-              return "Campaign copy updated.";
+              return editingMedia ? "Post updated, media and all." : "Campaign copy updated.";
             });
           }}>
+            {/* The media leads the form, previewed as it will post: the one
+                part of the package that used to be visible nowhere and
+                changeable nowhere - the remedy was re-creating the post and
+                losing its copy and its place in the rotation. Deliveries
+                already planned keep the cut they were planned with; the swap
+                reaches everything planned after it. */}
+            <section className="campaign-edit-media">
+              <div className="campaign-edit-media-head">
+                <strong>Media</strong>
+                <small>
+                  {(() => {
+                    const staged = editingMedia;
+                    const video = staged ? staged.video_path : editing.video_path;
+                    const images = staged ? staged.image_paths : editing.image_paths;
+                    const shape = video
+                      ? "Video"
+                      : images.length > 1 ? `Carousel · ${images.length} pictures` : "Image";
+                    return staged
+                      ? `${shape} — replaces the current media when you save.`
+                      : shape;
+                  })()}
+                </small>
+                <span className="campaign-edit-media-actions">
+                  {editingMedia && (
+                    <Button type="button" variant="quiet" size="sm"
+                      onClick={() => setEditingMedia(null)}>
+                      Keep current media
+                    </Button>
+                  )}
+                  <Button type="button" variant="secondary" size="sm"
+                    onClick={() => setSwappingMedia(true)}>
+                    Change from Library
+                  </Button>
+                </span>
+              </div>
+              {(() => {
+                const media = (path: string) =>
+                  `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+                  + `?path=${encodeURIComponent(path)}`;
+                const video = editingMedia ? editingMedia.video_path : editing.video_path;
+                const images = editingMedia ? editingMedia.image_paths : editing.image_paths;
+                return video ? (
+                  <video className="campaign-edit-media-video" controls
+                    preload="metadata" src={media(video)} />
+                ) : (
+                  <div className="campaign-edit-media-strip" role="list"
+                    aria-label="Pictures in this carousel, in posting order">
+                    {images.map((path, index) => (
+                      // eslint-disable-next-line @next/next/no-img-element -- authenticated preview URL
+                      <img key={`${path}-${index}`} role="listitem" src={media(path)}
+                        alt={`Picture ${index + 1} of ${images.length}`} />
+                    ))}
+                  </div>
+                );
+              })()}
+            </section>
             {/* The title, description and close now come from the Dialog frame,
                 so the form opens straight into its first field. */}
             {/* Only where a title exists. It is still shown when nothing takes
@@ -5051,6 +5130,18 @@ export function AutopilotPanel({
             <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post</Button>
           </form>
           </Dialog>
+        )}
+        {editing && (
+          <MediaSwapDialog
+            open={swappingMedia}
+            workspaceId={workspaceId}
+            apiFetch={apiFetch}
+            onClose={() => setSwappingMedia(false)}
+            onPick={(media) => {
+              setEditingMedia(media);
+              setSwappingMedia(false);
+            }}
+          />
         )}
       </Card>}
           </div>
@@ -6409,5 +6500,150 @@ export function AutopilotPanel({
       {/* Configuration, so it lives in Setup: the times themselves are
           visible in the timeline where they matter. */}
     </div>
+  );
+}
+
+/**
+ * Swap one queued post's media, from the Library it was picked from.
+ *
+ * Its own instance of the shared picker loop (ADR 0025) rather than a mode on
+ * the compose picker: the two are open at different times over different
+ * selections, and a "replace" flag threaded through the compose flow would be
+ * a second meaning for every one of its states.
+ *
+ * Selection is adaptive the way the queue's package rule is: a video stands
+ * alone, pictures gather into one carousel, and picking one kind clears the
+ * other - the package is either, never both.
+ */
+function MediaSwapDialog({
+  open,
+  workspaceId,
+  apiFetch,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  onClose: () => void;
+  onPick: (media: {
+    video_path: string;
+    image_paths: string[];
+    asset_id: string | null;
+    label: string;
+  }) => void;
+}) {
+  const picker = useLibraryAssets<LibraryAsset>({
+    workspaceId, apiFetch,
+    enabled: open,
+    keep: (asset) => asset.media_kind !== "audio",
+  });
+  const t = useT();
+  const [chosen, setChosen] = useState<LibraryAsset[]>([]);
+  const kind = chosen[0]?.media_kind ?? null;
+
+  const toggle = (asset: LibraryAsset) => {
+    setChosen((current) => {
+      if (current.some((item) => item.id === asset.id)) {
+        return current.filter((item) => item.id !== asset.id);
+      }
+      // A video replaces the whole selection; a picture joins other pictures
+      // and clears a video - the package rule, enforced by the gesture.
+      return asset.media_kind === "video" ? [asset] : [
+        ...current.filter((item) => item.media_kind === "image"),
+        asset,
+      ];
+    });
+  };
+
+  const confirm = () => {
+    if (!chosen.length) return;
+    const lead = chosen[0];
+    onPick(kind === "video"
+      ? {
+          video_path: handoffPath(lead),
+          image_paths: [],
+          asset_id: lead.id,
+          label: lead.title,
+        }
+      : {
+          video_path: "",
+          image_paths: chosen.map(handoffPath),
+          asset_id: lead.id,
+          label: chosen.length === 1
+            ? lead.title
+            : `Carousel of ${chosen.length} pictures`,
+        });
+    setChosen([]);
+  };
+
+  if (!open) return null;
+  return (
+    <Dialog
+      open
+      size="wide"
+      title="Change this post's media"
+      description="Pick one video, or a set of pictures that post as one carousel. The copy, products and place in the rotation stay as they are."
+      onClose={() => { setChosen([]); onClose(); }}
+      footer={
+        <>
+          <Button variant="quiet" onClick={() => { setChosen([]); onClose(); }}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" disabled={!chosen.length} onClick={confirm}>
+            {!chosen.length
+              ? "Pick media to use"
+              : kind === "video"
+                ? "Use this video"
+                : chosen.length === 1
+                  ? "Use this picture"
+                  : `Use ${chosen.length} pictures as one carousel`}
+          </Button>
+        </>
+      }
+    >
+      <div className="campaign-media-picker">
+        <AssetFilters
+          values={picker.filters}
+          facets={picker.facets}
+          fields={["query", "effect", "channel", "platform", "length"]}
+          cleared={{}}
+          onChange={(next) => picker.setFilters(next)}
+        />
+        <ul className="campaign-media-grid">
+          {picker.assets.map((asset) => {
+            const selected = chosen.some((item) => item.id === asset.id);
+            return (
+              <li key={asset.id}>
+                <label className={selected ? "selected" : ""}>
+                  <input className="sr-only" type="checkbox" checked={selected}
+                    onChange={() => toggle(asset)} />
+                  <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                  <span className="campaign-media-meta">
+                    <strong>{asset.title}</strong>
+                    <small>{[asset.creator, asset.platform, clipLength(asset.duration_ms)]
+                      .filter(Boolean).join(" · ") || "No source recorded"}</small>
+                    <em>{asset.versions.some((version) => ["blurred", "edited"].includes(version.kind))
+                      ? "Effects applied" : "Original"}</em>
+                  </span>
+                  <b className="campaign-media-check" aria-hidden="true"><Check size={14} strokeWidth={3} /></b>
+                </label>
+              </li>
+            );
+          })}
+          {!picker.assets.length && (
+            <li className="campaign-media-empty">
+              {picker.loading === "list" ? "Reading the library…" : "Nothing in the Library fits."}
+            </li>
+          )}
+        </ul>
+        {picker.total > picker.assets.length && (
+          <Button variant="quiet" size="sm" busy={picker.loading === "more"}
+            onClick={() => void picker.loadMore()}>
+            Load more · showing {picker.assets.length} of {picker.total.toLocaleString()}
+          </Button>
+        )}
+      </div>
+    </Dialog>
   );
 }

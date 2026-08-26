@@ -671,6 +671,81 @@ def test_queue_items_persist_an_editable_post_package(workspace) -> None:
     assert package["thread"] == ["Reply one", "Reply two"]
 
 
+def test_a_queue_items_media_can_be_swapped_without_losing_the_post(workspace) -> None:
+    """The editor could change everything about a post except what it shows.
+
+    The remedy people found was re-creating the post, which lost its copy,
+    its pins and its place in the rotation. A swap keeps the package rules -
+    one kind of media, identity travelling with it - and keeps the post.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\original.mp4",
+        "asset_id": "asset-old",
+        "body": "The copy stays",
+    }).json()["item"]
+
+    swapped = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "video_path": r"S:\media\replacement.mp4",
+        "asset_id": "asset-new",
+    })
+
+    assert swapped.status_code == 200, swapped.text
+    package = swapped.json()["item"]
+    assert package["video_path"] == r"S:\media\replacement.mp4"
+    assert package["asset_id"] == "asset-new"
+    assert package["body"] == "The copy stays"
+
+
+def test_a_video_post_can_become_a_carousel_and_back(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4", "body": "Copy",
+    }).json()["item"]
+
+    as_carousel = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "image_paths": [r"S:\media\one.jpg", r"S:\media\two.jpg"],
+        "asset_id": "asset-pictures",
+    }).json()["item"]
+    assert as_carousel["video_path"] in (None, "")
+    assert as_carousel["image_paths"] == [r"S:\media\one.jpg", r"S:\media\two.jpg"]
+
+    back = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "video_path": r"S:\media\clip.mp4", "asset_id": "asset-clip",
+    }).json()["item"]
+    assert back["image_paths"] == []
+    assert back["video_path"] == r"S:\media\clip.mp4"
+
+
+def test_a_media_swap_keeps_the_package_rules(workspace) -> None:
+    """One kind of media, never none - the same refusals creation makes."""
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4", "body": "Copy",
+    }).json()["item"]
+
+    both = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "video_path": r"S:\media\clip.mp4", "image_paths": [r"S:\media\one.jpg"],
+    })
+    assert both.status_code == 422
+    assert "not both" in both.json()["detail"]
+
+    neither = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "video_path": "", "image_paths": [],
+    })
+    assert neither.status_code == 422
+
+    # And an update that never mentions media leaves it exactly alone.
+    untouched = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "body": "New copy",
+    }).json()["item"]
+    assert untouched["video_path"] == r"S:\media\clip.mp4"
+    assert untouched["asset_id"] == item["asset_id"]
+
+
 def test_a_draft_queue_item_can_be_deleted(workspace) -> None:
     campaign_id = campaign(workspace)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"

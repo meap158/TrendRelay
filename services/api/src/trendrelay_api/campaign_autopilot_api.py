@@ -262,6 +262,15 @@ class QueueItemUpdate(BaseModel):
     #: This post's own wording for what the campaign otherwise supplies. Sent
     #: empty or null to go back to the campaign's - never stored as an empty
     #: disclosure, which is the one value that must not reach a post.
+    #: Replacement media, in the same two shapes `QueueItemCreate` takes: a
+    #: video or pictures, never both. Absent fields leave the media alone -
+    #: which is what every existing caller sends - and a change replaces the
+    #: package whole rather than merging into it, because half a carousel is
+    #: not a post anybody asked for. `asset_id` travels with the media it
+    #: names: a swap that keeps the old asset id would freeze the wrong clip.
+    video_path: str | None = Field(default=None, max_length=1200)
+    image_paths: list[str] | None = Field(default=None, max_length=MAX_CAROUSEL_IMAGES)
+    asset_id: str | None = Field(default=None, max_length=64)
     disclosure: str | None = Field(default=None, max_length=300)
     bio_hint: str | None = Field(default=None, max_length=120)
 
@@ -1025,7 +1034,15 @@ def apply_queue_item_edits(
             autopilot=_existing_autopilot(session, campaign_id),
         )
         item.offer_ids = list(dict.fromkeys(body.offer_ids))
-    if body.body is not None or body.hashtags is not None or body.offer_ids is not None:
+    if (
+        body.body is not None
+        or body.hashtags is not None
+        or body.offer_ids is not None
+        # New media is new evidence: the asset's caption, transcripts and
+        # analysis all change with it, and a match ranked against the old
+        # clip is an answer to a question nobody is asking any more.
+        or media_changed
+    ):
         _refresh_item_match(session, campaign_id, item)
     item.updated_at = datetime.now(UTC)
 
@@ -1136,6 +1153,7 @@ def _require_offer_ids(
                 f"This campaign attaches at most {autopilot.max_products_per_post} "
                 f"product(s) to a post; {len(wanted)} were pinned. Change the "
                 "limit in campaign settings, or pin fewer."
+    media_changed = _apply_media_change(session, workspace_id, campaign_id, item, body)
             ),
         )
 
@@ -1169,6 +1187,60 @@ def draft_offer_recommendations(
     source caption, the hashtags - all hang off the asset, which exists now.
     Reimplementing the scoring against a bare asset would be a second ranking
     to keep in step with the first.
+
+def _apply_media_change(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    item: CampaignQueueItem,
+    body: QueueItemUpdate,
+) -> bool:
+    """Swap the item's media package, when the update carries one.
+
+    The queue froze media by omission - the editor simply had no way to send
+    any - and the remedy that kept the whole clip was re-creating the post and
+    losing its copy, its pins and its place in the rotation. A swap here keeps
+    all of that; what a *planned* execution carries stays frozen exactly as
+    before, because planning resolves and freezes media on its own clock.
+    """
+    if not ({"video_path", "image_paths"} & body.model_fields_set):
+        return False
+    video = (body.video_path or "").strip()
+    images = [path.strip() for path in (body.image_paths or []) if path.strip()]
+    # The same rule the package was created under, restated on the way in:
+    # one kind of media, and never none. An update that names neither is not
+    # "clear the media" - a post with no media is not a post this queue holds.
+    if video and images:
+        raise HTTPException(
+            status_code=422, detail="A package is either a video or pictures, not both."
+        )
+    if not video and not images:
+        raise HTTPException(
+            status_code=422, detail="A package needs a video or at least one picture."
+        )
+    if video == item.video_path and images == list(item.image_paths or []):
+        return False
+    item.video_path = video
+    item.image_paths = images
+    # The identity travels with the media, including to "none": keeping the
+    # old asset id under a raw replacement path would freeze the wrong clip
+    # at planning time.
+    item.asset_id = (body.asset_id or "").strip() or None
+    # Format overrides were chosen against the old package's shape. The ones
+    # the new shape still supports survive; a photo-carousel override on what
+    # is now a video would otherwise wedge every later edit of this post.
+    kept: dict[str, str] = {}
+    for destination_id, requested in (item.post_type_overrides or {}).items():
+        try:
+            kept.update(_validated_post_type_overrides(
+                session, workspace_id, campaign_id,
+                {destination_id: requested}, has_images=bool(images),
+            ))
+        except HTTPException:
+            continue
+    item.post_type_overrides = kept
+    return True
+
 
     `chosen_matches` rather than the ranking underneath it, so the preview is
     subject to everything the post will be: the campaign's ceiling on products
