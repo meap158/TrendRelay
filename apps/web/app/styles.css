@@ -310,8 +310,12 @@ nav strong { color: var(--text); }
 .mcp-tool-rows li > div { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 .mcp-tool-rows li code { font-size: 12px; font-weight: 600; }
 .mcp-tool-rows li em { border: 1px solid var(--line-strong); border-radius: 999px; padding: 1px 7px; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
-.mcp-tool-rows li em.read { border-color: #8ac7b2; color: var(--green); }
-.mcp-tool-rows li em.write { border-color: #d9b98a; color: var(--amber, #9a6b1f); }
+/* Derived from the tokens rather than written beside them, so a re-theme
+   reaches these chips too. Scoped names: bare `read` was also the
+   notification list's read-state class, and one class belongs to one
+   stylesheet. */
+.mcp-tool-rows li em.access-read { border-color: color-mix(in srgb, var(--green) 45%, var(--panel)); color: var(--green); }
+.mcp-tool-rows li em.access-write { border-color: color-mix(in srgb, var(--amber) 45%, var(--panel)); color: color-mix(in srgb, var(--amber) 55%, var(--text)); }
 .mcp-tool-rows li em.tab { text-transform: none; }
 .mcp-tool-rows li em.file { border-color: var(--link); color: var(--link); text-transform: none; }
 .mcp-tool-rows li > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
@@ -1452,7 +1456,6 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-exception-list li > div { display: grid; min-width: 0; gap: 1px; }
 .campaign-exception-list li > div strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-exception-list li > div small { color: var(--muted); font-size: 9px; }
-.campaign-exception-actions { display: flex; align-items: center; gap: 6px; }
 .campaign-pipeline-summary span { display: grid; gap: 1px; padding: 10px 12px; border-inline-start: 1px solid var(--line); }
 .campaign-pipeline-summary span:first-child { border-inline-start: 0; }
 .campaign-pipeline-summary strong { color: var(--text); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }

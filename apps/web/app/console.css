@@ -1595,6 +1595,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-approval-list .post-preview-frame { max-block-size: min(34vh, 260px); }
 .campaign-approval-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-content: start; min-width: 0; }
 .campaign-approval-facts > * { min-width: 0; max-width: 100%; }
+/* Owned here: the approval inbox is a Campaigns surface, and its base rule
+   living in the Publish stylesheet was a class claimed by two sheets. */
+.campaign-exception-actions { display: flex; align-items: center; gap: 6px; }
 .campaign-approval-facts .campaign-exception-actions { flex-wrap: wrap; }
 .campaign-approval-facts pre { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 .campaign-approval-facts > small { color: var(--muted); font-size: 11px; }

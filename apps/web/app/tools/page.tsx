@@ -941,7 +941,7 @@ export default function ToolsPage() {
                           {heads && <h5>{tool.category}</h5>}
                           <div>
                             <code>{tool.name}</code>
-                            <em className={tool.access === "read" ? "read" : "write"}>
+                            <em className={tool.access === "read" ? "access-read" : "access-write"}>
                               {tool.access === "read" ? "read" : "write"}
                             </em>
                             {tool.tab && <em className="tab" title={`Its work shows up in the ${tool.tab} tab`}>{tool.tab}</em>}
