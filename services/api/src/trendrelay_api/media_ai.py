@@ -58,6 +58,26 @@ from trendrelay_api.media_vision import (  # noqa: E402
     vocabulary_digest as _vision_vocabulary_digest,
 )
 ONNX_VERSION = "1.28.0"
+#: The DirectML build of the same module, for Windows machines with a GPU.
+#:
+#: `onnxruntime`, `onnxruntime-directml` and `onnxruntime-gpu` all install the
+#: *same* `onnxruntime` module, so exactly one may be present - which is why
+#: this is a substitution rather than an addition. DirectML rather than CUDA
+#: because it needs no toolkit and runs on any DX12 adapter, and it is what
+#: face identity already asks for; on this machine it took a 1080p OCR pass
+#: from 1233ms to 484ms with identical text. It trails the CPU build by a few
+#: releases, which is the price of the two-and-a-half times.
+ONNX_DIRECTML_VERSION = "1.24.4"
+
+#: The oldest ONNX Runtime the *vision* reader will work against.
+#:
+#: OCR is not the only provider on this module - fastembed reads it too, and on
+#: Python 3.14 it requires 1.24.2 or newer. Because the DirectML build is a
+#: different distribution *name*, pip checks none of that: swapping in a build
+#: below this floor resolves cleanly and then fails somewhere inside the vision
+#: reader, which is a long way from the OCR setting that caused it. Asserted in
+#: the tests so a future bump downwards cannot pass quietly.
+ONNX_VISION_FLOOR = "1.24.2"
 #: Shares the CTranslate2 runtime faster-whisper already installs, so this is a
 #: package rather than a second stack. Language pairs arrive separately.
 TRANSLATE_PACKAGE = "argostranslate"
@@ -243,7 +263,7 @@ def provider_status(*, speech_provider: str | None = None) -> dict[str, Any]:
     return {
         "speech": speech,
         "ocr": {
-            "provider": f"RapidOCR {OCR_VERSION} / ONNX Runtime {ONNX_VERSION}",
+            "provider": f"RapidOCR {OCR_VERSION} / ONNX Runtime {onnx_runtime_build()}",
             "tool_id": PROVIDER_TOOL["ocr"],
             "source_active": active.get("rapidocr", False),
             "runtime_ready": ocr_runtime,
@@ -494,14 +514,63 @@ def _prepare_speech_cuda(stage: Any = None) -> list[str]:
     return []
 
 
+def _installed_onnx_distributions() -> list[Path]:
+    """Every ONNX Runtime build currently unpacked in the runtime."""
+    return sorted(
+        path
+        for path in RUNTIME_ROOT.glob("onnxruntime*.dist-info")
+        if path.is_dir()
+    )
+
+
+def _prepare_ocr_directml(stage: Any = None) -> list[str]:
+    """Swap the CPU ONNX Runtime for the DirectML build, on Windows.
+
+    A substitution, not an addition. `onnxruntime`, `onnxruntime-directml` and
+    `onnxruntime-gpu` all publish the same `onnxruntime` module, so installing
+    one over another leaves the module files from the newer and the metadata
+    from both - which reads as two runtimes installed and reports whichever
+    version is found first. The stale record is removed before the swap so the
+    status page keeps naming the build that is actually loaded.
+
+    Windows only, because DirectML is a Windows API. Any DX12 adapter will do,
+    which on Windows 10 or later is every machine that has a display - and
+    where it somehow is not, RapidOCR falls back to the CPU on its own.
+
+    Never fatal, for the same reason the CUDA download is not: the CPU path is
+    the same reading, only slower.
+    """
+    if os.name != "nt":
+        return []
+    if stage:
+        stage(0.4, "Downloading GPU support for on-screen text")
+    stale = _installed_onnx_distributions()
+    try:
+        # Without `--no-deps` this fails on a file it has no reason to rewrite:
+        # the CPU build brought numpy, protobuf, flatbuffers and packaging with
+        # it, they are already the versions this one wants, and a worker part
+        # way through a job holds them open. The swap is one module's files.
+        pip_install((f"onnxruntime-directml=={ONNX_DIRECTML_VERSION}",), no_deps=True)
+    except Exception as error:
+        return [f"GPU acceleration: {type(error).__name__}: {error}"]
+    # Only after the new build lands: a failed download must not leave the
+    # runtime with working files and no record of them.
+    for path in stale:
+        if path.name.startswith("onnxruntime_directml"):
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+    return []
+
+
 def _prepare_ocr(stage: Any = None) -> list[str]:
     _runtime_path()
     if importlib.util.find_spec("rapidocr") is None:
         raise RuntimeError("RapidOCR was downloaded but cannot be imported.")
+    skipped = _prepare_ocr_directml(stage)
     from rapidocr import RapidOCR
 
-    RapidOCR()
-    return []
+    RapidOCR(params=_ocr_engine_params())
+    return skipped
 
 
 def _argos_available_packages(package: Any) -> list[Any]:
@@ -1382,6 +1451,58 @@ _OCR_ENGINE: Any | None = None
 _OCR_LOCK = Lock()
 
 
+def _onnx_providers() -> list[str]:
+    """What this ONNX Runtime offers, or nothing if it will not import."""
+    _runtime_path()
+    try:
+        import onnxruntime
+
+        return list(onnxruntime.get_available_providers())
+    except Exception:
+        return []
+
+
+def onnx_runtime_build() -> str:
+    """Which ONNX Runtime is loaded, named the way it was installed.
+
+    The version alone stopped saying enough once the build could be swapped:
+    "ONNX Runtime 1.24.4" on a status page is indistinguishable from a stale
+    pin, where "1.24.4 (DirectML)" says why it is not the newer number. Read
+    from the runtime rather than from the constant, because the constant is
+    what was asked for and this is what answered.
+    """
+    _runtime_path()
+    try:
+        import onnxruntime
+
+        version = str(onnxruntime.__version__)
+    except Exception:
+        return ONNX_VERSION
+    return f"{version} (DirectML)" if "DmlExecutionProvider" in _onnx_providers() else version
+
+
+def _directml_available() -> bool:
+    """Whether this ONNX Runtime can actually place work on a DX12 adapter.
+
+    Asked of the runtime rather than assumed from the platform: the DirectML
+    build is only installed on Windows, but a machine can have the wheel and
+    no usable adapter, and a provider that is merely named is not one that
+    runs.
+    """
+    return "DmlExecutionProvider" in _onnx_providers()
+
+
+def _ocr_engine_params() -> dict[str, Any] | None:
+    """Point RapidOCR at the GPU, where there is one it can reach.
+
+    RapidOCR defaults every execution provider off and runs on the CPU, so the
+    DirectML build alone changes nothing - it has to be asked. `None` rather
+    than an empty dict when there is no GPU, because that is what RapidOCR
+    reads as "use your own configuration".
+    """
+    return {"EngineConfig.onnxruntime.use_dml": True} if _directml_available() else None
+
+
 def _ocr_engine() -> Any:
     """Load RapidOCR once; its three ONNX sessions are expensive to rebuild."""
     global _OCR_ENGINE
@@ -1389,7 +1510,16 @@ def _ocr_engine() -> Any:
     from rapidocr import RapidOCR
 
     if _OCR_ENGINE is None:
-        _OCR_ENGINE = RapidOCR()
+        params = _ocr_engine_params()
+        try:
+            _OCR_ENGINE = RapidOCR(params=params)
+        except Exception:
+            # DirectML can accept a session and still refuse a graph. Reading
+            # on the CPU is the same reading, so a GPU that will not build is
+            # worth a slower pass rather than no text at all.
+            if params is None:
+                raise
+            _OCR_ENGINE = RapidOCR()
     return _OCR_ENGINE
 
 
@@ -1439,7 +1569,7 @@ def _ocr_draft(asset: MediaAsset, source: Path, work: Path) -> dict[str, Any]:
         "language": "und",
         "text": text[:100_000],
         "segments": records,
-        "provider": f"rapidocr@{OCR_VERSION}:onnxruntime@{ONNX_VERSION}",
+        "provider": f"rapidocr@{OCR_VERSION}:onnxruntime@{onnx_runtime_build()}",
     }
 
 

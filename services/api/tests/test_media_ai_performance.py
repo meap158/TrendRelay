@@ -57,12 +57,14 @@ def test_rapidocr_sessions_are_reused(monkeypatch) -> None:
     module = ModuleType("rapidocr")
 
     class RapidOCR:
-        def __init__(self) -> None:
+        def __init__(self, params=None) -> None:
+            self.params = params
             loaded.append(self)
 
     module.RapidOCR = RapidOCR  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "rapidocr", module)
     monkeypatch.setattr(media_ai, "_OCR_ENGINE", None)
+    monkeypatch.setattr(media_ai, "_onnx_providers", lambda: ["CPUExecutionProvider"])
 
     first = media_ai._ocr_engine()
     second = media_ai._ocr_engine()
@@ -103,6 +105,99 @@ def test_gpu_support_is_downloaded_only_where_there_is_a_gpu(monkeypatch) -> Non
     monkeypatch.setattr(media_ai, "_cuda_devices_visible", lambda: 1)
     assert media_ai._prepare_speech_cuda() == []
     assert asked == [media_ai.SPEECH_CUDA_PACKAGES]
+
+
+def test_ocr_asks_for_the_gpu_only_when_one_is_reachable(monkeypatch) -> None:
+    """RapidOCR defaults every provider off, so the build alone changes nothing."""
+    monkeypatch.setattr(media_ai, "_onnx_providers", lambda: ["CPUExecutionProvider"])
+    assert media_ai._ocr_engine_params() is None
+
+    monkeypatch.setattr(
+        media_ai, "_onnx_providers", lambda: ["DmlExecutionProvider", "CPUExecutionProvider"]
+    )
+    assert media_ai._ocr_engine_params() == {"EngineConfig.onnxruntime.use_dml": True}
+
+
+def test_the_onnx_build_is_named_by_what_answered(monkeypatch) -> None:
+    module = ModuleType("onnxruntime")
+    module.__version__ = "1.24.4"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "onnxruntime", module)
+
+    monkeypatch.setattr(media_ai, "_onnx_providers", lambda: ["CPUExecutionProvider"])
+    assert media_ai.onnx_runtime_build() == "1.24.4"
+
+    monkeypatch.setattr(media_ai, "_onnx_providers", lambda: ["DmlExecutionProvider"])
+    assert media_ai.onnx_runtime_build() == "1.24.4 (DirectML)"
+
+
+def test_the_directml_build_still_satisfies_the_vision_reader() -> None:
+    """OCR and vision share one module, and pip cannot see the conflict.
+
+    `onnxruntime-directml` is a different distribution name from `onnxruntime`,
+    so swapping it in never trips fastembed's requirement - it resolves, then
+    fails inside the vision reader, a long way from the OCR setting that did it.
+    """
+
+    def parts(version: str) -> tuple[int, ...]:
+        return tuple(int(piece) for piece in version.split("."))
+
+    assert parts(media_ai.ONNX_DIRECTML_VERSION) >= parts(media_ai.ONNX_VISION_FLOOR)
+
+
+def test_directml_is_windows_only(monkeypatch) -> None:
+    asked: list[tuple[str, ...]] = []
+    monkeypatch.setattr(media_ai, "pip_install", lambda packages: asked.append(tuple(packages)))
+    monkeypatch.setattr(media_ai.os, "name", "posix")
+
+    assert media_ai._prepare_ocr_directml() == []
+    assert asked == []
+
+
+def test_a_failed_directml_swap_keeps_the_working_runtime(monkeypatch, tmp_path) -> None:
+    """The record is removed only once the replacement has landed.
+
+    Deleting first and installing second is how a locked file - a worker still
+    holding the module - turns a speed-up into an OCR provider that reports no
+    version and cannot say what it is running.
+    """
+    stale = tmp_path / "onnxruntime-1.28.0.dist-info"
+    stale.mkdir()
+
+    def refuse(packages, *, no_deps=False):
+        raise RuntimeError("The download failed. PermissionError: Access is denied.")
+
+    monkeypatch.setattr(media_ai.os, "name", "nt")
+    monkeypatch.setattr(media_ai, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(media_ai, "pip_install", refuse)
+
+    skipped = media_ai._prepare_ocr_directml()
+
+    assert len(skipped) == 1
+    assert "PermissionError" in skipped[0], "the reason must survive, not just the failure"
+    assert stale.is_dir(), "the working runtime's record must survive a failed swap"
+
+
+def test_a_successful_directml_swap_retires_the_replaced_record(monkeypatch, tmp_path) -> None:
+    stale = tmp_path / "onnxruntime-1.28.0.dist-info"
+    stale.mkdir()
+    landed = tmp_path / "onnxruntime_directml-1.24.4.dist-info"
+
+    asked: dict[str, bool] = {}
+
+    def install(packages, *, no_deps=False):
+        asked["no_deps"] = no_deps
+        landed.mkdir()
+
+    monkeypatch.setattr(media_ai.os, "name", "nt")
+    monkeypatch.setattr(media_ai, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(media_ai, "pip_install", install)
+
+    assert media_ai._prepare_ocr_directml() == []
+    # The dependencies are already in the runtime and a running worker holds
+    # them open; rewriting them is what made this fail on a loaded `.pyd`.
+    assert asked["no_deps"] is True
+    assert not stale.exists(), "two builds of one module must not both be recorded"
+    assert landed.is_dir()
 
 
 def test_a_failed_gpu_download_is_reported_rather_than_fatal(monkeypatch) -> None:
