@@ -69,6 +69,17 @@ type EngineRow = {
   requires_public_media: boolean;
   ingests_media_url: boolean;
   media_note: string;
+  /**
+   * Whether posts sent through this engine will ever show figures.
+   *
+   * Worth a column of its own rather than a footnote: an engine that cannot
+   * report leaves every post reading zero, and a zero on screen looks like a
+   * result rather than like a gap. Choosing an engine is partly choosing
+   * whether the campaign can be measured at all.
+   */
+  reads_engagement: boolean;
+  /** Why it cannot, in the engine's own terms. Empty when it can. */
+  no_metrics_reason: string;
   supports_approval: boolean;
   /**
    * The engine's published tiers, dated and sourced.
@@ -306,6 +317,7 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
                   the engine's own page, linked below. */}
               <th scope="col">Free plan</th>
               <th scope="col">Approval</th>
+              <th scope="col">Reports back</th>
               <th scope="col">Notes</th>
             </tr>
           </thead>
@@ -340,6 +352,19 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
                   );
                 })()}</td>
                 <td>{engine.supports_approval ? "Yes" : "—"}</td>
+                <td>
+                  {engine.reads_engagement ? (
+                    "Views, likes, comments"
+                  ) : (
+                    <>
+                      No
+                      {/* Said here, not left to be inferred from an empty
+                          chart later. The full reason is in the notes above
+                          the table; this is the part that changes a choice. */}
+                      <small>Delivery only, no engagement</small>
+                    </>
+                  )}
+                </td>
                 <td className="capability-note-cell">{engine.media_note}</td>
               </tr>
             ))}

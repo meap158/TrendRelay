@@ -206,3 +206,41 @@ def test_a_plan_says_what_it_means_for_publishing() -> None:
     assert all(caveats.values()), f"no caveat for: {[k for k, v in caveats.items() if not v]}"
     assert "not publishing" in caveats["woopsocial"]
     assert "queue depth" in caveats["buffer"]
+
+
+def test_the_table_says_which_engines_can_be_measured() -> None:
+    """Read from the reader registry, not from a second list.
+
+    The column answers "will I ever see figures for this", which is part of
+    choosing an engine and not a detail to discover after a fortnight of posts
+    reading zero. Asking the registry means the table cannot promise a
+    measurement the collector will not take.
+    """
+    from trendrelay_api.campaign_measurement import PROVIDER_METRIC_READERS
+
+    for row in capability_matrix()["engines"]:
+        assert row["reads_engagement"] == (row["id"] in PROVIDER_METRIC_READERS)
+        # The same pairing the engine definitions are held to: an engine that
+        # cannot be read says why, and one that can has nothing to explain.
+        assert bool(row["no_metrics_reason"]) != row["reads_engagement"]
+
+
+def test_an_engine_that_cannot_report_is_named_in_the_notes() -> None:
+    """Generated from the definitions, so the prose cannot go stale.
+
+    A hand-written sentence outlives the fact it describes. This one disappears
+    by itself the day an engine gains a reader.
+    """
+    matrix = capability_matrix()
+    unreadable = [row for row in matrix["engines"] if not row["reads_engagement"]]
+
+    for row in unreadable:
+        assert any(
+            note.startswith(f"{row['label']}: ") and row["no_metrics_reason"] in note
+            for note in matrix["notes"]
+        ), f"{row['id']} is unreadable and unexplained"
+
+    readable = {row["label"] for row in matrix["engines"] if row["reads_engagement"]}
+    for note in matrix["notes"]:
+        label = note.split(":", 1)[0]
+        assert label not in readable, f"{label} reads back and should not be excused"

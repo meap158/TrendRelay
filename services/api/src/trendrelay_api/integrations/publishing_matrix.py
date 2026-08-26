@@ -141,6 +141,19 @@ def _platform_row(platform: str) -> dict[str, Any]:
     }
 
 
+def _readable_engines() -> set[str]:
+    """Engines with a metrics reader registered, asked rather than restated.
+
+    Imported inside the call because the registry is populated by the
+    publishing module at import time, and reading it here rather than keeping a
+    second list means the table cannot drift out of step with what the
+    collector will actually do.
+    """
+    from trendrelay_api.campaign_measurement import PROVIDER_METRIC_READERS
+
+    return set(PROVIDER_METRIC_READERS)
+
+
 def _engine_row(engine_id: str) -> dict[str, Any]:
     engine = PROVIDERS[engine_id]
     return {
@@ -160,11 +173,34 @@ def _engine_row(engine_id: str) -> dict[str, Any]:
         "requires_public_media": engine.requires_public_media,
         "ingests_media_url": engine.ingests_media_url,
         "media_note": engine.media_note,
+        # Whether a campaign will ever see figures for what this engine posts.
+        # It belongs beside "can it reach that network", because an engine that
+        # publishes without reporting leaves every post reading zero - and a
+        # zero looks like a result rather than like a missing capability.
+        "reads_engagement": engine_id in _readable_engines(),
+        "no_metrics_reason": engine.no_metrics_reason,
         "supports_approval": engine_id == "buffer",
         # What the engine sells, so "can this plan post that" is answerable
         # in the same place as "can this engine reach that".
         "plans": engine_limits.plan_ladder_payload(engine_id),
     }
+
+
+def _engagement_notes() -> list[str]:
+    """One note per engine that cannot report, carrying its reason.
+
+    Generated rather than written down, so an engine that gains a reader stops
+    being mentioned without anybody remembering to delete a sentence - and one
+    that loses its reader starts being mentioned without anybody remembering to
+    add one. The reason is the engine's own, kept whole: a shortened version
+    would be the thing somebody has to go and re-check.
+    """
+    readable = _readable_engines()
+    return [
+        f"{engine.label}: {engine.no_metrics_reason}"
+        for engine_id, engine in PROVIDERS.items()
+        if engine_id not in readable and engine.no_metrics_reason
+    ]
 
 
 def capability_matrix() -> dict[str, Any]:
@@ -185,6 +221,7 @@ def capability_matrix() -> dict[str, Any]:
                 "A capability needs the network and the engine. Instagram has "
                 "carousels; no engine here can post one to it."
             ),
+            *_engagement_notes(),
             (
                 "Text after a post needs an engine that reaches it. Buffer and "
                 "Zernio both post a first comment on Instagram, Facebook and "
