@@ -1776,3 +1776,47 @@ def test_a_threads_topic_rides_the_post_from_creation_and_from_copy(session) -> 
 
     cleared = writes.write_post_copy(session, "ws", view["id"], topic="")
     assert cleared["topic"] is None
+
+
+# --- the procedure and the tools stay in step ----------------------------------
+
+
+def test_every_tool_an_sop_names_actually_exists() -> None:
+    """An SOP is loaded before acting, so a tool it names and the server does
+    not offer is a step an assistant cannot take.
+
+    The other direction is the one that bit: `upload_media` shipped and the
+    procedure went on describing `upload_image` five times, so the ability to
+    put a video into a campaign existed and nothing an assistant reads
+    mentioned it.
+    """
+    import re
+
+    offered = set(policy.allowed_operations())
+    for entry in sops.list_sops():
+        markdown = sops.get_sop(entry["action"])["markdown"]
+        # Tool names are written in backticks; only the ones shaped like an
+        # operation are checked, so prose in backticks is not a false alarm.
+        named = {
+            found for found in re.findall(r"`([a-z][a-z0-9_]{3,})`", markdown)
+            if found in offered or found.split("_")[0] in {
+                "upload", "create", "list", "get", "set", "write"
+            }
+        }
+        missing = sorted(name for name in named if name not in offered)
+        assert missing == [], f"{entry['action']} names tools nobody offers: {missing}"
+
+
+def test_the_media_sop_covers_what_the_upload_tools_accept() -> None:
+    """The gap this closes, kept closed.
+
+    `upload_media` takes video; the procedure described pictures only, so an
+    assistant following it would never have uploaded a clip.
+    """
+    markdown = sops.get_sop("campaigns.add-post-with-media")["markdown"]
+
+    assert "upload_media" in markdown
+    assert "video" in markdown.lower()
+    # And the one thing a caller must not try: a carousel is pictures, a video
+    # is one file, and the two never mix in a package.
+    assert "carousel of clips" in markdown or "never a mix" in markdown

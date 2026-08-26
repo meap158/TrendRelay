@@ -2,17 +2,21 @@
 id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
-summary: Upload an image into the media library and propose a draft post from Library assets into a campaign, for the operator to promote.
-version: 4
+summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign, for the operator to promote.
+version: 5
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post]
 ---
 # Adding a post with media to a TrendRelay campaign
 
-This SOP covers bringing images into the workspace and proposing a post made
-from Library media into a campaign - one picture, or several as a carousel. It
-uses five operations: `list_campaigns`, `list_library_assets`, `upload_image`,
-`get_import_status`, and `create_campaign_post`.
+This SOP covers bringing media into the workspace and proposing a post made
+from it into a campaign - one video, one picture, or several pictures as a
+carousel. It uses five operations: `list_campaigns`, `list_library_assets`,
+`upload_media`, `get_import_status`, and `create_campaign_post`.
+
+`upload_media` takes video and images alike. `upload_image` still exists and
+takes pictures only; prefer `upload_media` unless you have a reason not to,
+so that one tool covers whatever the user attaches.
 
 ## What you can and cannot do here
 
@@ -35,24 +39,28 @@ If the campaign you were given is `accepts_carousel: false` and the user wants
 a carousel, say so before uploading anything. Uploading first and finding out
 afterwards costs the user an import per picture.
 
-## 2. Bring the images in
+## 2. Bring the media in
 
-If the pictures are already in the library - the operator's own downloads, or
-something an earlier session uploaded - skip to step 4 and find them with
-`list_library_assets`. Otherwise call `upload_image` once per picture, with one
+If it is already in the library - the operator's own downloads, or something an
+earlier session uploaded - skip to step 4 and find it with
+`list_library_assets`. Otherwise call `upload_media` once per file, with one
 source each:
 
 - **A chat attachment.** In clients that support the `openai/fileParams`
-  convention (ChatGPT), an image the user attaches arrives automatically as the
-  `image` parameter - an object carrying a temporary `download_url`. You do
+  convention (ChatGPT), a file the user attaches arrives automatically as the
+  `media` parameter - an object carrying a temporary `download_url`. You do
   not need to read or repeat that URL.
-- **A direct URL.** Pass `image_url` with a direct public `https://` link to
-  the image file itself. Redirecting links, `http://` links, and links to
-  private or local addresses are refused. JPEG, PNG and WebP are accepted, up
-  to 25 MB.
+- **A direct URL.** Pass `media_url` with a direct public `https://` link to
+  the file itself. Redirecting links, `http://` links, and links to private or
+  local addresses are refused. MP4, MOV and WebM video up to 512 MB are
+  accepted, and JPEG, PNG and WebP images up to 25 MB.
+
+A video is one file and one post. There is no such thing as a carousel of
+clips: a campaign package is one video **or** a set of pictures, so upload the
+clip, wait for its asset id, and go straight to step 4.
 
 Always pass a `title` a person will recognise in the Library. When you know
-where the image genuinely came from, record it: `source_url` for the page,
+where the file genuinely came from, record it: `source_url` for the page,
 `creator` for who made it, `platform` for the network it came from. Do not
 invent provenance, and do not pass the temporary attachment URL as
 `source_url` - it expires and identifies nothing.
@@ -62,17 +70,17 @@ operator's own files - deduplicated by content, kept immutable, audited - and
 appears there under the `mcp-upload` source.
 
 **For a carousel, keep the order.** There is no bulk upload: a carousel of six
-pictures is six `upload_image` calls. Track the returned ids in the order the
+pictures is six `upload_media` calls. Track the returned ids in the order the
 user gave you the pictures, because that is the order they will swipe through -
 `create_campaign_post` uses the order of `asset_ids` as the order of the
 carousel.
 
 ## 3. Wait for the asset ids
 
-`upload_image` returns either:
+`upload_media` returns either:
 
 - `asset_id` immediately, with `duplicate: true` - the library already holds
-  this exact image; use the asset id as it is; or
+  these exact bytes; use the asset id as it is; or
 - a `job_id` - poll `get_import_status` until the import finishes.
 
 **Poll the whole set at once.** Pass every job id for this post as `job_ids`
