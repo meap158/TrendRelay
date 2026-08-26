@@ -228,8 +228,15 @@ class QueueItemCreate(BaseModel):
         images = [path for path in self.image_paths if path.strip()]
         if video and images:
             raise ValueError("A package is either a video or pictures, not both.")
-        if not video and not images:
+        if not video and not images and not self.media_later:
             raise ValueError("A package needs a video or at least one picture.")
+    #: A post may arrive before its media does - an assistant drafting copy
+    #: first and attaching the clip later mirrors media arriving before copy,
+    #: which the queue has always allowed. Explicit rather than inferred, so
+    #: an ordinary caller who forgot the media is still refused; a media-less
+    #: post is skipped by the scheduler with a note until media is attached.
+    media_later: bool = False
+
         return self
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
@@ -244,6 +251,9 @@ class QueueItemCreate(BaseModel):
     #: products it has, and a post pinned to a stray offer is refused.
     #:
     #: A post arriving whole is the case that rule reads wrong. Somebody who has
+    #: Threads' topic tag, validated by the same rule Publish's request uses
+    #: so a campaign cannot store a topic the network will bounce.
+    topic: str | None = Field(default=None, max_length=60)
     #: written a post in Publish around a particular product and then files it
     #: into a campaign has already chosen; refusing it and asking them to go and
     #: tag the product first is bookkeeping, not a decision. So the caller that
@@ -257,6 +267,14 @@ class QueueItemUpdate(BaseModel):
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     hashtags: list[str] | None = Field(default=None, max_length=30)
     first_comment: str | None = Field(default=None, max_length=2000)
+    post_type_overrides: dict[str, str] = Field(default_factory=dict, max_length=50)
+
+    @field_validator("topic")
+    @classmethod
+    def usable_topic(cls, value: str | None) -> str | None:
+        from trendrelay_api.integrations.publishing import clean_topic
+
+        return clean_topic(value)
     thread: list[str] | None = Field(default=None, max_length=24)
     offer_ids: list[str] | None = Field(default=None, max_length=5)
     #: This post's own wording for what the campaign otherwise supplies. Sent
@@ -270,8 +288,26 @@ class QueueItemUpdate(BaseModel):
     #: names: a swap that keeps the old asset id would freeze the wrong clip.
     video_path: str | None = Field(default=None, max_length=1200)
     image_paths: list[str] | None = Field(default=None, max_length=MAX_CAROUSEL_IMAGES)
+    title: str | None = Field(default=None, max_length=200)
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
+    hashtags: list[str] | None = Field(default=None, max_length=30)
+    first_comment: str | None = Field(default=None, max_length=2000)
+    thread: list[str] | None = Field(default=None, max_length=24)
+    topic: str | None = Field(default=None, max_length=60)
+    offer_ids: list[str] | None = Field(default=None, max_length=5)
+    #: This post's own wording for what the campaign otherwise supplies. Sent
+    #: empty or null to go back to the campaign's - never stored as an empty
+    #: disclosure, which is the one value that must not reach a post.
     asset_id: str | None = Field(default=None, max_length=64)
     disclosure: str | None = Field(default=None, max_length=300)
+    post_type_overrides: dict[str, str] | None = Field(default=None, max_length=50)
+
+    @field_validator("topic")
+    @classmethod
+    def usable_topic(cls, value: str | None) -> str | None:
+        from trendrelay_api.integrations.publishing import clean_topic
+
+        return clean_topic(value)
     bio_hint: str | None = Field(default=None, max_length=120)
 
 
@@ -333,6 +369,7 @@ def _destination_view(
 ) -> dict[str, Any]:
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
+        topic_deliverable,
         limits_for,
     )
 
@@ -380,6 +417,9 @@ def _destination_view(
         # Pinterest have one, and asking for a title on a campaign that posts
         # to none of them is asking for something nobody will ever see.
         "takes_title": limits_for(item.platform).title is not None,
+        # Whether a Threads topic can be attached here - Threads only, and only
+        # through an engine whose schema declares the field.
+        "topic_deliverable": topic_deliverable(item.provider, item.platform),
         "integration_id": item.integration_id,
         "platform": item.platform,
         "page_key": item.page_key,
@@ -421,6 +461,7 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "offer_ids": item.offer_ids,
         "offer_match": item.offer_match,
         "state": item.state,
+        "topic": item.topic,
         "position": item.position,
         "times_posted": item.times_posted,
         "last_posted_at": item.last_posted_at,
@@ -1058,6 +1099,7 @@ def _refresh_item_match(
     rotation that the preview had just spread across twenty rows vanished the
     moment those rows were added: the ranking does not change between items, so
     every one of them showed the same leading product.
+        topic=body.topic,
     """
     from trendrelay_api.campaign_offer_matcher import (
         last_promoted,
@@ -1143,6 +1185,9 @@ def _require_offer_ids(
                     "campaign's products first, here or in Attribution."
                 ),
             )
+    if "topic" in body.model_fields_set:
+        # Already cleaned by the model's validator; empty came back as None.
+        item.topic = body.topic
     # The campaign's own ceiling, refused rather than silently trimmed. The
     # scheduler takes the first N when it posts, so pinning five against a cap
     # of two used to store five and send two, with nothing saying which.

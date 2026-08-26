@@ -111,6 +111,9 @@ EXPOSURE: dict[str, Access] = {
     # person promotes it in the app. `intake.create_campaign_post` hard-codes
     # that state; a caller cannot ask for another.
     "upload_image": Access.WORKSPACE_WRITE,
+    # The same door with video allowed through it, under the same guards and
+    # the same ingest; the size cap is the only thing that widens.
+    "upload_media": Access.WORKSPACE_WRITE,
     "get_import_status": Access.READ,
     # Reading the Library is a read like any other, and the alternative was
     # worse than the exposure: without it the only asset ids a caller could
@@ -118,6 +121,10 @@ EXPOSURE: dict[str, Access] = {
     # the operator already collected meant uploading it again.
     "list_library_assets": Access.READ,
     "create_campaign_post": Access.WORKSPACE_WRITE,
+    # Media onto a *draft* only - `writes.set_post_media` refuses any other
+    # state - so the pair with the media-less create is complete without a
+    # way to change what a promoted post publishes.
+    "set_post_media": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,

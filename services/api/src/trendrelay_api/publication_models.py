@@ -138,6 +138,9 @@ class PublicationExecution(Base):
     caption: Mapped[str] = mapped_column(String(6000), default="")
     first_comment: Mapped[str | None] = mapped_column(String(2000))
     thread: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: The Threads topic frozen with the rest of the content, so what was
+    #: previewed is what publishes even if the queue item is edited after.
+    topic: Mapped[str | None] = mapped_column(String(50))
     placement: Mapped[str] = mapped_column(String(24), default="caption")
     #: Why TrendRelay chose this - destination rank, placement rule, product
     #: match - written at freeze time so the explanation cannot drift from the

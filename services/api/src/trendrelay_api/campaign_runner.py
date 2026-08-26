@@ -176,6 +176,7 @@ def _publish_execution(
         targets=[{
             "platform": execution.platform,
             "integration_id": execution.integration_id,
+        topic=execution.topic,
             "post_type": _post_type_for(execution),
             "provider": execution.provider,
         }],
@@ -273,6 +274,7 @@ def finalization_problems(
                     "integration_id": execution.integration_id,
                     "post_type": _post_type_for(execution),
                     "provider": execution.provider,
+                topic=execution.topic,
                 }],
             ))
         except Exception as error:
@@ -520,6 +522,7 @@ def _freeze_execution(
         tracking_links=links,
         provider=destination.provider,
         integration_id=destination.integration_id,
+        topic=post.topic,
         platform=destination.platform,
         destination_label=destination.label,
         post_type=destination.post_type,

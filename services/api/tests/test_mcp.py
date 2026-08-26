@@ -119,7 +119,8 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "list_posting_times",
         "list_posts_needing_copy", "list_published_posts", "list_sops",
         "set_campaign_posting_times",
-        "set_page_posting_times", "set_workspace_posting_times", "upload_image",
+        "set_page_posting_times", "set_post_media", "set_workspace_posting_times",
+        "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
         "write_post_copy", "write_thread",
     ]
@@ -1663,3 +1664,115 @@ def test_a_post_that_never_went_out_is_not_listed(session) -> None:
     _published(session, "waiting", state="proposed", performance_snapshots=[])
 
     assert context.list_published_posts(session, "ws") == []
+
+
+# --- drafting a post in two visits ---------------------------------------------
+
+
+def _video_asset(session, asset_id: str = "clip1", path: str = r"S:\media\clip.mp4"):
+    from trendrelay_api.media_models import MediaAsset
+
+    asset = MediaAsset(
+        id=asset_id, workspace_id="ws", title="Clip", media_kind="video",
+        source_type="mcp-upload", original_path=path,
+        original_sha256=(asset_id * 64)[:64], mime_type="video/mp4", size_bytes=1234,
+        has_audio=True, created_by="local-admin",
+    )
+    session.add(asset)
+    session.commit()
+    return asset
+
+
+def test_a_post_can_be_drafted_before_its_media_exists(session) -> None:
+    """Copy first, clip later - the mirror of media arriving before copy."""
+    from trendrelay_api.integrations.mcp import intake
+
+    view = intake.create_campaign_post(
+        session, "ws", "camp", [], caption="Words before pictures.",
+    )
+
+    item = session.scalar(
+        __import__("sqlalchemy").select(CampaignQueueItem).where(
+            CampaignQueueItem.id == view["id"],
+        )
+    )
+    assert item.state == "draft"
+    assert item.video_path == "" and item.image_paths == []
+    assert item.body == "Words before pictures."
+
+
+def test_set_post_media_completes_a_media_less_draft(session) -> None:
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _video_asset(session)
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Soon.")
+
+    done = writes.set_post_media(session, "ws", view["id"], ["clip1"])
+
+    assert done["video_path"] == r"S:\media\clip.mp4"
+    assert done["asset_id"] == "clip1"
+    assert "draft" in done["note"]
+
+
+def test_set_post_media_refuses_a_post_already_in_rotation(session) -> None:
+    """Changing what a promoted post publishes is the operator's act."""
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _video_asset(session)
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Soon.")
+    item = session.scalar(
+        __import__("sqlalchemy").select(CampaignQueueItem).where(
+            CampaignQueueItem.id == view["id"],
+        )
+    )
+    item.state = "approved"
+    session.commit()
+
+    with pytest.raises(ValueError, match="operator"):
+        writes.set_post_media(session, "ws", view["id"], ["clip1"])
+
+
+def test_upload_media_takes_a_video_the_image_door_refuses(monkeypatch, tmp_path) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    monkeypatch.setattr(intake, "_upload_root", lambda: tmp_path / "mcp-uploads")
+    recorded = {}
+
+    def fake_ingest(**kwargs):
+        recorded.update(kwargs)
+        return {"id": "job9", "status": "queued", "duplicate": False}
+
+    monkeypatch.setattr(
+        "trendrelay_api.media_library.create_ingest_job", fake_ingest
+    )
+    fetch = lambda url: (b"not really mp4 bytes", "video/mp4")
+
+    with pytest.raises(ValueError, match="accepts"):
+        intake.upload_image(
+            "ws", image_url="https://media.example/clip.mp4", fetch=fetch,
+        )
+    result = intake.upload_media(
+        "ws", media_url="https://media.example/clip.mp4", title="A clip", fetch=fetch,
+    )
+
+    assert result["job_id"] == "job9"
+    assert recorded["path"].endswith(".mp4")
+    assert recorded["source_type"] == "mcp-upload"
+
+
+def test_a_threads_topic_rides_the_post_from_creation_and_from_copy(session) -> None:
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session)
+    view = intake.create_campaign_post(
+        session, "ws", "camp", ["img1"], caption="Desk things.", topic="#desksetup",
+    )
+    assert view["topic"] == "desksetup", "the hash goes; Threads shows its own"
+
+    rewritten = writes.write_post_copy(
+        session, "ws", view["id"], topic="workspace tours",
+    )
+    assert rewritten["topic"] == "workspace tours"
+
+    cleared = writes.write_post_copy(session, "ws", view["id"], topic="")
+    assert cleared["topic"] is None

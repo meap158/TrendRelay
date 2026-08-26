@@ -654,6 +654,42 @@ DEFAULT_YOUTUBE_CATEGORY = "22"
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 
 #: Each network's ceiling on pictures in one post, which are not the same.
+
+def topic_deliverable(provider: str | None, platform: str | None) -> bool:
+    """Whether this destination's engine can attach a Threads topic here.
+
+    Asked before offering a topic field: Threads is the only network with one,
+    and Buffer the only engine whose schema declares it - see
+    `topic_platforms`. `provider` may be a connection id, exactly as with
+    `first_comment_deliverable`, so the same resolution applies.
+    """
+    engine = _engine_of(provider)
+    if not engine or engine not in PROVIDERS:
+        return False
+    return (platform or "") in PROVIDERS[engine].topic_platforms
+
+
+def clean_topic(value: str | None) -> str | None:
+    """A topic as Threads will take it, or a ValueError naming why not.
+
+    The one implementation behind every door a topic can come in through -
+    Publish's request, a campaign post, an assistant's write - because two
+    copies of "no full stop" is how one door starts accepting posts the
+    network will bounce. The leading hash goes: Threads shows one itself, so
+    typing it is natural and sending it would tag "#coffee" as "coffee"'s
+    stranger sibling.
+    """
+    if value is None:
+        return None
+    topic = value.strip().lstrip("#").strip()
+    if not topic:
+        return None
+    if "." in topic or "&" in topic:
+        raise ValueError("A Threads topic cannot contain a full stop or an ampersand.")
+    if len(topic) > 50:
+        raise ValueError("A Threads topic is at most 50 characters.")
+    return topic
+
 #:
 #: "Carousel" is the Instagram and TikTok word for it, and it is the wrong word
 #: for most of this list: four pictures on X and ten on Facebook are an ordinary
@@ -858,22 +894,8 @@ class PublishRequest(BaseModel):
     @field_validator("topic")
     @classmethod
     def usable_topic(cls, value: str | None) -> str | None:
-        """A topic as Threads will take it.
-
-        The leading hash goes because Threads shows one itself; typing it is
-        the natural thing to do and sending it would tag "#coffee" rather than
-        "coffee".
-        """
-        if value is None:
-            return None
-        topic = value.strip().lstrip("#").strip()
-        if not topic:
-            return None
-        if "." in topic or "&" in topic:
-            raise ValueError("A Threads topic cannot contain a full stop or an ampersand.")
-        if len(topic) > 50:
-            raise ValueError("A Threads topic is at most 50 characters.")
-        return topic
+        # One rule for every door a topic comes in through - see `clean_topic`.
+        return clean_topic(value)
 
     @field_validator("subreddit")
     @classmethod

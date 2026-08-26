@@ -61,6 +61,8 @@ def write_post_copy(
     title: str | None = None,
     disclosure: str | None = None,
     bio_hint: str | None = None,
+    topic: str | None = None,
+    post_types: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Set any of a post's copy fields, leaving the rest and its state alone.
 
@@ -112,13 +114,83 @@ def write_post_copy(
         # string clears the override back to the campaign's.
         _refuse_links("bio hint", bio_hint)
         fields["bio_hint"] = bio_hint
+    if topic is not None:
+        # Threads' topic tag. Validated by the update model's own rule - the
+        # same one Publish uses - and delivered only where the engine can
+        # attach it; an empty string clears it.
+        fields["topic"] = topic
+    if post_types is not None:
+        # Destination id -> format id. Sparse by design: omitted destinations
+        # keep inheriting their campaign default.
+        fields["post_type_overrides"] = post_types
     if not fields:
         raise ValueError(
             "Provide at least one of caption, first_comment, thread, hashtags, title, "
-            "disclosure or bio_hint."
+            "disclosure, bio_hint, topic or post_types."
         )
 
     update = QueueItemUpdate(**fields)
     apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
     session.commit()
     return _queue_view(item)
+
+
+def set_post_media(
+    session: Session,
+    workspace_id: str,
+    item_id: str,
+    asset_ids: list[str],
+) -> dict[str, Any]:
+    """Attach or replace a draft post's media, from Library assets.
+
+    The other half of writing a post in two visits: `create_campaign_post`
+    with no assets drafts the words, an upload brings the clip into the
+    Library, and this puts the two together. One video or a set of pictures,
+    the queue's own package rule.
+
+    Drafts only. A post in the rotation is one the operator promoted with its
+    media in view, and swapping what publishes underneath that decision is
+    theirs to do in the app - the same line that keeps approval out of an
+    assistant's hands.
+    """
+    from trendrelay_api.campaign_autopilot_api import (
+        QueueItemUpdate,
+        _queue_view,
+        apply_queue_item_edits,
+    )
+    from trendrelay_api.integrations.mcp.intake import (
+        _media_package,
+        resolve_post_assets,
+    )
+
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise LookupError(f"No queue item {item_id!r} in this workspace.")
+    if item.state != "draft":
+        raise ValueError(
+            "Only a draft's media can be set from here. This post is "
+            f"{item.state}; ask the operator to change its media in the app."
+        )
+    if not asset_ids:
+        raise ValueError("Name at least one Library asset to attach.")
+
+    assets = resolve_post_assets(session, workspace_id, asset_ids)
+    media = _media_package(assets)
+    update = QueueItemUpdate(
+        video_path=media.get("video_path", ""),
+        image_paths=media.get("image_paths", []),
+        asset_id=assets[0].id,
+    )
+    apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
+    session.commit()
+    view = _queue_view(item)
+    view["note"] = (
+        "Media attached. The post is still a draft; the operator promotes it "
+        "into the rotation in the app."
+    )
+    return view

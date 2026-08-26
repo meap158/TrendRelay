@@ -1571,3 +1571,22 @@ def test_a_package_with_its_own_title_keeps_it(session) -> None:
     posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
 
     assert [post.title for post in posts] == ["What somebody called it"]
+
+
+def test_a_post_awaiting_media_is_skipped_with_its_own_note(session) -> None:
+    """The mirror of the unwritten package: copy written, media still to come.
+
+    An assistant may draft the words over MCP and attach the clip later; until
+    it does, the post must not hold a slot or reach an engine with nothing to
+    send.
+    """
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q-empty", video_path="", image_paths=[])
+    queue_item(session, "q-ready", position=1)
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-ready"]
+    assert "still need media attached" in note
+    assert "q-empty" in note

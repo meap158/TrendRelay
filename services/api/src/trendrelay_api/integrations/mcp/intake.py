@@ -54,6 +54,20 @@ _IMAGE_TYPES: dict[str, str] = {
 #: uploads well below this.
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
+#: The video types the Library accepts over MCP, by reported content type -
+#: the same rule as images: the server's word decides the suffix, never the
+#: URL's own spelling.
+_VIDEO_TYPES: dict[str, str] = {
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+}
+
+#: A short-form clip with room to spare. Well under what the disk minds, well
+#: over what any network here will accept, so the refusal a caller meets is
+#: the network's real one rather than an arbitrary one of ours.
+MAX_VIDEO_BYTES = 512 * 1024 * 1024
+
 _FETCH_TIMEOUT_SECONDS = 30
 
 #: Where an assistant's uploads land: inside the first approved media root, in
@@ -100,8 +114,8 @@ def _require_public_https(url: str) -> None:
             )
 
 
-def _download(url: str) -> tuple[bytes, str]:
-    """The image bytes and the content type the server reported.
+def _fetch_bytes(url: str, *, limit: int, what: str) -> tuple[bytes, str]:
+    """The media bytes and the content type the server reported.
 
     Separated so a test can stand in for the network. The caps live here so no
     caller can forget them: the read stops at one byte over the limit rather
@@ -112,13 +126,21 @@ def _download(url: str) -> tuple[bytes, str]:
     request = urllib.request.Request(url, headers={"User-Agent": "TrendRelay-MCP/1.0"})
     with opener.open(request, timeout=_FETCH_TIMEOUT_SECONDS) as response:
         content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip()
-        data = response.read(MAX_IMAGE_BYTES + 1)
-    if len(data) > MAX_IMAGE_BYTES:
+        data = response.read(limit + 1)
+    if len(data) > limit:
         raise ValueError(
-            f"The image is larger than {MAX_IMAGE_BYTES // (1024 * 1024)} MB, "
+            f"The {what} is larger than {limit // (1024 * 1024)} MB, "
             "which is the most this server will fetch."
         )
     return data, content_type
+
+
+def _download(url: str) -> tuple[bytes, str]:
+    return _fetch_bytes(url, limit=MAX_IMAGE_BYTES, what="image")
+
+
+def _download_media(url: str) -> tuple[bytes, str]:
+    return _fetch_bytes(url, limit=MAX_VIDEO_BYTES, what="file")
 
 
 def _upload_root() -> Path:
@@ -155,9 +177,6 @@ def upload_image(
     string that has no business in a database. Provenance worth keeping goes in
     ``source_url``, which the caller states on purpose.
     """
-    from trendrelay_api.auth import LOCAL_ADMIN_ID
-    from trendrelay_api.media_library import create_ingest_job
-
     fetched_from = (image or {}).get("download_url") or image_url
     if not fetched_from or not str(fetched_from).strip():
         raise ValueError(
@@ -165,9 +184,65 @@ def upload_image(
             "parameter) or pass `image_url`."
         )
     data, content_type = fetch(str(fetched_from).strip())
-    suffix = _IMAGE_TYPES.get(content_type)
+    return _ingest_fetched(
+        workspace_id, data, content_type, _IMAGE_TYPES,
+        title=title, caption=caption, creator=creator,
+        source_url=source_url, platform=platform,
+    )
+
+
+def upload_media(
+    workspace_id: str,
+    media: dict[str, Any] | None = None,
+    media_url: str | None = None,
+    title: str = "",
+    caption: str | None = None,
+    creator: str | None = None,
+    source_url: str | None = None,
+    platform: str | None = None,
+    fetch=_download_media,
+) -> dict[str, Any]:
+    """Bring one video or image into the media library.
+
+    The same door as `upload_image` with the video types allowed through it,
+    kept as its own tool so existing callers of the image tool keep the
+    tighter cap they were promised. Everything else is identical: the served
+    content type decides what the file is, the digest names it, and it lands
+    in the Library through the ordinary ingest pipeline under the
+    'mcp-upload' source.
+    """
+    fetched_from = (media or {}).get("download_url") or media_url
+    if not fetched_from or not str(fetched_from).strip():
+        raise ValueError(
+            "Provide the file: attach one (it arrives as the `media` file "
+            "parameter) or pass `media_url`."
+        )
+    data, content_type = fetch(str(fetched_from).strip())
+    return _ingest_fetched(
+        workspace_id, data, content_type, {**_IMAGE_TYPES, **_VIDEO_TYPES},
+        title=title, caption=caption, creator=creator,
+        source_url=source_url, platform=platform,
+    )
+
+
+def _ingest_fetched(
+    workspace_id: str,
+    data: bytes,
+    content_type: str,
+    allowed: dict[str, str],
+    *,
+    title: str,
+    caption: str | None,
+    creator: str | None,
+    source_url: str | None,
+    platform: str | None,
+) -> dict[str, Any]:
+    from trendrelay_api.auth import LOCAL_ADMIN_ID
+    from trendrelay_api.media_library import create_ingest_job
+
+    suffix = allowed.get(content_type)
     if not suffix:
-        accepted = ", ".join(sorted(_IMAGE_TYPES))
+        accepted = ", ".join(sorted(allowed))
         raise ValueError(
             f"The URL served {content_type or 'no content type'}; the library "
             f"accepts {accepted}."
@@ -188,7 +263,7 @@ def upload_image(
         # The Library's own provenance: `source_type` is how these arrived and
         # is what the interface shows for them, so an assistant's uploads read
         # as their own source beside downloads and local imports. `platform` is
-        # only what the caller states - the network the image genuinely came
+        # only what the caller states - the network the media genuinely came
         # from - never invented here.
         source_type="mcp-upload",
         source_url=(source_url or "").strip() or None,
@@ -204,7 +279,7 @@ def upload_image(
         "job_id": job.get("id"),
         "status": job.get("status"),
         "note": (
-            "This image is already in the library; use the asset_id as it is."
+            "This file is already in the library; use the asset_id as it is."
             if duplicate else
             "Import queued. Poll get_import_status with the job_id until it "
             "succeeds and reports the asset_id, then create the post with it."
@@ -432,6 +507,48 @@ def _carousel_reach(
     return reaches, warnings
 
 
+def _media_package(assets: list[Any]) -> dict[str, Any]:
+    """The queue's media fields for a set of Library assets.
+
+    One video standing alone, or pictures gathering into one carousel - the
+    queue's own package rule, answered from what the assets are. Empty when
+    no assets were named, which a caller allows on purpose or not at all.
+    """
+    if not assets:
+        return {}
+    kinds = {asset.media_kind for asset in assets}
+    if kinds == {"image"}:
+        return {"image_paths": [asset.original_path for asset in assets]}
+    if kinds == {"video"} and len(assets) == 1:
+        return {"video_path": assets[0].original_path}
+    if "video" in kinds:
+        raise ValueError("A package is one video or a set of pictures, never both.")
+    raise ValueError(
+        "Only images and video can be posted; "
+        f"this selection includes {', '.join(sorted(kinds - {'image', 'video'}))}."
+    )
+
+
+def resolve_post_assets(
+    session: Session, workspace_id: str, asset_ids: list[str]
+) -> list[Any]:
+    """The named Library assets, in order, or a LookupError naming the gap."""
+    from trendrelay_api.media_models import MediaAsset
+
+    assets = []
+    for asset_id in dict.fromkeys(asset_ids):
+        asset = session.scalar(
+            select(MediaAsset).where(
+                MediaAsset.id == asset_id,
+                MediaAsset.workspace_id == workspace_id,
+            )
+        )
+        if not asset:
+            raise LookupError(f"No Library asset {asset_id!r} in this workspace.")
+        assets.append(asset)
+    return assets
+
+
 def create_campaign_post(
     session: Session,
     workspace_id: str,
@@ -443,6 +560,8 @@ def create_campaign_post(
     hashtags: list[str] | None = None,
     first_comment: str | None = None,
     thread: list[str] | None = None,
+    topic: str | None = None,
+    post_types: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Propose one post into a campaign, as a draft the operator promotes.
 
@@ -456,36 +575,9 @@ def create_campaign_post(
         create_queue_item,
     )
     from trendrelay_api.integrations.mcp.writes import _refuse_links
-    from trendrelay_api.media_models import MediaAsset
 
-    if not asset_ids:
-        raise ValueError("Name at least one Library asset to post.")
-    assets = []
-    for asset_id in dict.fromkeys(asset_ids):
-        asset = session.scalar(
-            select(MediaAsset).where(
-                MediaAsset.id == asset_id,
-                MediaAsset.workspace_id == workspace_id,
-            )
-        )
-        if not asset:
-            raise LookupError(f"No Library asset {asset_id!r} in this workspace.")
-        assets.append(asset)
-
-    kinds = {asset.media_kind for asset in assets}
-    if kinds == {"image"}:
-        media: dict[str, Any] = {
-            "image_paths": [asset.original_path for asset in assets]
-        }
-    elif kinds == {"video"} and len(assets) == 1:
-        media = {"video_path": assets[0].original_path}
-    elif "video" in kinds:
-        raise ValueError("A package is one video or a set of pictures, never both.")
-    else:
-        raise ValueError(
-            "Only images and video can be posted; "
-            f"this selection includes {', '.join(sorted(kinds - {'image', 'video'}))}."
-        )
+    assets = resolve_post_assets(session, workspace_id, asset_ids)
+    media = _media_package(assets)
 
     if caption is not None:
         _refuse_links("caption", caption)
@@ -509,12 +601,19 @@ def create_campaign_post(
 
     body = QueueItemCreate(
         **media,
-        asset_id=assets[0].id,
+        # Deliberate: an assistant may draft the words first and attach the
+        # clip with set_post_media once it is uploaded. The scheduler skips a
+        # media-less post with a note until then, exactly as it skips one
+        # whose copy is still the placeholder.
+        media_later=not assets,
+        asset_id=assets[0].id if assets else None,
         body=caption or "",
         title=title,
         hashtags=hashtags or [],
         first_comment=first_comment,
         thread=thread or [],
+        topic=topic,
+        post_type_overrides=post_types or {},
     )
     item = create_queue_item(
         session, workspace_id, campaign_id, body,

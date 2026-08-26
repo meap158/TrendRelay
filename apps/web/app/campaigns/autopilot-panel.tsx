@@ -455,6 +455,8 @@ type Destination = {
   accepts_carousel?: boolean;
   /** Whether a first comment or thread reply can be delivered here. */
   follow_up_deliverable?: boolean;
+  /** Whether a Threads topic tag can be attached here. */
+  topic_deliverable?: boolean;
   /** Whether this network has a title field at all. */
   takes_title?: boolean;
   integration_id: string;
@@ -495,6 +497,8 @@ type QueueItem = {
   hashtags: string[];
   first_comment: string | null;
   thread: string[];
+  /** Threads' single topic tag, delivered only where an engine can attach it. */
+  topic: string | null;
   /** This post's own wording. Null where it uses the campaign's. */
   disclosure: string | null;
   bio_hint: string | null;
@@ -4823,6 +4827,13 @@ export function AutopilotPanel({
             onClose={closePostEditor}
             title="Edit scheduled post"
             description="Everything below is one post. The campaign adds the disclosure and the product link to it, differently on each account - what that comes to is composed underneath, exactly as each one will receive it."
+            headerAction={
+              // Beside the ×, so saving does not mean scrolling a long form
+              // to its end. The same submit as the button down there - the
+              // `form` attribute reaches the form from outside it.
+              <Button type="submit" form="campaign-edit-content" variant="primary"
+                busy={busy === "edit-copy"}>Save post</Button>
+            }
           >
           <form className="autopilot-compose" id="campaign-edit-content"
             ref={editForm} onInput={scheduleCompose} onSubmit={(event) => {
@@ -4838,6 +4849,7 @@ export function AutopilotPanel({
                   hashtags: String(form.get("hashtags") ?? "")
                     .split(/[\s,]+/).filter(Boolean),
                   first_comment: String(form.get("first_comment") ?? "").trim() || null,
+                  topic: String(form.get("topic") ?? "").trim() || "",
                   thread: editingReplies.map((part) => part.trim()).filter(Boolean),
                   // Empty goes back to the campaign's wording rather than
                   // storing an empty disclosure, which is the one thing a post
@@ -4875,7 +4887,9 @@ export function AutopilotPanel({
                     const images = staged ? staged.image_paths : editing.image_paths;
                     const shape = video
                       ? "Video"
-                      : images.length > 1 ? `Carousel · ${images.length} pictures` : "Image";
+                      : images.length > 1 ? `Carousel · ${images.length} pictures`
+                        : images.length === 1 ? "Image"
+                          : "No media yet — the campaign skips this post until some is attached";
                     return staged
                       ? `${shape} — replaces the current media when you save.`
                       : shape;
@@ -4900,10 +4914,14 @@ export function AutopilotPanel({
                   + `?path=${encodeURIComponent(path)}`;
                 const video = editingMedia ? editingMedia.video_path : editing.video_path;
                 const images = editingMedia ? editingMedia.image_paths : editing.image_paths;
-                return video ? (
-                  <video className="campaign-edit-media-video" controls
-                    preload="metadata" src={media(video)} />
-                ) : (
+                if (video) {
+                  return (
+                    <video className="campaign-edit-media-video" controls
+                      preload="metadata" src={media(video)} />
+                  );
+                }
+                if (!images.length) return null;
+                return (
                   <div className="campaign-edit-media-strip" role="list"
                     aria-label="Pictures in this carousel, in posting order">
                     {images.map((path, index) => (
@@ -4936,6 +4954,24 @@ export function AutopilotPanel({
             <label>{t("autopilot.hashtags")}
               <input name="hashtags" defaultValue={editing.hashtags.join(" ")} />
             </label>
+            {/* Threads' single topic tag - a field the queue has carried since
+                the parity migration with nothing to write it. Shown only where
+                a destination can deliver one, or where this post already holds
+                one that would otherwise be invisible text. */}
+            {(destinations.some((item) => item.topic_deliverable) || editing.topic) && (
+              <label>Threads topic
+                <FeatureReach
+                  chosen={[...new Set(destinations.map((item) => item.platform))]}
+                  supported={[...new Set(destinations
+                    .filter((item) => item.topic_deliverable)
+                    .map((item) => item.platform))]}
+                />
+                <input name="topic" defaultValue={editing.topic ?? ""} maxLength={50}
+                  placeholder="One tag readers can tap, without the #" />
+                <small>One topic per post, up to 50 characters, no full stop or
+                  ampersand. Threads shows the # itself.</small>
+              </label>
+            )}
             {destinations.some((destination) => (
               compatiblePostTypes(destination, editing).length > 1
             )) && (

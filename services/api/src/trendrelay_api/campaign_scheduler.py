@@ -109,6 +109,9 @@ class ScheduledPost:
     product_names: tuple[str, ...] = ()
     #: The matcher's confidence per attached offer, in the same order. What the
     #: authority rules read: a low-confidence product never posts unattended.
+    #: The Threads topic, already gated by `topic_deliverable` at planning so
+    #: an execution never carries a tag its engine cannot attach.
+    topic: str | None = None
     offer_confidences: tuple[str, ...] = ()
     #: How those offers were chosen, from the matcher's own strategy. Carried
     #: so the approval inbox can say whether a weak product was pinned by hand
@@ -662,6 +665,7 @@ def plan_campaign(
     counter = autopilot.posts_scheduled
     reserved: dict[tuple[str, str], datetime] = {}
     planned_per_day: dict[tuple[str, date], int] = {}
+    awaiting_media: dict[str, str] = {}
     # The same queue item can fill several slots in one horizon. Its content,
     # campaign context and offer catalogue do not change while this plan is
     # being assembled, so score it once and reuse the explainable result.
@@ -821,6 +825,14 @@ def plan_campaign(
                 if candidate.id not in frozen_cache:
                     frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
                 if candidate.image_paths:
+                if not candidate.video_path and not candidate.image_paths:
+                    # The mirror case: copy written, media still to come. The
+                    # same treatment for the same reason - a slot held for it
+                    # would block content that is ready.
+                    awaiting_media.setdefault(
+                        candidate.id, _short_source_name(candidate.title or candidate.id)
+                    )
+                    continue
                     # Asked the same question a video is asked, and for the same
                     # reason. A carousel used to be taken by any destination at all:
                     # only Zernio and WoopSocial post one, only to TikTok, so a
@@ -897,7 +909,10 @@ def plan_campaign(
                 )
             matched = usable
             from trendrelay_api.campaign_autopilot import resolve_placement
-            from trendrelay_api.integrations.publishing import first_comment_deliverable
+            from trendrelay_api.integrations.publishing import (
+                first_comment_deliverable,
+                topic_deliverable,
+            )
 
             comment_ok = first_comment_deliverable(
                 destination.provider, destination.platform
@@ -1002,6 +1017,16 @@ def plan_campaign(
                 placement=post.placement.placement,
                 reason=(
                     f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
+                # Only where the engine can attach it - see `topic_deliverable`
+                # - so the execution record never promises a tag that cannot
+                # be delivered.
+                topic=(
+                    item.topic
+                    if item.topic and topic_deliverable(
+                        destination.provider, destination.platform
+                    )
+                    else None
+                ),
                     f"{post.placement.reason} Product match: {match_reason}"
                 ),
                 thread=post.thread,
@@ -1039,6 +1064,14 @@ def plan_campaign(
 
 def _why_nothing_eligible(
     queue: list[CampaignQueueItem],
+    if awaiting_media:
+        names = list(awaiting_media.values())
+        shown = ", ".join(names[:2])
+        rest = len(names) - 2
+        notes.append(
+            f"{len(names)} post(s) still need media attached and are skipped "
+            f"until it is: {shown}" + (f", and {rest} more." if rest > 0 else ".")
+        )
     approved: list[CampaignQueueItem],
     *,
     rested: list[CampaignQueueItem],

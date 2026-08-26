@@ -205,7 +205,6 @@ def build_server(workspace_id: str) -> FastMCP:
                 s, workspace_id, campaign_id, platform, sort_by, limit,
             ),
         )
-
     @server.tool(
         name="list_posts_needing_copy",
         description=(
@@ -298,8 +297,14 @@ def build_server(workspace_id: str) -> FastMCP:
         name="write_post_copy",
         description=(
             "Write several copy fields for a post at once - any of caption, "
-            "first_comment, thread, hashtags, title, disclosure, bio_hint. A field "
-            "left unset is not changed."
+            "first_comment, thread, hashtags, title, disclosure, bio_hint, "
+            "topic, or post_types. `topic` is Threads' single topic tag (no "
+            "leading #, up to 50 characters, no full stop or ampersand), "
+            "delivered only on Threads through an engine that can attach it; "
+            "an empty string clears it. `post_types` maps campaign destination "
+            "ids to format ids (for example reel, story or short); omitted "
+            "accounts inherit their campaign default. A field left unset is "
+            "not changed."
         ),
     )
     def write_post_copy(
@@ -311,6 +316,8 @@ def build_server(workspace_id: str) -> FastMCP:
         title: str | None = None,
         disclosure: str | None = None,
         bio_hint: str | None = None,
+        topic: str | None = None,
+        post_types: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return _call(
             "write_post_copy",
@@ -318,7 +325,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 s, workspace_id, item_id,
                 caption=caption, first_comment=first_comment,
                 thread=thread, hashtags=hashtags, title=title, disclosure=disclosure,
-                bio_hint=bio_hint,
+                bio_hint=bio_hint, topic=topic, post_types=post_types,
             ),
         )
 
@@ -427,6 +434,42 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="upload_media",
+        description=(
+            "Bring one video or image into the media library, to post later. "
+            "Attach the file in chat (it arrives as the `media` file "
+            "parameter) or pass a direct public https `media_url`. Accepts "
+            "mp4, mov and webm video up to 512 MB, and jpeg, png and webp "
+            "images. Give it a `title` a person will recognise; `source_url`, "
+            "`creator`, `caption` and `platform` record where it came from. "
+            "It lands in the media library under the 'mcp-upload' source. "
+            "Returns an asset_id at once for a file the library already "
+            "holds, otherwise a job_id to poll with get_import_status."
+        ),
+        meta={"openai/fileParams": ["media"]},
+    )
+    def upload_media(
+        media: dict[str, Any] | None = None,
+        media_url: str | None = None,
+        title: str = "",
+        caption: str | None = None,
+        creator: str | None = None,
+        source_url: str | None = None,
+        platform: str | None = None,
+    ) -> dict[str, Any]:
+        _guard("upload_media")
+        return intake.upload_media(
+            workspace_id,
+            media=media,
+            media_url=media_url,
+            title=title,
+            caption=caption,
+            creator=creator,
+            source_url=source_url,
+            platform=platform,
+        )
+
+    @server.tool(
         name="get_import_status",
         description=(
             "How upload_image imports are going. Pass every `job_ids` for the "
@@ -446,7 +489,10 @@ def build_server(workspace_id: str) -> FastMCP:
         name="create_campaign_post",
         description=(
             "Propose a post into a campaign from Library assets: one video "
-            "asset, or several image assets as a carousel. How many a "
+            "asset, or several image assets as a carousel - or none, to "
+            "draft the words first and attach media with set_post_media "
+            "once it is uploaded; the campaign skips the post with a note "
+            "until it has media. How many a "
             "carousel may hold is the network's own figure - X swipes "
             "through 4, Instagram and Facebook 10, LinkedIn 20, TikTok 35 - "
             "and `carousel_warnings` names any destination this post "
@@ -455,7 +501,9 @@ def build_server(workspace_id: str) -> FastMCP:
             "links; the campaign adds its own. The post is created as a DRAFT "
             "outside the rotation, and only the operator can promote it in "
             "the app - tell them it is waiting. If the campaign's accounts "
-            "cannot all carry a gallery, it is still created and "
+            "`post_types` may map destination ids to per-account formats; "
+            "omitted accounts inherit the default chosen when they were added. "
+            "If the campaign's accounts cannot all carry a gallery, it is still created and "
             "`carousel_warnings` says which ones will not - pass that on."
         ),
     )
@@ -467,14 +515,34 @@ def build_server(workspace_id: str) -> FastMCP:
         hashtags: list[str] | None = None,
         first_comment: str | None = None,
         thread: list[str] | None = None,
+        topic: str | None = None,
+        post_types: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_campaign_post",
             lambda s: intake.create_campaign_post(
                 s, workspace_id, campaign_id, asset_ids,
                 caption=caption, title=title, hashtags=hashtags,
-                first_comment=first_comment, thread=thread,
+                first_comment=first_comment, thread=thread, topic=topic,
+                post_types=post_types,
             ),
+        )
+
+    @server.tool(
+        name="set_post_media",
+        description=(
+            "Attach or replace a DRAFT post's media from Library assets: one "
+            "video asset id, or several image asset ids as a carousel. The "
+            "other half of drafting a post before its media exists - upload "
+            "with upload_media, wait for get_import_status, then attach "
+            "here. Refused on a post already in rotation; changing what a "
+            "promoted post publishes is the operator's act in the app."
+        ),
+    )
+    def set_post_media(item_id: str, asset_ids: list[str]) -> dict[str, Any]:
+        return _call(
+            "set_post_media",
+            lambda s: writes.set_post_media(s, workspace_id, item_id, asset_ids),
         )
 
     # --- when the workspace posts ------------------------------------------
@@ -613,8 +681,8 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "write_post_copy", "write_disclosure", "write_bio_hint",
     ),
     "Media & posts": (
-        "list_library_assets", "upload_image", "get_import_status",
-        "create_campaign_post",
+        "list_library_assets", "upload_image", "upload_media",
+        "get_import_status", "create_campaign_post", "set_post_media",
     ),
     "Posting schedule": (
         "list_posting_times", "get_campaign_posting_times",
@@ -637,6 +705,7 @@ CATEGORY_TABS: dict[str, str | None] = {
 }
 TOOL_TAB_OVERRIDES: dict[str, str] = {
     "upload_image": "Library",
+    "upload_media": "Library",
     "get_import_status": "Library",
 }
 
