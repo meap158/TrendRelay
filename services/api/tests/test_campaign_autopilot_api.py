@@ -1935,3 +1935,48 @@ def test_the_outlook_says_how_far_it_looked(workspace) -> None:
     ).json()
 
     assert body["horizon_days"] == 7
+
+
+def test_the_outlook_names_destinations_that_can_never_show_figures(workspace) -> None:
+    """A blank figure means "not yet" for almost every post, and never for these.
+
+    Nothing on the screen distinguished the two, which is how a campaign posting
+    through an engine that cannot report reads as one that simply has not been
+    measured recently.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations"
+    for index, provider in enumerate(("woopsocial", "woopsocial-2", "buffer")):
+        request("POST", base, json={
+            "provider": provider, "integration_id": f"acct-{index}",
+            "platform": "tiktok", "label": f"account {index}",
+        })
+
+    body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    ).json()
+
+    gaps = body["measurement"]
+    assert [gap["engine"] for gap in gaps] == ["woopsocial"], "buffer reads back"
+    # Both logins on one engine, named as the accounts affected rather than as
+    # the engine twice: the useful sentence is which accounts stay blank.
+    assert gaps[0]["destinations"] == ["account 0", "account 1"]
+    assert "does not report engagement" in gaps[0]["reason"]
+
+
+def test_the_outlook_stays_quiet_when_everything_can_be_read(workspace) -> None:
+    """The ordinary case says nothing, so the warning stays a warning."""
+    campaign_id = campaign(workspace)
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={
+            "provider": "zernio", "integration_id": "acct-1", "platform": "tiktok",
+            "label": "brand on TikTok",
+        },
+    )
+
+    body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    ).json()
+
+    assert body["measurement"] == []

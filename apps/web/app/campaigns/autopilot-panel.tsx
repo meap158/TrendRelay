@@ -1089,6 +1089,20 @@ const METRIC_ICON = {
 } as const;
 const METRIC_ORDER = ["views", "likes", "comments", "shares", "saves"] as const;
 
+/**
+ * Names joined the way a sentence joins them, with a tail once it gets long.
+ *
+ * `Intl.ListFormat` rather than commas by hand: the reader's locale decides
+ * whether the last separator is "and", "và" or nothing at all. Past three the
+ * list stops being readable and a count says more than the names would.
+ */
+function namedList(names: string[], limit = 3): string {
+  const format = new Intl.ListFormat(undefined, { style: "long", type: "conjunction" });
+  if (names.length <= limit) return format.format(names);
+  const rest = names.length - limit;
+  return format.format([...names.slice(0, limit), `${rest} more`]);
+}
+
 function PostMetricsRow({ metrics }: { metrics: PostMetrics }) {
   const shown = METRIC_ORDER.filter((key) => typeof metrics[key] === "number");
   if (!shown.length) return null;
@@ -1851,6 +1865,18 @@ export function AutopilotPanel({
       note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number;
       /** How many days the plan looked ahead, so a full window can name itself. */
       horizon_days?: number;
+      /**
+       * Destinations whose engine cannot report engagement, so their posts
+       * will never carry figures.
+       *
+       * An empty metrics row reads as "not read back yet", which is right for
+       * almost every post and wrong for ever for these. Only the campaign's
+       * own destinations appear, because the useful sentence names the
+       * accounts affected rather than the engine in the abstract.
+       */
+      measurement?: {
+        engine: string; label: string; reason: string; destinations: string[];
+      }[];
     } | null
   >(null);
   /** Posts the authority rules deferred to a person, reason attached. */
@@ -5917,6 +5943,16 @@ export function AutopilotPanel({
             </span>
           </div>
         )}
+        {preview?.measurement?.map((gap) => (
+          // Only when something is permanently blank, so it stays a warning
+          // rather than another line of chrome. The engine's own reason is the
+          // title: too long for the sentence, and the evidence somebody needs
+          // if they want to check whether it still holds.
+          <p key={gap.engine} className="autopilot-note" role="status" title={gap.reason}>
+            {gap.label} cannot report engagement, so {namedList(gap.destinations)} will
+            never show figures.
+          </p>
+        ))}
         {preview && timeline.length === 0 && (
           // The last-run banner above often carries this exact sentence;
           // saying it once is information, twice is noise.

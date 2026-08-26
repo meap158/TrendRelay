@@ -1591,6 +1591,44 @@ def _would_be_accepted(
     return None
 
 
+def _measurement_gaps(destinations: Any) -> list[dict[str, Any]]:
+    """This campaign's destinations that will never show figures, and why.
+
+    Not a list of engines in the abstract: only the ones this campaign actually
+    posts through, named by the destinations affected, because "WoopSocial
+    cannot report engagement" is a fact about the product while "these three
+    accounts will stay blank" is the one that changes what somebody does next.
+
+    Empty is the ordinary answer and means every destination can be read - at
+    which point a blank figure means "not yet", which the interface already
+    conveys by being blank.
+    """
+    from trendrelay_api.campaign_measurement import (
+        PROVIDER_ENGINE_RESOLVER,
+        PROVIDER_METRIC_READERS,
+    )
+    from trendrelay_api.integrations.publishing import PROVIDERS
+
+    gaps: dict[str, dict[str, Any]] = {}
+    for destination in destinations:
+        # A destination stores a connection id, so the engine behind a second
+        # login has to be resolved rather than read off the row.
+        engine_id = PROVIDER_ENGINE_RESOLVER(destination.provider or "") or ""
+        if not engine_id or engine_id in PROVIDER_METRIC_READERS:
+            continue
+        engine = PROVIDERS.get(engine_id)
+        if engine is None:
+            continue
+        gap = gaps.setdefault(engine_id, {
+            "engine": engine_id,
+            "label": engine.label,
+            "reason": engine.no_metrics_reason,
+            "destinations": [],
+        })
+        gap["destinations"].append(destination.label)
+    return sorted(gaps.values(), key=lambda item: item["label"])
+
+
 @router.post("/{campaign_id}/autopilot/preview")
 def preview_autopilot(
     workspace_id: str, campaign_id: str, user: AuthenticatedUser, session: DatabaseSession
@@ -1792,6 +1830,11 @@ def preview_autopilot(
         "posts": rendered,
         "deployed": deployed,
         "problems": sum(1 for item in rendered if item["problem"]),
+        # Why a row's figures are blank, when the answer is "they always will
+        # be". An empty cell reads as "not yet" and is usually right; for a
+        # destination on an engine that cannot report it is wrong for ever, and
+        # nothing on the screen distinguished the two.
+        "measurement": _measurement_gaps(destinations),
         # How far this plan looked. A queue larger than the window has posts
         # with no place in it, and saying so needs the number: "every slot is
         # taken" reads as a fault, while "the next seven days are full" is a
