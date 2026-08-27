@@ -151,8 +151,15 @@
 @media (min-width: 901px) {
   .console-page .download-composer,
   .console-page .download-queue-card {
-    top: 166px;
-    max-height: calc(100vh - 182px);
+    /* Below the heading, measured rather than guessed - 166 was a number from
+       somebody's screen, and it was 53px larger than where these cards
+       actually rest. A sticky top above an element's resting position does not
+       hold it still, it pushes it down: the shorter of two side-by-side cards
+       slid down to meet the offset while the taller one was clamped by its own
+       grid area, so step 2 sat half a heading below step 1 before a single
+       scroll. The 12px is the gap the heading already carries beneath it. */
+    top: calc(var(--page-heading-offset, 152px) + 12px);
+    max-height: calc(100vh - var(--page-heading-offset, 152px) - 28px);
   }
 
   .library-page .library-browser {

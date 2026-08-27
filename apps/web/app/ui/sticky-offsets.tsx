@@ -86,15 +86,61 @@ export function StickyOffsets() {
       }
     };
 
-    measure();
-
     // Heights change without the window resizing: a heading rewrapping when
     // the workspace name loads, a language switch, a font finishing loading.
-    const observer = new ResizeObserver(measure);
-    for (const layer of LAYERS) {
-      const element = document.querySelector(layer.selector);
-      if (element instanceof HTMLElement) observer.observe(element);
+    const observer = new ResizeObserver(() => measure());
+
+    // Which node each layer is currently watching. Re-checked on every measure
+    // because a layer is not a fixed element: React replaces a heading when the
+    // route's data arrives, and observing the node that was there at mount
+    // leaves the observer holding something detached from the document, quietly
+    // reporting nothing ever again.
+    const watched = new Map<string, HTMLElement>();
+
+    const bind = () => {
+      let missing = false;
+      for (const layer of LAYERS) {
+        const element = document.querySelector(layer.selector);
+        if (!(element instanceof HTMLElement)) {
+          const stale = watched.get(layer.property);
+          if (stale) {
+            observer.unobserve(stale);
+            watched.delete(layer.property);
+          }
+          missing = true;
+          continue;
+        }
+        if (watched.get(layer.property) !== element) {
+          const previous = watched.get(layer.property);
+          if (previous) observer.unobserve(previous);
+          observer.observe(element);
+          watched.set(layer.property, element);
+        }
+      }
+      return missing;
+    };
+
+    measure();
+
+    // A layer that is not in the document yet cannot be observed, and nothing
+    // else will announce its arrival: the heading renders once the workspace
+    // loads, well after this effect runs, and a ResizeObserver bound to what
+    // existed at mount never fires for it. The offsets then keep whatever they
+    // were measured as before the page had its heading - which is how the
+    // toolbar's own height came to stand in for the whole stack.
+    //
+    // Watched for only as long as something is missing, and disconnected the
+    // moment every layer is present, so the cost the comment above worries
+    // about - a callback per row on a page of a hundred - is paid for a few
+    // frames at startup rather than for the life of the page.
+    const appearances = new MutationObserver(() => {
+      measure();
+      if (!bind()) appearances.disconnect();
+    });
+    if (bind()) {
+      appearances.observe(document.body, { childList: true, subtree: true });
     }
+
     window.addEventListener("resize", measure);
     // The toolbar collapsing is an attribute change, not a size change, so the
     // ResizeObserver never sees it. Watch the attribute so the offsets follow
@@ -103,6 +149,7 @@ export function StickyOffsets() {
     chromeWatch.observe(root, { attributes: true, attributeFilter: ["data-chrome"] });
     return () => {
       observer.disconnect();
+      appearances.disconnect();
       chromeWatch.disconnect();
       window.removeEventListener("resize", measure);
     };
