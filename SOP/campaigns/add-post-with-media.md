@@ -2,17 +2,18 @@
 id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
-summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign, for the operator to promote.
-version: 5
+summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign - whole, or a piece at a time - for the operator to promote.
+version: 6
 tags: [campaigns, media, upload, posts]
-aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post]
+aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post, set-post-media]
 ---
 # Adding a post with media to a TrendRelay campaign
 
 This SOP covers bringing media into the workspace and proposing a post made
 from it into a campaign - one video, one picture, or several pictures as a
-carousel. It uses five operations: `list_campaigns`, `list_library_assets`,
-`upload_media`, `get_import_status`, and `create_campaign_post`.
+carousel - sent whole, or assembled a piece at a time. It uses six
+operations: `list_campaigns`, `list_library_assets`, `upload_media`,
+`get_import_status`, `create_campaign_post`, and `set_post_media`.
 
 `upload_media` takes video and images alike. `upload_image` still exists and
 takes pictures only; prefer `upload_media` unless you have a reason not to,
@@ -126,6 +127,35 @@ cannot post this gallery, and why - an engine that sends none, or a network
 whose picture limit this post exceeds. The post is still created; those
 accounts simply will not receive it. Read the warnings back to the operator
 rather than reporting a reach the post does not have.
+
+## 4a. Or build the post a piece at a time
+
+Everything above assumes you have the whole post before you start. Often you do
+not: the user sends the words now and the clip when they find it.
+`set_post_media` is the other half of `create_campaign_post`, and between them a
+post can be assembled in either order.
+
+**Media is never required to start.** Words alone are enough to create the post,
+and so is media alone - whichever half you have, the other can follow. That
+makes text the one thing you can always act on the moment the user gives it to
+you, without waiting for a file. So:
+
+- **Text first.** Call `create_campaign_post` with a `caption` and an empty
+  `asset_ids`. The post is created and marked as awaiting media - the scheduler
+  passes over it, with a note, until something is attached. Upload the file when
+  it arrives, then call `set_post_media` with the post's id and the asset ids.
+- **Media first.** Call `create_campaign_post` with `asset_ids` and no caption.
+  It is marked as needing copy, and `campaigns.fill-needs-copy` applies. Write
+  the words later with `write_post_copy`.
+
+`set_post_media` takes the same packages this SOP describes - one video, or a
+set of pictures in swipe order - and answers with the same `carousel_warnings`
+a whole-package create does. So a gallery attached on a second visit is told
+the moment it outgrows an account, rather than at publish time.
+
+Only a **draft** can be changed this way. Once the operator has promoted a post
+into the rotation they approved it with its media in view, and changing what
+publishes underneath that decision is theirs to make in the app.
 
 ## 5. Say what is waiting
 

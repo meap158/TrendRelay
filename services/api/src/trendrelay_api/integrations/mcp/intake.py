@@ -586,6 +586,17 @@ def create_campaign_post(
     for index, reply in enumerate(thread or [], start=1):
         _refuse_links(f"reply {index}", reply)
 
+    from trendrelay_api.integrations.publishing import MAX_CAROUSEL_IMAGES
+
+    pictures = media.get("image_paths") or []
+    if len(pictures) > MAX_CAROUSEL_IMAGES:
+        # In words, before the queue's schema says the same thing as a
+        # validation error naming a field and linking to pydantic's website.
+        raise ValueError(
+            f"A post carries at most {MAX_CAROUSEL_IMAGES} pictures, and this "
+            f"names {len(pictures)}. Send fewer, or split them across posts."
+        )
+
     # Said, not enforced. The app's own queue route accepts the same package
     # without asking, and a rule that exists only for assistants would mean the
     # operator adding this post by hand sails through where their assistant is

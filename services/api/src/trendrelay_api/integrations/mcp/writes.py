@@ -159,9 +159,12 @@ def set_post_media(
         apply_queue_item_edits,
     )
     from trendrelay_api.integrations.mcp.intake import (
+        _and_list,
+        _carousel_reach,
         _media_package,
         resolve_post_assets,
     )
+    from trendrelay_api.integrations.publishing import MAX_CAROUSEL_IMAGES
 
     item = session.scalar(
         select(CampaignQueueItem).where(
@@ -181,6 +184,16 @@ def set_post_media(
 
     assets = resolve_post_assets(session, workspace_id, asset_ids)
     media = _media_package(assets)
+    pictures = media.get("image_paths") or []
+    if len(pictures) > MAX_CAROUSEL_IMAGES:
+        # Said in words. The queue's schema refuses this too, but as a
+        # validation error naming a field and linking to pydantic's website,
+        # which tells an assistant nothing it can act on and reads nothing
+        # like the other refusals here.
+        raise ValueError(
+            f"A post carries at most {MAX_CAROUSEL_IMAGES} pictures, and this "
+            f"names {len(pictures)}. Send fewer, or split them across posts."
+        )
     update = QueueItemUpdate(
         video_path=media.get("video_path", ""),
         image_paths=media.get("image_paths", []),
@@ -189,8 +202,33 @@ def set_post_media(
     apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
     session.commit()
     view = _queue_view(item)
+    # The same answer `create_campaign_post` gives, because it is the same
+    # question. A gallery sent to the create door was told which of the
+    # campaign's accounts could carry it; the same gallery attached here was
+    # told nothing, and the post could pass every network's limit in silence
+    # until the runner declined it days later.
+    reaches, carousel_warnings = (
+        _carousel_reach(session, workspace_id, item.campaign_id, len(pictures))
+        if pictures
+        else ([], [])
+    )
+    view["carousel_warnings"] = carousel_warnings
     view["note"] = (
-        "Media attached. The post is still a draft; the operator promotes it "
+        (
+            # "cannot take it" rather than "cannot take one this long": an
+            # account may be refused because the gallery outgrew its limit or
+            # because its engine posts no gallery at all, and both can be in
+            # this list at once. Naming the wrong cause is worse than naming
+            # none.
+            f"{len(pictures)} pictures; they reach {_and_list(reaches)}, and the "
+            "rest of this campaign's accounts cannot take it. "
+            if carousel_warnings and reaches
+            else f"No account in this campaign can take {len(pictures)} pictures, "
+            "so this post has nowhere to go as it stands. "
+            if carousel_warnings
+            else ""
+        )
+        + "Media attached. The post is still a draft; the operator promotes it "
         "into the rotation in the app."
     )
     return view

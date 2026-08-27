@@ -1690,18 +1690,30 @@ def test_a_post_says_whether_figures_could_ever_arrive(session) -> None:
     assert by_id["never"]["interactions"] is None
 
 
-def test_a_second_login_is_measurable_when_its_engine_is(session) -> None:
+def test_a_second_login_is_measurable_when_its_engine_is(monkeypatch) -> None:
     """A destination stores a connection id, not an engine.
 
-    Read literally, a second Zernio login matches no reader and every one of
-    its posts would be reported as unmeasurable - which is how a whole engine's
+    Read literally, a second login's id matches no reader and every one of its
+    posts would be reported as unmeasurable - which is how a whole engine's
     posts were once skipped in the collector.
+
+    The resolver is stood in for rather than read from the operator's own
+    `.env`. Which second logins exist is a fact about one machine, and settings
+    find `.env` relative to the working directory - so a test that depends on
+    one passes from the repo root here and fails on a clean checkout.
     """
-    _published(session, "second", provider="zernio-2", performance_snapshots=[])
+    from trendrelay_api import campaign_measurement
 
-    post = context.list_published_posts(session, "ws")[0]
+    monkeypatch.setattr(
+        campaign_measurement,
+        "PROVIDER_ENGINE_RESOLVER",
+        lambda provider: "zernio" if provider.startswith("zernio") else provider,
+    )
 
-    assert post["measurable"] is True
+    # An id no reader is registered under, whose engine has one.
+    assert context._is_measurable("zernio-brand-b") is True
+    # And the resolver does not turn an unreadable engine into a readable one.
+    assert context._is_measurable("woopsocial") is False
 
 
 def test_measurability_does_not_depend_on_what_was_imported_first() -> None:
@@ -1785,6 +1797,76 @@ def test_set_post_media_completes_a_media_less_draft(session) -> None:
     assert done["video_path"] == r"S:\media\clip.mp4"
     assert done["asset_id"] == "clip1"
     assert "draft" in done["note"]
+
+
+def test_attaching_a_gallery_says_which_accounts_can_carry_it(session) -> None:
+    """The create door warned about reach; the attach door said nothing.
+
+    Both put the same pictures on the same post for the same campaign, so an
+    assistant that drafted the words first and attached the gallery second was
+    told less than one that sent both together - and the post could pass every
+    network's limit in silence until the runner declined it days later.
+
+    The fixture campaign posts Threads, which takes ten pictures, so eleven is
+    past what anything here can carry.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    for index in range(1, 12):
+        _image_asset(session, f"g{index:02d}", rf"S:\media\g{index:02d}.png")
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Words.")
+
+    attached = writes.set_post_media(
+        session, "ws", view["id"], [f"g{index:02d}" for index in range(1, 12)]
+    )
+
+    assert attached["carousel_warnings"], "eleven outgrew every account"
+    assert "No account in this campaign can take 11 pictures" in attached["note"]
+    # Attached all the same: this is a warning about where it can go, not a
+    # refusal. The operator may add an account that carries it.
+    assert len(attached["image_paths"]) == 11
+
+
+def test_a_gallery_within_reach_is_told_what_carries_it(session) -> None:
+    """And the ordinary case names the accounts rather than staying silent."""
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _destination(session, "d-zernio", "threads", "zernio")
+    for index in range(1, 4):
+        _image_asset(session, f"h{index:02d}", rf"S:\media\h{index:02d}.png")
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Words.")
+
+    attached = writes.set_post_media(
+        session, "ws", view["id"], ["h01", "h02", "h03"]
+    )
+
+    # The campaign's Buffer account posts no gallery at all, so there is a
+    # warning either way; what matters is that the Zernio one is named as
+    # carrying it rather than the whole thing reading as a failure.
+    assert "they reach Threads" in attached["note"]
+
+
+def test_neither_door_takes_more_pictures_than_any_network(session) -> None:
+    """In words, rather than as a schema error naming a field.
+
+    The queue's own model refuses this too, but its message links to pydantic's
+    website and tells an assistant nothing it can act on.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+    from trendrelay_api.integrations.publishing import MAX_CAROUSEL_IMAGES
+
+    names = []
+    for index in range(MAX_CAROUSEL_IMAGES + 1):
+        identifier = f"m{index:02d}"
+        _image_asset(session, identifier, rf"S:\media\{identifier}.png")
+        names.append(identifier)
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Words.")
+
+    with pytest.raises(ValueError, match=f"at most {MAX_CAROUSEL_IMAGES} pictures"):
+        intake.create_campaign_post(session, "ws", "camp", names, caption="Too many.")
+
+    with pytest.raises(ValueError, match=f"at most {MAX_CAROUSEL_IMAGES} pictures"):
+        writes.set_post_media(session, "ws", view["id"], names)
 
 
 def test_set_post_media_refuses_a_post_already_in_rotation(session) -> None:
@@ -1886,6 +1968,8 @@ def test_the_media_sop_covers_what_the_upload_tools_accept() -> None:
     `upload_media` takes video; the procedure described pictures only, so an
     assistant following it would never have uploaded a clip.
     """
+    from trendrelay_api.integrations.mcp.intake import _IMAGE_TYPES, _VIDEO_TYPES
+
     markdown = sops.get_sop("campaigns.add-post-with-media")["markdown"]
 
     assert "upload_media" in markdown
@@ -1893,3 +1977,34 @@ def test_the_media_sop_covers_what_the_upload_tools_accept() -> None:
     # And the one thing a caller must not try: a carousel is pictures, a video
     # is one file, and the two never mix in a package.
     assert "carousel of clips" in markdown or "never a mix" in markdown
+
+    # Every type the door opens for, named where a caller will read it. Checked
+    # against the tables rather than against a list written here, because a
+    # list written here goes stale in exactly the way the SOP did: MKV was
+    # accepted for months while the procedure said "MP4, MOV and WebM".
+    lowered = markdown.lower()
+    missing = [
+        suffix.lstrip(".")
+        for suffix in {**_IMAGE_TYPES, **_VIDEO_TYPES}.values()
+        # JPEG and JPG are the same format under two spellings, and the
+        # procedure should use the one a person recognises.
+        if suffix.lstrip(".").replace("jpg", "jpeg") not in lowered
+    ]
+    assert not missing, f"the procedure never names: {missing}"
+
+
+def test_the_media_sop_teaches_building_a_post_a_piece_at_a_time() -> None:
+    """The capability existed; the procedure described only the whole-package way.
+
+    An assistant follows the SOP, so a flow the SOP does not mention is a flow
+    that does not happen - and "send the words now, the clip when I find it" is
+    how a person actually talks.
+    """
+    markdown = sops.get_sop("campaigns.add-post-with-media")["markdown"]
+
+    assert "set_post_media" in markdown
+    # Whitespace collapsed, so re-wrapping a paragraph does not fail a test
+    # about what the paragraph says.
+    prose = " ".join(markdown.split())
+    # The rule that makes the order free: media is never required to start.
+    assert "Media is never required to start" in prose
