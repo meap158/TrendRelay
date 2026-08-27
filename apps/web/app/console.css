@@ -2196,3 +2196,96 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-queue-product > em.product { min-width: 0; }
 /* A caveat on the chip beside it, not a chip of its own. */
 .campaign-queue-facts em.soft { padding-inline: 0; background: transparent; font-style: italic; }
+
+/* --- Campaign performance overview --------------------------------------- */
+/* The campaign's outcome is a dashboard, not another settings form. KPI cards
+   stay in one stable grid, the time series carries the visual weight, and top
+   posts remain a compact ranked list even on a phone. */
+.campaign-analytics { gap: 14px; }
+.campaign-analytics-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.campaign-analytics-body { display: grid; gap: 14px; min-width: 0; }
+.campaign-analytics-body[aria-busy="true"] { opacity: .72; transition: opacity 120ms ease; }
+.campaign-analytics-period { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 3px 12px; }
+.campaign-analytics-period > span { color: var(--text); font-size: 12px; font-weight: 700; }
+.campaign-analytics-period small { color: var(--muted); font-size: 10px; }
+.campaign-analytics-scorecards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.campaign-analytics-scorecards > * { display: grid; min-width: 0; gap: 5px; border: 0; border-inline-end: 1px solid var(--line); padding: 13px 14px; color: var(--text); background: transparent; text-align: start; }
+.campaign-analytics-scorecards > *:last-child { border-inline-end: 0; }
+.campaign-analytics-scorecards > button { cursor: pointer; }
+.campaign-analytics-scorecards > button:hover { background: var(--panel-raised); }
+.campaign-analytics-scorecards > button.selected { box-shadow: inset 0 -3px 0 var(--link); background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
+.campaign-analytics-scorecards > button:focus-visible { z-index: 1; outline: 2px solid var(--link); outline-offset: -2px; }
+.campaign-analytics-card-label { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+.campaign-analytics-card-label svg { flex: none; }
+.campaign-analytics-card-label strong { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-analytics-scorecards b { font-size: clamp(20px, 2vw, 27px); font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
+.campaign-analytics-scorecards small { color: var(--muted); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.campaign-analytics-scorecards small.up { color: var(--green); }
+.campaign-analytics-scorecards small.down { color: var(--red); }
+.campaign-analytics-scorecards small span { color: var(--muted); font-weight: 400; }
+.campaign-analytics-chart { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 14px 10px; background: var(--panel); }
+.campaign-analytics-chart > div:first-child { display: grid; gap: 2px; }
+.campaign-analytics-chart > div:first-child strong { font-size: 12px; }
+.campaign-analytics-chart > div:first-child small { color: var(--muted); font-size: 10px; }
+.campaign-analytics-trend { display: grid; gap: 3px; min-width: 0; }
+.campaign-analytics-trend svg { display: block; inline-size: 100%; block-size: clamp(120px, 18vw, 190px); overflow: visible; }
+.campaign-analytics-trend line { stroke: var(--line); stroke-width: .45; vector-effect: non-scaling-stroke; }
+.campaign-analytics-trend polygon { fill: color-mix(in srgb, var(--link) 10%, transparent); }
+.campaign-analytics-trend polyline { fill: none; stroke: var(--link); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.campaign-analytics-trend > span { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; }
+.campaign-analytics-lower { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(220px, .7fr); gap: 14px; align-items: start; }
+.campaign-top-content, .campaign-analytics-coverage { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.campaign-top-content > header { display: flex; align-items: end; justify-content: space-between; gap: 10px; padding: 12px 14px; border-block-end: 1px solid var(--line); }
+.campaign-top-content > header > div { display: grid; gap: 2px; min-width: 0; }
+.campaign-top-content > header strong, .campaign-analytics-coverage > strong { font-size: 12px; }
+.campaign-top-content > header small { color: var(--muted); font-size: 10px; }
+.campaign-top-content > header label { display: flex; flex: none; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 600; }
+.campaign-top-content > header .ui-select { min-inline-size: 122px; }
+.campaign-top-content ol { margin: 0; padding: 0; list-style: none; }
+.campaign-top-content li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; padding: 10px 14px; border-block-end: 1px solid var(--line); }
+.campaign-top-content li:last-child { border-block-end: 0; }
+.campaign-top-rank { display: grid; place-items: center; inline-size: 24px; block-size: 24px; border-radius: 50%; color: var(--muted); background: var(--panel-raised); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.campaign-top-content li > div { display: grid; gap: 2px; min-width: 0; }
+.campaign-top-content li > div strong { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-top-content li > div a { color: var(--text); text-decoration: none; }
+.campaign-top-content li > div a:hover { color: var(--link); text-decoration: underline; }
+.campaign-top-content li > div small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-top-metric { display: grid; min-inline-size: 58px; text-align: end; }
+.campaign-top-metric strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+.campaign-top-metric small { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.campaign-analytics-empty { margin: 0; padding: 18px 14px; color: var(--muted); font-size: 11px; }
+.campaign-analytics-coverage { display: grid; gap: 7px; padding: 13px 14px; }
+.campaign-analytics-coverage p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.campaign-analytics-coverage p b { color: var(--text); font-variant-numeric: tabular-nums; }
+.campaign-analytics-coverage > small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.campaign-analytics-coverage p.campaign-analytics-gap { margin-block-start: 5px; border-block-start: 1px solid var(--line); padding-block-start: 10px; }
+.campaign-analytics-gap strong { color: var(--text); }
+
+@media (max-width: 900px) {
+  .campaign-analytics-lower { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .campaign-analytics > .ui-card-head { align-items: stretch; }
+  .campaign-analytics > .ui-card-head .ui-card-aside,
+  .campaign-analytics-controls { inline-size: 100%; min-inline-size: 0; }
+  .campaign-analytics-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .campaign-analytics-controls .ui-segmented { display: flex; min-width: 0; }
+  .campaign-analytics-controls .ui-segmented button { flex: 1 1 0; justify-content: center; min-width: 0; padding-inline: 5px; }
+  .campaign-analytics-controls .ui-button { padding-inline: 9px; }
+  .campaign-analytics-controls .ui-button > :last-child:not(:first-child) { display: none; }
+  .campaign-analytics-scorecards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campaign-analytics-scorecards > * { border-block-end: 1px solid var(--line); }
+  .campaign-analytics-scorecards > *:nth-child(2n) { border-inline-end: 0; }
+  .campaign-analytics-scorecards > *:nth-last-child(-n + 2) { border-block-end: 0; }
+  .campaign-analytics-scorecards > button.selected { box-shadow: inset 3px 0 0 var(--link); }
+  .campaign-analytics-scorecards small span { display: none; }
+  .campaign-top-content > header { align-items: center; }
+  .campaign-top-content li { padding-inline: 11px; }
+}
+@media (max-width: 370px) {
+  .campaign-analytics-controls { grid-template-columns: minmax(0, 1fr); }
+  .campaign-analytics-controls .ui-button { inline-size: 100%; }
+  .campaign-top-content > header { align-items: stretch; flex-direction: column; }
+  .campaign-top-content > header label { justify-content: space-between; }
+  .campaign-top-content > header .ui-select { min-inline-size: 0; inline-size: 55%; }
+}

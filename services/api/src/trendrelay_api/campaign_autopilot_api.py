@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -1873,6 +1874,215 @@ def _measurement_gaps(destinations: Any) -> list[dict[str, Any]]:
         })
         gap["destinations"].append(destination.label)
     return sorted(gaps.values(), key=lambda item: item["label"])
+
+
+ANALYTICS_RANGE_DAYS = {"today": 1, "7d": 7, "28d": 28, "90d": 90}
+
+
+def _aware_utc(value: datetime | None) -> datetime | None:
+    """A database moment as comparable UTC, including SQLite's naive values."""
+    if value is None:
+        return None
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _analytics_bounds(
+    period: str, timezone: str, *, now: datetime | None = None
+) -> tuple[datetime, datetime, datetime, ZoneInfo]:
+    """Current and preceding calendar windows on the workspace's clock.
+
+    A mobile dashboard says "Today", not "the last 24 hours". Seven and 28
+    days likewise include today plus the preceding calendar days. Converting
+    the local boundaries to UTC keeps database filtering accurate across DST.
+    """
+    try:
+        zone = ZoneInfo(timezone)
+    except ZoneInfoNotFoundError as error:
+        raise HTTPException(status_code=422, detail="Unknown analytics timezone.") from error
+    days = ANALYTICS_RANGE_DAYS[period]
+    moment = (now or datetime.now(UTC)).astimezone(zone)
+    today = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+    current_start = today - timedelta(days=days - 1)
+    previous_start = current_start - timedelta(days=days)
+    return (
+        previous_start.astimezone(UTC),
+        current_start.astimezone(UTC),
+        moment.astimezone(UTC),
+        zone,
+    )
+
+
+def _analytics_totals(rows: list[PublicationExecution]) -> dict[str, Any]:
+    """One period's provider-backed totals, never treating unread as zero."""
+    from trendrelay_api.campaign_measurement import latest_metrics
+
+    totals: dict[str, float] = {
+        "views": 0.0,
+        "likes": 0.0,
+        "comments": 0.0,
+        "shares": 0.0,
+        "saves": 0.0,
+        "watch_seconds": 0.0,
+    }
+    measured = 0
+    for execution in rows:
+        metrics = latest_metrics(execution)
+        if not metrics:
+            continue
+        measured += 1
+        for field in totals:
+            totals[field] += float(metrics.get(field, 0))
+    engagement = sum(totals[field] for field in ("likes", "comments", "shares", "saves"))
+    return {
+        **{key: round(value, 2) for key, value in totals.items()},
+        "engagement": round(engagement, 2),
+        "published": len(rows),
+        "measured": measured,
+        "engagement_rate": round((engagement / totals["views"]) * 100, 2)
+        if totals["views"] else None,
+    }
+
+
+@router.get("/{campaign_id}/analytics")
+def campaign_analytics(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    period: str = Query(default="28d", alias="range", pattern=r"^(today|7d|28d|90d)$"),
+    sort_by: str = Query(
+        default="views",
+        alias="sort",
+        pattern=r"^(views|engagement|likes|comments|shares|saves)$",
+    ),
+    timezone: str = Query(default="UTC", min_length=1, max_length=100),
+) -> dict[str, Any]:
+    """Campaign performance from the same native reads the scheduler uses.
+
+    Opening Overview is read-only: the worker already calls each configured
+    engine at its due measurement windows and stores cumulative snapshots.
+    This endpoint groups the newest snapshot per published post, so it is fast,
+    does not spend a provider's rate allowance, and never double-counts the 2h,
+    24h and 7d observations.
+    """
+    membership(session, workspace_id, user.id)
+    _campaign(session, workspace_id, campaign_id)
+    previous_start, current_start, current_end, zone = _analytics_bounds(
+        period, timezone
+    )
+    candidates = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.workspace_id == workspace_id,
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state.in_(("published", "measured")),
+            PublicationExecution.published_at.is_not(None),
+            PublicationExecution.published_at >= previous_start,
+            PublicationExecution.published_at <= current_end,
+        )
+    ).all()
+    rows = [
+        execution for execution in candidates
+        if (published := _aware_utc(execution.published_at)) is not None
+        and previous_start <= published <= current_end
+    ]
+    current_rows = [
+        row for row in rows
+        if (_aware_utc(row.published_at) or current_start) >= current_start
+    ]
+    previous_rows = [
+        row for row in rows
+        if previous_start <= (_aware_utc(row.published_at) or previous_start) < current_start
+    ]
+
+    from trendrelay_api.campaign_measurement import latest_metrics
+
+    days = ANALYTICS_RANGE_DAYS[period]
+    local_today = current_end.astimezone(zone).date()
+    daily = [
+        {
+            "date": (local_today - timedelta(days=offset)).isoformat(),
+            "views": 0.0,
+            "engagement": 0.0,
+            "published": 0,
+        }
+        for offset in range(days - 1, -1, -1)
+    ]
+    daily_by_date = {item["date"]: item for item in daily}
+    top_content: list[dict[str, Any]] = []
+    last_measured_at: datetime | None = None
+    for execution in current_rows:
+        published = _aware_utc(execution.published_at)
+        if published is None:
+            continue
+        day = daily_by_date.get(published.astimezone(zone).date().isoformat())
+        metrics = latest_metrics(execution)
+        engagement = sum(
+            float(metrics.get(field, 0))
+            for field in ("likes", "comments", "shares", "saves")
+        )
+        if day is not None:
+            day["published"] += 1
+            day["views"] += float(metrics.get("views", 0))
+            day["engagement"] += engagement
+        snapshots = execution.performance_snapshots or []
+        if snapshots:
+            observed = snapshots[-1].get("at")
+            try:
+                measured_at = _aware_utc(datetime.fromisoformat(str(observed)))
+            except (TypeError, ValueError):
+                measured_at = None
+            if measured_at and (last_measured_at is None or measured_at > last_measured_at):
+                last_measured_at = measured_at
+        if metrics:
+            top_content.append({
+                "id": execution.id,
+                "title": execution.title or execution.caption[:100] or "Untitled post",
+                "platform": execution.platform,
+                "destination": execution.destination_label,
+                "published_at": published,
+                "post_url": next(iter(execution.permalinks or []), None),
+                "views": round(float(metrics.get("views", 0)), 2),
+                "engagement": round(engagement, 2),
+                "likes": round(float(metrics.get("likes", 0)), 2),
+                "comments": round(float(metrics.get("comments", 0)), 2),
+                "shares": round(float(metrics.get("shares", 0)), 2),
+                "saves": round(float(metrics.get("saves", 0)), 2),
+            })
+    top_content.sort(
+        key=lambda item: (
+            item[sort_by], item["views"], item["engagement"], item["published_at"]
+        ),
+        reverse=True,
+    )
+    for item in daily:
+        item["views"] = round(float(item["views"]), 2)
+        item["engagement"] = round(float(item["engagement"]), 2)
+    for item in top_content:
+        item["published_at"] = item["published_at"].isoformat()
+
+    destinations = session.scalars(
+        select(CampaignDestination).where(
+            CampaignDestination.campaign_id == campaign_id,
+            CampaignDestination.enabled.is_(True),
+        )
+    ).all()
+    return {
+        "range": period,
+        "sort": sort_by,
+        "timezone": timezone,
+        "starts_at": current_start.isoformat(),
+        "ends_at": current_end.isoformat(),
+        "current": _analytics_totals(current_rows),
+        "previous": _analytics_totals(previous_rows),
+        "daily": daily,
+        "top_content": top_content[:10],
+        "coverage": {
+            "published": len(current_rows),
+            "measured": sum(1 for row in current_rows if latest_metrics(row)),
+            "last_measured_at": last_measured_at.isoformat() if last_measured_at else None,
+            "unreportable": _measurement_gaps(destinations),
+        },
+    }
 
 
 @router.post("/{campaign_id}/autopilot/preview")

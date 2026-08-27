@@ -65,6 +65,7 @@ const OfferPicker = dynamic(() => import("../publish/offer-picker").then((m) => 
 const BulkVoiceEditor = dynamic(() => import("../library/bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const BatchTranscribe = dynamic(() => import("../library/batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 import { TimelineImage, TimelinePlayer } from "./timeline-player";
+import { CampaignAnalytics } from "./campaign-analytics";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { profileUrl } from "../../lib/social-profile";
 import { commissionLabel, type CommissionBearing } from "../commission";
@@ -2037,14 +2038,13 @@ export function AutopilotPanel({
    * three: every switch between running campaigns threw you back to Schedule,
    * including the switch you made to compare two queues.
    *
-   * So it holds where it was put, and opens on Queue & setup, which is the
-   * half that answers "what is in this campaign" for a campaign you have not
-   * looked at yet.
+   * So it holds where it was put, and opens on Overview. That gives a returning
+   * operator the campaign's outcome before asking them to change its inputs.
    */
-  const [view, setView] = usePersistedState<"posts" | "content">(
+  const [view, setView] = usePersistedState<"overview" | "posts" | "content">(
     "trendrelay.campaigns.workTab",
-    "content",
-    oneOf("posts", "content"),
+    "overview",
+    oneOf("overview", "posts", "content"),
   );
   const automaticPreview = useRef(false);
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
@@ -3072,7 +3072,8 @@ export function AutopilotPanel({
    */
   function jumpTo(target: string) {
     const settings = ["accounts", "settings", "revenue"].includes(target);
-    const pane = target === "media" || settings ? "content"
+    const pane = target === "overview" ? "overview"
+      : target === "media" || settings ? "content"
       : target === "schedule" ? "posts"
       : null;
     if (!pane) return;
@@ -3592,6 +3593,11 @@ export function AutopilotPanel({
             "Queue" and not "Content", because next to a tab called Posts,
             Content · post packages read as the same thing. */}
         <nav className="campaign-work-tabs" aria-label="Campaign workspace">
+          <button type="button" className={view === "overview" ? "active" : ""}
+            onClick={() => jumpTo("overview")}>
+            <span>Overview</span>
+            <small>performance</small>
+          </button>
           {/* Counts the queue, because that is the number somebody comes to
               this tab for. The destinations are named on the tab's own second
               line rather than competing for the figure. */}
@@ -3932,6 +3938,11 @@ export function AutopilotPanel({
             ))}
           </ul>
         </Card>
+      )}
+
+
+      {view === "overview" && (
+        <CampaignAnalytics base={base} timezone={readerZone} apiFetch={apiFetch} />
       )}
 
 

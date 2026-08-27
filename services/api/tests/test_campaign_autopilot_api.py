@@ -2101,3 +2101,166 @@ def test_the_outlook_stays_quiet_when_everything_can_be_read(workspace) -> None:
     ).json()
 
     assert body["measurement"] == []
+
+
+def _published_for_analytics(
+    workspace_id: str,
+    campaign_id: str,
+    identifier: str,
+    *,
+    published_at: datetime,
+    title: str,
+    snapshots: list[dict] | None = None,
+) -> None:
+    """A provider-confirmed post, with cumulative reads when supplied."""
+    from trendrelay_api.publication_models import PublicationExecution
+
+    with TestingSession.begin() as session:
+        session.add(PublicationExecution(
+            id=identifier,
+            workspace_id=workspace_id,
+            campaign_id=campaign_id,
+            state="measured" if snapshots else "published",
+            delivery="schedule",
+            platform="facebook",
+            provider="buffer",
+            integration_id="analytics-account",
+            destination_label="Brand page",
+            title=title,
+            caption=title,
+            media_path=r"S:\media\analytics.mp4",
+            image_paths=[],
+            thread=[],
+            offer_ids=[],
+            tracking_links=[],
+            remote_post_ids=[identifier],
+            permalinks=[f"https://facebook.test/posts/{identifier}"],
+            published_at=published_at,
+            performance_snapshots=snapshots or [],
+            created_by="owner-user",
+        ))
+
+
+def _snapshot(at: datetime, window: str, **metrics: float) -> dict:
+    return {"at": at.isoformat(), "window": window, "metrics": metrics}
+
+
+def test_campaign_analytics_compares_periods_without_double_counting_reads(workspace) -> None:
+    campaign_id = campaign(workspace)
+    now = datetime.now(UTC)
+    _published_for_analytics(
+        workspace,
+        campaign_id,
+        "current-measured",
+        published_at=now - timedelta(days=2),
+        title="Current measured post",
+        snapshots=[
+            _snapshot(now - timedelta(days=2), "2h", views=40, likes=2),
+            _snapshot(
+                now - timedelta(days=1),
+                "24h",
+                views=120,
+                likes=10,
+                comments=4,
+                shares=2,
+                saves=1,
+            ),
+        ],
+    )
+    _published_for_analytics(
+        workspace,
+        campaign_id,
+        "current-unread",
+        published_at=now - timedelta(days=1),
+        title="Current post waiting for metrics",
+    )
+    _published_for_analytics(
+        workspace,
+        campaign_id,
+        "previous-measured",
+        published_at=now - timedelta(days=8),
+        title="Previous period post",
+        snapshots=[_snapshot(
+            now - timedelta(days=7), "24h", views=40, likes=3, comments=1
+        )],
+    )
+
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/analytics",
+        params={"range": "7d", "sort": "comments", "timezone": "UTC"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["range"] == "7d"
+    assert body["sort"] == "comments"
+    assert body["current"] == {
+        "views": 120.0,
+        "likes": 10.0,
+        "comments": 4.0,
+        "shares": 2.0,
+        "saves": 1.0,
+        "watch_seconds": 0.0,
+        "engagement": 17.0,
+        "published": 2,
+        "measured": 1,
+        "engagement_rate": 14.17,
+    }
+    assert body["previous"]["views"] == 40.0
+    assert body["previous"]["engagement"] == 4.0
+    assert len(body["daily"]) == 7
+    assert sum(day["published"] for day in body["daily"]) == 2
+    assert sum(day["views"] for day in body["daily"]) == 120.0
+    assert body["coverage"]["published"] == 2
+    assert body["coverage"]["measured"] == 1
+    assert body["top_content"][0]["id"] == "current-measured"
+
+
+def test_campaign_analytics_top_posts_follow_the_selected_metric(workspace) -> None:
+    campaign_id = campaign(workspace)
+    now = datetime.now(UTC)
+    _published_for_analytics(
+        workspace,
+        campaign_id,
+        "most-viewed",
+        published_at=now - timedelta(hours=2),
+        title="Most viewed",
+        snapshots=[_snapshot(now, "2h", views=1_000, comments=2, shares=1)],
+    )
+    _published_for_analytics(
+        workspace,
+        campaign_id,
+        "most-discussed",
+        published_at=now - timedelta(hours=1),
+        title="Most discussed",
+        snapshots=[_snapshot(now, "2h", views=100, comments=25, shares=2)],
+    )
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/analytics"
+
+    by_views = request("GET", base, params={"range": "today", "sort": "views"})
+    by_comments = request(
+        "GET", base, params={"range": "today", "sort": "comments"}
+    )
+
+    assert by_views.status_code == 200, by_views.text
+    assert by_comments.status_code == 200, by_comments.text
+    assert [post["id"] for post in by_views.json()["top_content"]] == [
+        "most-viewed", "most-discussed"
+    ]
+    assert [post["id"] for post in by_comments.json()["top_content"]] == [
+        "most-discussed", "most-viewed"
+    ]
+
+
+def test_campaign_analytics_rejects_an_unknown_workspace_timezone(workspace) -> None:
+    campaign_id = campaign(workspace)
+
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/analytics",
+        params={"timezone": "Not/A_Real_Zone"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Unknown analytics timezone."
