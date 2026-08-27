@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -289,7 +290,7 @@ function TopPostThumbnail({
     // The post title is printed immediately below, so the visual is decorative
     // rather than the same accessible name announced twice.
     // eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL
-    <img src={objectUrl} alt="" title={title} />
+    <img src={objectUrl} alt="" title={title} draggable={false} />
   ) : (
     <span className="campaign-top-thumb-empty" aria-hidden="true"><ImageIcon /></span>
   );
@@ -318,6 +319,54 @@ export function CampaignAnalytics({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const topPostsDrag = useRef({
+    pointerId: null as number | null,
+    startX: 0,
+    startScrollLeft: 0,
+    moved: false,
+  });
+  const [draggingTopPosts, setDraggingTopPosts] = useState(false);
+
+  const startTopPostsDrag = (event: ReactPointerEvent<HTMLOListElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
+    topPostsDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: event.currentTarget.scrollLeft,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveTopPostsDrag = (event: ReactPointerEvent<HTMLOListElement>) => {
+    const drag = topPostsDrag.current;
+    if (drag.pointerId !== event.pointerId) return;
+    const distance = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(distance) < 5) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      setDraggingTopPosts(true);
+    }
+    event.preventDefault();
+    event.currentTarget.scrollLeft = drag.startScrollLeft - distance;
+  };
+  const finishTopPostsDrag = (event: ReactPointerEvent<HTMLOListElement>) => {
+    const drag = topPostsDrag.current;
+    if (drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    drag.pointerId = null;
+    setDraggingTopPosts(false);
+    window.setTimeout(() => { drag.moved = false; }, 0);
+  };
+  const moveTopPostsByKeyboard = (event: ReactKeyboardEvent<HTMLOListElement>) => {
+    if (event.target !== event.currentTarget || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    event.currentTarget.scrollBy({
+      left: event.key === "ArrowLeft" ? -event.currentTarget.clientWidth * 0.72 : event.currentTarget.clientWidth * 0.72,
+      behavior: "smooth",
+    });
+  };
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setBusy(true);
@@ -426,7 +475,20 @@ export function CampaignAnalytics({
                 </label>
               </header>
               {data.top_content.length ? (
-                <ol>
+                <ol tabIndex={0}
+                  className={draggingTopPosts ? "is-dragging" : undefined}
+                  aria-label="Top posts. Drag horizontally or use the left and right arrow keys to browse."
+                  onPointerDown={startTopPostsDrag}
+                  onPointerMove={moveTopPostsDrag}
+                  onPointerUp={finishTopPostsDrag}
+                  onPointerCancel={finishTopPostsDrag}
+                  onKeyDown={moveTopPostsByKeyboard}
+                  onClickCapture={(event) => {
+                    if (!topPostsDrag.current.moved) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    topPostsDrag.current.moved = false;
+                  }}>
                   {data.top_content.map((post, index) => (
                     <li key={post.id}>
                       <div className="campaign-top-thumb">
