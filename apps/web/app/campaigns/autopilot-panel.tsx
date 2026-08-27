@@ -5172,6 +5172,7 @@ export function AutopilotPanel({
             open={swappingMedia}
             workspaceId={workspaceId}
             apiFetch={apiFetch}
+            currentKind={editing.video_path ? "video" : editing.image_paths.length ? "image" : null}
             onClose={() => setSwappingMedia(false)}
             onPick={(media) => {
               setEditingMedia(media);
@@ -6555,12 +6556,15 @@ function MediaSwapDialog({
   open,
   workspaceId,
   apiFetch,
+  currentKind,
   onClose,
   onPick,
 }: {
   open: boolean;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  /** What the post holds now, so the grid opens on like-for-like media. */
+  currentKind: "video" | "image" | null;
   onClose: () => void;
   onPick: (media: {
     video_path: string;
@@ -6572,6 +6576,10 @@ function MediaSwapDialog({
   const picker = useLibraryAssets<LibraryAsset>({
     workspaceId, apiFetch,
     enabled: open,
+    // Opens on the kind the post already holds - an image post that showed a
+    // hundred newest clips first made pictures look unofferable - and the
+    // chips above the grid widen it back to everything.
+    baseline: currentKind ? { mediaKind: currentKind } : {},
     keep: (asset) => asset.media_kind !== "audio",
   });
   const t = useT();
@@ -6639,11 +6647,16 @@ function MediaSwapDialog({
       }
     >
       <div className="campaign-media-picker">
+        {/* The shared filter row (ADR 0025), media kind included: without it,
+            newest-first over a mixed library buried whichever kind is rarer -
+            an image post's own pictures looked unofferable behind a hundred
+            clips. `cleared` keeps "clear" returning to this post's own kind
+            rather than to everything. */}
         <AssetFilters
           values={picker.filters}
           facets={picker.facets}
-          fields={["query", "effect", "channel", "platform", "length"]}
-          cleared={{}}
+          fields={["query", "mediaKind", "effect", "channel", "platform", "length"]}
+          cleared={currentKind ? { mediaKind: currentKind } : {}}
           onChange={(next) => picker.setFilters(next)}
         />
         <ul className="campaign-media-grid">
