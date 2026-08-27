@@ -90,3 +90,30 @@ recorded in `docs/third-party/openai-file-params.md`.
   a draft with the placeholder or the given copy; that the no-links rule holds
   on this surface; and that the `openai/fileParams` declaration survives to
   the tool listing, where losing it would silently break the ChatGPT client.
+
+## Amendment (2026-08-27): video, and a post in two visits
+
+The "argued for separately" above happened. Three changes, same boundary:
+
+**`upload_media` widens the door to video.** mp4, mov and webm, up to 512 MB,
+under exactly the guards `upload_image` proved: the served content type
+decides what the file is, the digest names it, the fetch refuses redirects
+and non-public addresses, and it lands through the operator's own ingest
+under the `mcp-upload` source. `upload_image` stays as it is, so existing
+callers keep the tighter cap they were promised; the video tool declares
+`meta={"openai/fileParams": ["media"]}` for the same attachment convention.
+
+**A post can arrive in halves, in either order.** `create_campaign_post`
+with no assets drafts the words first (`media_later` on the queue's create
+model, explicit rather than inferred, so an ordinary caller who forgot the
+media is still refused); `set_post_media` attaches Library assets to the
+draft once an upload lands. The reverse order always worked - media first,
+copy later, the placeholder standing in. A half-finished post is skipped by
+the scheduler with its own note ("still need media attached", the mirror of
+"still need copy written") until it is whole.
+
+**`set_post_media` is drafts-only, and that is the boundary restated.** A
+post in the rotation is one the operator promoted with its media in view;
+swapping what publishes underneath that decision is theirs to do in the app.
+The refusal names the state and says so. Both new operations join the policy
+as workspace writes with their reasoning recorded beside them.
