@@ -3673,6 +3673,8 @@ export function AutopilotPanel({
             const waiting = exceptions.length;
             const ready = autopilot.queue_ready;
             const needsCopy = queue.filter((item) => item.needs_copy).length;
+            const needsMedia = queue.filter((item) =>
+              !item.needs_copy && !item.video_path && !item.image_paths.length).length;
             return (
               <p className="autopilot-approval-summary" role="status">
                 <strong>{waiting}</strong> waiting for you
@@ -3680,6 +3682,10 @@ export function AutopilotPanel({
                 {needsCopy > 0 && (
                   <> · <strong>{needsCopy}</strong>{" "}
                     {needsCopy === 1 ? "still needs copy" : "still need copy"}</>
+                )}
+                {needsMedia > 0 && (
+                  <> · <strong>{needsMedia}</strong>{" "}
+                    {needsMedia === 1 ? "still needs media" : "still need media"}</>
                 )}
               </p>
             );
@@ -4552,6 +4558,13 @@ export function AutopilotPanel({
                           scheduler learned to skip unwritten posts and the
                           delivery guard learned to refuse them. */}
                       No copy yet — this post is skipped until somebody writes it.
+                    </span>
+                  ) : !item.video_path && !item.image_paths.length ? (
+                    // The mirror case, from the words-first MCP flow: the copy
+                    // exists and the clip does not, and the scheduler skips it
+                    // just the same until media is attached in Edit content.
+                    <span className="autopilot-queue-copy autopilot-needs-copy">
+                      No media yet — this post is skipped until some is attached.
                     </span>
                   ) : (
                     <span className="autopilot-queue-copy">{item.body}</span>

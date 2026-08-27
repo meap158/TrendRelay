@@ -356,7 +356,12 @@ def _post_summary(
         "item_id": item.id,
         "campaign_id": item.campaign_id,
         "campaign_name": campaign.name if campaign else None,
-        "media_kind": "carousel" if item.image_paths else "video",
+        "media_kind": (
+            "carousel" if item.image_paths
+            else "video" if item.video_path
+            # Drafted words-first; the scheduler skips it until media arrives.
+            else "none yet"
+        ),
         "video_title": _asset_title(session, item, asset),
         # How long there is to say it. A seven-second cut wants its hook in the
         # first word and a minute-long one can breathe, and the assistant was
@@ -490,6 +495,14 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
     effective_disclosure = (
         disclosure_for(item, autopilot) if autopilot else (item.disclosure or None)
     )
+    from trendrelay_api.integrations.publishing import topic_deliverable
+
+    # Which of this post's destinations can carry a Threads topic tag: one per
+    # post, no leading #, up to 50 characters. Said here so an assistant can
+    # offer one where it lands and not where it would be dropped.
+    topic_reach = sorted({
+        d.platform for d in destinations if topic_deliverable(d.provider, d.platform)
+    })
     missing = {
         "caption": _needs_copy(item),
         "first_comment": item.first_comment is None and follow_up["any_deliverable"],
@@ -497,17 +510,28 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
             d["follow_up_kind"] == "reply in the thread" and d["deliverable"]
             for d in follow_up["per_destination"]
         ),
+        # The media, for a post drafted words-first over MCP: attach it with
+        # set_post_media once its upload lands.
+        "media": not item.video_path and not (item.image_paths or []),
+        "topic": item.topic is None and bool(topic_reach),
     }
     return {
         "item_id": item.id,
         "campaign": get_campaign_config(session, workspace_id, item.campaign_id)
         if campaign else None,
-        "media_kind": "carousel" if item.image_paths else "video",
+        "media_kind": (
+            "carousel" if item.image_paths
+            else "video" if item.video_path
+            # Drafted words-first; the scheduler skips it until media arrives.
+            else "none yet"
+        ),
         "video_title": _asset_title(session, item, asset),
         #: None when the asset has left the Library or never carried a
         #: duration - which is a different answer from a clip of no length.
         "duration_seconds": _duration_seconds(asset),
         "products": _resolve_products(session, item),
+        "topic": item.topic,
+        "topic_deliverable_on": topic_reach,
         "destinations": destination_views,
         "follow_up_landing": follow_up,
         # The workspace's posting times, so the assistant knows the cadence the

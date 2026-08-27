@@ -21,7 +21,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
@@ -1290,6 +1290,12 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
             CampaignQueueItem.campaign_id == autopilot.campaign_id,
             CampaignQueueItem.state == "approved",
             CampaignQueueItem.body != PLACEHOLDER_BODY,
+            # A post still waiting for its media is not ready either - the
+            # mirror of the placeholder body, from the two-visit MCP flow.
+            or_(
+                CampaignQueueItem.video_path != "",
+                func.json_array_length(CampaignQueueItem.image_paths) > 0,
+            ),
         )
     ) or 0
     total = session.scalar(
@@ -1312,6 +1318,12 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
                 CampaignQueueItem.campaign_id == autopilot.campaign_id,
                 CampaignQueueItem.state == "approved",
                 CampaignQueueItem.body != PLACEHOLDER_BODY,
+            # A post still waiting for its media is not ready either - the
+            # mirror of the placeholder body, from the two-visit MCP flow.
+            or_(
+                CampaignQueueItem.video_path != "",
+                func.json_array_length(CampaignQueueItem.image_paths) > 0,
+            ),
             )
         ).all()
         account_ids = {item.id for item in destinations if item.enabled}
