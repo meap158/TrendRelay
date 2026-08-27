@@ -578,6 +578,7 @@ PROCESSING_LABELS = {
     "transcript_draft": "Transcript draft",
     "text_reviewed": "On-screen text reviewed",
     "text_draft": "On-screen text draft",
+    "content_draft": "What it shows draft",
     "captions": "Captions",
     "voiceover": "Voiceover",
 }
@@ -637,6 +638,7 @@ def _processing_condition(wanted: str) -> Any:
         "transcript_draft": ("speech", "machine"),
         "text_reviewed": ("ocr", "reviewed"),
         "text_draft": ("ocr", "machine"),
+        "content_draft": ("vision", "machine"),
     }.get(wanted)
     if transcript:
         kind, status = transcript
@@ -914,6 +916,7 @@ def _processing_facet(session: Session, where: list[Any]) -> list[dict[str, Any]
             ("speech", "machine"): "transcript_draft",
             ("ocr", "reviewed"): "text_reviewed",
             ("ocr", "machine"): "text_draft",
+            ("vision", "machine"): "content_draft",
         }.get((kind, status))
         if key:
             counts[key] = count

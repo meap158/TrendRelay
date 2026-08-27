@@ -1308,6 +1308,7 @@ export const fr: Messages = {
     transcriptDraft: "Brouillon de transcription",
     textReviewed: "Texte à l'écran validé",
     textDraft: "Brouillon du texte à l'écran",
+    contentDraft: "Brouillon du contenu reconnu",
     captions: "Sous-titres",
     voiceover: "Voix off",
     byLength: "Filtrer par durée",

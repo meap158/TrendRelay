@@ -40,6 +40,7 @@ const PROCESSING_LABEL_KEYS = {
   transcript_draft: "filters.transcriptDraft",
   text_reviewed: "filters.textReviewed",
   text_draft: "filters.textDraft",
+  content_draft: "filters.contentDraft",
   captions: "filters.captions",
   voiceover: "filters.voiceover",
 } as const;

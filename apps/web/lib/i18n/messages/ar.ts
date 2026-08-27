@@ -1291,6 +1291,7 @@ export const ar: Messages = {
     transcriptDraft: "مسودة النص",
     textReviewed: "نص الشاشة مراجع",
     textDraft: "مسودة نص الشاشة",
+    contentDraft: "مسودة التعرف على المحتوى",
     captions: "التسميات التوضيحية",
     voiceover: "التعليق الصوتي",
     byLength: "تصفية حسب المدة",

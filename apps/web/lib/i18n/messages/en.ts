@@ -1291,6 +1291,7 @@ export const en = {
     transcriptDraft: "Transcript draft",
     textReviewed: "On-screen text reviewed",
     textDraft: "On-screen text draft",
+    contentDraft: "What it shows draft",
     captions: "Captions",
     voiceover: "Voiceover",
     byLength: "Filter by length",

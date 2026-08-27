@@ -123,6 +123,7 @@ function cutEffects(t: Translate, version: Version): string[] {
 function processingTags(t: Translate, asset: Asset): string[] {
   const speech = asset.transcripts.filter((item) => item.kind === "speech");
   const ocr = asset.transcripts.filter((item) => item.kind === "ocr");
+  const vision = asset.transcripts.filter((item) => item.kind === "vision");
   const kinds = new Set(asset.versions.map((version) => version.kind));
   return [
     speech.some((item) => item.status === "reviewed")
@@ -133,6 +134,8 @@ function processingTags(t: Translate, asset: Asset): string[] {
       ? t("filters.textReviewed")
       : ocr.some((item) => item.status === "machine")
         ? t("filters.textDraft") : null,
+    vision.some((item) => item.status === "machine")
+      ? t("filters.contentDraft") : null,
     kinds.has("captioned") ? t("filters.captions") : null,
     kinds.has("voiceover") || kinds.has("voiced") ? t("filters.voiceover") : null,
   ].filter((tag): tag is string => Boolean(tag));

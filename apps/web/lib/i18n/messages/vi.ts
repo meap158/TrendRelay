@@ -1288,6 +1288,7 @@ export const vi: Messages = {
     transcriptDraft: "Bản chép lời nháp",
     textReviewed: "Văn bản trên màn hình đã duyệt",
     textDraft: "Văn bản trên màn hình nháp",
+    contentDraft: "Nhận diện nội dung nháp",
     captions: "Phụ đề",
     voiceover: "Lồng tiếng",
     byLength: "Lọc theo thời lượng",

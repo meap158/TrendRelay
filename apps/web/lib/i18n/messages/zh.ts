@@ -1263,6 +1263,7 @@ export const zh: Messages = {
     transcriptDraft: "文字稿草稿",
     textReviewed: "屏幕文字已审核",
     textDraft: "屏幕文字草稿",
+    contentDraft: "内容识别草稿",
     captions: "字幕",
     voiceover: "配音",
     byLength: "按时长筛选",

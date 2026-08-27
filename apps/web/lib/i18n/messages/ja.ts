@@ -1281,6 +1281,7 @@ export const ja: Messages = {
     transcriptDraft: "文字起こし下書き",
     textReviewed: "画面テキスト確認済み",
     textDraft: "画面テキスト下書き",
+    contentDraft: "内容認識下書き",
     captions: "字幕",
     voiceover: "ボイスオーバー",
     byLength: "長さで絞り込む",

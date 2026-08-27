@@ -1307,6 +1307,7 @@ export const ru: Messages = {
     transcriptDraft: "Черновик расшифровки",
     textReviewed: "Текст на экране проверен",
     textDraft: "Черновик текста на экране",
+    contentDraft: "Черновик распознанного содержимого",
     captions: "Субтитры",
     voiceover: "Закадровый голос",
     byLength: "Фильтровать по длительности",
