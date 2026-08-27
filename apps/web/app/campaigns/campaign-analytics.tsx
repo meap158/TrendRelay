@@ -177,34 +177,39 @@ function TrendLine({
 
   return (
     <div className="campaign-analytics-trend">
-      <div className="campaign-trend-scale" aria-hidden="true">
-        <span>{compact(maximum)}</span><span>0</span>
-      </div>
-      <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="group"
-        aria-label={`${CHART_LABELS[metric]} trend. ${compact(values.reduce((sum, value) => sum + value, 0))} total.`}>
-        <line x1="0" x2="100" y1="42" y2="42" />
-        <polygon points={area} />
-        <polyline points={path} />
-        {active ? (
-          <>
+      <div className="campaign-trend-plot">
+        <div className="campaign-trend-scale" aria-hidden="true">
+          <span>{compact(maximum)}</span><span>0</span>
+        </div>
+        <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="group"
+          aria-label={`${CHART_LABELS[metric]} trend. ${compact(values.reduce((sum, value) => sum + value, 0))} total.`}>
+          <line x1="0" x2="100" y1="42" y2="42" />
+          <polygon points={area} />
+          <polyline points={path} />
+          {active ? (
             <line className="campaign-trend-guide" x1={active.x} x2={active.x}
               y1="4" y2="42" />
-            <circle className="campaign-trend-active-dot"
-              cx={active.x} cy={active.y} r="1.35" />
-          </>
+          ) : null}
+          <rect className="campaign-trend-hit-area" x="0" y="0" width="100" height="44"
+            tabIndex={0} role="slider" aria-label="Inspect the campaign trend by date"
+            aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)}
+            aria-valuenow={activeIndex ?? Math.max(0, points.length - 1)}
+            aria-valuetext={spokenPoint ? pointLabel(spokenPoint.day) : "No chart data"}
+            onPointerMove={(event) => setActiveIndex(nearestIndex(event))}
+            onPointerDown={(event) => setActiveIndex(nearestIndex(event))}
+            onPointerLeave={() => setActiveIndex(null)}
+            onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+            onBlur={() => setActiveIndex(null)}
+            onKeyDown={moveByKeyboard} />
+        </svg>
+        {active ? (
+          <span className="campaign-trend-active-dot" aria-hidden="true"
+            style={{
+              "--trend-point-x": `${active.x}%`,
+              "--trend-point-y": `${(active.y / 44) * 100}%`,
+            } as CSSProperties} />
         ) : null}
-        <rect className="campaign-trend-hit-area" x="0" y="0" width="100" height="44"
-          tabIndex={0} role="slider" aria-label="Inspect the campaign trend by date"
-          aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)}
-          aria-valuenow={activeIndex ?? Math.max(0, points.length - 1)}
-          aria-valuetext={spokenPoint ? pointLabel(spokenPoint.day) : "No chart data"}
-          onPointerMove={(event) => setActiveIndex(nearestIndex(event))}
-          onPointerDown={(event) => setActiveIndex(nearestIndex(event))}
-          onPointerLeave={() => setActiveIndex(null)}
-          onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
-          onBlur={() => setActiveIndex(null)}
-          onKeyDown={moveByKeyboard} />
-      </svg>
+      </div>
       {active ? (
         <div className="campaign-trend-tooltip" role="status"
           style={{ "--trend-x": `${Math.min(82, Math.max(18, active.x))}%` } as CSSProperties}>
