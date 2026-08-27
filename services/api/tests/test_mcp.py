@@ -1666,6 +1666,79 @@ def test_a_post_that_never_went_out_is_not_listed(session) -> None:
     assert context.list_published_posts(session, "ws") == []
 
 
+def test_a_post_says_whether_figures_could_ever_arrive(session) -> None:
+    """"Not yet" and "not ever" lead an assistant to different conclusions.
+
+    Told the first it may reasonably wait and ask again. Told the second it
+    should stop reading the silence as a pending answer - or, worse, as
+    evidence the post did badly.
+    """
+    _published(session, "readable", provider="zernio", performance_snapshots=[])
+    _published(session, "never", provider="woopsocial", performance_snapshots=[])
+
+    by_id = {
+        post["execution_id"]: post
+        for post in context.list_published_posts(session, "ws")
+    }
+
+    assert by_id["readable"]["measured"] is False
+    assert by_id["readable"]["measurable"] is True
+    assert by_id["never"]["measured"] is False
+    assert by_id["never"]["measurable"] is False
+    # Neither carries invented figures either way.
+    assert by_id["never"]["metrics"] is None
+    assert by_id["never"]["interactions"] is None
+
+
+def test_a_second_login_is_measurable_when_its_engine_is(session) -> None:
+    """A destination stores a connection id, not an engine.
+
+    Read literally, a second Zernio login matches no reader and every one of
+    its posts would be reported as unmeasurable - which is how a whole engine's
+    posts were once skipped in the collector.
+    """
+    _published(session, "second", provider="zernio-2", performance_snapshots=[])
+
+    post = context.list_published_posts(session, "ws")[0]
+
+    assert post["measurable"] is True
+
+
+def test_measurability_does_not_depend_on_what_was_imported_first() -> None:
+    """The registry is filled by the publishing module at import time.
+
+    Asked before that module loads, it answers "nothing can be measured" for
+    every engine. This is the guard against a caller reaching the tool by a
+    path that never touched publishing.
+    """
+    import sys
+
+    from trendrelay_api import integrations
+    from trendrelay_api.campaign_measurement import PROVIDER_METRIC_READERS
+
+    readers = dict(PROVIDER_METRIC_READERS)
+    module = sys.modules.pop("trendrelay_api.integrations.publishing", None)
+    # The attribute on the package as well as the entry in sys.modules. With
+    # only the second removed, `from ... import publishing` finds the attribute
+    # and returns it without re-executing the module - so the import would look
+    # like it had run while registering nothing, and this test would pass a
+    # guard that does not work.
+    had_attribute = hasattr(integrations, "publishing")
+    if had_attribute:
+        delattr(integrations, "publishing")
+    PROVIDER_METRIC_READERS.clear()
+    try:
+        assert context._is_measurable("zernio") is True
+    finally:
+        PROVIDER_METRIC_READERS.clear()
+        PROVIDER_METRIC_READERS.update(readers)
+        if module is not None:
+            sys.modules["trendrelay_api.integrations.publishing"] = module
+            setattr(integrations, "publishing", module)
+        elif not had_attribute and hasattr(integrations, "publishing"):
+            delattr(integrations, "publishing")
+
+
 # --- drafting a post in two visits ---------------------------------------------
 
 

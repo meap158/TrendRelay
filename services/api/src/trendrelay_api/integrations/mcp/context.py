@@ -554,6 +554,29 @@ INTERACTION_FIELDS = ("likes", "comments", "shares", "saves")
 SORTABLE_METRICS = ("interactions", "views", *INTERACTION_FIELDS, "watch_seconds")
 
 
+def _is_measurable(provider: str) -> bool:
+    """Whether the engine behind a stored connection id can report engagement.
+
+    Resolved through the same hook the collector uses, so this cannot claim a
+    post is pending measurement that no pass will ever measure. An id that
+    resolves to nothing is reported as unmeasurable, which is the truthful
+    answer for a connection that has been removed.
+    """
+    # The registry is filled by the publishing module at import time, so asking
+    # it before that module has loaded answers "nothing can be measured" for
+    # every engine. Importing it here makes the answer independent of whatever
+    # else this process happened to touch first - the same import-order
+    # assumption, left implicit, is what once had a whole engine's posts
+    # skipped silently.
+    from trendrelay_api.campaign_measurement import (
+        PROVIDER_ENGINE_RESOLVER,
+        PROVIDER_METRIC_READERS,
+    )
+    from trendrelay_api.integrations import publishing  # noqa: F401
+
+    return (PROVIDER_ENGINE_RESOLVER(provider) or "") in PROVIDER_METRIC_READERS
+
+
 def _interactions(metrics: dict[str, float]) -> float:
     return sum(float(metrics.get(field) or 0) for field in INTERACTION_FIELDS)
 
@@ -577,10 +600,14 @@ def list_published_posts(
     thread, hashtags, the products it linked - beside the figures it earned, and
     a permalink to read the real thing.
 
-    Measurement is reported rather than assumed. A post nobody has read back
-    yet says `measured: false` and carries no figures at all, instead of zeros
-    that would sort it alongside a post that genuinely got nothing. The two are
-    different facts and only one of them is knowable today.
+    Measurement is reported rather than assumed, in three states rather than
+    two. A post nobody has read back yet says `measured: false` and carries no
+    figures at all, instead of zeros that would sort it alongside a post that
+    genuinely got nothing. A post whose engine cannot report engagement at all
+    additionally says `measurable: false`, because "not yet" and "not ever" lead
+    to different conclusions: an assistant told the first may reasonably wait
+    and ask again, and one told the second should stop treating the silence as
+    a pending answer - or as evidence the post did badly.
     """
     from trendrelay_api.campaign_measurement import latest_metrics
     from trendrelay_api.publication_models import PublicationExecution
@@ -631,6 +658,9 @@ def list_published_posts(
             "products": [offers.get(offer_id, offer_id) for offer_id in execution.offer_ids or []],
             "media_kind": "images" if execution.image_paths else "video",
             "measured": measured,
+            # Whether figures could ever arrive for this post, which is a fact
+            # about the engine that published it rather than about the post.
+            "measurable": _is_measurable(execution.provider or ""),
             "interactions": _interactions(metrics) if measured else None,
             "metrics": metrics or None,
         })

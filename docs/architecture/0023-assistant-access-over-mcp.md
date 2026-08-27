@@ -73,6 +73,18 @@ vision and face extras.
 - An assistant can be pointed at a running TrendRelay and fill in the captions,
   first comments and thread replies a campaign is missing, with the context to
   write them well, and a person still approves every post.
+- It can also read what already worked. `list_published_posts` returns posts
+  that went out, ranked by interactions, carrying the copy exactly as it was
+  published beside the figures it earned — which is what "write another like
+  the ones that did well" actually needs.
+- Absent figures are reported in three states rather than two, because they
+  mean different things to a caller. Measured carries numbers; `measured:
+  false` means nobody has read the post back yet, which may change; `measurable:
+  false` means the engine that published it cannot report engagement at all, so
+  waiting will not help. Collapsing the last two would have an assistant treat a
+  permanent silence as a pending answer, or worse as evidence the post did
+  badly. No state is ever reported as zeros — see [ADR
+  0011](0011-governed-social-publishing.md) for the same rule at the engine.
 - The boundary is enforced where it is decided and tested against a caller that
   ignores the menu: `tests/test_mcp.py` proves a refused operation is absent from
   the listing and refused by name, and that a read and a copy write work against
