@@ -2126,6 +2126,7 @@ def _published_for_analytics(
             provider="buffer",
             integration_id="analytics-account",
             destination_label="Brand page",
+            asset_id=f"asset-{identifier}",
             title=title,
             caption=title,
             media_path=r"S:\media\analytics.mp4",
@@ -2215,6 +2216,7 @@ def test_campaign_analytics_compares_periods_without_double_counting_reads(works
     assert body["coverage"]["published"] == 2
     assert body["coverage"]["measured"] == 1
     assert body["top_content"][0]["id"] == "current-measured"
+    assert body["top_content"][0]["asset_id"] == "asset-current-measured"
 
 
 def test_campaign_analytics_top_posts_follow_the_selected_metric(workspace) -> None:

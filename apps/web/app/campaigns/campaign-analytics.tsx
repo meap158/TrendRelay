@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BarChart3, Eye, FileCheck2, Heart } from "lucide-react";
+import { BarChart3, Eye, FileCheck2, Heart, ImageIcon } from "lucide-react";
 
 import { ActionIcon } from "../ui/action-icons";
 import { Button } from "../ui/button";
@@ -9,6 +9,7 @@ import { Card } from "../ui/primitives";
 import { SegmentedControl } from "../ui/segmented";
 import { Select } from "../ui/select";
 import { WaitingBlock } from "../ui/waiting-block";
+import { useOpaqueMedia } from "../../lib/media-preview";
 
 type AnalyticsRange = "today" | "7d" | "28d" | "90d";
 type RankingMetric = "views" | "engagement" | "likes" | "comments" | "shares" | "saves";
@@ -38,6 +39,7 @@ type Analytics = {
   daily: { date: string; views: number; engagement: number; published: number }[];
   top_content: {
     id: string;
+    asset_id: string | null;
     title: string;
     platform: string | null;
     destination: string | null;
@@ -181,12 +183,45 @@ function Scorecard({
   ) : <article title={hint}>{body}</article>;
 }
 
+function TopPostThumbnail({
+  assetId,
+  workspaceId,
+  title,
+  apiFetch,
+}: {
+  assetId: string | null;
+  workspaceId: string;
+  title: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const source = assetId
+    ? `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`
+    : "";
+  const { objectUrl } = useOpaqueMedia(
+    source,
+    "thumbnail.jpg",
+    "image/jpeg",
+    Boolean(assetId),
+    apiFetch,
+  );
+  return objectUrl ? (
+    // The post title is printed immediately below, so the visual is decorative
+    // rather than the same accessible name announced twice.
+    // eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL
+    <img src={objectUrl} alt="" title={title} />
+  ) : (
+    <span className="campaign-top-thumb-empty" aria-hidden="true"><ImageIcon /></span>
+  );
+}
+
 export function CampaignAnalytics({
   base,
+  workspaceId,
   timezone,
   apiFetch,
 }: {
   base: string;
+  workspaceId: string;
   timezone: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
@@ -291,7 +326,9 @@ export function CampaignAnalytics({
             <section className="campaign-top-content" aria-labelledby="campaign-top-content-title">
               <header>
                 <div>
-                  <strong id="campaign-top-content-title">Top posts</strong>
+                  <strong id="campaign-top-content-title">
+                    Top posts by {RANKING_LABELS[ranking].toLowerCase()}
+                  </strong>
                   <small>Published in the selected date range</small>
                 </div>
                 <label>Sort by
@@ -306,18 +343,22 @@ export function CampaignAnalytics({
                 <ol>
                   {data.top_content.map((post, index) => (
                     <li key={post.id}>
-                      <span className="campaign-top-rank">{index + 1}</span>
-                      <div>
+                      <div className="campaign-top-thumb">
+                        <TopPostThumbnail assetId={post.asset_id} workspaceId={workspaceId}
+                          title={post.title} apiFetch={apiFetch} />
+                        <span className="campaign-top-rank">{index + 1}</span>
+                      </div>
+                      <div className="campaign-top-copy">
                         <strong>{post.post_url ? (
                           <a href={post.post_url} target="_blank" rel="noreferrer">{post.title}</a>
                         ) : post.title}</strong>
                         <small>{[post.destination, post.platform, new Date(post.published_at).toLocaleDateString()]
                           .filter(Boolean).join(" · ")}</small>
+                        <span className="campaign-top-metric">
+                          <strong>{compact(post[ranking])}</strong>
+                          <small>{RANKING_LABELS[ranking]}</small>
+                        </span>
                       </div>
-                      <span className="campaign-top-metric">
-                        <strong>{compact(post[ranking])}</strong>
-                        <small>{RANKING_LABELS[ranking]}</small>
-                      </span>
                     </li>
                   ))}
                 </ol>

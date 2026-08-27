@@ -3942,7 +3942,8 @@ export function AutopilotPanel({
 
 
       {view === "overview" && (
-        <CampaignAnalytics base={base} timezone={readerZone} apiFetch={apiFetch} />
+        <CampaignAnalytics base={base} workspaceId={workspaceId}
+          timezone={readerZone} apiFetch={apiFetch} />
       )}
 
 

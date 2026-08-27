@@ -2036,6 +2036,7 @@ def campaign_analytics(
         if metrics:
             top_content.append({
                 "id": execution.id,
+                "asset_id": execution.asset_id,
                 "title": execution.title or execution.caption[:100] or "Untitled post",
                 "platform": execution.platform,
                 "destination": execution.destination_label,
