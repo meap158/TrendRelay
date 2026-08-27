@@ -1,8 +1,17 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: The checkout this package belongs to, worked out from this file rather than
+#: from where the process happens to have been started.
+#:
+#: Computed here rather than imported from `tool_registry` so that reading
+#: settings never pulls in the tool catalogue - configuration is the first
+#: thing loaded, and it should depend on as little as possible.
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 class Settings(BaseSettings):
@@ -74,7 +83,15 @@ class Settings(BaseSettings):
     def publishing_media_root_list(self) -> list[str]:
         return [root.strip() for root in self.publishing_media_roots.split(",") if root.strip()]
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Anchored to the checkout, not to the working directory. `.env` as a bare
+    # relative name is resolved against wherever the process was started, so a
+    # command run from anywhere but the repository root silently read no
+    # settings at all - every operator-supplied key and every publishing
+    # connection missing, reported as "not configured" rather than as an error.
+    #
+    # `env_store` already writes to this same anchored path, so the reader and
+    # the writer disagreed about which file they meant.
+    model_config = SettingsConfigDict(env_file=PROJECT_ROOT / ".env", extra="ignore")
 
 
 @lru_cache

@@ -114,3 +114,23 @@ def test_a_hand_written_single_quoted_value_keeps_its_backslashes(env_file) -> N
 
     assert env_store.read_env_file()["SOME_PATH"] == "C:\\Users\\me"
 
+
+def test_settings_read_the_same_env_file_the_writer_writes() -> None:
+    """Anchored to the checkout, not to wherever the process was started.
+
+    `.env` as a bare relative name is resolved against the working directory, so
+    any command run from outside the repository root read no settings at all -
+    every operator-supplied key and every publishing connection simply absent,
+    reported as "not configured" rather than as a missing file. The writer was
+    already anchored, so the two halves disagreed about which file they meant.
+    """
+    from pathlib import Path
+
+    from trendrelay_api.config import Settings
+    from trendrelay_api.env_store import ENV_PATH
+
+    configured = Settings.model_config["env_file"]
+
+    assert Path(configured).is_absolute(), configured
+    assert Path(configured) == ENV_PATH, "the reader and the writer must agree"
+
