@@ -218,7 +218,10 @@ def test_the_same_story_from_two_newsrooms_is_one_story() -> None:
     stories = group_stories(
         [
             headline("Ukrainian man arrested in Croatia over Nord Stream pipeline blasts", "BBC"),
-            headline("Ukrainian diver arrested in Croatia over Nord Stream pipeline bombings", "Guardian"),
+            headline(
+                "Ukrainian diver arrested in Croatia over Nord Stream pipeline bombings",
+                "Guardian",
+            ),
         ]
     )
 
@@ -231,8 +234,14 @@ def test_two_words_in_passing_are_not_a_story() -> None:
     # was then promoted to lead a story about Kenya. Two words out of eight.
     stories = group_stories(
         [
-            headline("Ecuador intelligence chief and five Americans killed in Kenya helicopter crash", "BBC"),
-            headline("Brazil bus crash kills at least 23 and injures five in Parana state", "Al Jazeera"),
+            headline(
+                "Ecuador intelligence chief and five Americans killed in Kenya helicopter crash",
+                "BBC",
+            ),
+            headline(
+                "Brazil bus crash kills at least 23 and injures five in Parana state",
+                "Al Jazeera",
+            ),
         ]
     )
 
@@ -250,7 +259,10 @@ def test_a_word_that_turns_up_all_morning_does_not_join_two_stories() -> None:
     ]
     stories = group_stories(
         [
-            headline("Trump nominates Heidi Overton to lead US Food and Drug Administration", "Al Jazeera"),
+            headline(
+                "Trump nominates Heidi Overton to lead US Food and Drug Administration",
+                "Al Jazeera",
+            ),
             headline("Trump administration can target Ethiopians for deportation", "BBC"),
             *ambient,
         ]
@@ -279,7 +291,10 @@ def test_a_short_headline_can_still_match_on_two_distinctive_words() -> None:
     # The true positive that any stricter count would have thrown away.
     stories = group_stories(
         [
-            headline("US gross national debt tops $40tn for first time, likely to escalate fears", "Guardian"),
+            headline(
+                "US gross national debt tops $40tn for first time, likely to escalate fears",
+                "Guardian",
+            ),
             headline("The U.S. debt tops a record-shattering $40 trillion", "NPR"),
         ]
     )
@@ -305,8 +320,14 @@ def test_the_shelves_do_not_show_the_same_story_twice() -> None:
     board = news_board(
         [
             headline("Nord Stream pipeline suspect arrested in Croatia", "BBC", minutes_ago=20),
-            headline("Nord Stream pipeline suspect held by Croatian police", "Guardian", minutes_ago=25),
-            headline("Alpine ski resort opens earliest winter season on record", "NPR", minutes_ago=15),
+            headline(
+                "Nord Stream pipeline suspect held by Croatian police",
+                "Guardian", minutes_ago=25,
+            ),
+            headline(
+                "Alpine ski resort opens earliest winter season on record",
+                "NPR", minutes_ago=15,
+            ),
         ],
         now=NOW,
     )

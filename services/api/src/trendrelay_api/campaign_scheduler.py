@@ -41,7 +41,6 @@ from trendrelay_api.campaign_autopilot import (
     rank_destinations,
 )
 from trendrelay_api.campaign_offer_matcher import (
-    OfferMatch,
     last_promoted,
     resolve_matches,
 )
@@ -669,15 +668,15 @@ def plan_campaign(
     counter = autopilot.posts_scheduled
     reserved: dict[tuple[str, str], datetime] = {}
     planned_per_day: dict[tuple[str, date], int] = {}
-    # The same queue item can fill several slots in one horizon. Its content,
-    # campaign context and offer catalogue do not change while this plan is
-    # being assembled, so score it once and reuse the explainable result.
+    # The same queue item can fill several slots in one horizon, and its
+    # scoring is repeated for each - the cache that once held it went when
+    # rotation arrived, because rotation makes the *choice* depend on what the
+    # run has already used, and a cached selection gave the same product to
+    # every post of an item, which is the thing rotation exists to stop.
     #
-    # The *choice* is no longer cached with it. Rotation makes the choice
-    # depend on what the run has already used, so a cached selection would give
-    # the same product to every post of an item - which is the thing rotation
-    # exists to stop.
-    match_cache: dict[str, tuple[list[OfferMatch], dict[str, Any]]] = {}
+    # Scoring alone could still be cached; the choice cannot. Nothing does
+    # today, and the declaration that outlived the cache has been removed
+    # rather than left to read as though one were still in place.
     # Which products this run has already sent out, and when each last went out
     # before it. Together they are whose turn it is.
     used_in_run: list[str] = []

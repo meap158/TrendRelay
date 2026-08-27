@@ -10,7 +10,7 @@ import types
 
 import pytest
 
-from trendrelay_api.subtitle_formats import PRESETS, to_ass
+from trendrelay_api.subtitle_formats import PRESETS
 from trendrelay_api.subtitle_translate import installed_pairs, live_translator, translate_cues
 from trendrelay_api.subtitles import Cue, Layout, Word
 
@@ -88,7 +88,7 @@ def test_a_word_paced_style_stays_word_paced_when_translated() -> None:
     assert [item.text for item in translated] == ["ONE", "TWO", "THREE"]
     # The chunks tile the cue - each starts where the one before it ends.
     assert translated[0].start_ms == 0
-    for before, after in zip(translated, translated[1:]):
+    for before, after in zip(translated, translated[1:], strict=False):
         assert after.start_ms == before.end_ms or after.start_ms > before.end_ms
     # The last word holds for the style's beat and leaves, exactly as a
     # measured track's last word does - it does not hang to the cue's end.

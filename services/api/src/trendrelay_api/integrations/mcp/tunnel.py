@@ -112,30 +112,32 @@ def _validate(key: str, value: str) -> str:
     person reading it has a value on their clipboard and wants to know whether
     to paste it again or fetch a different one.
     """
-    if key == "CONTROL_PLANE_TUNNEL_ID":
-        if value and not TUNNEL_ID.fullmatch(value):
-            raise TunnelSettingsError(
-                "A tunnel id is 'tunnel_' followed by 32 hex characters. "
-                "Copy it from OpenAI → Tunnels."
-            )
-    elif key == "CONTROL_PLANE_API_KEY":
-        # A short key is a mistake; no key is a decision. They are not alike.
-        if value and len(value) < 20:
-            raise TunnelSettingsError("That key looks too short to be a real one.")
-    elif key == "TUNNEL_LOG_LEVEL":
-        if value and value not in LOG_LEVELS:
-            raise TunnelSettingsError(f"Log verbosity is one of: {', '.join(LOG_LEVELS)}.")
-    elif key == "TUNNEL_HEALTH_PORT":
-        if value and (not value.isdigit() or not 1 <= int(value) <= 65535):
-            raise TunnelSettingsError("A health port is a number between 1 and 65535.")
-    elif key == "TUNNEL_CLIENT_BIN":
-        # Resolved now rather than at launch. The failure this prevents is a
-        # saved path that looks right and only fails the next time the tunnel
-        # is started, by which time nobody is looking at this form.
-        if value and not shutil.which(value):
-            raise TunnelSettingsError(
-                "No runnable file at that path. Leave it empty to use PATH."
-            )
+    # Every check below asks whether a value is the right shape, and an empty
+    # one has no shape to be wrong about: leaving a setting unset is a decision
+    # rather than a mistake. Asking once here is what keeps each check to the
+    # one thing it is for. A short key is a mistake; no key is a decision.
+    if not value:
+        return value
+    if key == "CONTROL_PLANE_TUNNEL_ID" and not TUNNEL_ID.fullmatch(value):
+        raise TunnelSettingsError(
+            "A tunnel id is 'tunnel_' followed by 32 hex characters. "
+            "Copy it from OpenAI → Tunnels."
+        )
+    if key == "CONTROL_PLANE_API_KEY" and len(value) < 20:
+        raise TunnelSettingsError("That key looks too short to be a real one.")
+    if key == "TUNNEL_LOG_LEVEL" and value not in LOG_LEVELS:
+        raise TunnelSettingsError(f"Log verbosity is one of: {', '.join(LOG_LEVELS)}.")
+    if key == "TUNNEL_HEALTH_PORT" and (
+        not value.isdigit() or not 1 <= int(value) <= 65535
+    ):
+        raise TunnelSettingsError("A health port is a number between 1 and 65535.")
+    # Resolved now rather than at launch. The failure this prevents is a saved
+    # path that looks right and only fails the next time the tunnel is started,
+    # by which time nobody is looking at this form.
+    if key == "TUNNEL_CLIENT_BIN" and not shutil.which(value):
+        raise TunnelSettingsError(
+            "No runnable file at that path. Leave it empty to use PATH."
+        )
     return value
 
 

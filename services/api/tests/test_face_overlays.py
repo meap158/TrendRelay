@@ -13,7 +13,12 @@ import math
 
 import pytest
 
-from trendrelay_api.integrations import face_landmarks, face_overlays, overlay_catalogue
+from trendrelay_api.integrations import (
+    face_landmarks,
+    face_overlays,
+    face_pose,
+    overlay_catalogue,
+)
 from trendrelay_api.integrations.face_landmarks import FaceAnchors
 from trendrelay_api.integrations.face_overlays import OverlaySettings, place
 from trendrelay_api.integrations.overlay_catalogue import ID_PATTERN, Overlay
@@ -1670,9 +1675,7 @@ def test_a_solid_object_reaches_most_of_the_sprite_it_is_given() -> None:
 # --- steadying a solved pose over time -----------------------------------------
 
 
-def _pose(yaw: float, pitch: float = 0.0) -> "face_pose.HeadPose":
-    from trendrelay_api.integrations import face_pose
-
+def _pose(yaw: float, pitch: float = 0.0) -> face_pose.HeadPose:
     return face_pose.HeadPose(yaw=yaw, pitch=pitch, roll=0.0, points=4)
 
 
@@ -1786,7 +1789,7 @@ def test_placement_jitter_is_flattened_over_the_timeline() -> None:
     steadied = face_overlays.placement_timeline(faces, overlay, settings)
 
     xs = [item.centre[0] for item in steadied]
-    deltas = [abs(a - b) for a, b in zip(xs, xs[1:])]
+    deltas = [abs(a - b) for a, b in zip(xs, xs[1:], strict=False)]
     assert max(deltas) < 1.0, "a three-pixel sawtooth survived the smoothing"
 
 
@@ -1808,8 +1811,6 @@ def test_a_turned_head_does_not_shrink_its_hat() -> None:
     """The measured width is the eye span, and the eye span forehortens by
     cos(yaw) as the head turns - so a cap pulsed smaller with every shake of
     the head while the head itself stayed the same size on screen."""
-    from trendrelay_api.integrations import face_pose
-
     overlay = overlay_catalogue.get("cap_3d")
     settings = OverlaySettings(overlay_id="cap_3d")
     square_on = [upright(100.0)] * 20

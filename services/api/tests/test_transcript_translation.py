@@ -48,7 +48,10 @@ def workspace():
     Base.metadata.create_all(engine)
     app.dependency_overrides[get_session] = session_override
     app.dependency_overrides[current_user] = lambda: CurrentUser(id="owner-user")
-    body = request("POST", "/api/workspaces", json={"name": "Workspace", "slug": "workspace"}).json()
+    body = request(
+        "POST", "/api/workspaces",
+        json={"name": "Workspace", "slug": "workspace"},
+    ).json()
     yield body["workspace"]["id"]
     app.dependency_overrides.clear()
 

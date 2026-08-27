@@ -155,7 +155,7 @@ def _word_paced(
 
     paced: list[Cue] = []
     at = cue.start_ms
-    for position, (chunk, weight) in enumerate(zip(chunks, weights)):
+    for position, (chunk, weight) in enumerate(zip(chunks, weights, strict=True)):
         if position == len(chunks) - 1:
             end = cue.end_ms
         else:
@@ -164,7 +164,7 @@ def _word_paced(
         word_total = sum(word_weights) or 1.0
         words: list[Word] = []
         word_at = at
-        for word_position, (token, word_weight) in enumerate(zip(chunk, word_weights)):
+        for word_position, (token, word_weight) in enumerate(zip(chunk, word_weights, strict=True)):
             if word_position == len(chunk) - 1:
                 word_end = end
             else:

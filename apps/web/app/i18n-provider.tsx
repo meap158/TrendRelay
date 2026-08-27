@@ -123,19 +123,21 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
   const restored = useRef(false);
 
-  // The active dictionary, loaded on demand. English (the fallback, already in
-  // the bundle) until a chosen locale's chunk arrives, then that. A lookup never
-  // waits: it falls through to English while the chunk is in flight.
-  const [dictionary, setDictionary] = useState<Messages>(EN);
+  // The most recently loaded chunk. English is not kept here: it ships in the
+  // bundle, so it is derived below rather than stored - storing it meant the
+  // effect writing state synchronously every time the locale returned to
+  // English, which is a cascading render for a value that was never in doubt.
+  //
+  // A lookup never waits either way: it falls through to English for anything
+  // the loaded chunk does not carry.
+  const [chunk, setChunk] = useState<Messages>(EN);
+  const dictionary = locale === "en" ? EN : chunk;
 
   useEffect(() => {
-    if (locale === "en") {
-      setDictionary(EN);
-      return;
-    }
+    if (locale === "en") return;
     let live = true;
     void loadMessages(locale).then((loaded) => {
-      if (live) setDictionary(loaded);
+      if (live) setChunk(loaded);
     });
     return () => {
       live = false;

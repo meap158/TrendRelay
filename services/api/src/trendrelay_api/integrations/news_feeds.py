@@ -85,10 +85,16 @@ DEFAULT_FEEDS: tuple[tuple[str, str, str, str], ...] = (
     ("guardian-world", "The Guardian", "https://www.theguardian.com/world/rss", "general"),
     ("npr", "NPR", "https://feeds.npr.org/1001/rss.xml", "general"),
     ("aljazeera", "Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml", "general"),
-    ("ars-technica", "Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", "technology"),
+    (
+        "ars-technica", "Ars Technica",
+        "https://feeds.arstechnica.com/arstechnica/index", "technology",
+    ),
     ("the-verge", "The Verge", "https://www.theverge.com/rss/index.xml", "technology"),
     ("techcrunch", "TechCrunch", "https://techcrunch.com/feed/", "technology"),
-    ("cnbc-business", "CNBC Business", "https://www.cnbc.com/id/10001147/device/rss/rss.html", "business"),
+    (
+        "cnbc-business", "CNBC Business",
+        "https://www.cnbc.com/id/10001147/device/rss/rss.html", "business",
+    ),
     # This app sells into Vietnam, and a board of English-language outlets
     # would never once mention the market its operator posts to.
     ("vnexpress", "VnExpress International", "https://e.vnexpress.net/rss/news.rss", "general"),
@@ -184,7 +190,11 @@ class Story:
         """
         dated = [item for item in self.headlines if item.published_at]
         if dated:
-            return min(dated, key=lambda item: item.published_at or datetime.max.replace(tzinfo=UTC))
+            return min(
+                dated,
+                key=lambda item: item.published_at
+                or datetime.max.replace(tzinfo=UTC),
+            )
         return self.headlines[0]
 
 
@@ -193,18 +203,18 @@ class Story:
 #: in one pile. Deliberately short: the length filter below does most of the
 #: work, and a long stopword list starts discarding real subjects.
 STOPWORDS = frozenset(
-    """
-    about after again against alone along already also although always among
-    another anything around because been before being below between both
-    cannot could does doing done down during each either else enough even
-    ever every from further half have having here how however into itself
-    just like made make many more most much must never next none nothing
-    only other over own perhaps rather same should since some such than that
-    their them then there these they thing this those though through thus
-    together too toward under until upon very what when where which while
-    who whom why will with within without would your says said after new
-    news report reports according amid ahead first last year years
-    """.split()
+    ["about", "after", "again", "against", "alone", "along", "already", "also", "although",
+     "always", "among", "another", "anything", "around", "because", "been", "before", "being",
+     "below", "between", "both", "cannot", "could", "does", "doing", "done", "down", "during",
+     "each", "either", "else", "enough", "even", "ever", "every", "from", "further", "half",
+     "have", "having", "here", "how", "however", "into", "itself", "just", "like", "made",
+     "make", "many", "more", "most", "much", "must", "never", "next", "none", "nothing", "only",
+     "other", "over", "own", "perhaps", "rather", "same", "should", "since", "some", "such",
+     "than", "that", "their", "them", "then", "there", "these", "they", "thing", "this",
+     "those", "though", "through", "thus", "together", "too", "toward", "under", "until",
+     "upon", "very", "what", "when", "where", "which", "while", "who", "whom", "why", "will",
+     "with", "within", "without", "would", "your", "says", "said", "after", "new", "news",
+     "report", "reports", "according", "amid", "ahead", "first", "last", "year", "years"]
 )
 
 
@@ -365,7 +375,10 @@ def parse_feed(document: str, *, outlet: str = "") -> tuple[str, list[Headline]]
         fields: dict[str, str] = {}
         for node in entry:
             name = _tag(node)
-            if name in {"title", "description", "summary", "pubDate", "published", "updated", "source"}:
+            if name in {
+                "title", "description", "summary",
+                "pubDate", "published", "updated", "source",
+            }:
                 fields.setdefault(name, _text(node))
         title = fields.get("title", "")
         link = _entry_link(entry)
@@ -415,7 +428,16 @@ def read_feed(url: str, *, outlet: str = "", opener: Any = urlopen) -> list[Head
         # Feeds are read over the network and their contents end up on screen;
         # there is no reason to accept one in the clear.
         raise NewsUnavailable("only https feeds are read")
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8"})
+    request = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": (
+                "application/rss+xml, application/atom+xml, "
+                "application/xml;q=0.9, */*;q=0.8"
+            ),
+        },
+    )
     try:
         with opener(request, timeout=REQUEST_TIMEOUT) as response:
             raw = response.read(MAX_FEED_BYTES)

@@ -901,7 +901,7 @@ function MediaPreview({
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [apiFetch, asset.id, asset.original_path, asset.title, asset.media_kind, rendered, cut, requested, t, workspaceId]);
+  }, [apiFetch, asset.id, asset.original_path, asset.title, asset.media_kind, playable, rendered, cut, requested, t, workspaceId]);
 
   function startPlayback() {
     setError("");

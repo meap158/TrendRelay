@@ -190,7 +190,9 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "runtime",
                     "InsightFace runtime",
                     "ready" if status["runtime_installed"] else "setup-required",
-                    f"Hardware acceleration: {status['provider']} ({'GPU DirectML/CUDA' if status['gpu_accelerated'] else 'CPU'})."
+                    "Hardware acceleration: "
+                    f"{status['provider']} ("
+                    f"{'GPU DirectML/CUDA' if status['gpu_accelerated'] else 'CPU'})."
                     if status["runtime_installed"]
                     else status["install_hint"],
                 ),

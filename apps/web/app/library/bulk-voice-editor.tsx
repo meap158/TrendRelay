@@ -14,6 +14,22 @@ type PreparedTarget = Target & { transcript: Transcript | null };
 type Deliver = "audio" | "video" | "both";
 
 /**
+ * One identity for a run, minted outside the component on purpose.
+ *
+ * The clock and the random suffix are impure, and React's rules forbid calling
+ * either while rendering: a value that changes on a re-render nobody asked for
+ * is the bug the rule exists to catch. This is only ever called from the queue
+ * handler, but a call written inside the component body cannot be told apart
+ * from one in the render path by anything reading the source - so it lives out
+ * here, where the question does not arise.
+ */
+function newBatchId(): string {
+  const stamp = Date.now().toString(36);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `voice-${stamp}-${suffix}`;
+}
+
+/**
  * A deliberately bounded bulk adapter around the per-asset voiceover API.
  *
  * The full single-asset editor can evolve independently (models, previews,
@@ -21,6 +37,7 @@ type Deliver = "audio" | "video" | "both";
  * its own reviewed transcript, billed work is shown before queueing, and at
  * most four requests are started at once.
  */
+
 export function BulkVoiceEditor({
   open,
   workspaceId,
@@ -132,7 +149,7 @@ export function BulkVoiceEditor({
     // queued one per asset, so without being told, the notification list
     // groups them by category, status and title - identical for every job
     // of a kind - and two runs merge into one row.
-    const batchId = `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const batchId = newBatchId();
     try {
       for (let at = 0; at < readyTargets.length; at += 4) {
         const results = await Promise.all(readyTargets.slice(at, at + 4).map(async (target) => {

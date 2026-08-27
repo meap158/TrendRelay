@@ -55,8 +55,11 @@ OCR_VERSION = "3.9.2"
 from trendrelay_api.media_vision import (  # noqa: E402
     VISION_VERSION,
     vision_draft,
+)
+from trendrelay_api.media_vision import (  # noqa: E402
     vocabulary_digest as _vision_vocabulary_digest,
 )
+
 ONNX_VERSION = "1.28.0"
 #: The DirectML build of the same module, for Windows machines with a GPU.
 #:
