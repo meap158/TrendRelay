@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/primitives";
 import { SegmentedControl } from "../ui/segmented";
 import { Select } from "../ui/select";
+import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { WaitingBlock } from "../ui/waiting-block";
 import { useOpaqueMedia } from "../../lib/media-preview";
 import { platformLabels, type PublishingPlatform } from "../publishing-icons";
@@ -312,9 +313,23 @@ export function CampaignAnalytics({
   timezone: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
-  const [range, setRange] = useState<AnalyticsRange>("28d");
-  const [ranking, setRanking] = useState<RankingMetric>("views");
-  const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
+  const campaignId = base.split("/").at(-1) ?? "campaign";
+  const preferenceScope = `trendrelay.campaigns.analytics.${workspaceId}.${campaignId}`;
+  const [range, setRange] = usePersistedState<AnalyticsRange>(
+    `${preferenceScope}.range`,
+    "28d",
+    oneOf<AnalyticsRange>("today", "7d", "28d", "90d"),
+  );
+  const [ranking, setRanking] = usePersistedState<RankingMetric>(
+    `${preferenceScope}.ranking`,
+    "views",
+    oneOf<RankingMetric>("views", "engagement", "likes", "comments", "shares", "saves"),
+  );
+  const [chartMetric, setChartMetric] = usePersistedState<ChartMetric>(
+    `${preferenceScope}.chartMetric`,
+    "views",
+    oneOf<ChartMetric>("views", "engagement", "published"),
+  );
   const [data, setData] = useState<Analytics | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
