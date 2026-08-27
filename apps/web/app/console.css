@@ -2227,11 +2227,23 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-analytics-chart > div:first-child { display: grid; gap: 2px; }
 .campaign-analytics-chart > div:first-child strong { font-size: 12px; }
 .campaign-analytics-chart > div:first-child small { color: var(--muted); font-size: 10px; }
-.campaign-analytics-trend { display: grid; gap: 3px; min-width: 0; }
+.campaign-analytics-trend { position: relative; display: grid; gap: 3px; min-width: 0; }
 .campaign-analytics-trend svg { display: block; inline-size: 100%; block-size: clamp(120px, 18vw, 190px); overflow: visible; }
 .campaign-analytics-trend line { stroke: var(--line); stroke-width: .45; vector-effect: non-scaling-stroke; }
 .campaign-analytics-trend polygon { fill: color-mix(in srgb, var(--link) 10%, transparent); }
 .campaign-analytics-trend polyline { fill: none; stroke: var(--link); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.campaign-trend-scale { position: absolute; z-index: 1; inset: 2px auto 18px 0; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.campaign-analytics-trend line.campaign-trend-guide { stroke: color-mix(in srgb, var(--link) 55%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
+.campaign-trend-active-dot { fill: var(--link); stroke: var(--panel); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.campaign-trend-hit-area { fill: transparent; stroke: transparent; stroke-width: .5; cursor: crosshair; pointer-events: all; }
+.campaign-trend-hit-area:focus { outline: none; stroke: color-mix(in srgb, var(--link) 38%, transparent); }
+.campaign-trend-tooltip { position: absolute; z-index: 3; inset-block-start: 5px; inset-inline-start: var(--trend-x); display: grid; min-inline-size: 190px; gap: 6px; transform: translateX(-50%); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 9px; color: var(--text); background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: var(--shadow-sm); pointer-events: none; }
+.campaign-trend-tooltip > strong { font-size: 10px; }
+.campaign-trend-tooltip dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.campaign-trend-tooltip dl > div { display: grid; gap: 1px; min-width: 0; border-inline-start: 2px solid var(--line); padding-inline-start: 6px; }
+.campaign-trend-tooltip dl > div.selected { border-color: var(--link); }
+.campaign-trend-tooltip dt { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-trend-tooltip dd { margin: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .campaign-analytics-trend > span { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; }
 .campaign-analytics-lower { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(220px, .7fr); gap: 14px; align-items: start; }
 .campaign-top-content, .campaign-analytics-coverage { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
@@ -2244,7 +2256,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-top-content ol { display: grid; grid-auto-columns: minmax(180px, 31%); grid-auto-flow: column; gap: 10px; margin: 0; overflow-x: auto; overscroll-behavior-inline: contain; padding: 12px 14px 14px; list-style: none; scroll-snap-type: inline proximity; scrollbar-width: thin; }
 .campaign-top-content li { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); scroll-snap-align: start; }
 .campaign-top-thumb { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 5; min-width: 0; overflow: hidden; background: var(--panel-raised); }
+.campaign-top-thumb-link { display: grid; inline-size: 100%; block-size: 100%; place-items: center; color: inherit; }
+.campaign-top-thumb-link:focus-visible { outline: 3px solid var(--link); outline-offset: -3px; }
+.campaign-top-thumb-link:hover img { transform: scale(1.025); }
 .campaign-top-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.campaign-top-thumb img { transition: transform 160ms ease-out; }
 .campaign-top-thumb-empty { display: grid; place-items: center; inline-size: 100%; block-size: 100%; color: var(--muted); }
 .campaign-top-thumb-empty svg { inline-size: 30px; block-size: 30px; }
 .campaign-top-rank { position: absolute; inset-block-start: 8px; inset-inline-start: 8px; display: grid; place-items: center; min-inline-size: 24px; block-size: 24px; border: 1px solid color-mix(in srgb, var(--panel) 75%, transparent); border-radius: 999px; padding-inline: 6px; color: var(--text); background: color-mix(in srgb, var(--panel) 90%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 16%); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -2256,6 +2272,8 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-top-metric { display: flex; align-items: baseline; gap: 5px; margin-block-start: 3px; min-inline-size: 58px; text-align: start; }
 .campaign-top-metric strong { font-size: 13px; font-variant-numeric: tabular-nums; }
 .campaign-top-metric small { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.campaign-top-open { display: inline-flex; align-items: center; justify-content: space-between; gap: 5px; margin-block-start: 3px; border-block-start: 1px solid var(--line); padding-block-start: 7px; color: var(--link); font-size: 9px; font-weight: 700; text-decoration: none; }
+.campaign-top-open:hover { text-decoration: underline; }
 .campaign-analytics-empty { margin: 0; padding: 18px 14px; color: var(--muted); font-size: 11px; }
 .campaign-analytics-coverage { display: grid; gap: 7px; padding: 13px 14px; }
 .campaign-analytics-coverage p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }

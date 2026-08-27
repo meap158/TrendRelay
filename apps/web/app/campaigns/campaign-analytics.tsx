@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BarChart3, Eye, FileCheck2, Heart, ImageIcon } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import { BarChart3, ExternalLink, Eye, FileCheck2, Heart, ImageIcon } from "lucide-react";
 
 import { ActionIcon } from "../ui/action-icons";
 import { Button } from "../ui/button";
@@ -10,6 +19,7 @@ import { SegmentedControl } from "../ui/segmented";
 import { Select } from "../ui/select";
 import { WaitingBlock } from "../ui/waiting-block";
 import { useOpaqueMedia } from "../../lib/media-preview";
+import { platformLabels, type PublishingPlatform } from "../publishing-icons";
 
 type AnalyticsRange = "today" | "7d" | "28d" | "90d";
 type RankingMetric = "views" | "engagement" | "likes" | "comments" | "shares" | "saves";
@@ -120,25 +130,96 @@ function TrendLine({
   data: Analytics["daily"];
   metric: ChartMetric;
 }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const values = data.map((day) => day[metric]);
   const maximum = Math.max(...values, 1);
-  const points = values.map((value, index) => {
+  const points = data.map((day, index) => {
+    const value = day[metric];
     const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
     const y = 42 - (value / maximum) * 36;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(" ");
-  const area = `0,42 ${points} 100,42`;
+    return { day, x, y };
+  });
+  const path = points.map(({ x, y }) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+  const area = `0,42 ${path} 100,42`;
   const first = data.at(0)?.date;
   const last = data.at(-1)?.date;
+  const active = activeIndex === null ? null : points[activeIndex] ?? null;
+  const spokenPoint = active ?? points.at(-1);
+  const dateLabel = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString(
+    undefined,
+    { month: "short", day: "numeric" },
+  );
+  const pointLabel = (day: Analytics["daily"][number]) => [
+    dateLabel(day.date),
+    `${compact(day.views)} views`,
+    `${compact(day.engagement)} engagements`,
+    `${compact(day.published)} ${day.published === 1 ? "post" : "posts"} published`,
+  ].join(". ");
+  const nearestIndex = (event: ReactPointerEvent<SVGRectElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const portion = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
+    return Math.round(portion * Math.max(0, points.length - 1));
+  };
+  const moveByKeyboard = (event: ReactKeyboardEvent<SVGRectElement>) => {
+    const current = activeIndex ?? points.length - 1;
+    let next = current;
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") next = Math.max(0, current - 1);
+    else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      next = Math.min(points.length - 1, current + 1);
+    } else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = points.length - 1;
+    else return;
+    event.preventDefault();
+    setActiveIndex(next);
+  };
 
   return (
     <div className="campaign-analytics-trend">
-      <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="img"
+      <div className="campaign-trend-scale" aria-hidden="true">
+        <span>{compact(maximum)}</span><span>0</span>
+      </div>
+      <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="group"
         aria-label={`${CHART_LABELS[metric]} trend. ${compact(values.reduce((sum, value) => sum + value, 0))} total.`}>
         <line x1="0" x2="100" y1="42" y2="42" />
         <polygon points={area} />
-        <polyline points={points} />
+        <polyline points={path} />
+        {active ? (
+          <>
+            <line className="campaign-trend-guide" x1={active.x} x2={active.x}
+              y1="4" y2="42" />
+            <circle className="campaign-trend-active-dot"
+              cx={active.x} cy={active.y} r="1.35" />
+          </>
+        ) : null}
+        <rect className="campaign-trend-hit-area" x="0" y="0" width="100" height="44"
+          tabIndex={0} role="slider" aria-label="Inspect the campaign trend by date"
+          aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)}
+          aria-valuenow={activeIndex ?? Math.max(0, points.length - 1)}
+          aria-valuetext={spokenPoint ? pointLabel(spokenPoint.day) : "No chart data"}
+          onPointerMove={(event) => setActiveIndex(nearestIndex(event))}
+          onPointerDown={(event) => setActiveIndex(nearestIndex(event))}
+          onPointerLeave={() => setActiveIndex(null)}
+          onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+          onBlur={() => setActiveIndex(null)}
+          onKeyDown={moveByKeyboard} />
       </svg>
+      {active ? (
+        <div className="campaign-trend-tooltip" role="status"
+          style={{ "--trend-x": `${Math.min(82, Math.max(18, active.x))}%` } as CSSProperties}>
+          <strong>{dateLabel(active.day.date)}</strong>
+          <dl>
+            <div className={metric === "views" ? "selected" : ""}>
+              <dt>Views</dt><dd>{compact(active.day.views)}</dd>
+            </div>
+            <div className={metric === "engagement" ? "selected" : ""}>
+              <dt>Engagement</dt><dd>{compact(active.day.engagement)}</dd>
+            </div>
+            <div className={metric === "published" ? "selected" : ""}>
+              <dt>Published</dt><dd>{compact(active.day.published)}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
       <span><time dateTime={first}>{first ? new Date(`${first}T00:00:00`).toLocaleDateString(undefined, {
         month: "short", day: "numeric",
       }) : ""}</time><time dateTime={last}>{last ? new Date(`${last}T00:00:00`).toLocaleDateString(undefined, {
@@ -212,6 +293,11 @@ function TopPostThumbnail({
   ) : (
     <span className="campaign-top-thumb-empty" aria-hidden="true"><ImageIcon /></span>
   );
+}
+
+function socialPlatformLabel(platform: string | null) {
+  if (!platform || !(platform in platformLabels)) return "social platform";
+  return platformLabels[platform as PublishingPlatform];
 }
 
 export function CampaignAnalytics({
@@ -344,8 +430,17 @@ export function CampaignAnalytics({
                   {data.top_content.map((post, index) => (
                     <li key={post.id}>
                       <div className="campaign-top-thumb">
-                        <TopPostThumbnail assetId={post.asset_id} workspaceId={workspaceId}
-                          title={post.title} apiFetch={apiFetch} />
+                        {post.post_url ? (
+                          <a className="campaign-top-thumb-link" href={post.post_url}
+                            target="_blank" rel="noreferrer"
+                            aria-label={`Open ${post.title} on ${socialPlatformLabel(post.platform)}`}>
+                            <TopPostThumbnail assetId={post.asset_id} workspaceId={workspaceId}
+                              title={post.title} apiFetch={apiFetch} />
+                          </a>
+                        ) : (
+                          <TopPostThumbnail assetId={post.asset_id} workspaceId={workspaceId}
+                            title={post.title} apiFetch={apiFetch} />
+                        )}
                         <span className="campaign-top-rank">{index + 1}</span>
                       </div>
                       <div className="campaign-top-copy">
@@ -358,6 +453,13 @@ export function CampaignAnalytics({
                           <strong>{compact(post[ranking])}</strong>
                           <small>{RANKING_LABELS[ranking]}</small>
                         </span>
+                        {post.post_url ? (
+                          <a className="campaign-top-open" href={post.post_url}
+                            target="_blank" rel="noreferrer">
+                            Open on {socialPlatformLabel(post.platform)}
+                            <ExternalLink size={11} aria-hidden="true" />
+                          </a>
+                        ) : null}
                       </div>
                     </li>
                   ))}

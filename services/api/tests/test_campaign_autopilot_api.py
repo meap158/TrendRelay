@@ -2217,6 +2217,9 @@ def test_campaign_analytics_compares_periods_without_double_counting_reads(works
     assert body["coverage"]["measured"] == 1
     assert body["top_content"][0]["id"] == "current-measured"
     assert body["top_content"][0]["asset_id"] == "asset-current-measured"
+    assert body["top_content"][0]["post_url"] == (
+        "https://facebook.test/posts/current-measured"
+    )
 
 
 def test_campaign_analytics_top_posts_follow_the_selected_metric(workspace) -> None:
