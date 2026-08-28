@@ -1288,6 +1288,7 @@ export const ja: Messages = {
     downloaded: "ダウンロード",
     anyTime: "すべての期間",
     byDownloaded: "ダウンロードした時期で絞り込む",
+    notInCampaign: "このキャンペーンに未追加",
   },
 
   clipEditor: {

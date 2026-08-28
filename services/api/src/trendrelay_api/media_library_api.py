@@ -567,6 +567,17 @@ class AssetFilter(BaseModel):
     #: Explicit ids supplied by a notification deep link. This is an
     #: intersection with ordinary filters, never a workspace bypass.
     asset_ids: list[str] = Field(default_factory=list, max_length=200)
+    #: Keep only what this campaign's queue does not already hold.
+    #:
+    #: Filling a campaign is the one place where the interesting question is
+    #: what is *missing*: a library of two thousand clips, a hundred of them
+    #: already queued, and no way to see the rest except by recognising titles.
+    #:
+    #: A filter rather than a client-side hide, because the list is paged and
+    #: counted on the server. Hiding rows after they arrive leaves short pages,
+    #: a total that disagrees with what is on screen, and a select-all that
+    #: takes back what was just removed.
+    not_in_campaign: str | None = None
 
 
 #: Filter values that are not the id of an effect.
@@ -690,6 +701,19 @@ def asset_conditions(
             MediaAsset.collected_at
             >= utc_now() - timedelta(days=filters.collected_within_days)
         )
+    if filters.not_in_campaign:
+        # The queue holds the asset id it was built from, so "already in this
+        # campaign" is that row existing. Not the rendered path: a clip queued
+        # and then re-rendered is still the same clip to somebody deciding
+        # whether to add it again.
+        from trendrelay_api.autopilot_models import CampaignQueueItem
+
+        already = select(CampaignQueueItem.id).where(
+            CampaignQueueItem.campaign_id == filters.not_in_campaign,
+            CampaignQueueItem.workspace_id == workspace_id,
+            CampaignQueueItem.asset_id == MediaAsset.id,
+        ).correlate(MediaAsset).exists()
+        values.append(~already)
     if omit != "has_version" and filters.has_version:
         values.append(_effect_condition(filters.has_version))
     if omit != "processing" and filters.processing:
@@ -752,6 +776,7 @@ def list_asset_ids(
     processing: Annotated[str | None, Query(max_length=64)] = None,
     collected_within_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
+    not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -764,7 +789,7 @@ def list_asset_ids(
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
-        asset_ids=_words(asset_ids, 200, 80),
+        asset_ids=_words(asset_ids, 200, 80), not_in_campaign=not_in_campaign,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -802,6 +827,7 @@ def list_assets(
     processing: Annotated[str | None, Query(max_length=64)] = None,
     collected_within_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
+    not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     # Without this a caller could read the first hundred matches and no more,
@@ -817,7 +843,7 @@ def list_assets(
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
-        asset_ids=_words(asset_ids, 200, 80),
+        asset_ids=_words(asset_ids, 200, 80), not_in_campaign=not_in_campaign,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:
@@ -1922,7 +1948,9 @@ class BatchMarker(BaseModel):
     total: int = Field(default=0, ge=0, le=10_000)
 
 
-def _stamp_batch(session: Session, job: dict[str, Any], marker: BatchMarker | None) -> dict[str, Any]:
+def _stamp_batch(
+    session: Session, job: dict[str, Any], marker: BatchMarker | None
+) -> dict[str, Any]:
     """Record a job's batch on the job itself.
 
     Written to the stored payload as well as the returned copy: the returned

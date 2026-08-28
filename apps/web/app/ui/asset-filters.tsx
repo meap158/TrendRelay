@@ -33,7 +33,11 @@ export {
  * disagreeing again.
  */
 /** Which controls a surface shows. The picker has no use for a media kind. */
-export type FilterField = "query" | "channel" | "platform" | "mediaKind" | "effect" | "processing" | "length" | "downloaded";
+export type FilterField =
+  | "query" | "channel" | "platform" | "mediaKind" | "effect" | "processing"
+  | "length" | "downloaded"
+  /** Hide what the open campaign already queued; needs `campaignId`. */
+  | "notInCampaign";
 
 const PROCESSING_LABEL_KEYS = {
   transcript_reviewed: "filters.transcriptReviewed",
@@ -93,6 +97,7 @@ export function AssetFilters({
   onChange,
   cleared,
   children,
+  campaignId,
 }: {
   values: AssetFilterValues;
   facets: AssetFacets;
@@ -106,6 +111,14 @@ export function AssetFilters({
   cleared?: AssetFilterValues;
   /** Extra controls that belong on the same row, such as the Library's grouping. */
   children?: React.ReactNode;
+  /**
+   * The campaign the `notInCampaign` toggle hides the contents of.
+   *
+   * Passed in rather than read from a filter value because the control has to
+   * know the id before it is switched on. Absent on every surface that is not
+   * browsing for one campaign, which is why the field is opt-in like the rest.
+   */
+  campaignId?: string;
 }) {
   const t = useT();
   const shown = new Set(fields);
@@ -247,6 +260,23 @@ export function AssetFilters({
               <option key={days} value={days}>{text}</option>
             ))}
           </Select>
+        </label>
+      )}
+
+      {/* A checkbox among the selects, because it is the one filter with two
+          states rather than a list. It sits last so the row still reads as
+          "narrow the library" left to right, ending with what is particular to
+          this campaign. Without an id there is nothing to exclude, so the
+          control is not drawn rather than drawn and inert. */}
+      {shown.has("notInCampaign") && campaignId && (
+        <label className="asset-filter-toggle">
+          <input
+            type="checkbox"
+            checked={values.notInCampaign === campaignId}
+            onChange={(event) =>
+              set({ notInCampaign: event.target.checked ? campaignId : undefined })}
+          />
+          <span>{t("filters.notInCampaign")}</span>
         </label>
       )}
 

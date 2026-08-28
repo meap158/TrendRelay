@@ -1314,6 +1314,7 @@ export const ru: Messages = {
     downloaded: "Загружено",
     anyTime: "Любое время",
     byDownloaded: "Фильтровать по времени загрузки",
+    notInCampaign: "Ещё не в этой кампании",
   },
 
   clipEditor: {

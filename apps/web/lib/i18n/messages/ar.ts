@@ -1298,6 +1298,7 @@ export const ar: Messages = {
     downloaded: "تم التنزيل",
     anyTime: "أي وقت",
     byDownloaded: "تصفية حسب وقت التنزيل",
+    notInCampaign: "ليست في هذه الحملة بعد",
   },
 
   clipEditor: {

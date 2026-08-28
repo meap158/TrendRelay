@@ -24,6 +24,19 @@ export type AssetFilterValues = {
    * relative answer needs nobody to work out what today is first.
    */
   downloadedWithinDays?: number;
+  /**
+   * Hide what this campaign's queue already holds, by campaign id.
+   *
+   * Only the campaign browser sets it, and it carries the id rather than a
+   * boolean so the serialiser needs nothing but the values it is given - a
+   * flag would leave this file needing to know which campaign is open.
+   *
+   * Applied by the server for the same reason the other filters are: the list
+   * is paged and counted there, and hiding rows after they arrive gives short
+   * pages, a total that disagrees with the screen, and a select-all that takes
+   * back what was just hidden.
+   */
+  notInCampaign?: string;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -58,6 +71,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   if (values.downloadedWithinDays) {
     params.set("collected_within_days", String(values.downloadedWithinDays));
   }
+  if (values.notInCampaign) params.set("not_in_campaign", values.notInCampaign);
   return params;
 }
 
@@ -67,7 +81,7 @@ export function activeFilterCount(
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
-    "downloadedWithinDays",
+    "downloadedWithinDays", "notInCampaign",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];

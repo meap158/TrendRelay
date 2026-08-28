@@ -1298,6 +1298,7 @@ export const en = {
     downloaded: "Downloaded",
     anyTime: "Any time",
     byDownloaded: "Filter by when it was downloaded",
+    notInCampaign: "Not already in this campaign",
   },
 
   clipEditor: {

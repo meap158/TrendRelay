@@ -45,6 +45,22 @@
 /* The searchable one earns a little more room: a creator name is longer than
    "All regions", and the trigger shows the whole choice rather than clipping. */
 .asset-filters .asset-filter-wide { flex: 1 1 210px; }
+/* The one two-state filter, so it is a box and its label rather than a stacked
+   caption over a control. Sized to the words and aligned on the same baseline
+   as the selects, so it joins the row instead of standing above it. */
+.asset-filters .asset-filter-toggle {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 2px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.asset-filters .asset-filter-toggle input { margin: 0; cursor: pointer; }
 /* Matches the height of the plain selects beside it, so a row of filters is a
    row rather than a row with one taller thing in it. */
 .asset-filters .search-select-trigger { min-height: 32px; padding: 6px 8px; border-color: var(--line); font-size: 12px; }

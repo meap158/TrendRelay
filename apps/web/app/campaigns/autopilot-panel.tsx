@@ -4092,11 +4092,21 @@ export function AutopilotPanel({
                 );
               })}
             </div>
+            {/* The Library's own row, less the media kind it already has as
+                buttons above. "Downloaded" and the processing state were
+                missing here and present there, which made the same library
+                answer two different sets of questions depending on which page
+                asked - and filling a campaign is where "what came in this
+                week" is asked most. */}
             <AssetFilters
               values={libraryFilters}
               facets={libraryFacets}
-              fields={["query", "effect", "channel", "platform", "length"]}
+              fields={[
+                "query", "effect", "channel", "platform", "processing",
+                "length", "downloaded", "notInCampaign",
+              ]}
               cleared={{}}
+              campaignId={campaignId}
               onChange={(next) => picker.setFilters(next)}
             />
             <div className="campaign-media-actions">
@@ -6680,7 +6690,10 @@ function MediaSwapDialog({
         <AssetFilters
           values={picker.filters}
           facets={picker.facets}
-          fields={["query", "mediaKind", "effect", "channel", "platform", "length"]}
+          fields={[
+            "query", "mediaKind", "effect", "channel", "platform", "processing",
+            "length", "downloaded",
+          ]}
           cleared={currentKind ? { mediaKind: currentKind } : {}}
           onChange={(next) => picker.setFilters(next)}
         />

@@ -1270,6 +1270,7 @@ export const zh: Messages = {
     downloaded: "下载时间",
     anyTime: "任何时间",
     byDownloaded: "按下载时间筛选",
+    notInCampaign: "尚未加入此广告系列",
   },
 
   clipEditor: {

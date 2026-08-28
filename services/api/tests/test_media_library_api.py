@@ -14,7 +14,8 @@ from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
-from trendrelay_api.models import Base, utc_now
+from trendrelay_api.autopilot_models import CampaignQueueItem
+from trendrelay_api.models import Base, Campaign, utc_now
 
 engine = create_engine(
     "sqlite://",
@@ -827,3 +828,66 @@ def test_an_oversize_captioned_cut_streams_instead_of_refusing(
     assert streamed.status_code == 200
     assert streamed.headers["content-type"].startswith("video/mp4")
     assert streamed.content == b"long captioned render"
+
+
+def test_a_campaign_browser_can_hide_what_it_already_queued() -> None:
+    """Filling a campaign asks what is missing, not what exists.
+
+    A library of two thousand clips with a hundred already queued offers no way
+    to see the rest except by recognising titles. The exclusion is a filter
+    rather than a hide applied after the rows arrive, because the list is paged
+    and counted on the server: hiding afterwards gives short pages, a total that
+    disagrees with the screen, and a select-all that takes back what it removed.
+    """
+    workspace_id = create_workspace()
+    campaign_id = "camp-hiding"
+    with TestingSession.begin() as session:
+        session.add(Campaign(
+            id=campaign_id, workspace_id=workspace_id, name="Autumn",
+            objective="sell", audience="people", markets=["US"], languages=["en"],
+            created_by="library-owner",
+        ))
+        for index in ("queued", "spare"):
+            session.add(MediaAsset(
+                id=f"asset-{index}",
+                workspace_id=workspace_id,
+                title=f"Clip {index}",
+                media_kind="video",
+                source_type="test",
+                original_path=f"/clips/{index}.mp4",
+                original_sha256=f"sha-{index}",
+                mime_type="video/mp4",
+                size_bytes=10,
+                created_by="library-owner",
+            ))
+        session.add(CampaignQueueItem(
+            id="queue-1", workspace_id=workspace_id, campaign_id=campaign_id,
+            asset_id="asset-queued", video_path="/clips/queued.mp4",
+            body="already here", state="approved", created_by="library-owner",
+        ))
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    everything = asyncio.run(request("GET", f"{base}/assets"))
+    assert {asset["id"] for asset in everything.json()["assets"]} == {
+        "asset-queued", "asset-spare",
+    }
+
+    remaining = asyncio.run(
+        request("GET", f"{base}/assets?not_in_campaign={campaign_id}")
+    )
+    assert remaining.status_code == 200
+    assert [asset["id"] for asset in remaining.json()["assets"]] == ["asset-spare"]
+    # The count has to agree with the rows, which is the whole reason this is a
+    # filter and not a hide.
+    assert remaining.json()["total"] == 1
+
+    # And the select-all covers exactly what the list shows.
+    selectable = asyncio.run(
+        request("GET", f"{base}/assets/ids?not_in_campaign={campaign_id}")
+    )
+    assert selectable.json()["matched"] == 1
+    assert selectable.json()["asset_ids"] == ["asset-spare"]
+
+    # Another campaign has queued nothing, so nothing is hidden from it.
+    other = asyncio.run(request("GET", f"{base}/assets?not_in_campaign=camp-empty"))
+    assert other.json()["total"] == 2
