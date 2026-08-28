@@ -1788,6 +1788,21 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-media-browser-head, .campaign-media-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
 .campaign-media-browser-head > div { display: grid; gap: 2px; }
 .campaign-media-browser-head small { color: var(--muted); font-size: 10px; }
+/* Reads as a caveat on the count above it, not as a warning banner: the
+   selection is doing what it was asked to, it just is not all on screen. The
+   button sits inline so the sentence and its remedy are one line rather than a
+   notice with a control parked under it. */
+.campaign-media-browser-head .campaign-media-offkind {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--warn);
+}
+.campaign-media-browser-head .campaign-media-offkind .ui-button {
+  min-height: 0;
+  padding: 0 2px;
+  font-size: 10px;
+}
 /* Deliberately the Library category bar's own shape: it is the same choice on
    another screen, and two pill rows that differ by a few pixels read as two
    different controls. */

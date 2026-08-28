@@ -3323,6 +3323,27 @@ export function AutopilotPanel({
   /** What the head reports: the chosen kind's count, or both kinds together. */
   const matchingCount = selectedKind ? kindCount(selectedKind) : postableMatching;
   /**
+   * Selected media the chosen kind is not showing.
+   *
+   * A selection survives a change of filter on purpose: gathering three clips
+   * and then two pictures for their carousel is one job, and narrowing to
+   * pictures must not throw the clips away. What it did instead was go quiet -
+   * the head read "116 selected" over a list of videos, the actions offered
+   * "6 pictures as one carousel", and nothing said the six were not on screen.
+   *
+   * So it is counted and named rather than dropped. Only the kind is checked:
+   * it is the one filter whose mismatch each asset can answer for itself, and
+   * the only one the picker raises to a row of its own.
+   */
+  const selectedOffKind = selectedKind
+    ? selectedLibrary.filter((asset) => asset.media_kind !== selectedKind)
+    : [];
+  function dropOffKind() {
+    setSelectedAssets((current) => Object.fromEntries(
+      Object.entries(current).filter(([, asset]) => asset.media_kind === selectedKind),
+    ));
+  }
+  /**
    * Which of this campaign's destinations could carry a carousel.
    *
    * Read off the destinations rather than worked out here: whether a login
@@ -4071,6 +4092,20 @@ export function AutopilotPanel({
                 ? `${selectedLibrary.length} selected`
                 : t("autopilot.chooseMedia")}</strong>
                 <small>{matchingCount.toLocaleString()} matching · showing {library.length}</small>
+                {/* Said where the count is, because it is that count being
+                    explained: some of what it counts is not on screen. */}
+                {selectedOffKind.length > 0 && (
+                  <small className="campaign-media-offkind">
+                    {selectedOffKind.length}{" "}
+                    {selectedKind === "video"
+                      ? (selectedOffKind.length === 1 ? "picture" : "pictures")
+                      : (selectedOffKind.length === 1 ? "video" : "videos")}
+                    {" "}still selected, hidden by this filter
+                    <Button variant="quiet" size="sm" onClick={dropOffKind}>
+                      Remove
+                    </Button>
+                  </small>
+                )}
               </div>
             </div>
             {/* The same row the Library page carries, so narrowing to pictures
