@@ -41,10 +41,18 @@
  * a grid of fixed columns and a row of pill buttons respectively, which is how
  * the same filter came to look like two different features. */
 .asset-filters { display: flex; flex-wrap: wrap; gap: 7px; align-items: end; margin-top: 12px; }
-.asset-filters label { display: grid; gap: 4px; min-width: 0; flex: 1 1 150px; color: var(--muted); font-size: 10px; font-weight: 600; }
+/* Sized to their content and not grown.
+
+   These hold short fixed lists - "Any time", "Up to 15s" - so there is nothing
+   for extra width to show. Growing them was fine while they shared a line and
+   absurd the moment one wrapped alone onto the next: with `flex-grow: 1` and no
+   neighbour to share with, the Downloaded filter took the whole row at 823px to
+   hold the word "Any". The search below is what absorbs the slack, which is
+   what it is for - a title is longer than a facet name. */
+.asset-filters label { display: grid; gap: 4px; min-width: 0; flex: 0 1 150px; color: var(--muted); font-size: 10px; font-weight: 600; }
 /* The searchable one earns a little more room: a creator name is longer than
    "All regions", and the trigger shows the whole choice rather than clipping. */
-.asset-filters .asset-filter-wide { flex: 1 1 210px; }
+.asset-filters .asset-filter-wide { flex: 0 1 210px; }
 /* The one two-state filter, so it is a box and its label rather than a stacked
    caption over a control. Sized to the words and aligned on the same baseline
    as the selects, so it joins the row instead of standing above it. */
@@ -66,7 +74,11 @@
 .asset-filters .search-select-trigger { min-height: 32px; padding: 6px 8px; border-color: var(--line); font-size: 12px; }
 /* The search takes what is left of the row, since a title is longer than a
  * facet name and truncating it hides the thing being searched for. */
-.asset-filter-search { flex: 3 1 220px; }
+/* Scoped, so it actually applies. `.asset-filters label` above is the more
+   specific selector, so this lost every time and the search sat at the same
+   width as a dropdown holding the word "Any" - the row it was meant to absorb
+   the slack of. */
+.asset-filters .asset-filter-search { flex: 3 1 220px; }
 /* Scoped to the row's own field. Unscoped, this also caught the search box
    inside a SearchSelect popover - it sits within the label, and at one class
    plus a type plus an attribute it outranks the popover's own rule. Fighting
