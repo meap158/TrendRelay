@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Any
 
-from sqlalchemy import and_, case, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from trendrelay_api.database import SessionFactory
@@ -261,11 +261,38 @@ def list_job_records_for_kinds(
     """
     if not kinds:
         return []
+    # Unfinished work is returned in full, however much of it there is, and the
+    # limit applies to history alone.
+    #
+    # Ordering unfinished first was the earlier fix for a batch pushing older
+    # running batches out of the window. It holds only while the unfinished
+    # work fits: an effect applied to thirteen hundred videos queues thirteen
+    # hundred jobs, and against a ceiling of five hundred the ordering just
+    # decided *which* still-to-run work was dropped. Four of seven batches were
+    # missing from the notification list, and the nine hundred assets behind
+    # them showed no progress on their Library thumbnails either - the same
+    # stream draws both, so a job absent from this answer is a card that looks
+    # untouched while its render is queued.
+    #
+    # There is no ceiling on the unfinished half on purpose. A cap here cannot
+    # be set from this end: it would have to guess how much work somebody is
+    # allowed to have running, and being wrong means silently hiding some of
+    # it, which is the failure being fixed rather than a smaller version of it.
+    unfinished = (
+        select(DurableJob)
+        .where(
+            DurableJob.workspace_key == workspace_key,
+            DurableJob.kind.in_(kinds),
+            DurableJob.status.in_(("queued", "running")),
+        )
+        .order_by(DurableJob.created_at.desc())
+    )
     query = (
         select(DurableJob)
         .where(
             DurableJob.workspace_key == workspace_key,
             DurableJob.kind.in_(kinds),
+            DurableJob.status.not_in(("queued", "running")),
         )
         # Unfinished work first, then the newest of what is done.
         #
@@ -278,17 +305,21 @@ def list_job_records_for_kinds(
         # than having been created more recently.
         #
         # A job nobody is waiting on is history; one still to run is the thing
-        # the list exists for. History yields.
-        .order_by(
-            case((DurableJob.status.in_(("queued", "running")), 0), else_=1),
-            DurableJob.created_at.desc(),
-        )
+        # the list exists for. History yields - now by being a separate query
+        # rather than by sorting behind work that might not fit.
+        .order_by(DurableJob.created_at.desc())
         .limit(limit)
     )
     if session is not None:
-        return [serialize_job(item) for item in session.scalars(query).all()]
+        return [
+            serialize_job(item)
+            for item in [*session.scalars(unfinished).all(), *session.scalars(query).all()]
+        ]
     with factory() as owned:
-        return [serialize_job(item) for item in owned.scalars(query).all()]
+        return [
+            serialize_job(item)
+            for item in [*owned.scalars(unfinished).all(), *owned.scalars(query).all()]
+        ]
 
 
 def record_completed_job(

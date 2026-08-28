@@ -6,6 +6,8 @@ from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.jobs import (
     ABANDONED_ERROR,
+    RETRY_BASE_SECONDS,
+    RETRY_MAX_SECONDS,
     abandon_expired_jobs,
     claim_job,
     claim_next_job,
@@ -19,12 +21,10 @@ from trendrelay_api.jobs import (
     list_job_records_for_kinds,
     list_job_records_including_active,
     now_utc,
-    RETRY_BASE_SECONDS,
-    RETRY_MAX_SECONDS,
     recoverable_job_ids,
-    retry_delay_for,
     request_job_cancellation,
     requeue_terminal_job,
+    retry_delay_for,
     settle_expired_cancellations,
     upgrade_active_job_recovery,
 )
@@ -515,8 +515,42 @@ def test_a_newer_batch_does_not_push_older_running_work_out_of_the_window() -> N
     running = [job for job in window if job["status"] == "queued"]
     assert len(running) == 3, "every unfinished job belongs in the window"
     assert {job["payload"]["batch"]["id"] for job in running} == {"older-run"}
-    # And the leftover room still goes to the most recent history.
-    assert len(window) == 5
+    # The limit is the history's, so the answer is the unfinished work plus it.
+    assert len(window) == 3 + 5
+
+
+def test_unfinished_work_is_never_trimmed_to_the_limit() -> None:
+    """Thirteen hundred videos queue thirteen hundred jobs.
+
+    Ordering unfinished work first only helps while it fits. Against a ceiling
+    smaller than the queue, the ordering merely decided which still-to-run jobs
+    were dropped: four of seven batches went missing from the notification
+    list, and the assets behind them showed no progress on their Library
+    thumbnails, because one stream draws both. A job absent from this answer is
+    a card that looks untouched while its render is queued.
+    """
+    sessions = factory()
+    for index in range(40):
+        create_job_record(
+            f"queued-{index}", "ws", "media_effect_render",
+            {"batch": {"id": f"batch-{index // 10}"}}, factory=sessions,
+        )
+    for index in range(20):
+        create_job_record(
+            f"done-{index}", "ws", "media_effect_render",
+            {"batch": {"id": "finished"}}, factory=sessions,
+        )
+        claim_job(f"done-{index}", "worker", factory=sessions)
+        complete_job(f"done-{index}", "worker", {"ok": True}, factory=sessions)
+
+    window = list_job_records_for_kinds("ws", {"media_effect_render"}, 5, factory=sessions)
+
+    unfinished = [job for job in window if job["status"] == "queued"]
+    assert len(unfinished) == 40, "a queue larger than the limit is still the queue"
+    # Every batch, not the few that happened to fit: the notification list is
+    # built by grouping these, so a missing job is a missing batch.
+    assert len({job["payload"]["batch"]["id"] for job in unfinished}) == 4
+    assert len(window) == 40 + 5, "history alone answers to the limit"
 
 
 def test_each_retry_waits_longer_than_the_one_before() -> None:
