@@ -2770,9 +2770,16 @@ export default function PublishPage() {
                 const reachOf = (item: Provider) =>
                   engineReach.find((row) => row.id === item.id)?.account_count
                   ?? item.account_count ?? 0;
+                const ranked = [...engines].sort((a, b) => reachOf(b) - reachOf(a));
                 const engine = (
-                  [...engines].sort((a, b) => reachOf(b) - reachOf(a))[0] ?? engines[0]
-                )?.engine ?? "buffer";
+                  ranked.find((item) => reachOf(item) > 0)?.engine
+                  // Account discovery can be temporarily unavailable. The
+                  // workspace's active provider is still a better fallback
+                  // than whichever engine the API happens to list first.
+                  ?? activeProvider?.engine
+                  ?? ranked[0]?.engine
+                  ?? "buffer"
+                );
                 setAddingToEngine(engine);
                 setNewLoginLabel(suggestedLoginName(engine));
               }}
