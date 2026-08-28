@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.integrations import overlay_match
-from trendrelay_api.integrations.overlay_match import suggest
+from trendrelay_api.integrations.overlay_match import choose, suggest
 from trendrelay_api.media_models import MediaAsset, MediaTranscript
 from trendrelay_api.models import Base, UserProfile, Workspace
 
@@ -162,6 +162,30 @@ def test_a_clip_with_nothing_to_read_says_so(session) -> None:
     assert picks == []
     assert how["read_from"] == []
     assert "no caption" in how["advice"]
+
+
+def test_an_automatic_batch_choice_uses_the_strongest_content_match(session) -> None:
+    asset = clip(session, caption="#健身 #腹肌", hashtags=("健身", "腹肌"))
+
+    picked = choose(session, WORKSPACE, asset)
+
+    assert picked.overlay_id == "cap_3d"
+    assert picked.basis == "content_match"
+    assert picked.score is not None
+    assert {"健身", "腹肌"} & set(picked.matched)
+    assert "hashtags" in picked.read_from
+
+
+def test_an_automatic_batch_choice_labels_its_safe_fallback(session) -> None:
+    asset = clip(session, caption="zzzz qqqq", title="unmatched")
+
+    picked = choose(session, WORKSPACE, asset)
+
+    assert picked.overlay_id == "smiley"
+    assert picked.basis == "safe_fallback"
+    assert picked.score is None
+    assert picked.matched == ()
+    assert "No trustworthy content match" in picked.advice
 
 
 def test_a_clip_from_another_workspace_is_not_read(session) -> None:

@@ -7,9 +7,11 @@ dropdown of names, because a gallery exists precisely because nobody picks a
 sticker by reading its label.
 
 So the clip is asked what it is about, and the objects that say the same thing
-are put in front. Nothing is applied: this returns a ranking and the picker
-shows it, because choosing a prop is somebody's own judgement and the point of
-a suggestion is to save the scroll, not to make the decision.
+are put in front. The gallery uses the ranking as suggestions and leaves the
+decision to its operator. A deliberately enabled batch can also resolve the
+top trustworthy match per item; when there is no such match it records and uses
+the safe full-face fallback instead of presenting the least-wrong candidate as
+an intelligent choice.
 
 **Read from what is actually there.** Measured before it was written: this
 workspace holds 2,540 Douyin clips, 2,434 of which carry a caption, against 15
@@ -97,6 +99,37 @@ class Suggestion:
     #: first. Shown, because a suggestion nobody can see the reason for is a
     #: suggestion nobody trusts twice.
     matched: tuple[str, ...]
+
+
+AUTO_FALLBACK_ID = "smiley"
+
+
+@dataclass(frozen=True)
+class AutomaticChoice:
+    """The object a batch will actually render for one item, with provenance."""
+
+    overlay_id: str
+    label: str
+    group: str
+    dimensional: bool
+    basis: str
+    score: float | None
+    matched: tuple[str, ...]
+    read_from: tuple[str, ...]
+    advice: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "value": self.overlay_id,
+            "label": self.label,
+            "group": self.group,
+            "dimensional": self.dimensional,
+            "basis": self.basis,
+            "score": self.score,
+            "matched": list(self.matched),
+            "read_from": list(self.read_from),
+            "advice": self.advice,
+        }
 
 
 def _rarity(objects: list[Any]) -> dict[str, float]:
@@ -280,3 +313,58 @@ def suggest(
                  "suggesting. Pick from the gallery."
         ),
     }
+
+
+def choose(
+    session: Session,
+    workspace_id: str,
+    asset_id: str,
+) -> AutomaticChoice:
+    """Resolve one renderable object for an explicitly automatic batch.
+
+    The suggestion threshold remains the trust boundary. Falling below it does
+    not make the top-scoring coincidence a match merely because the caller
+    needs an answer; it selects the catalogue's safe, full-face default and
+    labels that decision as a fallback all the way into the job and response.
+    """
+    from trendrelay_api.integrations.overlay_catalogue import catalogue
+
+    picks, how = suggest(session, workspace_id, asset_id, limit=1)
+    read_from = tuple(str(item) for item in how.get("read_from", []))
+    if picks:
+        pick = picks[0]
+        return AutomaticChoice(
+            overlay_id=pick.overlay_id,
+            label=pick.label,
+            group=pick.group,
+            dimensional=pick.dimensional,
+            basis="content_match",
+            score=pick.score,
+            matched=pick.matched,
+            read_from=read_from,
+            advice=(
+                f"Matched {', '.join(pick.matched)} from "
+                f"{', '.join(read_from) or 'the clip metadata'}."
+            ),
+        )
+
+    fallback = next(
+        (item for item in catalogue() if item.id == AUTO_FALLBACK_ID),
+        None,
+    )
+    if fallback is None:  # A broken catalogue should fail before a render is queued.
+        raise LookupError(f"Automatic face-object fallback {AUTO_FALLBACK_ID!r} is missing.")
+    return AutomaticChoice(
+        overlay_id=fallback.id,
+        label=fallback.label,
+        group=fallback.group,
+        dimensional=fallback.mesh is not None,
+        basis="safe_fallback",
+        score=None,
+        matched=(),
+        read_from=read_from,
+        advice=(
+            "No trustworthy content match was found, so the safe full-face "
+            f"fallback ({fallback.label}) was used. {how.get('advice', '')}"
+        ).strip(),
+    )

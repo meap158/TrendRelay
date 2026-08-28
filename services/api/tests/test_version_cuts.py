@@ -786,6 +786,119 @@ def test_a_batch_preserves_a_stack_for_every_compatible_asset(tmp_path, monkeypa
         )
 
 
+def test_a_face_object_batch_resolves_and_records_each_items_own_choice(
+    tmp_path, monkeypatch
+) -> None:
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.integrations.overlay_match import choose
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    fitness = make_asset(workspace, tmp_path, name="batch-fitness")
+    birthday = make_asset(workspace, tmp_path, name="batch-birthday")
+    unmatched = make_asset(workspace, tmp_path, name="batch-unmatched")
+    with TestingSession() as session:
+        by_id = {
+            asset.id: asset
+            for asset in session.query(MediaAsset).filter(
+                MediaAsset.id.in_([fitness, birthday, unmatched])
+            )
+        }
+        by_id[fitness].caption = "#健身 #腹肌"
+        by_id[fitness].hashtags = ["健身", "腹肌"]
+        by_id[birthday].caption = "Happy birthday #生日"
+        by_id[birthday].hashtags = ["生日", "派对"]
+        by_id[unmatched].caption = "zzzz qqqq"
+        session.commit()
+        expected = {
+            asset_id: choose(session, workspace, asset_id)
+            for asset_id in (fitness, birthday, unmatched)
+        }
+    assert expected[fitness].overlay_id != expected[birthday].overlay_id
+    assert expected[unmatched].basis == "safe_fallback"
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [fitness, birthday, unmatched],
+            "steps": [{"effect": "face_overlay", "values": {"object": "smiley"}}],
+            "auto_face_object": True,
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["counts"]["queued"] == 3
+    assert body["automatic_object_counts"] == {
+        "content_match": 2,
+        "safe_fallback": 1,
+    }
+    results = {item["asset_id"]: item for item in body["results"]}
+    for asset_id, choice in expected.items():
+        resolved = results[asset_id]["automatic_face_object"]
+        assert resolved["value"] == choice.overlay_id
+        assert resolved["basis"] == choice.basis
+
+    with TestingSession() as session:
+        recipes = {
+            recipe.asset_id: recipe.steps[0]["values"]["object"]
+            for recipe in session.query(MediaEditRecipe).all()
+        }
+        jobs = {
+            job.payload["asset_id"]: job
+            for job in session.query(DurableJob).filter_by(
+                kind="media_effect_render"
+            ).all()
+        }
+    for asset_id, choice in expected.items():
+        assert recipes[asset_id] == choice.overlay_id
+        assert jobs[asset_id].payload["request"]["steps"][0]["values"]["object"] == (
+            choice.overlay_id
+        )
+        assert jobs[asset_id].payload["batch"]["automatic_face_object"]["basis"] == (
+            choice.basis
+        )
+
+
+def test_a_face_object_batch_keeps_one_manual_choice_when_automatic_is_off(
+    tmp_path, monkeypatch
+) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    assets = [
+        make_asset(workspace, tmp_path, name=f"batch-manual-{index}")
+        for index in range(2)
+    ]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": assets,
+            "steps": [{"effect": "face_overlay", "values": {"object": "robot"}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["automatic_object_counts"] == {
+        "content_match": 0,
+        "safe_fallback": 0,
+    }
+    assert all(
+        job["payload"]["request"]["steps"][0]["values"]["object"] == "robot"
+        for job in response.json()["jobs"]
+    )
+
+
 def test_a_batch_does_not_duplicate_an_active_effect_job(tmp_path, monkeypatch) -> None:
     from trendrelay_api.integrations import effect_render
 

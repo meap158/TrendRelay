@@ -2687,6 +2687,7 @@ class BatchEffectRenderRequest(BaseModel):
 
     asset_ids: list[str] = Field(min_length=1, max_length=200)
     steps: list[dict[str, Any]] = Field(min_length=1, max_length=24)
+    auto_face_object: bool = False
     confirm_external_action: bool = False
 
 
@@ -2698,12 +2699,13 @@ def submit_batch_render(
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
-    """Queue the same validated stack for every compatible selected asset.
+    """Queue a validated stack for every compatible selected asset.
 
     Each asset remains its own durable job. A corrupt file or an incompatible
     media kind therefore becomes one reported outcome instead of failing the
     whole selection, while notifications and cancellation keep working exactly
-    as they do for a single edit.
+    as they do for a single edit. When automatic face objects are enabled, only
+    that parameter is resolved per asset; every other setting remains shared.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     ensure_profile(session, user)
@@ -2719,6 +2721,7 @@ def submit_batch_render(
         create_render_job,
     )
     from trendrelay_api.integrations.effects import EffectError, read_recipe
+    from trendrelay_api.integrations.overlay_match import choose as choose_face_object
     from trendrelay_api.models import DurableJob
 
     try:
@@ -2748,6 +2751,7 @@ def submit_batch_render(
 
     results: list[dict[str, Any]] = []
     jobs: list[dict[str, Any]] = []
+    automatic_object_counts = {"content_match": 0, "safe_fallback": 0}
     batch_id = f"effect_batch_{token_hex(10)}"
     for position, asset_id in enumerate(wanted, start=1):
         asset = by_id.get(asset_id)
@@ -2768,14 +2772,37 @@ def submit_batch_render(
             continue
         try:
             check_media_kinds(steps, asset.media_kind)
+            # The stack is shared except for the object itself. Clone its
+            # values before replacing it so one item's answer cannot leak into
+            # the next item's recipe (or back into the request-normalised one).
+            resolved = [
+                {"effect": item["effect"], "values": dict(item["values"])}
+                for item in normalised
+            ]
+            automatic_object = None
+            if body.auto_face_object and any(
+                item["effect"] == "face_overlay" for item in resolved
+            ):
+                automatic_object = choose_face_object(
+                    session, workspace_id, asset.id
+                ).as_dict()
+                for item in resolved:
+                    if item["effect"] == "face_overlay":
+                        item["values"]["object"] = automatic_object["value"]
             job = create_render_job(
                 EffectRenderRequest(
                     workspace_id=workspace_id,
                     source_path=asset.original_path,
-                    steps=normalised,
+                    steps=resolved,
                     confirm_external_action=True,
                 ),
-                batch={"id": batch_id, "position": position, "total": len(wanted)},
+                batch={
+                    "id": batch_id,
+                    "position": position,
+                    "total": len(wanted),
+                    **({"automatic_face_object": automatic_object}
+                       if automatic_object else {}),
+                },
                 # The request's own transaction. Queueing on a second
                 # connection made every asset after the first recipe write wait
                 # out the busy timeout and then fail: the whole selection
@@ -2809,13 +2836,17 @@ def submit_batch_render(
                 "detail": f"{type(error).__name__}: {error}",
             })
             continue
-        _store_recipe(session, workspace_id, asset.id, normalised, user.id)
+        _store_recipe(session, workspace_id, asset.id, resolved, user.id)
+        if automatic_object:
+            automatic_object_counts[automatic_object["basis"]] += 1
         jobs.append(job)
         results.append({
             "asset_id": asset.id,
             "title": asset.title,
             "status": "queued",
             "job_id": job["id"],
+            **({"automatic_face_object": automatic_object}
+               if automatic_object else {}),
         })
 
     counts = {
@@ -2857,10 +2888,20 @@ def submit_batch_render(
         "media.effect_batch_rendered",
         "media_asset",
         ",".join(wanted[:10]),
-        {"counts": counts, "effects": [step.effect.id for step in steps]},
+        {
+            "counts": counts,
+            "effects": [step.effect.id for step in steps],
+            "auto_face_object": body.auto_face_object,
+            "automatic_object_counts": automatic_object_counts,
+        },
     )
     session.commit()
-    return {"counts": counts, "results": results, "jobs": jobs}
+    return {
+        "counts": counts,
+        "results": results,
+        "jobs": jobs,
+        "automatic_object_counts": automatic_object_counts,
+    }
 
 
 @router.get("/effects/jobs")

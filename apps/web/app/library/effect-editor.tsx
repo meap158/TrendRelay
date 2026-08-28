@@ -88,6 +88,8 @@ export function EffectEditor({
   const [reading, setReading] = useState<number | null>(null);
   /** Which step has its gallery open, if any. */
   const [picking, setPicking] = useState<number | null>(null);
+  /** Resolve the face object from each item's own content in a batch. */
+  const [autoFaceObject, setAutoFaceObject] = useState(false);
 
   const base = `/api/workspaces/${workspaceId}/media/library`;
   const targetIds = assetIds?.length ? assetIds : targets.map((target) => target.id);
@@ -200,6 +202,7 @@ export function EffectEditor({
       setPreviewDuration(null);
       setPreviewNote("");
       previewSpecRef.current = null;
+      setAutoFaceObject(batch);
       void load();
     });
     // Reopened for a different asset, so the recipe is read again.
@@ -223,6 +226,12 @@ export function EffectEditor({
     .map((step) => definitionOf(step.effect))
     .find((effect) => effect?.stage === "frame" && !effect.previewable);
   const previewBlocker = framePreviewBlockerFor(steps);
+  const usesAutomaticFaceObject = (candidateSteps: Step[]) => batch
+    && autoFaceObject
+    && candidateSteps.some((step) => step.effect === "face_overlay");
+  const automaticPreviewReason = usesAutomaticFaceObject(steps)
+    ? "Each item gets its own matched object when the batch is queued. Turn off automatic selection to preview one shared object."
+    : "";
 
   function edit(next: Step[]) {
     setSteps(next);
@@ -269,6 +278,7 @@ export function EffectEditor({
     try {
       if (batch) {
         const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
+        const automaticObjects = { content_match: 0, safe_fallback: 0 };
         const queuedJobs: any[] = [];
         // What went wrong on the way, kept rather than thrown. A chunk that
         // fails used to abandon the whole call, so the items already queued by
@@ -286,6 +296,7 @@ export function EffectEditor({
               body: JSON.stringify({
                 asset_ids: targetIds.slice(at, at + CHUNK),
                 steps,
+                auto_face_object: autoFaceObject,
                 confirm_external_action: true,
               }),
             });
@@ -296,6 +307,8 @@ export function EffectEditor({
             for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
               totals[key] += body.counts?.[key] ?? 0;
             }
+            automaticObjects.content_match += body.automatic_object_counts?.content_match ?? 0;
+            automaticObjects.safe_fallback += body.automatic_object_counts?.safe_fallback ?? 0;
             queuedJobs.push(...(body.jobs ?? []));
           } catch (reason) {
             interrupted = reason instanceof Error ? reason.message : "The batch stopped early.";
@@ -308,6 +321,12 @@ export function EffectEditor({
         if (totals.skipped) details.push(`${totals.skipped} skipped`);
         if (totals.failed) details.push(`${totals.failed} failed`);
         if (totals.missing) details.push(`${totals.missing} missing`);
+        if (automaticObjects.content_match) {
+          details.push(`${automaticObjects.content_match} content-matched objects`);
+        }
+        if (automaticObjects.safe_fallback) {
+          details.push(`${automaticObjects.safe_fallback} safe fallbacks`);
+        }
         const done = totals.queued + totals.skipped + totals.failed + totals.missing;
         if (interrupted) {
           // Said in the dialog and left open, because there is something to do
@@ -422,7 +441,7 @@ export function EffectEditor({
       description={gallery
         ? "Pick one, then check it on a real frame before rendering."
         : batch
-          ? "Build one stack for the selection. Every compatible item gets its own tracked job."
+          ? "Build one stack for the selection. Face objects can be matched separately; every compatible item gets its own tracked job."
           : "Stack effects on this asset. The original is never changed."}
       onClose={onClose}
       footer={gallery ? (
@@ -442,8 +461,11 @@ export function EffectEditor({
             variant="secondary"
             busy={busy === "preview"}
             disabled={!canEdit || !steps.length || unavailable.length > 0 || !previewTarget
-              || Boolean(previewBlocker) || busy === "preview"}
-            title={previewBlocker?.unpreviewable_reason ?? undefined}
+              || Boolean(previewBlocker) || Boolean(automaticPreviewReason)
+              || busy === "preview"}
+            title={automaticPreviewReason
+              || previewBlocker?.unpreviewable_reason
+              || undefined}
             onClick={() => void preview()}
           >Preview stack</Button>
           {/* Why it cannot be pressed, beside it. A disabled primary action
@@ -489,7 +511,8 @@ export function EffectEditor({
         <p className="effect-batch-note">
           Effects are equal steps in one stack and run from top to bottom. Select
           multiple Library items before opening this editor to apply the same stack
-          as a batch. Incompatible media are skipped and reported, never silently changed.
+          as a batch. Face objects can be chosen from each item&apos;s own content;
+          incompatible media are skipped and reported, never silently changed.
         </p>
 
         {!steps.length ? (
@@ -531,11 +554,14 @@ export function EffectEditor({
                         size="sm"
                         iconOnly
                         aria-label={`Preview through ${effectLabel(t, effect.id, effect.label)}`}
-                        title={`Preview the result through step ${index + 1}`}
                         disabled={!canEdit || !effect.available
                           || !previewTargetFor(steps.slice(0, index + 1))
                           || Boolean(framePreviewBlockerFor(steps.slice(0, index + 1)))
+                          || usesAutomaticFaceObject(steps.slice(0, index + 1))
                           || busy === "preview"}
+                        title={usesAutomaticFaceObject(steps.slice(0, index + 1))
+                          ? "This batch chooses a different object per item at queue time."
+                          : `Preview the result through step ${index + 1}`}
                         onClick={() => void preview(
                           steps.slice(0, index + 1),
                           `Preview through ${effectLabel(t, effect.id, effect.label)}`,
@@ -564,9 +590,45 @@ export function EffectEditor({
                   {effect.available && effect.stage === "frame" && !effect.previewable && (
                     <p className="effect-unavailable">{effect.unpreviewable_reason}</p>
                   )}
+                  {batch && effect.id === "face_overlay" && (
+                    <button
+                      type="button"
+                      className={`effect-auto-object${autoFaceObject ? " active" : ""}`}
+                      role="switch"
+                      aria-checked={autoFaceObject}
+                      disabled={!canEdit || !effect.available}
+                      onClick={() => setAutoFaceObject((current) => !current)}
+                    >
+                      <span className="effect-auto-object-switch" aria-hidden="true"><span /></span>
+                      <span>
+                        <strong>Choose the best object separately for each item</strong>
+                        <small>
+                          Reads that item&apos;s hashtags, caption, visual description,
+                          on-screen text, and transcript. Uses Smiley only when no
+                          trustworthy match exists.
+                        </small>
+                      </span>
+                    </button>
+                  )}
                   {effect.params.length > 0 && (
                     <div className="effect-params">
-                      {effect.params.map((param) => param.presentation === "gallery" ? (
+                      {effect.params.map((param) => (
+                        autoFaceObject
+                        && batch
+                        && effect.id === "face_overlay"
+                        && param.id === "object"
+                      ) ? (
+                        <div key={param.id} className="effect-param effect-param-gallery">
+                          <span>{paramLabel(t, effect.id, param.id, param.label)}</span>
+                          <div className="effect-auto-object-value">
+                            <ActionIcon name="effects" />
+                            <span>
+                              <strong>Automatic per item</strong>
+                              <small>The resolved object is recorded on each tracked job.</small>
+                            </span>
+                          </div>
+                        </div>
+                      ) : param.presentation === "gallery" ? (
                         /* A choice between pictures opens the gallery instead of
                            filling a select with their names. */
                         <div key={param.id} className="effect-param effect-param-gallery">
