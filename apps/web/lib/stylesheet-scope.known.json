@@ -44,6 +44,8 @@
   "ui-badge",
   "ui-button",
   "ui-card",
+  "ui-card-aside",
+  "ui-card-head",
   "ui-card-head-region",
   "ui-dialog",
   "ui-dialog-foot",
