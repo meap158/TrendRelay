@@ -19,6 +19,7 @@ accelerator, and its absence costs speed, never correctness.
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +54,41 @@ _DEVICE_LOST_FRAGMENTS = (
     "out of memory",
 )
 
+#: How long the GPU is left alone after it has been lost.
+#:
+#: Windows TDR suspends a device and brings it back within seconds; the session
+#: that was running is unrecoverable, the adapter is not. Disabling the GPU for
+#: the life of the process therefore turned one hiccup into a permanent
+#: demotion: a queue of thirteen hundred renders lost its accelerator at the
+#: first timeout and finished the remaining twelve hundred on the CPU, hours
+#: after the device was well again.
+#:
+#: Ten minutes is long enough that a genuinely broken adapter is not retried
+#: once per render - each retry costs one failed render - and short enough that
+#: a transient reset costs a handful rather than a night's work.
+GPU_COOLDOWN_SECONDS = 600.0
+
 _GPU_DISABLED: bool = False
+
+#: When the GPU was last given up on, for the cooldown above.
+_GPU_DISABLED_AT: float = 0.0
+
+
+def _gpu_is_disabled() -> bool:
+    """Whether the GPU is currently out, re-arming it once the cooldown passes.
+
+    Read rather than scheduled: there is no timer to fire in a worker that may
+    be idle, and the question is only ever asked when a render is about to
+    start. The flag stays set until then, so nothing racing behind this call
+    sees the GPU come back mid-session.
+    """
+    global _GPU_DISABLED
+    if not _GPU_DISABLED:
+        return False
+    if time.monotonic() - _GPU_DISABLED_AT < GPU_COOLDOWN_SECONDS:
+        return True
+    _GPU_DISABLED = False
+    return False
 
 
 def _is_device_lost(error: BaseException) -> bool:
@@ -73,8 +108,9 @@ _SESSIONS: dict[str, Any] = {}
 
 def _disable_gpu_and_evict() -> None:
     """Mark GPU disabled for the process and drop every cached GPU session."""
-    global _GPU_DISABLED
+    global _GPU_DISABLED, _GPU_DISABLED_AT
     _GPU_DISABLED = True
+    _GPU_DISABLED_AT = time.monotonic()
     dead = [key for key in _SESSIONS if not key.endswith(f"|{CPU_PROVIDER}")]
     for key in dead:
         del _SESSIONS[key]
@@ -92,7 +128,7 @@ def _evict_gpu_sessions() -> None:
 
 def available_providers() -> list[str]:
     """The execution providers this machine offers, fastest first."""
-    if _GPU_DISABLED:
+    if _gpu_is_disabled():
         return [CPU_PROVIDER]
     try:
         import onnxruntime
@@ -103,7 +139,7 @@ def available_providers() -> list[str]:
 
 
 def chosen_provider(force_cpu: bool = False) -> str:
-    if force_cpu or _GPU_DISABLED:
+    if force_cpu or _gpu_is_disabled():
         return CPU_PROVIDER
     return next(iter(available_providers()), CPU_PROVIDER)
 
@@ -191,7 +227,11 @@ class YuNetOnnx:
                 try:
                     self._switch_to_provider(force_cpu=True)
                     named = dict(
-                        zip(self._outputs, self._session.run(None, {self._input: blob}), strict=True)
+                        zip(
+                            self._outputs,
+                            self._session.run(None, {self._input: blob}),
+                            strict=True,
+                        )
                     )
                 except Exception:
                     self._dead = True
