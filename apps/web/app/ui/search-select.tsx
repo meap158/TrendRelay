@@ -190,7 +190,18 @@ export function SearchSelect({
     const side = preferredSide === "auto"
       ? below < 220 && above > below ? "above" : "below"
       : preferredSide;
-    setPlacement({ side, maxHeight: Math.max(140, Math.min(320, side === "above" ? above : below)) });
+    // Never taller than the room that exists. The floor here was 140px,
+    // which in a short dialog handed the list more height than its clip
+    // allowed: the surplus rendered outside the scrollable dialog body,
+    // where the dialog own footer took the clicks. On the Publish page
+    // add-account dialog that left 57px of room for a 140px list, and two of
+    // the four engines could not be chosen at all - they were drawn past the
+    // clip, so a click at them landed on the footer behind.
+    //
+    // A cramped list that scrolls is usable. One that reaches past its clip
+    // is not, and it does not look broken either, which is worse: the options
+    // are visible, they simply do nothing.
+    setPlacement({ side, maxHeight: Math.max(0, Math.min(320, side === "above" ? above : below)) });
   }, [preferredSide]);
 
   useLayoutEffect(() => { if (open) place(); }, [open, place]);

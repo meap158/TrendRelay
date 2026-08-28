@@ -417,6 +417,13 @@ a.ui-button { text-decoration: none; }
    stops clipping for exactly as long as a list is open. Anchoring the list to
    the field, inside the trap, keeps typing and picking working. */
 .ui-dialog:has(.search-select-popover) { overflow: visible; }
+/* The body scrolls, so it clips too - and releasing only the panel above left
+   the list measured against a box the height of two fields. On the Publish
+   add-account dialog that was 57px for a four-engine menu: the list was drawn
+   past the body's edge, where the footer took the clicks, and two engines
+   could not be chosen at all. Both boxes have to let go for the one gesture,
+   and both take it back the moment the list closes. */
+.ui-dialog:has(.search-select-popover) .ui-dialog-body { overflow: visible; }
 
 /* Opens below by default and above when below would be clipped; the component
    measures the space against whatever ancestor would cut the list off and sets
