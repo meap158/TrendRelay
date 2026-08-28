@@ -35,12 +35,37 @@ QUEUES = re.compile(
     r"|enqueue_ingest|queue_enrichment|create_montage_job)\s*\("
 )
 
-#: How far after the call to look for the session being handed over, which
-#: covers a multi-line call with a comment inside it.
-LOOKAHEAD = 14
+#: The same names, as the parser sees them rather than as text.
+QUEUE_NAMES = frozenset({
+    "create_render_job", "create_blur_job", "create_job_record", "queue_caption_job",
+    "queue_media_ai_setup", "create_download_job", "create_publish_job",
+    "enqueue_ingest", "queue_enrichment", "create_montage_job",
+})
+
+
+def _called_name(call: ast.Call) -> str:
+    """The bare function name, whether it is called plainly or off a module."""
+    func = call.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return ""
 
 
 def offenders() -> list[str]:
+    """Queue calls that follow a write without joining the request's transaction.
+
+    The handover is read off the call itself. It used to be looked for in the
+    fourteen lines after the call started, which is a guess at how long a call
+    can be: `submit_batch_render` grew a per-item object and a comment saying
+    why it passes the session, which put `session=session` on the nineteenth
+    line and made the guard report the one place most careful about this.
+
+    A window is wrong in the other direction too. Fourteen lines is far enough
+    to reach the *next* call, so a neighbour's handover could vouch for a call
+    that had none. Asking the parser for the keyword removes both.
+    """
     found: list[str] = []
     for path in sorted(SOURCE.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
@@ -48,23 +73,26 @@ def offenders() -> list[str]:
         for node in ast.walk(ast.parse(source)):
             if not isinstance(node, ast.FunctionDef):
                 continue
-            body = lines[node.lineno - 1 : node.end_lineno]
-            written = False
-            for offset, line in enumerate(body):
+            wrote_at: int | None = None
+            for offset, line in enumerate(lines[node.lineno - 1 : node.end_lineno]):
                 if line.lstrip().startswith("#"):
                     continue
-                if not written and WRITES.search(line):
-                    written = True
-                    continue
-                if written and QUEUES.search(line):
-                    window = " ".join(body[offset : offset + LOOKAHEAD])
-                    if "session=session" in window:
-                        break
-                    found.append(
-                        f"{path.name}:{node.lineno + offset} {node.name} "
-                        f"queues after writing: {line.strip()}"
-                    )
+                if WRITES.search(line):
+                    wrote_at = node.lineno + offset
                     break
+            if wrote_at is None:
+                continue
+            for call in ast.walk(node):
+                if not isinstance(call, ast.Call) or call.lineno <= wrote_at:
+                    continue
+                if _called_name(call) not in QUEUE_NAMES:
+                    continue
+                if any(keyword.arg == "session" for keyword in call.keywords):
+                    continue
+                found.append(
+                    f"{path.name}:{call.lineno} {node.name} queues after writing: "
+                    f"{lines[call.lineno - 1].strip()}"
+                )
     return found
 
 
