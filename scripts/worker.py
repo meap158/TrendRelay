@@ -140,7 +140,15 @@ def process_available() -> int:
         run_ingest_job(job_id)
     for job_id in blur_ids:
         run_blur_job(job_id)
-    run_job_batch(effect_ids, run_effect_render_job, label="Effect render")
+    # Renders are the long queue - an effect over a selection is hundreds of
+    # them - so this one keeps its pool fed rather than draining twenty and
+    # waiting on the slowest before claiming more.
+    run_job_batch(
+        effect_ids,
+        run_effect_render_job,
+        label="Effect render",
+        refill=lambda: recoverable_job_ids(EFFECT_JOB_KIND),
+    )
     for job_id in enrich_ids:
         run_enrich_job(job_id)
     run_job_batch(caption_ids, run_caption_job, label="Caption render")
