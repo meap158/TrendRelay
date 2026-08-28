@@ -2756,7 +2756,23 @@ export default function PublishPage() {
               type="button"
               className="engine-add-tile"
               onClick={() => {
-                const engine = (connection?.providers[0]?.engine ?? "buffer") as PublishingEngine;
+                // The engine a second login is most likely for: the one already
+                // carrying the most accounts. `providers[0]` was whichever the
+                // API happens to list first, which is Bundle.social - an engine
+                // this workspace has never got a working key for - so the
+                // dialog opened on the single choice that could not be used and
+                // every visit began by changing it.
+                //
+                // Reach rather than `authenticated`, which is only true after a
+                // live probe and so reads false for every engine on a page that
+                // has just loaded.
+                const engines = (connection?.providers ?? []).filter((item) => item.is_default);
+                const reachOf = (item: Provider) =>
+                  engineReach.find((row) => row.id === item.id)?.account_count
+                  ?? item.account_count ?? 0;
+                const engine = (
+                  [...engines].sort((a, b) => reachOf(b) - reachOf(a))[0] ?? engines[0]
+                )?.engine ?? "buffer";
                 setAddingToEngine(engine);
                 setNewLoginLabel(suggestedLoginName(engine));
               }}
