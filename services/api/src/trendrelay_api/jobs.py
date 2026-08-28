@@ -112,6 +112,79 @@ def serialize_job(item: DurableJob) -> dict[str, Any]:
     }
 
 
+#: What the activity stream reads out of a job's payload, and nothing else.
+#:
+#: The rest is for the worker. A render request carries the absolute source
+#: path twice, the output path, the workspace id again, and - since batches
+#: began choosing an object per item - the whole chosen face object on every
+#: job in the batch. None of it is drawn: about 1.4 KB per job travelling four
+#: hundred times a minute so a card can show a spinner.
+ACTIVITY_PAYLOAD_FIELDS = (
+    "asset_id", "effects", "action", "media_ms", "title", "created_at",
+    "delivery", "translate_to", "modes",
+)
+
+#: The batch keys the drawer groups and counts by. Deliberately not the whole
+#: block: `automatic_face_object` is four hundred bytes of answer repeated on
+#: every job that shares the batch.
+ACTIVITY_BATCH_FIELDS = ("id", "position", "total")
+
+#: Result keys a finished job is drawn from.
+ACTIVITY_RESULT_FIELDS = (
+    "asset_id", "removed_versions", "coverage", "faces_tracked", "frame_effects",
+)
+
+#: What survives of each `frame_effects` entry.
+#:
+#: One number is read from the first of them - what share of frames the object
+#: actually covered - out of fourteen keys describing the render: paths, frame
+#: counts, placement, occlusion, the overlay itself. The list keeps its length
+#: because a caller may count the entries; only the unread detail goes.
+ACTIVITY_FRAME_FIELDS = ("coverage",)
+
+
+def _activity_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    slim = {key: payload[key] for key in ACTIVITY_PAYLOAD_FIELDS if key in payload}
+    batch = payload.get("batch")
+    if isinstance(batch, dict):
+        slim["batch"] = {key: batch[key] for key in ACTIVITY_BATCH_FIELDS if key in batch}
+    request = payload.get("request")
+    if isinstance(request, dict) and "preview_seconds" in request:
+        # The one thing read out of the request: whether this is a preview.
+        slim["request"] = {"preview_seconds": request["preview_seconds"]}
+    return slim
+
+
+def serialize_job_for_activity(item: DurableJob) -> dict[str, Any]:
+    """A job as the notification drawer and the Library thumbnails read it.
+
+    Same shape as `serialize_job` with the payload and result reduced to the
+    keys those two surfaces actually use. The stream is polled every two and a
+    half seconds while work is running, and every unfinished job is in it, so a
+    field nobody draws is paid for once per job per poll: a thirteen-hundred
+    item batch was moving about 2.4 MB each time, nine tenths of it worker
+    detail.
+    """
+    slim = serialize_job(item)
+    slim["payload"] = _activity_payload(item.payload)
+    result = item.result
+    if not isinstance(result, dict):
+        slim["result"] = result
+        return slim
+    trimmed = {key: result[key] for key in ACTIVITY_RESULT_FIELDS if key in result}
+    frames = trimmed.get("frame_effects")
+    if isinstance(frames, list):
+        trimmed["frame_effects"] = [
+            {key: entry[key] for key in ACTIVITY_FRAME_FIELDS if key in entry}
+            if isinstance(entry, dict) else entry
+            for entry in frames
+        ]
+    slim["result"] = trimmed
+    return slim
+
+
 def create_job_record(
     job_id: str,
     workspace_key: str,
@@ -312,12 +385,12 @@ def list_job_records_for_kinds(
     )
     if session is not None:
         return [
-            serialize_job(item)
+            serialize_job_for_activity(item)
             for item in [*session.scalars(unfinished).all(), *session.scalars(query).all()]
         ]
     with factory() as owned:
         return [
-            serialize_job(item)
+            serialize_job_for_activity(item)
             for item in [*owned.scalars(unfinished).all(), *owned.scalars(query).all()]
         ]
 

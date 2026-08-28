@@ -553,6 +553,81 @@ def test_unfinished_work_is_never_trimmed_to_the_limit() -> None:
     assert len(window) == 40 + 5, "history alone answers to the limit"
 
 
+def test_the_activity_stream_carries_what_is_drawn_and_not_the_render_recipe() -> None:
+    """Every unfinished job rides this list, polled every two and a half seconds.
+
+    A render request repeats the absolute source path, the output path and the
+    workspace id, and since batches began choosing an object per item it also
+    repeats the whole chosen object on every job that shares the batch. None of
+    it is drawn. At thirteen hundred queued jobs that was about 1.4 KB each of
+    worker detail travelling to a page that wanted a spinner and a count.
+    """
+    sessions = factory()
+    create_job_record(
+        "slim-1", "ws", "media_effect_render",
+        {
+            "asset_id": "asset_1",
+            "effects": ["face_overlay"],
+            "media_ms": 22300,
+            "workspace_id": "ws",
+            "source": r"S:\media\ws\long\path\original.mp4",
+            "output": r"S:\productions\edits\ws\original-8278a0d9.mp4",
+            "request": {
+                "source_path": r"S:\media\ws\long\path\original.mp4",
+                "steps": [{"effect": "face_overlay", "values": {"object": "smiley"}}],
+                "preview_seconds": None,
+            },
+            "batch": {
+                "id": "effect_batch_1", "position": 3, "total": 198,
+                "automatic_face_object": {"value": "smiley", "label": "Smiley", "group": "C"},
+            },
+        },
+        factory=sessions,
+    )
+
+    [job] = list_job_records_for_kinds("ws", {"media_effect_render"}, 5, factory=sessions)
+
+    payload = job["payload"]
+    # Read by the drawer and the thumbnails, so they have to be here.
+    assert payload["asset_id"] == "asset_1"
+    assert payload["effects"] == ["face_overlay"]
+    assert payload["media_ms"] == 22300
+    assert payload["batch"] == {"id": "effect_batch_1", "position": 3, "total": 198}
+    assert payload["request"] == {"preview_seconds": None}
+    # The worker's own detail, drawn by nothing.
+    assert "source" not in payload and "output" not in payload
+    assert "workspace_id" not in payload
+    assert "steps" not in payload["request"]
+    assert "automatic_face_object" not in payload["batch"]
+    # The record itself is untouched: this trims the answer, not the job.
+    assert "automatic_face_object" in get_job_record("slim-1", factory=sessions)["payload"]["batch"]
+
+
+def test_a_finished_job_keeps_the_one_figure_its_row_shows() -> None:
+    """`frame_effects` describes the render in fourteen keys; one is read."""
+    sessions = factory()
+    create_job_record("slim-2", "ws", "media_effect_render", {"asset_id": "a"}, factory=sessions)
+    claim_job("slim-2", "worker", factory=sessions)
+    complete_job(
+        "slim-2", "worker",
+        {
+            "asset_id": "a",
+            "output": r"S:\productions\edits\out.mp4",
+            "frame_effects": [{
+                "effect": "face_overlay", "coverage": 0.4944, "frames": 669,
+                "objects_drawn": 669, "placement": {"top": 1}, "occludes": True,
+            }],
+        },
+        factory=sessions,
+    )
+
+    [job] = list_job_records_for_kinds("ws", {"media_effect_render"}, 5, factory=sessions)
+
+    assert job["result"]["frame_effects"] == [{"coverage": 0.4944}]
+    assert job["result"]["asset_id"] == "a"
+    assert "output" not in job["result"]
+
+
 def test_each_retry_waits_longer_than_the_one_before() -> None:
     delays = [retry_delay_for("edit_abc123", attempt) for attempt in range(1, 6)]
 
