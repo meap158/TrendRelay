@@ -389,10 +389,9 @@ def blur_jobs(monkeypatch, tmp_path):
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
-    # Registering a version touches media_assets; importing the models is what
-    # puts their tables into the shared metadata before create_all runs.
-    import trendrelay_api.media_models  # noqa: F401
-    import trendrelay_api.opportunity_models  # noqa: F401
+    # Registering a version touches media_assets; importing the application routes
+    # and models puts all tables into the shared metadata before create_all runs.
+    import trendrelay_api.main  # noqa: F401
     from trendrelay_api.models import Base
 
     engine = create_engine(
@@ -763,3 +762,73 @@ def test_a_missing_blurred_file_refuses_rather_than_falling_back(
 
     with pytest.raises(ValueError, match="blurred version but its file is missing"):
         publishing.publishable_source("w1", original)
+
+
+def test_gpu_device_loss_recovers_to_cpu(monkeypatch) -> None:
+    """When DirectML GPU device crashes with 887A0005, detect() seamlessly falls back to CPU."""
+    from trendrelay_api.integrations import face_detect_onnx
+    import numpy as np
+
+    error = RuntimeError(
+        "[ONNXRuntimeError] : 1 : FAIL : ... Exception(2277) tid(905c) 887A0005 "
+        "The GPU device instance has been suspended. Use GetDeviceRemovedReason to determine the appropriate action."
+    )
+    assert face_detect_onnx._is_device_lost(error) is True
+
+    # Reset state for test
+    face_detect_onnx._GPU_DISABLED = False
+    dummy_model = face_detect_onnx.Path("dummy.onnx")
+
+    class FakeSession:
+        def __init__(self, *args, **kwargs):
+            self.fail_once = True
+
+        def get_inputs(self):
+            class Input:
+                name = "input"
+            return [Input()]
+
+        def get_outputs(self):
+            names = [
+                f"{k}_{stride}"
+                for stride in (8, 16, 32)
+                for k in ("cls", "obj", "bbox", "kps")
+            ]
+            class Output:
+                def __init__(self, name):
+                    self.name = name
+            return [Output(n) for n in names]
+
+        def get_providers(self):
+            return ["DmlExecutionProvider"]
+
+        def run(self, *args, **kwargs):
+            if self.fail_once:
+                self.fail_once = False
+                raise error
+            # Return dummy output array for each output
+            return [np.zeros((1, 1, 80, 80), dtype=np.float32) for _ in range(12)]
+
+    class FakeCpuSession(FakeSession):
+        def __init__(self, *args, **kwargs):
+            self.fail_once = False
+
+        def get_providers(self):
+            return ["CPUExecutionProvider"]
+
+    import onnxruntime
+
+    def fake_inference_session(path, sess_options=None, providers=None):
+        if providers and providers[0] == face_detect_onnx.CPU_PROVIDER:
+            return FakeCpuSession()
+        return FakeSession()
+
+    monkeypatch.setattr(onnxruntime, "InferenceSession", fake_inference_session)
+    detector = face_detect_onnx.YuNetOnnx(dummy_model, 0.5)
+
+    dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    _, faces = detector.detect(dummy_frame)
+
+    assert face_detect_onnx._GPU_DISABLED is True
+    assert detector.provider == "CPUExecutionProvider"
+

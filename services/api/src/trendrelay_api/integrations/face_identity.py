@@ -74,6 +74,13 @@ LICENCE_SUMMARY = (
 _ANALYSERS: dict[str, Any] = {}
 
 
+def _evict_gpu_analysers() -> None:
+    """Drop cached GPU InsightFace sessions after a device-removed crash."""
+    dead = [key for key in _ANALYSERS if key != CPU_PROVIDER]
+    for key in dead:
+        del _ANALYSERS[key]
+
+
 class FaceIdentityUnavailable(RuntimeError):
     """Raised when identities cannot be read, with the reason to show."""
 
@@ -179,6 +186,13 @@ def _require_available() -> None:
 def available_providers() -> list[str]:
     """The execution providers this machine offers, fastest first."""
     try:
+        from trendrelay_api.integrations import face_detect_onnx
+
+        if face_detect_onnx._GPU_DISABLED:
+            return [CPU_PROVIDER]
+    except Exception:
+        pass
+    try:
         import onnxruntime
     except ImportError:
         return []
@@ -187,6 +201,13 @@ def available_providers() -> list[str]:
 
 
 def chosen_provider(force_cpu: bool = False) -> str:
+    try:
+        from trendrelay_api.integrations import face_detect_onnx
+
+        if face_detect_onnx._GPU_DISABLED:
+            return CPU_PROVIDER
+    except Exception:
+        pass
     if force_cpu:
         return CPU_PROVIDER
     return next(iter(available_providers()), CPU_PROVIDER)
@@ -377,6 +398,10 @@ def render_selective_blur(
         # losing the render: slower is a far better answer than failed.
         if chosen_provider() == CPU_PROVIDER:
             raise
+        from trendrelay_api.integrations.face_detect_onnx import _is_device_lost
+
+        if _is_device_lost(error):
+            _evict_gpu_analysers()
         fallback_reason = f"{type(error).__name__}: {str(error)[:200]}"
         timeline, shape, provider = _read_faces(force_cpu=True)
     else:

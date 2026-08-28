@@ -33,6 +33,35 @@ PROVIDER_PREFERENCE = (
 )
 CPU_PROVIDER = "CPUExecutionProvider"
 
+# DXGI_ERROR_DEVICE_REMOVED (0x887A0005): Windows TDR has suspended the GPU
+# device because a DML operation timed out or VRAM was exhausted.  The session
+# is irrecoverable — every subsequent ``run()`` on it will throw the same
+# error.  Callers must discard the session and fall back to CPU.
+_DEVICE_LOST_FRAGMENTS = (
+    "device instance has been suspended",
+    "DXGI_ERROR_DEVICE_REMOVED",
+    "DXGI_ERROR_DEVICE_HUNG",
+    "DXGI_ERROR_DEVICE_RESET",
+    "GetDeviceRemovedReason",
+    "887A0005",
+    "887a0005",
+    "887A0006",
+    "887a0006",
+    "887A0007",
+    "887a0007",
+    "DmlExecutionProvider",
+    "out of memory",
+)
+
+_GPU_DISABLED: bool = False
+
+
+def _is_device_lost(error: BaseException) -> bool:
+    """Whether an ONNX Runtime error is a GPU device-removed or VRAM crash."""
+    message = str(error)
+    return any(fragment in message for fragment in _DEVICE_LOST_FRAGMENTS)
+
+
 #: YuNet's fixed input side, and the strides its three detection heads decode at.
 _INPUT = 640
 _STRIDES = (8, 16, 32)
@@ -42,8 +71,29 @@ _STRIDES = (8, 16, 32)
 _SESSIONS: dict[str, Any] = {}
 
 
+def _disable_gpu_and_evict() -> None:
+    """Mark GPU disabled for the process and drop every cached GPU session."""
+    global _GPU_DISABLED
+    _GPU_DISABLED = True
+    dead = [key for key in _SESSIONS if not key.endswith(f"|{CPU_PROVIDER}")]
+    for key in dead:
+        del _SESSIONS[key]
+    try:
+        from trendrelay_api.integrations import face_identity
+
+        face_identity._evict_gpu_analysers()
+    except Exception:
+        pass
+
+
+def _evict_gpu_sessions() -> None:
+    _disable_gpu_and_evict()
+
+
 def available_providers() -> list[str]:
     """The execution providers this machine offers, fastest first."""
+    if _GPU_DISABLED:
+        return [CPU_PROVIDER]
     try:
         import onnxruntime
     except ImportError:
@@ -52,7 +102,9 @@ def available_providers() -> list[str]:
     return [name for name in PROVIDER_PREFERENCE if name in present]
 
 
-def chosen_provider() -> str:
+def chosen_provider(force_cpu: bool = False) -> str:
+    if force_cpu or _GPU_DISABLED:
+        return CPU_PROVIDER
     return next(iter(available_providers()), CPU_PROVIDER)
 
 
@@ -73,31 +125,34 @@ class YuNetOnnx:
     where ``faces`` is an ``N x 15`` float array, or ``(None, None)`` for none).
     """
 
-    def __init__(self, model: Path, confidence: float, nms: float = 0.3) -> None:
+    def __init__(
+        self, model: Path, confidence: float, nms: float = 0.3, *, force_cpu: bool = False
+    ) -> None:
         import numpy as np
-        import onnxruntime
 
         self._np = np
+        self._model = model
         self._score = confidence
         self._nms = nms
         self._size = (_INPUT, _INPUT)
-        provider = chosen_provider()
-        # CPU is always appended behind a GPU provider, so a GPU that cannot
-        # place an operator falls back per-node rather than failing to build.
+        self._dead = False
+        self._switch_to_provider(force_cpu=force_cpu)
+
+    def _switch_to_provider(self, force_cpu: bool = False) -> None:
+        import onnxruntime
+
+        provider = chosen_provider(force_cpu=force_cpu)
         providers = [provider] if provider == CPU_PROVIDER else [provider, CPU_PROVIDER]
-        key = f"{model}|{provider}"
+        key = f"{self._model}|{provider}"
         if key not in _SESSIONS:
             options = onnxruntime.SessionOptions()
-            # Quiet: the DirectML provider is chatty at load, and this is a
-            # library, not a place to print a machine's GPU inventory.
             options.log_severity_level = 3
             _SESSIONS[key] = onnxruntime.InferenceSession(
-                str(model), sess_options=options, providers=providers
+                str(self._model), sess_options=options, providers=providers
             )
         self._session = _SESSIONS[key]
         self._input = self._session.get_inputs()[0].name
         self._outputs = [output.name for output in self._session.get_outputs()]
-        #: Which provider actually placed the graph, for reporting.
         self.provider = self._session.get_providers()[0]
 
     # cv2 spells it this way; keep the name so the detector is a drop-in.
@@ -106,6 +161,9 @@ class YuNetOnnx:
 
     def detect(self, frame: Any) -> tuple[None, Any]:
         import cv2
+
+        if self._dead:
+            return None, None
 
         np = self._np
         height, width = frame.shape[:2]
@@ -120,9 +178,26 @@ class YuNetOnnx:
             frame, (new_width, new_height), interpolation=cv2.INTER_AREA
         )
         blob = canvas.astype(np.float32).transpose(2, 0, 1)[None]
-        named = dict(
-            zip(self._outputs, self._session.run(None, {self._input: blob}), strict=True)
-        )
+        try:
+            named = dict(
+                zip(self._outputs, self._session.run(None, {self._input: blob}), strict=True)
+            )
+        except Exception as error:
+            if _is_device_lost(error):
+                # The GPU device was suspended by Windows TDR / VRAM exhaustion.
+                # Evict dead GPU sessions, disable GPU for this process,
+                # and immediately switch this detector instance to CPU.
+                _disable_gpu_and_evict()
+                try:
+                    self._switch_to_provider(force_cpu=True)
+                    named = dict(
+                        zip(self._outputs, self._session.run(None, {self._input: blob}), strict=True)
+                    )
+                except Exception:
+                    self._dead = True
+                    return None, None
+            else:
+                raise
         rows = self._decode(cv2, named, 1.0 / scale)
         return None, (np.array(rows, dtype=np.float32) if rows else None)
 
