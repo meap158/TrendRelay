@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from trendrelay_api.database import configured_database_url
-from trendrelay_api.models import Base
+from trendrelay_api.model_registry import load_all_models
 
 config = context.config
 # The database the API opens, not one named relative to whatever directory
@@ -13,7 +13,10 @@ config = context.config
 config.set_main_option("sqlalchemy.url", configured_database_url().replace("%", "%%"))
 if config.config_file_name:
     fileConfig(config.config_file_name)
-target_metadata = Base.metadata
+# Every mapped table, not only the ones `models` declares: autogenerate and
+# `alembic check` compare against whatever has been imported, and thirteen of
+# thirty-seven tables makes the other twenty-four look like drift.
+target_metadata = load_all_models().metadata
 
 
 def run_migrations_offline() -> None:
