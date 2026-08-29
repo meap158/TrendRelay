@@ -489,6 +489,8 @@ type QueueItem = {
   asset_id?: string | null;
   video_path: string;
   image_paths: string[];
+  /** Empty media is intentional copy-only, rather than waiting for a file. */
+  text_only: boolean;
   /** Sparse destination-id overrides; absent destinations inherit defaults. */
   post_type_overrides: Record<string, string>;
   /** The body is still the placeholder nobody wrote; the card says so. */
@@ -2061,6 +2063,8 @@ export function AutopilotPanel({
     asset_id: string | null;
     label: string;
   } | null>(null);
+  /** A staged copy-only post. Separate from null, which means keep media. */
+  const [editingMediaRemoved, setEditingMediaRemoved] = useState(false);
   const [swappingMedia, setSwappingMedia] = useState(false);
   // The campaign's own wording, overridden for this post. Empty means the
   // campaign's, which is why these are strings rather than nullable: the field
@@ -2962,6 +2966,7 @@ export function AutopilotPanel({
     setEditingReplies(item.thread.length ? item.thread : [""]);
     setEditingPostTypes(item.post_type_overrides ?? {});
     setEditingMedia(null);
+    setEditingMediaRemoved(false);
     setSwappingMedia(false);
     openEditorWording(item);
   }
@@ -5062,15 +5067,23 @@ export function AutopilotPanel({
                   // Only when a replacement was staged: an absent field
                   // leaves the media exactly as it was, which is what saving
                   // this form has always meant.
-                  ...(editingMedia ? {
+                  ...(editingMediaRemoved ? {
+                    video_path: "",
+                    image_paths: [],
+                    asset_id: null,
+                    text_only: true,
+                  } : editingMedia ? {
                     video_path: editingMedia.video_path,
                     image_paths: editingMedia.image_paths,
                     asset_id: editingMedia.asset_id,
+                    text_only: false,
                   } : {}),
                 }),
               }));
               closePostEditor();
-              return editingMedia ? "Post updated, media and all." : "Campaign copy updated.";
+              return editingMediaRemoved
+                ? "Post updated as text only."
+                : editingMedia ? "Post updated, media and all." : "Campaign copy updated.";
             });
           }}>
             {/* The media leads the form, previewed as it will post: the one
@@ -5085,23 +5098,44 @@ export function AutopilotPanel({
                 <small>
                   {(() => {
                     const staged = editingMedia;
-                    const video = staged ? staged.video_path : editing.video_path;
-                    const images = staged ? staged.image_paths : editing.image_paths;
+                    const video = editingMediaRemoved
+                      ? "" : staged ? staged.video_path : editing.video_path;
+                    const images = editingMediaRemoved
+                      ? [] : staged ? staged.image_paths : editing.image_paths;
                     const shape = video
                       ? "Video"
                       : images.length > 1 ? `Carousel · ${images.length} pictures`
                         : images.length === 1 ? "Image"
-                          : "No media yet — the campaign skips this post until some is attached";
+                          : "Text only";
+                    if (editingMediaRemoved) {
+                      return "Text only — removes the current media when you save.";
+                    }
                     return staged
                       ? `${shape} — replaces the current media when you save.`
                       : shape;
                   })()}
                 </small>
                 <span className="campaign-edit-media-actions">
-                  {editingMedia && (
+                  {(editingMedia || editingMediaRemoved) && (
                     <Button type="button" variant="quiet" size="sm"
-                      onClick={() => setEditingMedia(null)}>
+                      onClick={() => {
+                        setEditingMedia(null);
+                        setEditingMediaRemoved(false);
+                      }}>
                       Keep current media
+                    </Button>
+                  )}
+                  {!editingMediaRemoved && Boolean(
+                    editingMedia?.video_path
+                    || editingMedia?.image_paths.length
+                    || (!editingMedia && (editing.video_path || editing.image_paths.length))
+                  ) && (
+                    <Button type="button" variant="danger" size="sm"
+                      onClick={() => {
+                        setEditingMedia(null);
+                        setEditingMediaRemoved(true);
+                      }}>
+                      Remove media
                     </Button>
                   )}
                   <Button type="button" variant="secondary" size="sm"
@@ -5114,8 +5148,10 @@ export function AutopilotPanel({
                 const media = (path: string) =>
                   `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
                   + `?path=${encodeURIComponent(path)}`;
-                const video = editingMedia ? editingMedia.video_path : editing.video_path;
-                const images = editingMedia ? editingMedia.image_paths : editing.image_paths;
+                const video = editingMediaRemoved
+                  ? "" : editingMedia ? editingMedia.video_path : editing.video_path;
+                const images = editingMediaRemoved
+                  ? [] : editingMedia ? editingMedia.image_paths : editing.image_paths;
                 if (video) {
                   return (
                     <video className="campaign-edit-media-video" controls
@@ -5373,11 +5409,18 @@ export function AutopilotPanel({
             open={swappingMedia}
             workspaceId={workspaceId}
             apiFetch={apiFetch}
-            currentKind={editing.video_path ? "video" : editing.image_paths.length ? "image" : null}
+            currentKind={
+              editingMediaRemoved ? null
+                : editingMedia?.video_path ? "video"
+                  : editingMedia?.image_paths.length ? "image"
+                    : editing.video_path ? "video"
+                      : editing.image_paths.length ? "image" : null
+            }
             campaignId={campaignId}
             onClose={() => setSwappingMedia(false)}
             onPick={(media) => {
               setEditingMedia(media);
+              setEditingMediaRemoved(false);
               setSwappingMedia(false);
             }}
           />

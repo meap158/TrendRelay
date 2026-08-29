@@ -720,7 +720,7 @@ def test_a_video_post_can_become_a_carousel_and_back(workspace) -> None:
 
 
 def test_a_media_swap_keeps_the_package_rules(workspace) -> None:
-    """One kind of media, never none - the same refusals creation makes."""
+    """One media kind at a time; clearing both intentionally keeps copy only."""
     campaign_id = campaign(workspace)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
     item = request("POST", f"{base}/queue", json={
@@ -734,16 +734,22 @@ def test_a_media_swap_keeps_the_package_rules(workspace) -> None:
     assert "not both" in both.json()["detail"]
 
     neither = request("PATCH", f"{base}/queue/{item['id']}", json={
-        "video_path": "", "image_paths": [],
+        "video_path": "", "image_paths": [], "text_only": True,
     })
-    assert neither.status_code == 422
+    assert neither.status_code == 200, neither.text
+    text_only = neither.json()["item"]
+    assert text_only["video_path"] in (None, "")
+    assert text_only["image_paths"] == []
+    assert text_only["asset_id"] is None
+    assert text_only["text_only"] is True
+    assert text_only["body"] == "Copy"
 
     # And an update that never mentions media leaves it exactly alone.
     untouched = request("PATCH", f"{base}/queue/{item['id']}", json={
         "body": "New copy",
     }).json()["item"]
-    assert untouched["video_path"] == r"S:\media\clip.mp4"
-    assert untouched["asset_id"] == item["asset_id"]
+    assert untouched["video_path"] in (None, "")
+    assert untouched["asset_id"] is None
 
 
 def test_a_draft_queue_item_can_be_deleted(workspace) -> None:
@@ -1071,6 +1077,26 @@ def test_the_preview_reports_what_an_engine_would_refuse(workspace, tmp_path) ->
         # And a post an engine would take comes back clean, rather than merely
         # unreported.
         assert _would_be_accepted(pilot, planned("Short and fine."), uploads) is None
+
+        # A picture is a real post shape of its own. The preview used to omit
+        # these paths when it reconstructed PublishRequest and claimed the
+        # exact post visible in the editor had no MP4.
+        picture = ScheduledPost(
+            campaign_id=campaign_id, destination_id="d1", queue_item_id="q2",
+            at=datetime.now(UTC), video_path="", image_paths=(str(tmp_path / "shot.jpg"),),
+            title=None, caption="Picture copy", first_comment=None,
+            placement="caption", reason="", post_type="post",
+        )
+        assert _would_be_accepted(pilot, picture, uploads) is None
+
+        # Copy alone is likewise intentional on a documented text surface.
+        text_only = ScheduledPost(
+            campaign_id=campaign_id, destination_id="d1", queue_item_id="q3",
+            at=datetime.now(UTC), video_path="", title=None,
+            caption="Words are the post.", first_comment=None,
+            placement="caption", reason="", post_type="post",
+        )
+        assert _would_be_accepted(pilot, text_only, uploads) is None
     finally:
         publishing.get_settings = original
         publishing.media_hosting.status = original_hosting
@@ -1303,13 +1329,26 @@ def test_a_package_is_a_video_or_pictures_but_not_both(workspace) -> None:
     assert response.status_code == 422
 
 
-def test_a_package_needs_some_media(workspace) -> None:
+def test_a_package_can_be_copy_only_but_not_empty(workspace) -> None:
     campaign_id = campaign(workspace)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
 
-    response = request("POST", f"{base}/queue", json={"body": "Words only"})
+    response = request(
+        "POST", f"{base}/queue", json={"body": "Words only", "text_only": True}
+    )
 
-    assert response.status_code == 422
+    assert response.status_code == 201, response.text
+    item = response.json()["item"]
+    assert item["body"] == "Words only"
+    assert item["video_path"] in (None, "")
+    assert item["image_paths"] == []
+    assert item["text_only"] is True
+
+    accidental = request("POST", f"{base}/queue", json={"body": "Words only"})
+    assert accidental.status_code == 422
+
+    empty = request("POST", f"{base}/queue", json={"text_only": True})
+    assert empty.status_code == 422
 
 
 def test_media_can_be_picked_before_the_copy_is_written(workspace) -> None:

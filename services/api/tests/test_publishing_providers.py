@@ -1841,6 +1841,66 @@ def test_a_carousel_needs_no_video_path(carousel_images: list[str]) -> None:
     assert body.image_paths == carousel_images
 
 
+def test_zernio_posts_copy_without_inventing_a_media_attachment(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "zernio")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        assert path == "/posts"
+        sent["body"] = kwargs["body"]
+        return {"id": "post-text", "status": "scheduled"}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    body = publishing.PublishRequest(
+        workspace_id="workspace-1",
+        caption="Words are the whole post.",
+        date=datetime.now(UTC) + timedelta(hours=2),
+        provider="zernio",
+        targets=[publishing.PublishTarget(
+            platform="facebook", integration_id="account-1", post_type="post",
+        )],
+    )
+
+    publishing._zernio_publish(body, None)
+
+    assert sent["body"]["content"] == "Words are the whole post."
+    assert "mediaItems" not in sent["body"]
+
+
+def test_buffer_text_only_preview_does_not_demand_media_hosting(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "buffer")
+    monkeypatch.setattr(publishing.media_hosting, "status", lambda: {"configured": False})
+    body = publishing.PublishRequest(
+        workspace_id="workspace-1",
+        caption="No attachment by design.",
+        date=datetime.now(UTC) + timedelta(hours=2),
+        provider="buffer",
+        targets=[publishing.PublishTarget(
+            platform="facebook", integration_id="account-1", post_type="post",
+        )],
+    )
+
+    preview = publishing.preview_publish(body)
+
+    assert preview["media_source"] == "text only"
+
+
+def test_text_only_still_refuses_a_media_required_surface() -> None:
+    with pytest.raises(ValueError, match="Text-only posts are not supported"):
+        publishing.PublishRequest(
+            workspace_id="workspace-1",
+            caption="A video platform still needs a video.",
+            date=datetime.now(UTC) + timedelta(hours=2),
+            targets=[publishing.PublishTarget(
+                platform="tiktok", integration_id="account-1", post_type="video",
+            )],
+        )
+
+
 def test_a_carousel_cannot_also_carry_a_video(
     media_file: Path, carousel_images: list[str]
 ) -> None:
@@ -1859,7 +1919,7 @@ def test_a_video_post_still_needs_its_media() -> None:
         "date": datetime.now(UTC) + timedelta(hours=2),
         "targets": [publishing.PublishTarget(platform="tiktok", integration_id="a1")],
     }
-    with pytest.raises(ValueError, match="approved MP4 or a public media URL"):
+    with pytest.raises(ValueError, match="Text-only posts are not supported"):
         publishing.PublishRequest(**payload)
     # A public URL is the other way to have media, and is enough on its own.
     assert publishing.PublishRequest(**payload, media_url="https://cdn.example.com/c.mp4")
@@ -2929,4 +2989,3 @@ def test_bundle_needs_the_network_as_well_as_the_post(monkeypatch) -> None:
     execution.platform = "not-a-network"
 
     assert publishing._bundle_metrics(execution) is None
-

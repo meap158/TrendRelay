@@ -1591,13 +1591,7 @@ def test_a_package_with_its_own_title_keeps_it(session) -> None:
     assert [post.title for post in posts] == ["What somebody called it"]
 
 
-def test_a_post_awaiting_media_is_skipped_with_its_own_note(session) -> None:
-    """The mirror of the unwritten package: copy written, media still to come.
-
-    An assistant may draft the words over MCP and attach the clip later; until
-    it does, the post must not hold a slot or reach an engine with nothing to
-    send.
-    """
+def test_a_post_awaiting_media_keeps_its_own_note(session) -> None:
     destination(session, "d1", "youtube")
     slot(session, 12)
     queue_item(session, "q-empty", video_path="", image_paths=[])
@@ -1608,3 +1602,29 @@ def test_a_post_awaiting_media_is_skipped_with_its_own_note(session) -> None:
     assert [post.queue_item_id for post in posts] == ["q-ready"]
     assert "still need media attached" in note
     assert "q-empty" in note
+
+
+def test_an_explicit_text_only_post_skips_a_media_required_destination(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q-copy", video_path="", image_paths=[], text_only=True)
+    queue_item(session, "q-ready", position=1)
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-ready"]
+    assert "requires media" in note
+    assert "YouTube" in note
+
+
+def test_a_text_only_post_is_scheduled_on_a_text_capable_destination(session) -> None:
+    destination(session, "d1", "facebook", provider="zernio", post_type="reel")
+    slot(session, 12)
+    queue_item(session, "q-copy", video_path="", image_paths=[], text_only=True)
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-copy"]
+    assert posts[0].video_path == ""
+    assert posts[0].image_paths == ()
+    assert "requires media" not in note

@@ -1684,10 +1684,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    rather than natural-size - a portrait clip at full height is the whole
    dialog - and the carousel scrolls sideways in posting order. */
 .campaign-edit-media { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.campaign-edit-media-head { display: flex; align-items: center; gap: 8px; }
+.campaign-edit-media-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .campaign-edit-media-head strong { font-size: 12px; }
-.campaign-edit-media-head small { margin-inline-end: auto; color: var(--muted); font-size: 11px; }
-.campaign-edit-media-actions { display: inline-flex; flex: none; gap: 6px; }
+.campaign-edit-media-head small { min-width: 160px; flex: 1 1 240px; margin-inline-end: auto; color: var(--muted); font-size: 11px; }
+.campaign-edit-media-actions { display: inline-flex; flex: none; flex-wrap: wrap; gap: 6px; }
 .campaign-edit-media-video { display: block; width: 100%; max-height: 300px; border-radius: var(--radius-sm); background: var(--ink); object-fit: contain; }
 .campaign-edit-media-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .campaign-edit-media-strip img { height: 110px; flex: none; border-radius: var(--radius-sm); object-fit: cover; }

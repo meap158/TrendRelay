@@ -125,19 +125,14 @@ def _post_type_for(execution: Any) -> str | None:
     Only Instagram and TikTok have the type at all. Everywhere else pictures
     ride an ordinary post and the destination's own type is already right.
     """
-    if not execution.image_paths:
-        return execution.post_type
-    from trendrelay_api.integrations.publishing import post_types_for
+    from trendrelay_api.integrations.publishing import post_type_for_media
 
-    choices = post_types_for(execution.platform)
-    if any(kind.id == "photo" for kind in choices):
-        return "photo"
-    # Facebook, for example, has no separately named photo format: pictures
-    # ride an ordinary feed post. Do not inherit a Reel/Story video default for
-    # media that cannot be either of those.
-    if any(kind.id == "post" for kind in choices):
-        return "post"
-    return execution.post_type
+    return post_type_for_media(
+        execution.platform,
+        execution.post_type,
+        has_video=bool(execution.media_path),
+        has_images=bool(execution.image_paths),
+    )
 
 
 def _publish_execution(
@@ -550,6 +545,17 @@ def _media_ready(execution: PublicationExecution) -> str | None:
     the unedited original here is exactly what the frozen inputs exist to
     prevent - the operator previewed one cut and would be publishing another.
     """
+    images = list(execution.image_paths or [])
+    if images:
+        missing = [path for path in images if not Path(path).is_file()]
+        if missing:
+            return f"A frozen image file is missing: {missing[0]}"
+        return None
+    if not execution.media_path:
+        # An intentional text-only post has nothing to freeze. Whether its
+        # destination accepts copy alone was checked while planning and again
+        # by PublishRequest before the durable job is created.
+        return None
     path = Path(execution.media_path)
     if not path.is_file():
         return f"The frozen media file is missing: {execution.media_path}"

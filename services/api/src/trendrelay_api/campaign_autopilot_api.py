@@ -212,7 +212,7 @@ class DestinationPostType(BaseModel):
 class QueueItemCreate(BaseModel):
     """One package: the media, the copy, and what it links to.
 
-    Either a video or pictures, not both and not neither. A carousel is the one
+    Either a video, pictures, or authored copy; never video and pictures. A carousel is the one
     shape a campaign could not hold before, and the two are kept as separate
     fields rather than one list because a network that takes a video and one
     that takes five pictures want different things from the composer.
@@ -237,6 +237,7 @@ class QueueItemCreate(BaseModel):
     #: an ordinary caller who forgot the media is still refused; a media-less
     #: post is skipped by the scheduler with a note until media is attached.
     media_later: bool = False
+    text_only: bool = False
 
     @model_validator(mode="after")
     def one_kind_of_media(self) -> QueueItemCreate:
@@ -244,8 +245,12 @@ class QueueItemCreate(BaseModel):
         images = [path for path in self.image_paths if path.strip()]
         if video and images:
             raise ValueError("A package is either a video or pictures, not both.")
-        if not video and not images and not self.media_later:
-            raise ValueError("A package needs a video or at least one picture.")
+        if self.text_only and (video or images):
+            raise ValueError("A text-only package cannot also carry media.")
+        if not video and not images and not self.media_later and not self.text_only:
+            raise ValueError("A package needs copy, a video, or at least one picture.")
+        if self.text_only and not self.body.strip():
+            raise ValueError("A text-only package needs copy.")
         return self
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
@@ -289,6 +294,7 @@ class QueueItemUpdate(BaseModel):
     video_path: str | None = Field(default=None, max_length=1200)
     image_paths: list[str] | None = Field(default=None, max_length=MAX_CAROUSEL_IMAGES)
     asset_id: str | None = Field(default=None, max_length=64)
+    text_only: bool | None = None
     title: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     hashtags: list[str] | None = Field(default=None, max_length=30)
@@ -453,6 +459,7 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "asset_id": item.asset_id,
         "video_path": item.video_path,
         "image_paths": list(item.image_paths or []),
+        "text_only": item.text_only,
         "post_type_overrides": dict(item.post_type_overrides or {}),
         # So the interface can mark a package that still needs writing rather
         # than showing the placeholder as though somebody meant it.
@@ -1089,6 +1096,7 @@ def create_queue_item(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
         video_path=body.video_path.strip(),
         image_paths=[path.strip() for path in body.image_paths if path.strip()],
+        text_only=body.text_only,
         post_type_overrides=_validated_post_type_overrides(
             session, workspace_id, campaign_id, body.post_type_overrides,
             has_images=bool(body.image_paths),
@@ -1238,25 +1246,37 @@ def _apply_media_change(
     all of that; what a *planned* execution carries stays frozen exactly as
     before, because planning resolves and freezes media on its own clock.
     """
-    if not ({"video_path", "image_paths"} & body.model_fields_set):
+    if not ({"video_path", "image_paths", "text_only"} & body.model_fields_set):
         return False
     video = (body.video_path or "").strip()
     images = [path.strip() for path in (body.image_paths or []) if path.strip()]
-    # The same rule the package was created under, restated on the way in:
-    # one kind of media, and never none. An update that names neither is not
-    # "clear the media" - a post with no media is not a post this queue holds.
+    # The same rule the package was created under, restated on the way in: one
+    # kind of media. Neither is an intentional text-only post; the body remains
+    # required by QueueItemUpdate and the publish request, so clearing media
+    # cannot create an empty post.
     if video and images:
         raise HTTPException(
             status_code=422, detail="A package is either a video or pictures, not both."
         )
-    if not video and not images:
+    wants_text_only = body.text_only is True
+    if wants_text_only and (video or images):
         raise HTTPException(
-            status_code=422, detail="A package needs a video or at least one picture."
+            status_code=422, detail="A text-only package cannot also carry media."
         )
-    if video == item.video_path and images == list(item.image_paths or []):
+    if not video and not images and not wants_text_only:
+        raise HTTPException(
+            status_code=422,
+            detail="Removing all media requires text_only=true so intent is explicit.",
+        )
+    if (
+        video == item.video_path
+        and images == list(item.image_paths or [])
+        and wants_text_only == item.text_only
+    ):
         return False
     item.video_path = video
     item.image_paths = images
+    item.text_only = wants_text_only
     # The identity travels with the media, including to "none": keeping the
     # old asset id under a raw replacement path would freeze the wrong clip
     # at planning time.
@@ -1266,6 +1286,8 @@ def _apply_media_change(
     # is now a video would otherwise wedge every later edit of this post.
     kept: dict[str, str] = {}
     for destination_id, requested in (item.post_type_overrides or {}).items():
+        if wants_text_only and requested != "post":
+            continue
         try:
             kept.update(_validated_post_type_overrides(
                 session, workspace_id, campaign_id,
@@ -1811,6 +1833,7 @@ def _would_be_accepted(
     from trendrelay_api.integrations.publishing import (
         PublishRequest,
         _validate_request,
+        post_type_for_media,
         resolve_provider,
     )
 
@@ -1818,6 +1841,7 @@ def _would_be_accepted(
         request = PublishRequest(
             workspace_id=autopilot.workspace_id,
             video_path=post.video_path,
+            image_paths=list(post.image_paths or []),
             caption=post.caption,
             title=post.title,
             first_comment=post.first_comment,
@@ -1828,7 +1852,12 @@ def _would_be_accepted(
             targets=[{
                 "platform": destination.platform,
                 "integration_id": destination.integration_id,
-                "post_type": destination.post_type,
+                "post_type": post_type_for_media(
+                    destination.platform,
+                    post.post_type,
+                    has_video=bool(post.video_path),
+                    has_images=bool(post.image_paths),
+                ),
                 "provider": destination.provider,
             }],
         )

@@ -290,6 +290,9 @@ class CampaignQueueItem(Base):
     #: the first is the cover - so this is a list rather than a set, and the
     #: order somebody chose in the picker is the order that posts.
     image_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: True only when the operator intentionally chose copy without an
+    #: attachment. False with empty paths means the media is still to come.
+    text_only: Mapped[bool] = mapped_column(Boolean, default=False)
     #: Per-account format choices for this post. A queue item can be a Reel on
     #: Instagram and a Short on YouTube, so this is keyed by destination id
     #: rather than pretending one format can describe every delivery. Missing

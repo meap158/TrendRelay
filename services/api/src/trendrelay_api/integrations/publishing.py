@@ -227,6 +227,13 @@ class ProviderDefinition:
     #: as a separate post type. Keeping the surface in the capability prevents
     #: a network-wide image limit from turning a Reel into a gallery.
     image_post_limits: tuple[tuple[str, str, int], ...] = ()
+    #: Media-optional surfaces this engine can publish as copy alone.
+    #:
+    #: Kept per surface rather than per network: Facebook Feed accepts a text
+    #: post, while its Reel and Story surfaces still require media. An empty
+    #: tuple is deliberately conservative for engines whose adapter currently
+    #: uploads a file unconditionally.
+    text_post_surfaces: tuple[tuple[str, str], ...] = ()
     #: Platforms this engine can attach a topic to.
     #:
     #: Threads is the only network with one: a single tag per post that readers
@@ -356,6 +363,18 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             ("bluesky", "post", 4),
             ("pinterest", "post", 1),
         ),
+        # Zernio documents these as text-capable. Instagram, TikTok, YouTube
+        # and Pinterest remain media-first and are intentionally absent.
+        text_post_surfaces=(
+            ("twitter", "post"),
+            ("facebook", "post"),
+            ("linkedin", "post"),
+            ("threads", "post"),
+            ("reddit", "post"),
+            ("bluesky", "post"),
+            ("telegram", "post"),
+            ("googlebusiness", "post"),
+        ),
         media_note="The approved local MP4 is uploaded through a Zernio presigned URL.",
     ),
     "buffer": ProviderDefinition(
@@ -409,6 +428,15 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # story, or reel." A type existing in the schema is not a contract for
         # the network being posted to.
         image_post_limits=(),
+        text_post_surfaces=(
+            ("twitter", "post"),
+            ("facebook", "post"),
+            ("linkedin", "post"),
+            ("threads", "post"),
+            ("bluesky", "post"),
+            ("mastodon", "post"),
+            ("googlebusiness", "post"),
+        ),
     ),
     "woopsocial": ProviderDefinition(
         id="woopsocial",
@@ -751,6 +779,25 @@ def post_types_for(platform: str) -> tuple[PostType, ...]:
     return POST_TYPES.get(platform, (DEFAULT_POST_TYPE,))
 
 
+def post_type_for_media(
+    platform: str,
+    requested: str | None,
+    *,
+    has_video: bool,
+    has_images: bool,
+) -> str | None:
+    """Resolve a queue default into the surface this post can actually use."""
+    choices = post_types_for(platform)
+    if has_images:
+        if any(kind.id == "photo" for kind in choices):
+            return "photo"
+        if any(kind.id == "post" for kind in choices):
+            return "post"
+    if not has_video and any(kind.id == "post" for kind in choices):
+        return "post"
+    return requested
+
+
 def resolve_post_type(platform: str, requested: str | None) -> PostType:
     """Pick the post type for a destination, defaulting to the network's first."""
     choices = post_types_for(platform)
@@ -811,6 +858,24 @@ def _takes_pictures(target: PublishTarget) -> bool:
     except ValueError:
         return True
     return image_post_limit(provider, target.platform, chosen) > 0
+
+
+def text_post_fits_destination(
+    provider_id: str, platform: str, post_type: str | None
+) -> tuple[bool, str | None]:
+    """Whether this exact engine surface accepts copy with no attachment."""
+    try:
+        provider = resolve_provider(provider_id)
+        kind = resolve_post_type(platform, post_type)
+    except ValueError as error:
+        return False, str(error)
+    if (platform, kind.id) in provider.text_post_surfaces:
+        return True, None
+    label = PLATFORM_LABELS.get(platform, platform)
+    return False, (
+        f"{provider.label} requires media for the {label} {kind.label}. "
+        "Attach a supported video or image, or choose a text-capable account."
+    )
 
 
 class PublishTarget(BaseModel):
@@ -1007,7 +1072,26 @@ class PublishRequest(BaseModel):
                     " there, or post a video."
                 )
             if not self.video_path.strip() and not self.media_url:
-                raise ValueError("A post needs an approved MP4 or a public media URL.")
+                # Copy-only posts are coherent on ordinary text surfaces. The
+                # engine-specific check happens in `_validate_request`, where
+                # the provider is resolved; a Reel, Story, Short or Pin still
+                # cannot become text merely because its attachment was removed.
+                incompatible = []
+                for target in self.targets:
+                    kind = target.kind
+                    if kind.id != "post" or target.platform in {
+                        "instagram", "tiktok", "youtube", "pinterest",
+                    }:
+                        incompatible.append(
+                            f"{PLATFORM_LABELS.get(target.platform, target.platform)} "
+                            f"{kind.label}"
+                        )
+                if incompatible:
+                    raise ValueError(
+                        "Text-only posts are not supported by "
+                        + ", ".join(sorted(set(incompatible)))
+                        + ". Attach media or choose a text-capable post format."
+                    )
         return self
 
     @field_validator("targets")
@@ -1415,6 +1499,12 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
                 f"{noun}, and this post has {len(request.image_paths)}. "
                 "Remove some, or send the rest as a second post."
             )
+        if not request.video_path.strip() and not request.image_paths and not request.media_url:
+            fits, why = text_post_fits_destination(
+                provider.id, target.platform, kind.id
+            )
+            if not fits and why:
+                raise ValueError(why)
 
     # Length is checked before anything is uploaded. The alternative the code
     # used to take was to truncate a title to fit, which published something
@@ -1466,7 +1556,9 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
                 f"{label} allows {limits.title} characters in a title and this one is "
                 f"{len(title)}. Shorten it or drop that destination."
             )
-    if provider.requires_public_media:
+    if provider.requires_public_media and (
+        request.video_path.strip() or request.image_paths or request.media_url
+    ):
         if not request.media_url:
             # The adapter hosts the reviewed cut itself at execution time, so an
             # operator is not asked to find a URL by hand.
@@ -1978,7 +2070,7 @@ def _zernio_publish(
             for image in approved_image_paths(request.image_paths)
         ]
         media_url = media_items[0]["url"]
-    else:
+    elif request.video_path or request.media_url:
         media_url = request.media_url
         if not media_url:
             if video is None:
@@ -1987,15 +2079,22 @@ def _zernio_publish(
                 )
             media_url = _zernio_upload(video)
         media_items = [{"type": "video", "url": media_url}]
+    else:
+        # Zernio's create-post contract makes `mediaItems` optional for the
+        # text-capable surfaces validated above. Omitting it matters: an empty
+        # attachment is not the same payload as a copy-only post.
+        media_url = None
+        media_items = []
     post: dict[str, Any] = {
         # Kept as the full caption for ordinary image posts. TikTok automatically
         # truncates this value into its 90-character photo title and reads the
         # actual caption from `tiktokSettings.description` below.
         "content": request.caption,
-        "mediaItems": media_items,
         "platforms": [],
         "timezone": "UTC",
     }
+    if media_items:
+        post["mediaItems"] = media_items
     if request.title:
         post["title"] = request.title
     if request.mode == "now":
@@ -2954,6 +3053,8 @@ def _needs_local_media(provider: ProviderDefinition, request: PublishRequest) ->
     cannot, and that matters precisely because one post spans several engines:
     a URL supplied so Buffer can work must not leave WoopSocial with nothing.
     """
+    if not request.video_path.strip() and not request.image_paths:
+        return False
     if provider.requires_public_media:
         return False
     if not provider.ingests_media_url:
@@ -3916,7 +4017,11 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "delivery": {"now": "immediate post", "schedule": "scheduled post"}
         .get(request.mode, "draft"),
         "date": request.date.isoformat(),
-        "media_source": "approved local file" if uses_local_media else "public media URL",
+        "media_source": (
+            "approved local file" if uses_local_media
+            else "public media URL" if request.media_url
+            else "text only"
+        ),
         "video_path": request.video_path if uses_local_media else None,
         "media_url": request.media_url,
         "media_handling": " ".join(
@@ -3972,7 +4077,11 @@ def _execute_publish(request: PublishRequest, request_id: str | None = None) -> 
         providers[provider_id] = provider
 
     hosted: dict[str, Any] | None = None
-    if any(item.requires_public_media for item in providers.values()) and not request.media_url:
+    if (
+        (request.video_path.strip() or request.image_paths)
+        and any(item.requires_public_media for item in providers.values())
+        and not request.media_url
+    ):
         # Hosted once and shared: the engines are sending the same cut, and
         # uploading it per engine would pay for the same bytes repeatedly.
         # Done now rather than at request time so a scheduled job sends what the

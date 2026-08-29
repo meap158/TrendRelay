@@ -806,6 +806,8 @@ def plan_campaign(
             from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
             from trendrelay_api.integrations.publishing import (
                 carousel_fits_destination,
+                post_type_for_media,
+                text_post_fits_destination,
                 video_fits_platform,
             )
 
@@ -825,12 +827,28 @@ def plan_campaign(
                     )
                     continue
                 if not candidate.video_path and not candidate.image_paths:
-                    # The mirror case: copy written, media still to come. The
-                    # same treatment for the same reason - a slot held for it
-                    # would block content that is ready.
-                    awaiting_media.setdefault(
-                        candidate.id, _short_source_name(candidate.title or candidate.id)
+                    if not candidate.text_only:
+                        awaiting_media.setdefault(
+                            candidate.id,
+                            _short_source_name(candidate.title or candidate.id),
+                        )
+                        continue
+                    requested = (candidate.post_type_overrides or {}).get(
+                        destination.id, destination.post_type
                     )
+                    post_type = post_type_for_media(
+                        destination.platform,
+                        requested,
+                        has_video=False,
+                        has_images=False,
+                    )
+                    fits, why = text_post_fits_destination(
+                        destination.provider, destination.platform, post_type
+                    )
+                    if fits:
+                        item = candidate
+                        break
+                    item_notes.append(f"Skipped on {destination.label}: {why}")
                     continue
                 if candidate.id not in frozen_cache:
                     frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
@@ -867,6 +885,11 @@ def plan_campaign(
                         "waiting on an earlier one to be approved or sent."
                     )
                 continue
+            # Text-only posts deliberately have no file, but still freeze an
+            # empty media record so the rest of planning follows the same path
+            # and execution cannot later substitute an attachment.
+            if item.id not in frozen_cache:
+                frozen_cache[item.id] = resolve_frozen_media(session, item)
             frozen = frozen_cache[item.id]
             # Chosen per post rather than per item: the ranking is the same
             # every time, and which of it goes out is not.
