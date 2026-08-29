@@ -185,6 +185,12 @@ export function NotificationContext({
   const working = typeof job.progress === "number"
     && ["running", "in_progress"].includes(job.status);
   const summary = useAssetSummary(workspaceId, apiFetch, assetId);
+  // A publish request with neither videos nor images is deliberately copy
+  // only. Do not reserve the media thumbnail's 46px frame for something this
+  // post does not have; the platform icon below still says where it is going.
+  const hasPublishMedia = Boolean(
+    request?.video_path || (request?.image_paths?.length ?? 0) > 0,
+  );
 
   let platforms: PublishingPlatform[] = [];
   let destinationCount = 0;
@@ -225,7 +231,7 @@ export function NotificationContext({
 
   return (
     <div className="notification-context">
-      {!fetchedName && (
+      {!fetchedName && (!request || hasPublishMedia) && (
         <JobThumbnail
           workspaceId={workspaceId}
           apiFetch={apiFetch}
