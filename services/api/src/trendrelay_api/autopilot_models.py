@@ -257,6 +257,15 @@ class CampaignQueueItem(Base):
             "state IN ('draft','approved','paused','retired')",
             name="valid_queue_item_state",
         ),
+        # Declared here because the database has enforced it since 0037 and
+        # this class never said so. The gap is only invisible while every row
+        # is public: a model free to write "unlisted" meets a constraint it
+        # does not know about, and the failure arrives as an IntegrityError
+        # from a rule that is not written down anywhere in the code.
+        CheckConstraint(
+            "visibility IN ('public','private')",
+            name="valid_queue_visibility",
+        ),
         # "Is this clip already in that campaign?", asked once per row of a
         # library filter. Both columns are indexed separately and neither is
         # selective on its own: SQLite chose the workspace index - which every
