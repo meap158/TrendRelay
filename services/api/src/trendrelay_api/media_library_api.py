@@ -567,6 +567,9 @@ class AssetFilter(BaseModel):
     #: Explicit ids supplied by a notification deep link. This is an
     #: intersection with ordinary filters, never a workspace bypass.
     asset_ids: list[str] = Field(default_factory=list, max_length=200)
+    #: Assets produced by one downloader run. Unlike explicit ids this can
+    #: represent thousands of files without putting thousands of ids in a URL.
+    download_job_id: str | None = None
     #: Keep only what this campaign's queue does not already hold.
     #:
     #: Filling a campaign is the one place where the interesting question is
@@ -678,6 +681,17 @@ def asset_conditions(
     values: list[Any] = [MediaAsset.workspace_id == workspace_id]
     if filters.asset_ids:
         values.append(MediaAsset.id.in_(filters.asset_ids))
+    if filters.download_job_id:
+        batch_id = filters.download_job_id
+        escaped_batch_id = batch_id.replace("_", r"\_")
+        values.append(
+            or_(
+                MediaAsset.engagement["download_job_id"].as_string() == batch_id,
+                cast(MediaAsset.engagement["download_job_ids"], String).like(
+                    f'%"{escaped_batch_id}"%', escape="\\"
+                ),
+            )
+        )
     if omit != "platform":
         if filters.platform:
             values.append(MediaAsset.platform == filters.platform)
@@ -776,6 +790,9 @@ def list_asset_ids(
     processing: Annotated[str | None, Query(max_length=64)] = None,
     collected_within_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
+    download_job_id: Annotated[
+        str | None, Query(pattern=r"^download_[a-f0-9]{16}$")
+    ] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
@@ -789,7 +806,8 @@ def list_asset_ids(
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
-        asset_ids=_words(asset_ids, 200, 80), not_in_campaign=not_in_campaign,
+        asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
+        not_in_campaign=not_in_campaign,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -827,6 +845,9 @@ def list_assets(
     processing: Annotated[str | None, Query(max_length=64)] = None,
     collected_within_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
+    download_job_id: Annotated[
+        str | None, Query(pattern=r"^download_[a-f0-9]{16}$")
+    ] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -843,7 +864,8 @@ def list_assets(
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
-        asset_ids=_words(asset_ids, 200, 80), not_in_campaign=not_in_campaign,
+        asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
+        not_in_campaign=not_in_campaign,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:

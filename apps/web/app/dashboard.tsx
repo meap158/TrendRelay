@@ -17,6 +17,7 @@ const isDownloadMode = oneOf("post", "like", "mix", "music");
 import { useJobs } from "./jobs-provider";
 import { useWorkspace } from "./workspace-provider";
 import { readTabSnapshot, refreshTabSnapshot } from "../lib/tab-snapshots";
+import { downloadLibraryHref } from "../lib/job-links";
 
 type Artifact = { path: string; name: string; size_bytes: number };
 type DownloadProgress = {
@@ -763,7 +764,12 @@ export default function Dashboard() {
                   {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title={t("downloads.addCreatorProfile")} onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}
                   {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">{t("downloads.openSource")}</a>}
                   {canOpenFolder && <Button variant="secondary" size="sm" onClick={() => void openFolder(job.payload.output_root!)}><ActionIcon name="openFolder" />{t("downloads.openFolder")}</Button>}
-                  {job.status === "succeeded" && <Link href="/library">{t("downloads.openLibrary")}</Link>}
+                  {job.status === "succeeded" && (
+                    <Link href={downloadLibraryHref(
+                      job.id,
+                      sources[0] ? `Downloaded from ${shortSource(sources[0])}` : "Downloaded batch",
+                    )}>{t("downloads.openLibrary")}</Link>
+                  )}
                 </div>}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
                 {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}><ActionIcon name="confirm" />{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}><ActionIcon name="play" />{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}

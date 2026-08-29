@@ -698,6 +698,111 @@ def test_a_download_window_narrows_the_list_and_the_selection_together() -> None
     assert asyncio.run(request("GET", f"{base}/assets")).json()["total"] == 3
 
 
+def test_a_download_batch_narrows_the_list_and_selection_without_an_id_list() -> None:
+    workspace_id = create_workspace()
+    wanted = "download_0123456789abcdef"
+    with TestingSession.begin() as session:
+        cases = (
+            (wanted, [wanted]),
+            ("download_fedcba9876543210", ["download_fedcba9876543210"]),
+            ("download_fedcba9876543210", [wanted, "download_fedcba9876543210"]),
+        )
+        for index, (latest, batches) in enumerate(cases):
+            session.add(
+                MediaAsset(
+                    id=f"asset-download-{index}",
+                    workspace_id=workspace_id,
+                    title=f"Downloaded asset {index}",
+                    media_kind="video",
+                    source_type="douyin-download",
+                    original_path=f"/clips/download-{index}.mp4",
+                    original_sha256=f"{index + 100:064x}",
+                    mime_type="video/mp4",
+                    size_bytes=10,
+                    engagement={
+                        "download_job_id": latest,
+                        "download_job_ids": batches,
+                    },
+                    created_by="library-owner",
+                )
+            )
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    listed = asyncio.run(request("GET", f"{base}/assets?download_job_id={wanted}"))
+    selectable = asyncio.run(
+        request("GET", f"{base}/assets/ids?download_job_id={wanted}")
+    )
+
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 2
+    assert {asset["id"] for asset in listed.json()["assets"]} == {
+        "asset-download-0",
+        "asset-download-2",
+    }
+    assert selectable.status_code == 200
+    assert selectable.json()["matched"] == 2
+    assert set(selectable.json()["asset_ids"]) == {
+        "asset-download-0",
+        "asset-download-2",
+    }
+
+
+def test_a_duplicate_download_keeps_membership_in_each_batch(monkeypatch) -> None:
+    workspace_id = create_workspace()
+    source = Path("services/api/tests/.download-membership-test.mp4").resolve()
+    source.write_bytes(b"same downloaded media")
+    monkeypatch.setattr(
+        media_library,
+        "get_settings",
+        lambda: SimpleNamespace(publishing_media_root_list=[str(source.parent)]),
+    )
+    try:
+        digest = media_library.file_sha256(source)
+        with TestingSession.begin() as session:
+            session.add(
+                MediaAsset(
+                    id="asset-duplicate-download",
+                    workspace_id=workspace_id,
+                    title="Already downloaded",
+                    media_kind="video",
+                    source_type="douyin-download",
+                    original_path=str(source),
+                    original_sha256=digest,
+                    mime_type="video/mp4",
+                    size_bytes=source.stat().st_size,
+                    engagement={
+                        "download_job_id": "download_1111111111111111",
+                        "download_job_ids": ["download_1111111111111111"],
+                    },
+                    created_by="library-owner",
+                )
+            )
+
+        duplicate = media_library.create_ingest_job(
+            workspace_id=workspace_id,
+            actor_user_id="library-owner",
+            path=str(source),
+            title="Downloaded again",
+            source_type="douyin-download",
+            engagement={
+                "download_job_id": "download_2222222222222222",
+                "download_job_ids": ["download_2222222222222222"],
+            },
+            factory=TestingSession,
+        )
+        with TestingSession() as session:
+            asset = session.get(MediaAsset, "asset-duplicate-download")
+
+        assert duplicate["duplicate"] is True
+        assert asset is not None
+        assert asset.engagement["download_job_ids"] == [
+            "download_1111111111111111",
+            "download_2222222222222222",
+        ]
+    finally:
+        source.unlink(missing_ok=True)
+
+
 def test_paging_past_the_end_is_empty_rather_than_an_error() -> None:
     """A picker that pages until it runs out must be able to run out."""
     workspace_id = create_workspace()

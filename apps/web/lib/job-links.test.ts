@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { assetHref, notificationHref } from "./job-links.ts";
+import { assetHref, downloadLibraryHref, notificationHref } from "./job-links.ts";
 
 test("a finished job links to the asset it produced", () => {
   assert.equal(
@@ -77,5 +77,12 @@ test("a one-item notification remains a direct asset link", () => {
       { title: "Captions ready" },
     ),
     "/library?asset=asset_one&assets=asset_one&from=notifications&notice=Captions+ready",
+  );
+});
+
+test("a download batch links by its durable id instead of listing every asset", () => {
+  assert.equal(
+    downloadLibraryHref("download_0123456789abcdef", "Downloaded from a profile"),
+    "/library?download=download_0123456789abcdef&from=download&notice=Downloaded+from+a+profile",
   );
 });

@@ -76,3 +76,20 @@ export function notificationHref(
   if (title) params.set("notice", title);
   return `${path}?${params}`;
 }
+
+/**
+ * Open the complete Library slice produced by one download batch.
+ *
+ * A profile download can create thousands of assets, so carrying asset ids in
+ * the URL would hit both the browser's address limit and the Library's bounded
+ * explicit-id filter. The durable download id is short, shareable, and remains
+ * a server-side filter that can still be paged, counted, and narrowed.
+ */
+export function downloadLibraryHref(jobId: string, title = "Downloaded batch"): string {
+  const params = new URLSearchParams({
+    download: jobId,
+    from: "download",
+    notice: title.trim().slice(0, 140) || "Downloaded batch",
+  });
+  return `/library?${params}`;
+}

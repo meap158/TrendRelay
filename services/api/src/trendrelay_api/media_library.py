@@ -330,11 +330,21 @@ def create_ingest_job(
             current = dict(existing.engagement or {})
             current_origin_value = current.get("origin_urls") or []
             incoming_origin_value = incoming.get("origin_urls") or []
+            current_download_value = current.get("download_job_ids") or []
+            incoming_download_value = incoming.get("download_job_ids") or []
+            current_download_id = current.get("download_job_id")
+            incoming_download_id = incoming.get("download_job_id")
             current_origins = (
                 current_origin_value if isinstance(current_origin_value, list) else []
             )
             incoming_origins = (
                 incoming_origin_value if isinstance(incoming_origin_value, list) else []
+            )
+            current_downloads = (
+                current_download_value if isinstance(current_download_value, list) else []
+            )
+            incoming_downloads = (
+                incoming_download_value if isinstance(incoming_download_value, list) else []
             )
             origin_urls = list(
                 dict.fromkeys(
@@ -346,6 +356,20 @@ def create_ingest_job(
             current.update(incoming)
             if origin_urls:
                 current["origin_urls"] = origin_urls
+            download_job_ids = list(
+                dict.fromkeys(
+                    job_id
+                    for job_id in [
+                        *current_downloads,
+                        current_download_id,
+                        *incoming_downloads,
+                        incoming_download_id,
+                    ]
+                    if isinstance(job_id, str) and job_id
+                )
+            )
+            if download_job_ids:
+                current["download_job_ids"] = download_job_ids
             if current != (existing.engagement or {}):
                 existing.engagement = current
             if source_url and (

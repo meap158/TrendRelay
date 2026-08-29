@@ -789,6 +789,7 @@ def _queue_library_artifacts(
                     caption=metadata.get("caption"),
                     engagement={
                         "download_job_id": payload.get("id"),
+                        "download_job_ids": [payload["id"]] if payload.get("id") else [],
                         "download_source_path": artifact["path"],
                         "origin_urls": origin_urls,
                     },

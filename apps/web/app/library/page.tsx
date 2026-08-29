@@ -1114,6 +1114,7 @@ function LibraryContent() {
   const [filters, setFilters] = useState<AssetFilterValues>({});
   const notificationAssetQuery = searchParams.get("assets") ?? "";
   const notificationTitle = notificationActionTitle(searchParams.get("notice") ?? "");
+  const downloadJobId = searchParams.get("download") ?? "";
   const notificationAssetIds = useMemo(
     () => notificationAssetsFromQuery(notificationAssetQuery),
     [notificationAssetQuery],
@@ -1220,8 +1221,9 @@ function LibraryContent() {
   const filterParams = useCallback(() => {
     const params = assetFilterParams(filters);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
+    if (downloadJobId) params.set("download_job_id", downloadJobId);
     return params;
-  }, [filters, notificationAssetIds]);
+  }, [downloadJobId, filters, notificationAssetIds]);
 
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
@@ -1234,6 +1236,7 @@ function LibraryContent() {
     // use what the controls show now, rather than silently restoring "All".
     const params = assetFilterParams(latestFilters.current);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
+    if (downloadJobId) params.set("download_job_id", downloadJobId);
     params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
     const suffix = `?${params}`;
@@ -1292,7 +1295,7 @@ function LibraryContent() {
         setLoadedWorkspaceId(nextWorkspace);
       }
     }
-  }, [apiFetch, notificationAssetIds, workspaceId]);
+  }, [apiFetch, downloadJobId, notificationAssetIds, workspaceId]);
 
   useEffect(() => {
     const mediaJobs = notificationJobs.filter((job) => Boolean(job.assetId));
@@ -1318,6 +1321,7 @@ function LibraryContent() {
     const url = new URL(window.location.href);
     url.searchParams.delete("asset");
     url.searchParams.delete("assets");
+    url.searchParams.delete("download");
     url.searchParams.delete("from");
     url.searchParams.delete("notice");
     router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
@@ -1816,12 +1820,16 @@ function LibraryContent() {
         <aside className="library-browser">
           <div className="library-browser-sticky-controls">
             <div className="library-browser-toolbar">
-          {notificationAssetIds.length > 0 && (
+          {(notificationAssetIds.length > 0 || downloadJobId) && (
             <div className="library-notification-view" role="status">
               <span className="library-notification-copy">
-                <strong>{notificationTitle || t("library.fromNotifications")}</strong>
+                <strong>{notificationTitle || (downloadJobId ? "Downloaded batch" : t("library.fromNotifications"))}</strong>
                 <small>
-                  {notificationProgress
+                  {downloadJobId
+                    ? loadingAssets
+                      ? "Filtering this download…"
+                      : `${total.toLocaleString()} ${total === 1 ? "item" : "items"} from this download`
+                    : notificationProgress
                     ? `${notificationProgress.settled}/${notificationAssetIds.length} ${t("library.itemsDone")}${notificationProgress.retrying ? ` · ${notificationProgress.retrying} ${t("library.toRetry")}` : ""}`
                     : t(
                       notificationAssetIds.length === 1
