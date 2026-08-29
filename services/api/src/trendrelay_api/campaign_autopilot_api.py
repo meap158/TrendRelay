@@ -485,6 +485,7 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "position": item.position,
         "times_posted": item.times_posted,
         "last_posted_at": item.last_posted_at,
+        "last_posted_by_destination": dict(item.last_posted_by_destination or {}),
     }
 
 
@@ -1142,6 +1143,95 @@ def add_queue_item(
         session, workspace_id, campaign_id, body, created_by=user.id
     )
     return {"item": _queue_view(item)}
+
+
+class QueuePublishRequest(BaseModel):
+    """Deliver one queue item immediately."""
+
+    destination_ids: list[str] | None = None
+    force: bool = False
+
+
+class QueueBatchPublishRequest(BaseModel):
+    """Deliver multiple queued items immediately."""
+
+    item_ids: list[str] = Field(min_length=1, max_length=200)
+    destination_ids: list[str] | None = None
+    force: bool = False
+
+
+@router.post("/{campaign_id}/queue/{item_id}/publish")
+def publish_single_queue_item(
+    workspace_id: str,
+    campaign_id: str,
+    item_id: str,
+    body: QueuePublishRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Deliver one queue item immediately to eligible connected destinations."""
+    from trendrelay_api.campaign_runner import publish_queue_item_now
+
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    try:
+        outcome = publish_queue_item_now(
+            session,
+            workspace_id,
+            campaign_id,
+            item_id,
+            destination_ids=body.destination_ids,
+            force=body.force,
+        )
+        audit(
+            session,
+            request,
+            workspace_id,
+            user.id,
+            "campaign.queue_item_published_now",
+            "campaign_queue_item",
+            item_id,
+            {"published_count": len(outcome.get("published", []))},
+        )
+        return outcome
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/{campaign_id}/queue/publish")
+def batch_publish_queue(
+    workspace_id: str,
+    campaign_id: str,
+    body: QueueBatchPublishRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Publish multiple queued items immediately."""
+    from trendrelay_api.campaign_runner import batch_publish_queue_items
+
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    outcome = batch_publish_queue_items(
+        session,
+        workspace_id,
+        campaign_id,
+        body.item_ids,
+        destination_ids=body.destination_ids,
+        force=body.force,
+    )
+    for result in outcome.get("results", []):
+        audit(
+            session,
+            request,
+            workspace_id,
+            user.id,
+            "campaign.queue_item_published_now",
+            "campaign_queue_item",
+            result["item_id"],
+            {"published_count": len(result.get("published", []))},
+        )
+    return outcome
+
 
 
 @router.patch("/{campaign_id}/queue/{item_id}")

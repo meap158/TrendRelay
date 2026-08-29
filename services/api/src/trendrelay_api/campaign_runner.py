@@ -1127,3 +1127,329 @@ def tick(session_factory: Any, *, now: datetime | None = None) -> dict[str, Any]
                 autopilot.last_note = f"Autopilot failed: {error}"
         session.commit()
     return {"campaigns": ran}
+
+
+def publish_queue_item_now(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    item_id: str,
+    *,
+    destination_ids: list[str] | None = None,
+    force: bool = False,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Immediately deliver one queue item to eligible campaign destinations.
+
+    Respects campaign format rules and the 'repeat_posts' (Let a post go out more than once)
+    setting:
+    - If repeat_posts is False: skips destinations where the item has already been posted,
+      unless force=True is explicitly passed.
+    - If repeat_posts is True: skips destinations posted within min_recycle_days, unless force=True.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+    from trendrelay_api.autopilot_models import (
+        CampaignAutopilot,
+        CampaignDestination,
+        CampaignQueueItem,
+        bio_hint_for,
+        disclosure_for,
+    )
+    from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
+    from trendrelay_api.campaign_offer_matcher import resolve_matches
+    from trendrelay_api.campaign_scheduler import (
+        _as_utc,
+        record_published,
+        resolve_frozen_media,
+    )
+    from trendrelay_api.integrations.publishing import (
+        carousel_fits_destination,
+        delivery_block,
+        first_comment_deliverable,
+        post_type_for_media,
+        thread_deliverable,
+        topic_deliverable,
+        video_fits_platform,
+    )
+    from trendrelay_api.models import Campaign
+    from trendrelay_api.opportunity_models import ProductOffer
+
+    moment = now or datetime.now(UTC)
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise ValueError(f"Queue item {item_id} not found.")
+
+    caption = (item.body or "").strip()
+    if not caption:
+        raise ValueError("This post has no caption. Write copy before publishing.")
+
+    if not item.text_only and not item.video_path and not (item.image_paths or []):
+        raise ValueError("This post has no media attached.")
+
+    campaign = session.scalar(
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.workspace_id == workspace_id,
+        )
+    )
+    if not campaign:
+        raise ValueError(f"Campaign {campaign_id} not found.")
+
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
+    )
+    if not autopilot:
+        raise ValueError(f"Autopilot configuration for campaign {campaign_id} not found.")
+
+    dest_query = select(CampaignDestination).where(
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.workspace_id == workspace_id,
+        CampaignDestination.enabled.is_(True),
+    )
+    all_destinations = list(session.scalars(dest_query).all())
+    if destination_ids:
+        dest_set = set(destination_ids)
+        destinations = [d for d in all_destinations if d.id in dest_set]
+    else:
+        destinations = all_destinations
+
+    if not destinations:
+        raise ValueError("No enabled destinations configured for this campaign.")
+
+    frozen = resolve_frozen_media(session, item)
+    if not item.text_only:
+        images = list(item.image_paths or [])
+        if images:
+            missing = [path for path in images if not Path(path).is_file()]
+            if missing:
+                raise ValueError(f"A carousel image file is missing: {missing[0]}")
+        elif item.video_path:
+            if not Path(frozen.path).is_file():
+                raise ValueError(f"The video file is missing: {frozen.path}")
+
+    published: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    stamps = dict(item.last_posted_by_destination or {})
+
+    for destination in destinations:
+        dest_label = destination.label or destination.platform
+
+        # Check format compatibility
+        if item.image_paths:
+            fits, why = carousel_fits_destination(
+                destination.provider, destination.platform, len(item.image_paths)
+            )
+            if not fits:
+                skipped.append({"destination_id": destination.id, "label": dest_label, "reason": why})
+                continue
+        elif item.video_path:
+            fits, why = video_fits_platform(destination.platform, frozen.path)
+            if not fits:
+                skipped.append({"destination_id": destination.id, "label": dest_label, "reason": why})
+                continue
+
+        # Check delivery block / quota
+        blocked = delivery_block(destination.provider, destination.integration_id)
+        if blocked:
+            skipped.append({
+                "destination_id": destination.id,
+                "label": dest_label,
+                "reason": f"Account unavailable: {blocked}",
+            })
+            continue
+
+        # Check 'repeat_posts' rule:
+        has_posted_here = destination.id in stamps
+        if has_posted_here and not autopilot.repeat_posts and not force:
+            skipped.append({
+                "destination_id": destination.id,
+                "label": dest_label,
+                "reason": "Already published to this account ('Let a post go out more than once' is Off).",
+            })
+            continue
+
+        if has_posted_here and autopilot.repeat_posts and not force:
+            stamp_val = stamps.get(destination.id)
+            if stamp_val:
+                try:
+                    last_time = datetime.fromisoformat(str(stamp_val))
+                    last_time = _as_utc(last_time) or moment
+                    if moment - last_time < timedelta(days=autopilot.min_recycle_days):
+                        skipped.append({
+                            "destination_id": destination.id,
+                            "label": dest_label,
+                            "reason": f"Rested less than {autopilot.min_recycle_days} days since last post.",
+                        })
+                        continue
+                except Exception:
+                    pass
+
+        # Resolve matched products & affiliate links
+        cached_matches, ranked, match_strategy = resolve_matches(
+            session, campaign, autopilot, item, [destination]
+        )
+        matched = list(cached_matches)
+        product_links: list[tuple[str, str]] = []
+        minted_links: list[dict[str, Any]] = []
+
+        for match in matched:
+            offer = session.get(ProductOffer, match.offer_id)
+            if offer and offer.affiliate_url:
+                url = offer.affiliate_url
+                product_links.append((match.product_name, url))
+                minted_links.append({
+                    "offer_id": match.offer_id,
+                    "placement": destination.link_placement or "caption",
+                    "tracking_link_id": None,
+                    "url": url,
+                })
+
+        try:
+            comment_ok = first_comment_deliverable(destination.provider, destination.platform)
+            thread_ok = thread_deliverable(destination.provider, destination.platform)
+            composed = compose_for_post(
+                platform=destination.platform,
+                body=item.body,
+                hashtags=list(item.hashtags or []),
+                products=product_links,
+                disclosure=disclosure_for(item, autopilot) if product_links else "",
+                require_disclosure=autopilot.disclose,
+                bio_hint=bio_hint_for(item, autopilot),
+                placement_override=destination.link_placement,
+                comment_deliverable=comment_ok,
+                thread_deliverable=thread_ok,
+                written_first_comment=item.first_comment,
+                written_thread=item.thread or (),
+            )
+        except DisclosureMissing as error:
+            skipped.append({"destination_id": destination.id, "label": dest_label, "reason": str(error)})
+            continue
+
+        topic_tag = (
+            item.topic
+            if item.topic and topic_deliverable(destination.provider, destination.platform)
+            else None
+        )
+        requested_pt = (item.post_type_overrides or {}).get(
+            destination.id, destination.post_type
+        )
+        post_type = post_type_for_media(
+            destination.platform,
+            requested_pt,
+            has_video=bool(item.video_path),
+            has_images=bool(item.image_paths),
+        )
+
+        execution = PublicationExecution(
+            workspace_id=workspace_id,
+            campaign_id=campaign_id,
+            queue_item_id=item.id,
+            destination_id=destination.id,
+            state="ready",
+            delivery="now",
+            scheduled_at=moment,
+            asset_id=frozen.asset_id,
+            asset_version_id=frozen.version_id,
+            media_path=frozen.path,
+            image_paths=list(item.image_paths or ()),
+            media_sha256=frozen.sha256,
+            effect_ids=list(frozen.effect_ids or ()),
+            title=item.title or "",
+            caption=composed.caption,
+            first_comment=composed.first_comment,
+            thread=list(composed.thread),
+            topic=topic_tag,
+            placement=composed.placement.placement,
+            reason="Immediate manual publish from campaign rotation",
+            offer_ids=[m.offer_id for m in matched],
+            tracking_links=minted_links,
+            provider=destination.provider,
+            integration_id=destination.integration_id,
+            platform=destination.platform,
+            destination_label=dest_label,
+            post_type=post_type,
+            reserved_at=moment,
+            created_by=autopilot.created_by,
+        )
+        session.add(execution)
+        session.flush()
+
+        job = _publish_execution(session, autopilot, execution, at=moment, delivery_override="now")
+        execution.job_id = job["id"]
+        execution.state = "queued"
+        execution.queued_at = moment
+        execution.scheduled_at = moment
+        record_published(session, execution, now=moment)
+
+        published.append({
+            "destination_id": destination.id,
+            "destination_label": dest_label,
+            "platform": destination.platform,
+            "job_id": job["id"],
+            "execution_id": execution.id,
+        })
+
+    if not published and skipped:
+        reasons = "; ".join(f"{s['label']}: {s['reason']}" for s in skipped)
+        raise ValueError(f"Could not publish post: {reasons}")
+
+    if item.state != "approved":
+        item.state = "approved"
+
+    flag_modified(item, "last_posted_by_destination")
+    return {
+        "item_id": item.id,
+        "published": published,
+        "skipped": skipped,
+        "title": item.title,
+    }
+
+
+def batch_publish_queue_items(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    item_ids: list[str],
+    *,
+    destination_ids: list[str] | None = None,
+    force: bool = False,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Publish several queued posts at once to eligible campaign destinations."""
+    moment = now or datetime.now(UTC)
+    unique_ids = list(dict.fromkeys(item_ids))
+    results: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+
+    for item_id in unique_ids:
+        try:
+            outcome = publish_queue_item_now(
+                session,
+                workspace_id,
+                campaign_id,
+                item_id,
+                destination_ids=destination_ids,
+                force=force,
+                now=moment,
+            )
+            results.append(outcome)
+        except Exception as error:
+            failures.append({
+                "item_id": item_id,
+                "error": str(error),
+            })
+
+    total_published_jobs = sum(len(r.get("published", [])) for r in results)
+    return {
+        "published_items": len(results),
+        "total_jobs": total_published_jobs,
+        "results": results,
+        "failures": failures,
+    }
+

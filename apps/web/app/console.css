@@ -1670,7 +1670,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr); }
   .autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr); }
   .autopilot-queue > li > .ui-badge { grid-column: 1 / -1; justify-self: start; }
-  .autopilot-queue > li > .campaign-queue-actions { grid-column: 1 / -1; }
+  .autopilot-queue > li > .campaign-queue-actions { grid-column: 1 / -1; justify-content: flex-start; margin-top: 2px; }
   .campaign-mode-options { grid-template-columns: 1fr; }
   .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }

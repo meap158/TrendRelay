@@ -511,6 +511,7 @@ type QueueItem = {
   position: number;
   times_posted: number;
   last_posted_at: string | null;
+  last_posted_by_destination?: Record<string, string>;
   offer_ids: string[];
   offer_match: {
     matches?: OfferMatch[];
@@ -3369,6 +3370,130 @@ export function AutopilotPanel({
     });
   }
 
+  async function publishQueueItem(item: QueueItem, { force = false }: { force?: boolean } = {}) {
+    if (!destinations.length) {
+      fail("Add at least one connected account to this campaign before publishing.");
+      jumpTo("revenue");
+      return;
+    }
+    if (item.needs_copy || !item.body?.trim()) {
+      fail("This post has no caption. Write copy before publishing.");
+      openPostEditor(item);
+      return;
+    }
+
+    const postedMap = item.last_posted_by_destination || {};
+    const postedDests = destinations.filter((d) => Boolean(postedMap[d.id]));
+    const unpostedDests = destinations.filter((d) => !postedMap[d.id]);
+    const repeatOff = autopilot && !autopilot.repeat_posts;
+
+    if (!force && repeatOff) {
+      if (postedDests.length === destinations.length) {
+        const confirmForce = window.confirm(
+          `This post has already been sent to all ${destinations.length} connected account(s).\n\n` +
+          `Campaign setting "Let a post go out more than once" is currently Off.\n\n` +
+          `Do you want to force repost to all accounts anyway?`
+        );
+        if (!confirmForce) return;
+        return void publishQueueItem(item, { force: true });
+      } else if (postedDests.length > 0) {
+        const confirmPartial = window.confirm(
+          `Publish this post now to ${unpostedDests.length} new account${unpostedDests.length === 1 ? "" : "s"} (${unpostedDests.map((d) => d.label || d.platform).join(", ")})?\n\n` +
+          `Note: ${postedDests.length} account${postedDests.length === 1 ? "" : "s"} already received it and will be skipped per campaign repeat settings.`
+        );
+        if (!confirmPartial) return;
+      } else {
+        if (!window.confirm(`Publishes "${item.title || "this post"}" to ${destinations.length} connected account${destinations.length === 1 ? "" : "s"} immediately. Continue?`)) {
+          return;
+        }
+      }
+    } else if (!force) {
+      if (!window.confirm(`Publishes "${item.title || "this post"}" to ${destinations.length} connected account${destinations.length === 1 ? "" : "s"} immediately. Continue?`)) {
+        return;
+      }
+    }
+
+    await run(`publish-${item.id}`, async () => {
+      const body = await json<{
+        item_id: string;
+        published: Array<{ destination_label: string; platform: string; job_id: string }>;
+        skipped: Array<{ label: string; reason: string }>;
+        title?: string;
+      }>(
+        await apiFetch(`${base}/queue/${item.id}/publish`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ force }),
+        }),
+      );
+      const pubCount = body.published.length;
+      const skipCount = body.skipped.length;
+      if (pubCount > 0 && skipCount > 0) {
+        return `Published to ${pubCount} account${pubCount === 1 ? "" : "s"} (${skipCount} skipped).`;
+      }
+      if (pubCount > 0) {
+        return `Published immediately to ${pubCount} account${pubCount === 1 ? "" : "s"}.`;
+      }
+      return `No accounts published: ${body.skipped.map((s) => `${s.label}: ${s.reason}`).join("; ")}`;
+    });
+  }
+
+  async function batchPublishQueue({ force = false }: { force?: boolean } = {}) {
+    const ids = pickedQueue.map((item) => item.id);
+    if (!ids.length) return;
+    if (!destinations.length) {
+      fail("Add at least one connected account to this campaign before publishing.");
+      jumpTo("revenue");
+      return;
+    }
+
+    const repeatOff = autopilot && !autopilot.repeat_posts;
+    if (!force && repeatOff) {
+      const hasAnyPosted = pickedQueue.some(
+        (item) => Object.keys(item.last_posted_by_destination || {}).some((destId) => destinations.some((d) => d.id === destId)),
+      );
+      if (hasAnyPosted) {
+        const proceed = window.confirm(
+          `Publish ${ids.length} selected post${ids.length === 1 ? "" : "s"} now?\n\n` +
+          `Campaign setting "Let a post go out more than once" is Off. ` +
+          `Accounts that already received a post will be skipped.\n\n` +
+          `Click OK to proceed.`,
+        );
+        if (!proceed) return;
+      } else {
+        if (!window.confirm(`Publish ${ids.length} selected post${ids.length === 1 ? "" : "s"} now to ${destinations.length} connected account${destinations.length === 1 ? "" : "s"}?`)) {
+          return;
+        }
+      }
+    } else if (!force) {
+      if (!window.confirm(`Publish ${ids.length} selected post${ids.length === 1 ? "" : "s"} now to ${destinations.length} connected account${destinations.length === 1 ? "" : "s"}?`)) {
+        return;
+      }
+    }
+
+    await run("queue-batch-publish", async () => {
+      const body = await json<{
+        published_items: number;
+        total_jobs: number;
+        results: any[];
+        failures: Array<{ item_id: string; error: string }>;
+      }>(
+        await apiFetch(`${base}/queue/publish`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ item_ids: ids, force }),
+        }),
+      );
+      setQueuePicked(new Set());
+      const count = body.published_items;
+      const jobs = body.total_jobs;
+      if (body.failures.length > 0) {
+        return `Published ${count} post${count === 1 ? "" : "s"} (${jobs} delivery jobs). ${body.failures.length} failed.`;
+      }
+      return `Published ${count} post${count === 1 ? "" : "s"} (${jobs} delivery job${jobs === 1 ? "" : "s"}).`;
+    });
+  }
+
   /**
    * Abandon the composition, and everything gathered for it.
    *
@@ -4199,6 +4324,13 @@ export function AutopilotPanel({
             </strong>
             {pickedQueue.length > 0 && (
               <>
+                <Tooltip content="Publish the selected posts immediately to connected campaign accounts.">
+                  <Button variant="secondary" size="sm"
+                    busy={busy === "queue-batch-publish"}
+                    onClick={() => void batchPublishQueue()}>
+                    Publish now ({pickedQueue.length})
+                  </Button>
+                </Tooltip>
                 {pickedQueue.some((item) => item.state !== "approved") && (
                   <Tooltip content="Put the selected posts into rotation, so the campaign may publish them.">
                     <Button variant="secondary" size="sm"
@@ -4938,6 +5070,16 @@ export function AutopilotPanel({
                           return t("autopilot.itemApproved");
                         })}>{t("autopilot.approve")}</Button>
                     )}
+                    <Tooltip content="Publish this post immediately to connected campaign accounts.">
+                      <Button
+                        variant={item.state === "approved" ? "secondary" : "quiet"}
+                        size="sm"
+                        busy={busy === `publish-${item.id}`}
+                        onClick={() => void publishQueueItem(item)}
+                      >
+                        Publish now
+                      </Button>
+                    </Tooltip>
                     <Button variant="quiet" size="sm"
                       onClick={() => openPostEditor(item)}>Edit content</Button>
                     <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
