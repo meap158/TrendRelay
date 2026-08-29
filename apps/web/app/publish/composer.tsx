@@ -810,6 +810,13 @@ export function scheduleLabel(
     case "failed": return { label: "Failed", tone: "warn" };
     case "cancelled": return { label: "Cancelled", tone: "neutral" };
     case "planned": return { label: "Planned", tone: "neutral" };
+    case "running":
+    case "in_progress":
+      return at.getTime() <= Date.now()
+        ? { label: "Publishing", tone: "info" }
+        : { label: "Scheduling", tone: "info" };
+    case "queued":
+      return { label: "Queued", tone: "neutral" };
     // Handed to the engine is not published: it stays Scheduled until its time
     // comes, and is Published only once it has passed - read against the clock,
     // not called done the moment the job returned. Scheduled gets its own tone

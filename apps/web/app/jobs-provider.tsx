@@ -344,16 +344,33 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         // Publish jobs
         const fetchPublish = apiFetch(`/api/workspaces/${activeWorkspaceId}/publishing/jobs`)
           .then(res => res.json())
-          .then(data => (data.jobs || []).map((j: any) => ({
-            id: j.id,
-            category: "publish" as JobCategory,
-            status: j.status,
-            created_at: j.created_at,
-            title: `Publish: ${j.payload?.title ?? j.id}`,
-            error: j.error,
-            href: "/publish",
-            raw: j,
-          })))
+          .then(data => (data.jobs || []).map((j: any) => {
+            const request = j.payload?.request;
+            const isSchedule = request?.delivery === "schedule"
+              || (!request?.delivery && request?.schedule === true);
+            const date = request?.date ? new Date(request.date) : null;
+            const isFuture = date && !Number.isNaN(date.getTime()) && date.getTime() > Date.now();
+            const subject = j.payload?.title || request?.title || request?.caption || j.id;
+            return {
+              id: j.id,
+              category: "publish" as JobCategory,
+              status: j.status,
+              created_at: j.created_at,
+              title: j.status === "succeeded"
+                ? (isSchedule && isFuture ? `Scheduled: ${subject}` : `Published: ${subject}`)
+                : j.status === "failed"
+                  ? `Publish failed: ${subject}`
+                  : (isSchedule && isFuture ? `Scheduling: ${subject}` : `Publishing: ${subject}`),
+              error: j.error,
+              progress: j.progress,
+              progressStage: j.progress_stage,
+              startedAt: j.started_at,
+              stalled: Boolean(j.stalled),
+              assetId: request?.asset_id ?? j.result?.asset_id ?? null,
+              href: "/publish",
+              raw: j,
+            };
+          }))
           .catch(() => []);
         fetchPromises.push(fetchPublish);
       }
