@@ -279,6 +279,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             created_at: j.created_at ?? j.payload?.created_at,
             title: `Library: ${j.payload?.title ?? j.id}`,
             error: j.error,
+            assetId: j?.payload?.asset_id ?? j?.result?.asset_id ?? null,
             href: assetHref(j) ?? "/library",
             raw: j,
           })))
