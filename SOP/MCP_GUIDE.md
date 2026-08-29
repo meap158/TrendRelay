@@ -61,9 +61,11 @@ or private filesystem with no public URL, encode the file and pass `media_base64
      fallback and does not need a public URL.
    - If the file already has a direct public HTTPS address, pass `media_url`.
    Send exactly one source field, not the same file in several forms.
-4. If the result contains `job_id`, poll `get_import_status` until `all_done`.
-   Use the returned `asset_id` / entry in `ready`; a failed import creates no
-   campaign attachment and its error must be reported.
+4. An image normally finishes during `upload_media` and returns `asset_id`
+   immediately. Use it without polling. A video—and the rare image already
+   claimed by another worker—returns `job_id`; poll `get_import_status` until
+   `all_done`, then use its `asset_id` / entry in `ready`. A failed import
+   creates no campaign attachment and its error must be reported.
 5. Create a new draft with `create_campaign_post(asset_ids=[...])`, or add the
    asset to an existing text-first draft with `set_post_media`. Use
    `append=true` only to extend an image carousel. The MCP cannot approve or
@@ -72,7 +74,10 @@ or private filesystem with no public URL, encode the file and pass `media_base64
 The upload validates the actual file signature on attachment, URL, and base64
 routes. JPEG, PNG, and WebP images are capped at 25 MB; MP4, MOV, WebM, and MKV
 videos are capped at 512 MB. MIME labels and filename extensions do not
-override the bytes.
+override the bytes. The exact uploaded image is the immutable `original`
+Library version at its full pixel dimensions; TrendRelay creates a separate
+thumbnail for browsing. Never downscale, recompress, or upload a second version
+merely to make an image import faster.
 
 ## Authority and safety
 

@@ -740,6 +740,19 @@ def test_upload_image_writes_the_file_and_queues_the_operators_own_ingest(
         return {"id": "media_abc", "status": "queued", "duplicate": False}
 
     monkeypatch.setattr(media_library, "create_ingest_job", fake_ingest)
+    immediate: dict[str, object] = {}
+    monkeypatch.setattr(
+        media_library,
+        "run_ingest_job",
+        lambda job_id, worker_id: immediate.update(
+            job_id=job_id, worker_id=worker_id
+        ) or {
+            "id": job_id,
+            "status": "succeeded",
+            "duplicate": False,
+            "result": {"asset_id": "asset_abc"},
+        },
+    )
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
     result = intake.upload_image(
         "ws",
@@ -756,7 +769,11 @@ def test_upload_image_writes_the_file_and_queues_the_operators_own_ingest(
     assert asked["actor_user_id"] == "local-admin"
     assert asked["source_type"] == "mcp-upload"
     assert result["job_id"] == "media_abc"
-    assert "get_import_status" in result["note"]
+    assert result["asset_id"] == "asset_abc"
+    assert result["status"] == "succeeded"
+    assert "original resolution" in result["note"]
+    assert immediate["job_id"] == "media_abc"
+    assert str(immediate["worker_id"]).startswith("mcp-image-")
 
 
 def test_the_chatgpt_file_object_supplies_the_fetch(tmp_path, monkeypatch) -> None:
@@ -770,6 +787,15 @@ def test_the_chatgpt_file_object_supplies_the_fetch(tmp_path, monkeypatch) -> No
     monkeypatch.setattr(
         media_library, "create_ingest_job",
         lambda **kwargs: asked.update(kwargs) or {"id": "j", "status": "queued"},
+    )
+    monkeypatch.setattr(
+        media_library,
+        "run_ingest_job",
+        lambda job_id, worker_id: {
+            "id": job_id,
+            "status": "succeeded",
+            "result": {"asset_id": "asset-chat-file"},
+        },
     )
     fetched: list[str] = []
 
@@ -820,6 +846,15 @@ def test_url_upload_uses_the_signature_not_a_mime_claim(tmp_path, monkeypatch) -
         "create_ingest_job",
         lambda **kwargs: recorded.update(kwargs)
         or {"id": "job-signature", "status": "queued", "duplicate": False},
+    )
+    monkeypatch.setattr(
+        media_library,
+        "run_ingest_job",
+        lambda job_id, worker_id: {
+            "id": job_id,
+            "status": "succeeded",
+            "result": {"asset_id": "asset-signature"},
+        },
     )
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
@@ -2215,6 +2250,9 @@ def test_the_media_sop_explains_the_file_transfer_boundary() -> None:
     assert "Never silently replace" in prose
     assert "one file per call" in prose
     assert "There is no bulk upload" in prose
+    assert "full pixel dimensions" in prose
+    assert "returns `asset_id` immediately" in prose
+    assert "Do not send a smaller WebP or downscaled retry" in prose
 
 
 def test_a_post_of_nothing_is_refused_with_the_way_in(session) -> None:

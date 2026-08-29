@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign - whole, or a piece at a time - for the operator to promote.
-version: 8
+version: 9
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post, set-post-media]
 ---
@@ -90,7 +90,8 @@ The compact end-to-end sequence is:
 
 1. generate image;
 2. `upload_media(media=<host file>)` or `upload_media(media_base64=<bytes>)`;
-3. poll `get_import_status(job_id=...)` until the `asset_id` is ready;
+3. use the returned `asset_id`; only when the result instead contains a
+   `job_id`, poll `get_import_status(job_id=...)` until the asset is ready;
 4. `create_campaign_post(asset_ids=[asset_id], ...)` for a new draft, or
    `set_post_media(item_id=..., asset_ids=[asset_id])` for a text-first draft;
 5. report that the draft is waiting for the operator to promote.
@@ -133,6 +134,16 @@ The upload lands in the media library through the same import pipeline as the
 operator's own files - deduplicated by content, kept immutable, audited - and
 appears there under the `mcp-upload` source.
 
+Images take a fast lane through that pipeline: a normal image upload finishes
+inside the tool call and returns `asset_id` immediately, independent of the
+general media worker's video/effect backlog. The exact uploaded bytes and full
+pixel dimensions are stored as the immutable `original`; the smaller JPEG made
+for Library cards is a separate `thumbnail` version and is never attached to a
+campaign or published in place of the original. Do not send a smaller WebP or
+downscaled retry just because an image appears queued. If the response does
+return `job_id`—for a video, or because another worker already claimed a rare
+image race—follow step 3 rather than uploading another copy.
+
 **For a carousel, keep the order.** There is no bulk upload: a carousel of six
 pictures is six upload calls. Track one result slot per source in the order the
 user supplied the pictures, even if calls finish out of order. Later place each
@@ -143,8 +154,9 @@ order of `asset_ids` as the swipe order and the first image as the cover.
 
 Each upload call returns either:
 
-- `asset_id` immediately, with `duplicate: true` - the library already holds
-  these exact bytes; use the asset id as it is; or
+- `asset_id` immediately - for a newly imported image, or with
+  `duplicate: true` when the Library already holds these exact bytes; use the
+  asset id as it is; or
 - a `job_id` - poll `get_import_status` until the import finishes.
 
 **Poll the whole set at once.** Pass every job id for this post as `job_ids`

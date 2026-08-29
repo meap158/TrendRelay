@@ -432,7 +432,7 @@ def _ingest_fetched(
     platform: str | None,
 ) -> dict[str, Any]:
     from trendrelay_api.auth import LOCAL_ADMIN_ID
-    from trendrelay_api.media_library import create_ingest_job
+    from trendrelay_api.media_library import create_ingest_job, run_ingest_job
 
     # The bytes decide the type on every route. HTTP Content-Type is useful
     # metadata but not proof, and accepting it alone lets arbitrary content be
@@ -480,18 +480,49 @@ def _ingest_fetched(
         caption=(caption or "").strip() or None,
         source_sha256=digest,
     )
+    # An MCP image is normally the missing half of a draft the caller is
+    # already assembling. Sending it through the general durable worker put a
+    # two-second thumbnail behind hours of video proxies and effect renders;
+    # one real upload in this workspace waited 53 minutes without ever being
+    # claimed. Process a newly queued image in this request so the caller gets
+    # its asset id immediately. The ordinary durable record remains the audit
+    # trail and retry boundary, and video stays asynchronous because proxying a
+    # long clip does not belong inside a tool-call timeout.
+    if (
+        content_type.startswith("image/")
+        and job.get("id")
+        and job.get("status") == "queued"
+    ):
+        try:
+            job = run_ingest_job(
+                str(job["id"]), worker_id=f"mcp-image-{digest[:12]}"
+            )
+        except PermissionError:
+            # A live worker won the narrow claim race. It now owns the job, so
+            # preserve the normal status response rather than processing the
+            # same immutable bytes twice.
+            from trendrelay_api.jobs import get_job_record
+
+            job = get_job_record(str(job["id"]))
     duplicate = bool(job.get("duplicate"))
-    return {
-        "duplicate": duplicate,
-        "asset_id": job.get("asset_id"),
-        "job_id": job.get("id"),
-        "status": job.get("status"),
-        "note": (
-            "This file is already in the library; use the asset_id as it is."
-            if duplicate else
+    result = job.get("result") or {}
+    asset_id = job.get("asset_id") or result.get("asset_id")
+    ready = bool(asset_id) and job.get("status") == "succeeded"
+    if duplicate:
+        note = "This file is already in the library; use the asset_id as it is."
+    elif ready and content_type.startswith("image/"):
+        note = "Image imported at its original resolution; use the asset_id now."
+    else:
+        note = (
             "Import queued. Poll get_import_status with the job_id until it "
             "succeeds and reports the asset_id, then create the post with it."
-        ),
+        )
+    return {
+        "duplicate": duplicate,
+        "asset_id": asset_id,
+        "job_id": job.get("id"),
+        "status": job.get("status"),
+        "note": note,
     }
 
 
