@@ -32,7 +32,8 @@ INSTRUCTIONS = (
     "To add a new post: `list_library_assets` finds media the workspace already "
     "holds - look before uploading, because re-importing a file the Library "
     "has records provenance that is not true. `upload_media` brings in one "
-    "that is new, video or image (attach it in chat, or pass media_url); "
+    "that is new, video or image (attach it in chat, pass media_url, or send "
+    "media_base64 when the client cannot materialize its private file); "
     "`upload_image` is the same thing for pictures only. "
     "`get_import_status` reports when its "
     "asset_id exists, and `create_campaign_post` proposes a post from Library "
@@ -403,8 +404,11 @@ def build_server(workspace_id: str) -> FastMCP:
         name="upload_image",
         description=(
             "Bring one image into the media library, to post later. Attach the "
-            "image in chat (it arrives as the `image` file parameter) or pass "
-            "a direct public https `image_url`. Give it a `title` a person "
+            "image in chat (it arrives as the `image` file parameter), pass "
+            "a direct public https `image_url`, or - for an image you "
+            "generated yourself and cannot give a public address - send the "
+            "bytes as `image_base64` (standard base64, or a "
+            "data:<type>;base64,<data> URL). Give it a `title` a person "
             "will recognise; `source_url`, `creator`, `caption` and `platform` "
             "(the network it genuinely came from, if any) record where it came "
             "from. It lands in the media library like any import, under the "
@@ -425,6 +429,7 @@ def build_server(workspace_id: str) -> FastMCP:
         creator: str | None = None,
         source_url: str | None = None,
         platform: str | None = None,
+        image_base64: str | None = None,
     ) -> dict[str, Any]:
         _guard("upload_image")
         return intake.upload_image(
@@ -436,16 +441,23 @@ def build_server(workspace_id: str) -> FastMCP:
             creator=creator,
             source_url=source_url,
             platform=platform,
+            image_base64=image_base64,
         )
 
     @server.tool(
         name="upload_media",
         description=(
             "Bring one video or image into the media library, to post later. "
-            "Attach the file in chat (it arrives as the `media` file "
-            "parameter) or pass a direct public https `media_url`. Accepts "
-            "mp4, mov and webm video up to 512 MB, and jpeg, png and webp "
-            "images. Give it a `title` a person will recognise; `source_url`, "
+            "Three ways in, in order of preference: attach the file in chat "
+            "(it arrives as the `media` file parameter); pass a direct public "
+            "https `media_url`; or, for a file you generated yourself and "
+            "cannot give a public address, send the bytes as `media_base64` "
+            "(standard base64, or a data:<type>;base64,<data> URL). The "
+            "base64 route needs no URL and no file registry, so use it when "
+            "the client cannot turn its own file reference into a link. "
+            "Accepts "
+            "mp4, mov, webm and mkv video up to 512 MB, and jpeg, png and webp "
+            "images up to 25 MB. Give it a `title` a person will recognise; `source_url`, "
             "`creator`, `caption` and `platform` record where it came from. "
             "It lands in the media library under the 'mcp-upload' source. "
             "Returns an asset_id at once for a file the library already "
@@ -461,6 +473,7 @@ def build_server(workspace_id: str) -> FastMCP:
         creator: str | None = None,
         source_url: str | None = None,
         platform: str | None = None,
+        media_base64: str | None = None,
     ) -> dict[str, Any]:
         _guard("upload_media")
         return intake.upload_media(
@@ -472,12 +485,14 @@ def build_server(workspace_id: str) -> FastMCP:
             creator=creator,
             source_url=source_url,
             platform=platform,
+            media_base64=media_base64,
         )
 
     @server.tool(
         name="get_import_status",
         description=(
-            "How upload_image imports are going. Pass every `job_ids` for the "
+            "How upload_media and upload_image imports are going. Pass every "
+            "`job_ids` for the "
             "post at once - a carousel is several uploads and polling is a "
             "loop, so one call a round beats one per picture. Poll until "
             "`all_done`, then take `ready` (the asset ids, in the order asked "
@@ -540,14 +555,21 @@ def build_server(workspace_id: str) -> FastMCP:
             "video asset id, or several image asset ids as a carousel. The "
             "other half of drafting a post before its media exists - upload "
             "with upload_media, wait for get_import_status, then attach "
-            "here. Refused on a post already in rotation; changing what a "
-            "promoted post publishes is the operator's act in the app."
+            "here. Pass append=true to add pictures onto the post's existing "
+            "carousel one upload at a time instead of replacing the whole "
+            "package (a video always stands alone). Refused on a post "
+            "already in rotation; changing what a promoted post publishes is "
+            "the operator's act in the app."
         ),
     )
-    def set_post_media(item_id: str, asset_ids: list[str]) -> dict[str, Any]:
+    def set_post_media(
+        item_id: str, asset_ids: list[str], append: bool = False
+    ) -> dict[str, Any]:
         return _call(
             "set_post_media",
-            lambda s: writes.set_post_media(s, workspace_id, item_id, asset_ids),
+            lambda s: writes.set_post_media(
+                s, workspace_id, item_id, asset_ids, append=append
+            ),
         )
 
     # --- when the workspace posts ------------------------------------------

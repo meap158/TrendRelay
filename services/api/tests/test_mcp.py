@@ -179,10 +179,15 @@ def test_the_server_exposes_the_sop_catalog_and_action_template() -> None:
     procedure = asyncio.run(
         built.read_resource("trendrelay://sops/campaigns.fill-needs-copy")
     )
+    media_procedure = asyncio.run(
+        built.read_resource("trendrelay://sops/campaigns.add-post-with-media")
+    )
     assert "control tower and operating entry point" in guide[0].content
     assert "Route the action first" in guide[0].content
     assert "campaigns.fill-needs-copy" in catalog[0].content
     assert "Connect to TrendRelay MCP first" in procedure[0].content
+    assert "files/materialize" in media_procedure[0].content
+    assert "There is no bulk upload" in media_procedure[0].content
     assert "control tower and operating entry point" in built.instructions
     assert "Route the action first" in built.instructions
 
@@ -735,16 +740,17 @@ def test_upload_image_writes_the_file_and_queues_the_operators_own_ingest(
         return {"id": "media_abc", "status": "queued", "duplicate": False}
 
     monkeypatch.setattr(media_library, "create_ingest_job", fake_ingest)
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
     result = intake.upload_image(
         "ws",
         image_url="https://cdn.example.test/shot.png",
         title="Launch hero",
-        fetch=lambda url: (b"png-bytes", "image/png"),
+        fetch=lambda url: (png, "image/png"),
     )
 
     saved = list((tmp_path / "mcp-uploads").iterdir())
     assert len(saved) == 1 and saved[0].suffix == ".png"
-    assert saved[0].read_bytes() == b"png-bytes"
+    assert saved[0].read_bytes() == png
     assert asked["path"] == str(saved[0])
     assert asked["workspace_id"] == "ws"
     assert asked["actor_user_id"] == "local-admin"
@@ -769,7 +775,7 @@ def test_the_chatgpt_file_object_supplies_the_fetch(tmp_path, monkeypatch) -> No
 
     def fetch(url: str):
         fetched.append(url)
-        return b"jpeg-bytes", "image/jpeg"
+        return b"\xff\xd8\xff\xe0" + b"\x00" * 32, "image/jpeg"
 
     intake.upload_image(
         "ws",
@@ -800,6 +806,74 @@ def test_a_wrong_content_type_is_refused_by_what_the_server_said(
             "ws", image_url="https://cdn.example.test/page",
             fetch=lambda url: (b"<html>", "text/html"),
         )
+
+
+def test_url_upload_uses_the_signature_not_a_mime_claim(tmp_path, monkeypatch) -> None:
+    """A temporary attachment URL may answer as octet-stream; its bytes win."""
+    from trendrelay_api import media_library
+    from trendrelay_api.integrations.mcp import intake
+
+    monkeypatch.setattr(intake, "_upload_root", lambda: tmp_path / "mcp-uploads")
+    recorded: dict[str, object] = {}
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: recorded.update(kwargs)
+        or {"id": "job-signature", "status": "queued", "duplicate": False},
+    )
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+    result = intake.upload_media(
+        "ws",
+        media_url="https://files.example.test/generated",
+        fetch=lambda _url: (png, "application/octet-stream"),
+    )
+
+    assert result["job_id"] == "job-signature"
+    assert str(recorded["path"]).endswith(".png")
+
+
+def test_rejected_url_bytes_create_neither_file_nor_import(tmp_path, monkeypatch) -> None:
+    """A false MIME claim is rejected before persistent state is touched."""
+    from trendrelay_api import media_library
+    from trendrelay_api.integrations.mcp import intake
+
+    upload_root = tmp_path / "mcp-uploads"
+    monkeypatch.setattr(intake, "_upload_root", lambda: upload_root)
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **_kwargs: pytest.fail("invalid bytes must not create an import"),
+    )
+
+    with pytest.raises(ValueError, match="signature matches no media type"):
+        intake.upload_media(
+            "ws",
+            media_url="https://files.example.test/not-an-image.png",
+            fetch=lambda _url: (b"<html>not media</html>", "image/png"),
+        )
+
+    assert not upload_root.exists()
+
+
+def test_url_image_uses_the_image_cap_through_upload_media(
+    tmp_path, monkeypatch
+) -> None:
+    """Generic URL uploads apply the cap of the bytes, not the tool name."""
+    from trendrelay_api.integrations.mcp import intake
+
+    monkeypatch.setattr(intake, "MAX_IMAGE_BYTES", 16)
+    monkeypatch.setattr(intake, "_upload_root", lambda: tmp_path / "mcp-uploads")
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+    with pytest.raises(ValueError, match="larger than"):
+        intake.upload_media(
+            "ws",
+            media_url="https://files.example.test/large.png",
+            fetch=lambda _url: (png, "image/png"),
+        )
+
+    assert not (tmp_path / "mcp-uploads").exists()
 
 
 def test_the_fetch_guard_refuses_plain_http_and_local_addresses() -> None:
@@ -903,6 +977,9 @@ def test_the_upload_tool_declares_the_chatgpt_file_param() -> None:
     built = server.build_server("ws")
     tools = {tool.name: tool for tool in asyncio.run(built.list_tools())}
     assert tools["upload_image"].meta == {"openai/fileParams": ["image"]}
+    assert tools["upload_media"].meta == {"openai/fileParams": ["media"]}
+    assert "image_base64" in tools["upload_image"].inputSchema["properties"]
+    assert "media_base64" in tools["upload_media"].inputSchema["properties"]
 
 
 def test_every_tool_is_categorised_and_the_catalog_is_grouped() -> None:
@@ -1746,7 +1823,7 @@ def test_measurability_does_not_depend_on_what_was_imported_first() -> None:
         PROVIDER_METRIC_READERS.update(readers)
         if module is not None:
             sys.modules["trendrelay_api.integrations.publishing"] = module
-            setattr(integrations, "publishing", module)
+            integrations.publishing = module
         elif not had_attribute and hasattr(integrations, "publishing"):
             delattr(integrations, "publishing")
 
@@ -1869,6 +1946,70 @@ def test_neither_door_takes_more_pictures_than_any_network(session) -> None:
         writes.set_post_media(session, "ws", view["id"], names)
 
 
+def test_a_gallery_grown_one_picture_at_a_time_is_warned_like_one_sent_whole(
+    session,
+) -> None:
+    """The same question deserves the same answer whichever way it is asked.
+
+    A carousel assembled in a single call was told which of the campaign's
+    accounts could carry it. The same carousel appended a picture at a time was
+    told nothing at all, and could pass every network's limit in silence -
+    which is precisely the flow appending exists to serve.
+
+    The fixture campaign posts Threads, which takes ten pictures. So the tenth
+    is fine and the eleventh is not, and the difference has to be audible at
+    the eleventh rather than at publish time.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _destination(session, "d-zernio", "threads", "zernio")
+    for index in range(1, 12):
+        _image_asset(session, f"g{index:02d}", rf"S:\media\g{index:02d}.png")
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Growing.")
+
+    for index in range(1, 11):
+        step = writes.set_post_media(
+            session, "ws", view["id"], [f"g{index:02d}"], append=True
+        )
+    # Threads takes ten, so at ten the Zernio account still carries it. The
+    # campaign's Buffer account never could - it posts no gallery at all - so
+    # the useful assertion is what is still reached, not that nothing warned.
+    assert "they reach Threads" in step["note"]
+
+    eleventh = writes.set_post_media(session, "ws", view["id"], ["g11"], append=True)
+
+    assert eleventh["carousel_warnings"], "the eleventh outgrew every account"
+    assert "No account in this campaign can take 11 pictures" in eleventh["note"]
+    # Still attached: this is a warning about where it can go, not a refusal.
+    assert len(eleventh["image_paths"]) == 11
+
+
+def test_a_gallery_cannot_grow_past_what_any_network_takes(session) -> None:
+    """And says so in words rather than as a schema error.
+
+    The queue's own model refuses this too, but as a validation error naming a
+    field and linking to pydantic's website - which tells an assistant nothing
+    it can act on, and reads nothing like the other refusals here.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+    from trendrelay_api.integrations.publishing import MAX_CAROUSEL_IMAGES
+
+    names = []
+    for index in range(MAX_CAROUSEL_IMAGES + 1):
+        identifier = f"m{index:02d}"
+        _image_asset(session, identifier, rf"S:\media\{identifier}.png")
+        names.append(identifier)
+    view = intake.create_campaign_post(
+        session, "ws", "camp", names[:MAX_CAROUSEL_IMAGES], caption="Full."
+    )
+
+    with pytest.raises(ValueError, match=f"at most {MAX_CAROUSEL_IMAGES} pictures"):
+        writes.set_post_media(session, "ws", view["id"], [names[-1]], append=True)
+
+    with pytest.raises(ValueError, match=f"at most {MAX_CAROUSEL_IMAGES} pictures"):
+        intake.create_campaign_post(session, "ws", "camp", names, caption="Too many.")
+
+
 def test_set_post_media_refuses_a_post_already_in_rotation(session) -> None:
     """Changing what a promoted post publishes is the operator's act."""
     from trendrelay_api.integrations.mcp import intake, writes
@@ -1900,7 +2041,8 @@ def test_upload_media_takes_a_video_the_image_door_refuses(monkeypatch, tmp_path
     monkeypatch.setattr(
         "trendrelay_api.media_library.create_ingest_job", fake_ingest
     )
-    fetch = lambda url: (b"not really mp4 bytes", "video/mp4")
+    def fetch(url):
+        return b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 32, "video/mp4"
 
     with pytest.raises(ValueError, match="accepts"):
         intake.upload_image(
@@ -2008,3 +2150,48 @@ def test_the_media_sop_teaches_building_a_post_a_piece_at_a_time() -> None:
     prose = " ".join(markdown.split())
     # The rule that makes the order free: media is never required to start.
     assert "Media is never required to start" in prose
+
+
+def test_the_media_sop_explains_the_file_transfer_boundary() -> None:
+    """A generated artifact is not necessarily a file-param attachment."""
+    markdown = sops.get_sop("campaigns.add-post-with-media")["markdown"]
+    prose = " ".join(markdown.split())
+
+    assert "files/materialize" in prose
+    assert "download_url" in prose
+    assert "local filesystem path" in prose
+    assert "Never silently replace" in prose
+    assert "one file per call" in prose
+    assert "There is no bulk upload" in prose
+
+
+def test_a_post_of_nothing_is_refused_with_the_way_in(session) -> None:
+    """Words or media may each come later, but a post cannot start as neither."""
+    from trendrelay_api.integrations.mcp import intake
+
+    with pytest.raises(ValueError, match="words or its media"):
+        intake.create_campaign_post(session, "ws", "camp", [])
+
+
+def test_a_picture_can_join_the_carousel_one_upload_at_a_time(session) -> None:
+    """Append, so a caller adding its third picture need not know the first two."""
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session)
+    _image_asset(session, asset_id="img2", path=r"S:\media\second.png")
+    view = intake.create_campaign_post(session, "ws", "camp", ["img1"], caption="Set.")
+
+    grown = writes.set_post_media(session, "ws", view["id"], ["img2"], append=True)
+
+    assert grown["image_paths"] == [r"S:\media\shot.png", r"S:\media\second.png"]
+
+
+def test_a_video_never_appends_because_it_stands_alone(session) -> None:
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session)
+    _video_asset(session)
+    view = intake.create_campaign_post(session, "ws", "camp", ["img1"], caption="Set.")
+
+    with pytest.raises(ValueError, match="stands alone"):
+        writes.set_post_media(session, "ws", view["id"], ["clip1"], append=True)

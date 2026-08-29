@@ -12,7 +12,7 @@ write operation looks convenient.
 | Intended action | Canonical action | First live operation |
 | --- | --- | --- |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
-| Add a post with media (upload an image, propose a post) | `campaigns.add-post-with-media` | `upload_image` |
+| Add a post with media (existing asset, new upload, or carousel) | `campaigns.add-post-with-media` | `list_campaigns` |
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
 
 For an action not listed here, call `list_sops`. Match its canonical action or
@@ -34,6 +34,15 @@ the MCP server's general policy; do not invent a procedure or broaden authority.
 For `campaigns.fill-needs-copy`, load the SOP, read the live campaign and each
 post's context, write only fields reported as missing, refresh after each batch,
 and use a final fresh queue read as completion evidence.
+
+For `campaigns.add-post-with-media`, load the SOP before choosing an intake
+tool. Check the campaign and Library first. A new file is one upload call per
+file; several image asset ids become a carousel when the draft is created. A
+generic artifact or local path from another tool is not automatically a valid
+TrendRelay attachment, and a failed requested image must never be silently
+replaced with a similar Library asset. For files generated in a client sandbox
+or private filesystem with no public URL, encode the file and pass `media_base64`
+(or a standard `data:<mime>;base64,<data>` URL) to `upload_media`.
 
 ## Authority and safety
 

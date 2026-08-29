@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign - whole, or a piece at a time - for the operator to promote.
-version: 6
+version: 7
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post, set-post-media]
 ---
@@ -11,13 +11,14 @@ aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campai
 
 This SOP covers bringing media into the workspace and proposing a post made
 from it into a campaign - one video, one picture, or several pictures as a
-carousel - sent whole, or assembled a piece at a time. It uses six
-operations: `list_campaigns`, `list_library_assets`, `upload_media`,
-`get_import_status`, `create_campaign_post`, and `set_post_media`.
+carousel - sent whole, or assembled a piece at a time. It uses six operations:
+`list_campaigns`, `list_library_assets`, `upload_media`, `get_import_status`,
+`create_campaign_post`, and `set_post_media`.
 
 `upload_media` takes video and images alike. `upload_image` still exists and
-takes pictures only; prefer `upload_media` unless you have a reason not to,
-so that one tool covers whatever the user attaches.
+takes pictures only; prefer `upload_media` when it is offered, so one tool
+covers whatever the user attaches. Each upload call accepts exactly one file.
+Several images become one carousel later; they are not a bulk upload.
 
 ## What you can and cannot do here
 
@@ -44,17 +45,52 @@ afterwards costs the user an import per picture.
 
 If it is already in the library - the operator's own downloads, or something an
 earlier session uploaded - skip to step 4 and find it with
-`list_library_assets`. Otherwise call `upload_media` once per file, with one
-source each:
+`list_library_assets`. Use an existing asset only when it is the media the user
+actually chose. Never silently replace a rejected attachment with a merely
+similar Library image; report the failed file and ask before substituting.
 
-- **A chat attachment.** In clients that support the `openai/fileParams`
-  convention (ChatGPT), a file the user attaches arrives automatically as the
-  `media` parameter - an object carrying a temporary `download_url`. You do
-  not need to read or repeat that URL.
+Otherwise call `upload_media` once per file, with exactly one of these sources:
+
+- **A compatible chat attachment.** In clients that support the
+  `openai/fileParams` convention, a file attached for this tool arrives as the
+  `media` parameter: an object carrying a temporary `download_url`. Pass that
+  object as `media`; do not extract, repeat, or save the temporary URL.
 - **A direct URL.** Pass `media_url` with a direct public `https://` link to
   the file itself. Redirecting links, `http://` links, and links to private or
-  local addresses are refused. MP4, MOV and WebM video up to 512 MB are
-  accepted, and JPEG, PNG and WebP images up to 25 MB.
+  local addresses are refused. MP4, MOV, WebM and MKV video up to 512 MB are
+  accepted, and JPEG, PNG and WebP images up to 25 MB. What decides the type is
+  the content type the server reports, never the spelling of the URL.
+- **The bytes themselves.** Pass `media_base64` with standard base64, or a
+  `data:<type>;base64,<data>` URL in either `media_base64` or `media_url`. Use
+  this for a file you generated yourself and cannot give a public address -
+  which is the ordinary case for an image a model has just made. Nothing is
+  fetched, so no URL and no file registry is involved. The same size caps
+  apply, and the type is read from the file's own signature: a `data:` label
+  that disagrees with the bytes is ignored in favour of the bytes.
+
+On every route, TrendRelay verifies the file's signature rather than trusting
+the URL suffix, HTTP Content-Type, or `data:` label. A legitimate file served
+as `application/octet-stream` is accepted by its bytes; a page or wrapper
+mislabelled as an image or video is rejected before a Library import is made.
+
+The attachment boundary is deliberately narrow. A local filesystem path, bare
+file id, or generic artifact returned by another tool - including a
+`files/materialize` result - is **not** automatically a valid `media` value.
+Do not pass its artifact metadata or local path and do not retry the same shape.
+It must first be supplied by the client as a compatible attachment object with
+a `download_url`, made available as a direct public HTTPS file URL, or sent as
+base64. Reach for base64 as soon as the first two are unavailable rather than
+retrying them: a generated file usually has no address to give, and that is
+the situation base64 exists for. Only when the bytes themselves cannot be
+produced is the file genuinely unable to cross the boundary - say so then, and
+do not claim the image format was rejected unless the tool's error says that.
+
+If `upload_media` is not in the connected server's offered tool list, images
+can use the compatibility tool `upload_image`, one file per call. Its fields are
+named `image`, `image_url` and `image_base64` instead of `media`, `media_url`
+and `media_base64`, and it accepts JPEG, PNG and WebP only. It cannot upload video. Do not call a tool merely
+because this SOP names it: the connected server's live tool list is the source
+of truth for what that deployment offers.
 
 A video is one file and one post. There is no such thing as a carousel of
 clips: a campaign package is one video **or** a set of pictures, so upload the
@@ -71,14 +107,14 @@ operator's own files - deduplicated by content, kept immutable, audited - and
 appears there under the `mcp-upload` source.
 
 **For a carousel, keep the order.** There is no bulk upload: a carousel of six
-pictures is six `upload_media` calls. Track the returned ids in the order the
-user gave you the pictures, because that is the order they will swipe through -
-`create_campaign_post` uses the order of `asset_ids` as the order of the
-carousel.
+pictures is six upload calls. Track one result slot per source in the order the
+user supplied the pictures, even if calls finish out of order. Later place each
+returned `asset_id` into its original slot; `create_campaign_post` uses the
+order of `asset_ids` as the swipe order and the first image as the cover.
 
 ## 3. Wait for the asset ids
 
-`upload_media` returns either:
+Each upload call returns either:
 
 - `asset_id` immediately, with `duplicate: true` - the library already holds
   these exact bytes; use the asset id as it is; or
@@ -94,6 +130,11 @@ calls per round, several rounds over. Wait until `all_done` is true, then:
 - `failed` holds any that did not import, each with the error to read back to
   the user. Decide with them whether to post the rest or fix the failure
   first; do not quietly create a carousel a picture short.
+
+An upload-tool error happens before a `job_id` exists and therefore cannot be
+polled. Read that error immediately. Name the affected file, preserve the other
+files' order, and do not report the post as complete while a requested file is
+missing.
 
 ## 4. Propose the post
 
@@ -131,27 +172,32 @@ rather than reporting a reach the post does not have.
 ## 4a. Or build the post a piece at a time
 
 Everything above assumes you have the whole post before you start. Often you do
-not: the user sends the words now and the clip when they find it.
-`set_post_media` is the other half of `create_campaign_post`, and between them a
-post can be assembled in either order.
+not: the user sends the words now and the clip later, or dictates a carousel one
+picture at a time as they find them. `set_post_media` is the other half of
+`create_campaign_post`, and between them a post can be assembled in any order.
 
-**Media is never required to start.** Words alone are enough to create the post,
-and so is media alone - whichever half you have, the other can follow. That
-makes text the one thing you can always act on the moment the user gives it to
-you, without waiting for a file. So:
+**Media is never required to start.** Words alone are enough to create the
+post, and so is media alone - whichever half you have, the other can follow.
+That makes text the one thing you can always act on the moment the user gives
+it to you, without waiting for a file. So:
 
 - **Text first.** Call `create_campaign_post` with a `caption` and an empty
   `asset_ids`. The post is created and marked as awaiting media - the scheduler
   passes over it, with a note, until something is attached. Upload the file when
-  it arrives, then call `set_post_media` with the post's id and the asset ids.
+  it arrives, then call `set_post_media` with the post's id and the asset id.
 - **Media first.** Call `create_campaign_post` with `asset_ids` and no caption.
   It is marked as needing copy, and `campaigns.fill-needs-copy` applies. Write
   the words later with `write_post_copy`.
+- **A picture at a time.** Call `set_post_media` with `append: true` and the one
+  new asset id. You do not need to know or resend what is already attached; the
+  new picture joins the end of the carousel, which is the order it will be
+  swiped. Without `append` the package is replaced outright.
 
-`set_post_media` takes the same packages this SOP describes - one video, or a
-set of pictures in swipe order - and answers with the same `carousel_warnings`
-a whole-package create does. So a gallery attached on a second visit is told
-the moment it outgrows an account, rather than at publish time.
+`set_post_media` answers with the same `carousel_warnings` a whole-package
+create does, so a gallery grown one picture at a time is told the moment it
+outgrows an account rather than at publish time. A video cannot be appended -
+it stands alone - so swapping pictures for a clip means sending the clip
+without `append`.
 
 Only a **draft** can be changed this way. Once the operator has promoted a post
 into the rotation they approved it with its media in view, and changing what

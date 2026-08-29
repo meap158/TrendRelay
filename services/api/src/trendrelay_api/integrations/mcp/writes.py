@@ -140,6 +140,7 @@ def set_post_media(
     workspace_id: str,
     item_id: str,
     asset_ids: list[str],
+    append: bool = False,
 ) -> dict[str, Any]:
     """Attach or replace a draft post's media, from Library assets.
 
@@ -184,29 +185,50 @@ def set_post_media(
 
     assets = resolve_post_assets(session, workspace_id, asset_ids)
     media = _media_package(assets)
+    if append:
+        # One more picture onto the carousel, without the caller having to
+        # know what is already there. Only pictures gather; a video stands
+        # alone, so appending to or with one has no meaning to honour.
+        if media.get("video_path"):
+            raise ValueError(
+                "A video cannot be appended - it stands alone. Send it "
+                "without append to replace the post's media."
+            )
+        if item.video_path:
+            raise ValueError(
+                "This post holds a video, and a video stands alone. Send "
+                "the new package without append to replace it."
+            )
+        already = list(item.image_paths or [])
+        fresh = [path for path in media.get("image_paths", []) if path not in already]
+        media = {"image_paths": [*already, *fresh]}
+
     pictures = media.get("image_paths") or []
     if len(pictures) > MAX_CAROUSEL_IMAGES:
         # Said in words. The queue's schema refuses this too, but as a
-        # validation error naming a field and linking to pydantic's website,
-        # which tells an assistant nothing it can act on and reads nothing
-        # like the other refusals here.
+        # validation error naming a field and linking to pydantic's website -
+        # which tells an assistant nothing it can act on, and is the one
+        # refusal in this module that did not read like the others.
         raise ValueError(
             f"A post carries at most {MAX_CAROUSEL_IMAGES} pictures, and this "
-            f"names {len(pictures)}. Send fewer, or split them across posts."
+            f"would make {len(pictures)}. Send fewer, or replace the package "
+            "instead of appending to it."
         )
     update = QueueItemUpdate(
         video_path=media.get("video_path", ""),
         image_paths=media.get("image_paths", []),
-        asset_id=assets[0].id,
+        # The lead identity stays with the first picture of the carousel when
+        # appending; a replacement takes the new package's own lead.
+        asset_id=item.asset_id if append and item.asset_id else assets[0].id,
     )
     apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
     session.commit()
     view = _queue_view(item)
     # The same answer `create_campaign_post` gives, because it is the same
-    # question. A gallery sent to the create door was told which of the
-    # campaign's accounts could carry it; the same gallery attached here was
-    # told nothing, and the post could pass every network's limit in silence
-    # until the runner declined it days later.
+    # question. A gallery assembled in one call was told which of the
+    # campaign's accounts could carry it; one grown a picture at a time was
+    # told nothing, and could pass every network's limit in silence - which is
+    # precisely the flow this tool exists to serve.
     reaches, carousel_warnings = (
         _carousel_reach(session, workspace_id, item.campaign_id, len(pictures))
         if pictures
@@ -217,11 +239,10 @@ def set_post_media(
         (
             # "cannot take it" rather than "cannot take one this long": an
             # account may be refused because the gallery outgrew its limit or
-            # because its engine posts no gallery at all, and both can be in
-            # this list at once. Naming the wrong cause is worse than naming
-            # none.
-            f"{len(pictures)} pictures; they reach {_and_list(reaches)}, and the "
-            "rest of this campaign's accounts cannot take it. "
+            # because its engine posts no gallery at all, and both are in this
+            # list at once. Naming the wrong cause is worse than naming none.
+            f"{len(pictures)} pictures now; they reach {_and_list(reaches)}, and "
+            "the rest of this campaign's accounts cannot take it. "
             if carousel_warnings and reaches
             else f"No account in this campaign can take {len(pictures)} pictures, "
             "so this post has nowhere to go as it stands. "

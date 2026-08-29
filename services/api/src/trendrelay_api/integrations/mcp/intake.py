@@ -8,7 +8,7 @@ remote model chose the target of. The guard refuses everything but a direct
 HTTPS fetch of a public address: no redirects (a public URL that redirects to a
 private one is the classic escape), no loopback or private or link-local
 destination (this machine runs services on loopback that no outside caller may
-reach through us), a size cap, and only the image types the Library accepts.
+reach through us), a size cap, and only the media types the Library accepts.
 ChatGPT's own upload URLs - the `openai/fileParams` convention, where a chat
 attachment arrives as ``{"file_id": ..., "download_url": ...}`` - pass these
 guards, because they are direct HTTPS links to public storage.
@@ -29,6 +29,8 @@ same helper the interface's own route calls.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import ipaddress
 import socket
@@ -40,9 +42,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-#: The image types the Library accepts, keyed by the content type the server
-#: reports. The reported type decides the suffix - never the URL's own, which
-#: is the caller's to write.
+#: The image types the Library accepts, keyed by their verified MIME type. The
+#: bytes decide the suffix - never the URL, header, or caller's own label.
 _IMAGE_TYPES: dict[str, str] = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -54,13 +55,25 @@ _IMAGE_TYPES: dict[str, str] = {
 #: uploads well below this.
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
-#: The video types the Library accepts over MCP, by reported content type -
-#: the same rule as images: the server's word decides the suffix, never the
-#: URL's own spelling.
+#: The video types the Library accepts over MCP, by verified content type - the
+#: same rule as images: the bytes decide the suffix, never the URL's spelling.
 _VIDEO_TYPES: dict[str, str] = {
     "video/mp4": ".mp4",
     "video/quicktime": ".mov",
     "video/webm": ".webm",
+    # The Library's own import list has taken .mkv from the start; the MCP
+    # door matching it is what keeps "the Library accepts it" one fact.
+    "video/x-matroska": ".mkv",
+}
+
+#: ISO base-media brands that are actually video. Merely finding ``ftyp`` is
+#: not enough: HEIC and AVIF pictures use the same container and would
+#: otherwise be filed as MP4 before the media worker eventually rejected them.
+_MP4_VIDEO_BRANDS = {
+    b"3g2a", b"3g2b", b"3gp4", b"3gp5", b"F4V ", b"M4A ", b"M4V ",
+    b"MSNV", b"avc1", b"cmfc", b"cmfs", b"dash", b"hev1", b"hvc1",
+    b"iso2", b"iso3", b"iso4", b"iso5", b"iso6", b"isom", b"mp41",
+    b"mp42",
 }
 
 #: A short-form clip with room to spare. Well under what the disk minds, well
@@ -174,11 +187,152 @@ def _attachment_url(value: dict[str, Any] | str | None, direct_url: str | None) 
         raise ValueError(
             "This is a file id or filesystem path, not a transferable file. "
             "TrendRelay cannot read another tool's private file registry or "
-            "mounted runtime. Attach the generated file directly to this "
-            "upload tool so the client supplies a temporary download URL, or "
-            "pass a direct public https URL."
+            "mounted runtime. Either attach the file directly so the client "
+            "supplies a temporary download URL, pass a direct public https "
+            "URL, or - for a file you generated and cannot give an address - "
+            "send the bytes themselves as image_base64/media_base64, or as a "
+            "data:<type>;base64,<data> URL in this field."
         )
     return source
+
+
+#: What the first bytes of an accepted file look like. Inline uploads are
+#: identified from these rather than from anything the caller says, because
+#: there is no server on the other end whose Content-Type header could be
+#: believed - and a declared type is only a claim in any case.
+def _sniff_media_type(data: bytes) -> str | None:
+    """The media type these bytes actually are, or None if it is not one we take.
+
+    Signatures, not extensions and not the caller's word. A URL fetch can lean
+    on the serving host's Content-Type; inline bytes have no such witness, so
+    this is the whole of the check and it is deliberately strict: anything not
+    positively recognised is refused rather than guessed at.
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[4:8] == b"ftyp":
+        # ISO base media. The brand separates QuickTime from the MP4 family;
+        # everything else in that family is filed as MP4, which is what it is.
+        brand = data[8:12]
+        if brand[:2] == b"qt":
+            return "video/quicktime"
+        if brand in _MP4_VIDEO_BRANDS:
+            return "video/mp4"
+        return None
+    if data.startswith(b"\x1a\x45\xdf\xa3"):
+        # Matroska and WebM share the EBML header and are told apart by the
+        # DocType string, which sits early in the header.
+        return "video/webm" if b"webm" in data[:_EBML_DOCTYPE_WINDOW] else "video/x-matroska"
+    return None
+
+
+#: Far enough into an EBML header to have passed the DocType, and no further:
+#: reading more only raises the chance of matching the word inside content.
+_EBML_DOCTYPE_WINDOW = 256
+
+
+def _decode_inline(
+    value: str,
+    *,
+    allowed: dict[str, str],
+    what: str,
+) -> tuple[bytes, str]:
+    """Bytes a caller sent directly, rather than a URL for us to go and get.
+
+    This exists because a generated file often has no address. An assistant
+    that has just produced an image holds it in its own private file registry;
+    if the client cannot mint a temporary public URL from that, there is
+    nothing to fetch and the upload is impossible however well the fetch path
+    works. The bytes themselves are the one thing the caller always has.
+
+    Nothing is fetched here, so none of the SSRF guarding above applies or is
+    needed - there is no address for a caller to point this machine at. What
+    replaces it is a stricter identification: the type comes from the file's
+    own signature, never from a claim.
+    """
+    payload = value.strip()
+    if payload.startswith("data:"):
+        header, _, encoded = payload.partition(",")
+        parameters = [part.strip().lower() for part in header.split(";")[1:]]
+        if not encoded or "base64" not in parameters:
+            raise ValueError(
+                "A data: URL must be base64-encoded, as data:<type>;base64,<data>."
+            )
+        payload = encoded
+
+    # Decode only enough to identify the container before allocating the whole
+    # payload. This is what keeps a 200 MB blob labelled as a video from using
+    # the video allowance when its own signature says it is a picture.
+    sample_text = payload if len(payload) <= 1024 else payload[:1024]
+    try:
+        sample = base64.b64decode(sample_text, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError(
+            "The base64 payload could not be decoded. Send standard base64 "
+            "with no line breaks, or a data:<type>;base64,<data> URL."
+        ) from error
+    if not sample:
+        raise ValueError("The base64 payload decoded to no bytes.")
+    sniffed = _sniff_media_type(sample)
+    if not sniffed or sniffed not in allowed:
+        accepted = ", ".join(sorted(allowed))
+        raise ValueError(
+            "These bytes are not a file type this upload accepts. The "
+            "signature matches no allowed image or video format; accepted "
+            f"types are {accepted}. Check the payload is the file itself and "
+            "not text, a wrapper, or base64 that has been encoded twice."
+        )
+
+    limit = MAX_IMAGE_BYTES if sniffed.startswith("image/") else MAX_VIDEO_BYTES
+    # Base64 runs at exactly four characters per three source bytes (rounded
+    # up). Refuse above the type's real limit before building the full bytes.
+    if len(payload) > 4 * ((limit + 2) // 3):
+        raise ValueError(
+            f"The {what} is larger than {limit // (1024 * 1024)} MB, "
+            "which is the most this server accepts."
+        )
+    try:
+        data = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError(
+            "The base64 payload could not be decoded. Send standard base64 "
+            "with no line breaks, or a data:<type>;base64,<data> URL."
+        ) from error
+    if len(data) > limit:
+        raise ValueError(
+            f"The {what} is larger than {limit // (1024 * 1024)} MB, "
+            "which is the most this server accepts."
+        )
+    return data, sniffed
+
+
+def _inline_source(
+    value: dict[str, Any] | str | None,
+    direct_url: str | None,
+    explicit: str | None,
+) -> str | None:
+    """The inline bytes among the arguments, if a caller supplied any.
+
+    A `data:` URL is accepted wherever a URL is, because that is where a client
+    that has one will naturally put it, and refusing it there for being the
+    wrong shape of URL would be pedantry.
+    """
+    if explicit and explicit.strip():
+        return explicit
+    candidates = [direct_url]
+    if isinstance(value, str):
+        candidates.append(value)
+    elif isinstance(value, dict):
+        candidates.extend(str(value.get(key) or "") for key in ("data", "base64", "url"))
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text.startswith("data:"):
+            return text
+    return None
 
 
 def _upload_root() -> Path:
@@ -203,6 +357,7 @@ def upload_image(
     creator: str | None = None,
     source_url: str | None = None,
     platform: str | None = None,
+    image_base64: str | None = None,
     fetch=_download,
 ) -> dict[str, Any]:
     """Bring one image into the media library, from a URL or a chat attachment.
@@ -215,8 +370,13 @@ def upload_image(
     string that has no business in a database. Provenance worth keeping goes in
     ``source_url``, which the caller states on purpose.
     """
-    fetched_from = _attachment_url(image, image_url)
-    data, content_type = fetch(fetched_from)
+    inline = _inline_source(image, image_url, image_base64)
+    if inline:
+        data, content_type = _decode_inline(
+            inline, allowed=_IMAGE_TYPES, what="image"
+        )
+    else:
+        data, content_type = fetch(_attachment_url(image, image_url))
     return _ingest_fetched(
         workspace_id, data, content_type, _IMAGE_TYPES,
         title=title, caption=caption, creator=creator,
@@ -233,19 +393,25 @@ def upload_media(
     creator: str | None = None,
     source_url: str | None = None,
     platform: str | None = None,
+    media_base64: str | None = None,
     fetch=_download_media,
 ) -> dict[str, Any]:
     """Bring one video or image into the media library.
 
     The same door as `upload_image` with the video types allowed through it,
     kept as its own tool so existing callers of the image tool keep the
-    tighter cap they were promised. Everything else is identical: the served
-    content type decides what the file is, the digest names it, and it lands
+    tighter cap they were promised. Everything else is identical: the file
+    signature decides what the file is, the digest names it, and it lands
     in the Library through the ordinary ingest pipeline under the
     'mcp-upload' source.
     """
-    fetched_from = _attachment_url(media, media_url)
-    data, content_type = fetch(fetched_from)
+    inline = _inline_source(media, media_url, media_base64)
+    if inline:
+        data, content_type = _decode_inline(
+            inline, allowed={**_IMAGE_TYPES, **_VIDEO_TYPES}, what="file"
+        )
+    else:
+        data, content_type = fetch(_attachment_url(media, media_url))
     return _ingest_fetched(
         workspace_id, data, content_type, {**_IMAGE_TYPES, **_VIDEO_TYPES},
         title=title, caption=caption, creator=creator,
@@ -268,12 +434,26 @@ def _ingest_fetched(
     from trendrelay_api.auth import LOCAL_ADMIN_ID
     from trendrelay_api.media_library import create_ingest_job
 
-    suffix = allowed.get(content_type)
+    # The bytes decide the type on every route. HTTP Content-Type is useful
+    # metadata but not proof, and accepting it alone lets arbitrary content be
+    # written with a media suffix and queued for a worker. It also rejects a
+    # legitimate file served as application/octet-stream for no good reason.
+    sniffed = _sniff_media_type(data)
+    suffix = allowed.get(sniffed or "")
     if not suffix:
         accepted = ", ".join(sorted(allowed))
         raise ValueError(
-            f"The URL served {content_type or 'no content type'}; the library "
-            f"accepts {accepted}."
+            f"The file was labelled {content_type or 'with no content type'}, "
+            "but its signature matches no media type this upload accepts. "
+            f"Accepted types are {accepted}."
+        )
+    content_type = sniffed or content_type
+    limit = MAX_IMAGE_BYTES if content_type.startswith("image/") else MAX_VIDEO_BYTES
+    if len(data) > limit:
+        kind = "image" if content_type.startswith("image/") else "video"
+        raise ValueError(
+            f"The {kind} is larger than {limit // (1024 * 1024)} MB, "
+            "which is the most this server accepts."
         )
     digest = hashlib.sha256(data).hexdigest()
     root = _upload_root()
@@ -606,6 +786,16 @@ def create_campaign_post(
 
     assets = resolve_post_assets(session, workspace_id, asset_ids)
     media = _media_package(assets)
+    # A post may arrive as words without media, or media without words - both
+    # halves can follow later - but never as neither. Text is the one thing
+    # only a caller can supply, so an empty create is a mistake to name, not
+    # a draft to keep.
+    if not assets and not (caption or "").strip():
+        raise ValueError(
+            "A post needs at least its words or its media. Send a caption - "
+            "media can follow with set_post_media once uploaded - or name "
+            "Library assets to start from the media instead."
+        )
 
     if caption is not None:
         _refuse_links("caption", caption)
