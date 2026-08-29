@@ -4756,7 +4756,11 @@ export function AutopilotPanel({
           <>
           <ul className={canEdit ? "autopilot-queue selectable" : "autopilot-queue"}>
             {shownQueue.slice(safeQueuePage * QUEUE_PAGE_SIZE, (safeQueuePage + 1) * QUEUE_PAGE_SIZE).map((item) => (
-              <li key={item.id} id={`queued-${item.id}`} className={item.state}>
+              <li
+                key={item.id}
+                id={`queued-${item.id}`}
+                className={`${item.state}${item.text_only ? " copy-only" : ""}`}
+              >
                 {/* A span, not a div: `.autopilot-queue > li > div` is a grid
                     rule that catches any div wrapper added inside these rows. */}
                 {canEdit && (
@@ -4774,31 +4778,33 @@ export function AutopilotPanel({
                     }}
                   >{queuePicked.has(item.id) && <ActionIcon name="confirm" size={12} />}</span>
                 )}
-                {/* The clip itself, not just its name: this list is where
-                    content is curated, and a thumbnail answers "which video
-                    is this" faster than any filename. */}
-                <div className="autopilot-queue-thumb">
-                  {item.asset_id ? (
-                    <AssetThumbnail
-                      asset={{
-                        id: item.asset_id,
-                        title: item.title ?? "Queued media",
-                        original_path: "",
-                        media_kind: item.video_path ? "video" : "image",
-                        duration_ms: null,
-                        platform: null,
-                        creator: null,
-                        width: null,
-                        height: null,
-                        versions: [{ id: `${item.asset_id}-thumbnail`, kind: "thumbnail" }],
-                      }}
-                      workspaceId={workspaceId}
-                      apiFetch={apiFetch}
-                    />
-                  ) : (
-                    <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>
-                  )}
-                </div>
+                {/* A deliberate copy-only post has no media identity to show.
+                    Omitting the entire cell also lets its copy use that space;
+                    an empty play frame would imply a missing attachment. */}
+                {!item.text_only && (
+                  <div className="autopilot-queue-thumb">
+                    {item.asset_id ? (
+                      <AssetThumbnail
+                        asset={{
+                          id: item.asset_id,
+                          title: item.title ?? "Queued media",
+                          original_path: "",
+                          media_kind: item.video_path ? "video" : "image",
+                          duration_ms: null,
+                          platform: null,
+                          creator: null,
+                          width: null,
+                          height: null,
+                          versions: [{ id: `${item.asset_id}-thumbnail`, kind: "thumbnail" }],
+                        }}
+                        workspaceId={workspaceId}
+                        apiFetch={apiFetch}
+                      />
+                    ) : (
+                      <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>
+                    )}
+                  </div>
+                )}
                 <div>
                   <strong>{displayTitle(item.title) ?? item.body.slice(0, 60)}</strong>
                   {item.needs_copy ? (

@@ -1258,6 +1258,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    unconditionally would leave an empty column for a reader who cannot edit,
    and the checkbox is not rendered for them at all. */
 .autopilot-queue.selectable > li { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+/* Copy-only rows omit the media cell entirely. Give that room to the copy
+   instead of leaving the following cells in the thumbnail's narrow track. */
+.autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr) auto auto; }
+.autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr) auto auto; }
 /* The rehearsal, on its own row spanning every column. It holds a post preview
    at its natural size, wider than the copy track that used to contain it - so
    opening one drew across the status badge and the buttons beside it rather
@@ -1670,6 +1674,8 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
      its own title - which is the one thing a row about a video should not
      lose when the screen narrows. */
   .autopilot-queue > li { grid-template-columns: auto minmax(0, 1fr); }
+  .autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr); }
+  .autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr); }
   .autopilot-queue > li > .ui-badge { grid-column: 1 / -1; justify-self: start; }
   .autopilot-queue > li > .campaign-queue-actions { grid-column: 1 / -1; }
   .campaign-mode-options { grid-template-columns: 1fr; }
