@@ -44,6 +44,36 @@ replaced with a similar Library asset. For files generated in a client sandbox
 or private filesystem with no public URL, encode the file and pass `media_base64`
 (or a standard `data:<mime>;base64,<data>` URL) to `upload_media`.
 
+### Quick path: generate an image, then add it to a campaign
+
+1. Call `get_sop` for `campaigns.add-post-with-media`, then read the live
+   campaign with `list_campaigns` and check `list_library_assets` for the exact
+   image before importing it again.
+2. Generate the image with the client's image-generation capability.
+3. Call `upload_media` once for that image:
+   - In ChatGPT, pass the generated image as the top-level `media` file input
+     when the host offers it. TrendRelay declares the official
+     `_meta["openai/fileParams"]` contract, so ChatGPT materializes the file as
+     `{download_url, file_id, mime_type?, file_name?}`. Pass that object as
+     supplied; never invent, shorten, or persist its temporary URL.
+   - If the client has the bytes but cannot materialize a file object, pass
+     standard base64 in `media_base64`. This is the portable external-client
+     fallback and does not need a public URL.
+   - If the file already has a direct public HTTPS address, pass `media_url`.
+   Send exactly one source field, not the same file in several forms.
+4. If the result contains `job_id`, poll `get_import_status` until `all_done`.
+   Use the returned `asset_id` / entry in `ready`; a failed import creates no
+   campaign attachment and its error must be reported.
+5. Create a new draft with `create_campaign_post(asset_ids=[...])`, or add the
+   asset to an existing text-first draft with `set_post_media`. Use
+   `append=true` only to extend an image carousel. The MCP cannot approve or
+   publish the draft; tell the operator it is waiting in Campaigns.
+
+The upload validates the actual file signature on attachment, URL, and base64
+routes. JPEG, PNG, and WebP images are capped at 25 MB; MP4, MOV, WebM, and MKV
+videos are capped at 512 MB. MIME labels and filename extensions do not
+override the bytes.
+
 ## Authority and safety
 
 An SOP explains how to use authority already granted by the MCP policy; it does

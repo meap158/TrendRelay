@@ -981,6 +981,58 @@ def test_the_upload_tool_declares_the_chatgpt_file_param() -> None:
     assert "image_base64" in tools["upload_image"].inputSchema["properties"]
     assert "media_base64" in tools["upload_media"].inputSchema["properties"]
 
+    for tool_name, parameter in (("upload_image", "image"), ("upload_media", "media")):
+        schema = tools[tool_name].inputSchema
+        file_schema = schema["$defs"]["OpenAIFile"]
+        assert schema["properties"][parameter]["$ref"] == "#/$defs/OpenAIFile"
+        assert set(file_schema["properties"]) == {
+            "download_url", "file_id", "mime_type", "file_name",
+        }
+        assert file_schema["required"] == ["download_url", "file_id"]
+        assert file_schema["additionalProperties"] is False
+        assert all(
+            definition["type"] == "string"
+            for definition in file_schema["properties"].values()
+        )
+
+
+def test_chatgpt_file_object_reaches_the_upload_pipeline(monkeypatch) -> None:
+    """FastMCP validates the official file shape and unwraps it for intake."""
+    from trendrelay_api.integrations.mcp import intake
+
+    received: dict[str, object] = {}
+    monkeypatch.setattr(
+        intake,
+        "upload_media",
+        lambda workspace_id, **kwargs: received.update(
+            workspace_id=workspace_id, **kwargs
+        ) or {"job_id": "j-chatgpt"},
+    )
+    built = server.build_server("ws")
+
+    asyncio.run(
+        built.call_tool(
+            "upload_media",
+            {
+                "media": {
+                    "download_url": "https://files.openai.example/generated.png",
+                    "file_id": "file_generated",
+                    "mime_type": "image/png",
+                    "file_name": "generated.png",
+                },
+                "title": "Generated campaign image",
+            },
+        )
+    )
+
+    assert received["workspace_id"] == "ws"
+    assert received["media"] == {
+        "download_url": "https://files.openai.example/generated.png",
+        "file_id": "file_generated",
+        "mime_type": "image/png",
+        "file_name": "generated.png",
+    }
+
 
 def test_every_tool_is_categorised_and_the_catalog_is_grouped() -> None:
     """Adding a tool without placing it in a group must fail loudly - the

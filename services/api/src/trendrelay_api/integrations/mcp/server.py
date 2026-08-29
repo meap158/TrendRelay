@@ -12,10 +12,36 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, ConfigDict
+
 from trendrelay_api.integrations.mcp import context, intake, policy, schedules, sops, writes
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
+
+class OpenAIFile(BaseModel):
+    """The exact ChatGPT file-parameter object, not an arbitrary dictionary.
+
+    OpenAI's plugin scanner requires all four fields to be declared, exactly
+    the two transferable identifiers to be required, and no undeclared keys.
+    Keeping this as a named model also makes FastMCP emit one reusable `$defs`
+    schema for both upload tools.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    download_url: str
+    file_id: str
+    # OpenAI requires these to be declared as strings but not required. A
+    # non-optional annotation with a None default produces exactly that JSON
+    # Schema: `type: string`, absent from `required`, defaulting when omitted.
+    mime_type: str = None  # type: ignore[assignment]
+    file_name: str = None  # type: ignore[assignment]
+
+
+def _file_value(value: OpenAIFile | None) -> dict[str, Any] | None:
+    return value.model_dump(exclude_none=True) if value is not None else None
 
 INSTRUCTIONS = (
     "This is a TrendRelay workspace. Help write copy for campaign posts that are "
@@ -402,6 +428,7 @@ def build_server(workspace_id: str) -> FastMCP:
 
     @server.tool(
         name="upload_image",
+        title="Upload image to TrendRelay",
         description=(
             "Bring one image into the media library, to post later. Attach the "
             "image in chat (it arrives as the `image` file parameter), pass "
@@ -422,7 +449,7 @@ def build_server(workspace_id: str) -> FastMCP:
         meta={"openai/fileParams": ["image"]},
     )
     def upload_image(
-        image: dict[str, Any] | str | None = None,
+        image: OpenAIFile = None,  # type: ignore[assignment]
         image_url: str | None = None,
         title: str = "",
         caption: str | None = None,
@@ -434,7 +461,7 @@ def build_server(workspace_id: str) -> FastMCP:
         _guard("upload_image")
         return intake.upload_image(
             workspace_id,
-            image=image,
+            image=_file_value(image),
             image_url=image_url,
             title=title,
             caption=caption,
@@ -446,6 +473,7 @@ def build_server(workspace_id: str) -> FastMCP:
 
     @server.tool(
         name="upload_media",
+        title="Upload media to TrendRelay",
         description=(
             "Bring one video or image into the media library, to post later. "
             "Three ways in, in order of preference: attach the file in chat "
@@ -466,7 +494,7 @@ def build_server(workspace_id: str) -> FastMCP:
         meta={"openai/fileParams": ["media"]},
     )
     def upload_media(
-        media: dict[str, Any] | str | None = None,
+        media: OpenAIFile = None,  # type: ignore[assignment]
         media_url: str | None = None,
         title: str = "",
         caption: str | None = None,
@@ -478,7 +506,7 @@ def build_server(workspace_id: str) -> FastMCP:
         _guard("upload_media")
         return intake.upload_media(
             workspace_id,
-            media=media,
+            media=_file_value(media),
             media_url=media_url,
             title=title,
             caption=caption,
