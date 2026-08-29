@@ -472,6 +472,8 @@ export function PostPreview({
     || platform === "tiktok"
     || postTypeLabel.toLowerCase().includes("reel")
     || postTypeLabel.toLowerCase().includes("short");
+  const isVideo = !sourceIsImage && (!!source || !!thumbnail || postTypeLabel.toLowerCase().includes("video"));
+  const defaultRatio = overlaid ? (9 / 16) : isVideo ? (9 / 16) : (4 / 5);
   // Which frame the preview is showing. A carousel is swiped, so the question
   // "does this read" is asked of each one, not only of the cover.
   const [frame, setFrame] = useState(0);
@@ -488,7 +490,7 @@ export function PostPreview({
   const [measured, setMeasured] = useState<number | null>(null);
   const frames = carousel ?? [];
   const showing = frames.length ? frames[Math.min(frame, frames.length - 1)] : source;
-  const ratio = measured;
+  const ratio = measured ?? (overlaid || isVideo ? defaultRatio : null);
   // The frames either side, rendered but not shown, so stepping reads from
   // cache rather than starting a fresh request and blanking the box.
   const neighbours = frames.length > 1
@@ -522,16 +524,12 @@ export function PostPreview({
       {!copyOnly && (
         <div
           className="post-preview-frame"
-        // Not on a Story. That surface is 9:16 full bleed whatever the clip is,
-        // and the CSS says so - but an inline variable beats any rule, so
-        // measuring one here would quietly replace the network's shape with the
-        // file's, which is the opposite of what this preview is for.
-        style={
-          ratio && !story
-            ? ({ "--preview-ratio": String(ratio) } as React.CSSProperties)
-            : undefined
-        }
-      >
+          style={
+            ratio
+              ? ({ "--preview-ratio": String(ratio) } as React.CSSProperties)
+              : undefined
+          }
+        >
         {/* The media, where there is any: a network shows the clip, not a
             still of it, and a caption judged against a frozen frame is judged
             against something nobody will see. The thumbnail is the fallback

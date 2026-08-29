@@ -600,7 +600,7 @@ nav strong { color: var(--text); }
    widening the row. The width of an account's name is not a layout. */
 .preview-head-controls .preview-destination { flex: 1 1 auto; min-inline-size: 0; }
 .preview-head-controls > :last-child { flex: 0 0 auto; }
-.post-preview { display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
+.post-preview { --preview-max-height: min(56vh, 440px); display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
 /* A phone is the width these networks are read at, so it is the default and
    the narrower of the two. Capped rather than stretched: a preview as wide
    as the panel stops being a preview of anything somebody will see. */
@@ -630,8 +630,9 @@ nav strong { color: var(--text); }
    back to the column when that is narrower. Both halves of the ratio
    variable work in `calc`, whether it arrives as `4 / 5` from here or as a
    measured decimal from the media. */
-.post-preview-frame { display: grid; place-items: center; justify-self: center; inline-size: min(100%, calc(min(56vh, 440px) * var(--preview-ratio, 4 / 5))); max-inline-size: 100%; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
-.post-preview.story .post-preview-frame { --preview-ratio: 9 / 16; }
+.post-preview-frame { display: grid; place-items: center; justify-self: center; inline-size: min(100%, calc(var(--preview-max-height, min(56vh, 440px)) * var(--preview-ratio, 4 / 5))); max-inline-size: 100%; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: var(--preview-max-height, min(56vh, 440px)); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; position: relative; }
+.post-preview.story .post-preview-frame,
+.post-preview:has(.preview-surface) .post-preview-frame { --preview-ratio: 9 / 16; }
 
 /* The surface's own furniture, over the media.
 
@@ -668,13 +669,11 @@ nav strong { color: var(--text); }
    is a player centred in a page, inset and rounded. Both references show
    exactly that, and it is the whole visible difference between the two
    modes on these surfaces - so the toggle changes what it says it does. */
-.post-preview[data-width="mobile"]:has(.preview-surface) .post-preview-frame { inline-size: 100%; border-radius: 0; }
 .post-preview[data-width="mobile"]:has(.preview-surface) { padding: 0; overflow: hidden; }
 .post-preview[data-width="mobile"]:has(.preview-surface) figcaption,
 .post-preview[data-width="mobile"]:has(.preview-surface) .post-preview-copy { padding-inline: 12px; }
 .post-preview[data-width="mobile"]:has(.preview-surface) figcaption { padding-block-start: 12px; }
 .post-preview[data-width="desktop"]:has(.preview-surface) .post-preview-frame { border-radius: var(--radius-lg); }
-.post-preview-frame { position: relative; }
 /* Contain, like the video below it. The frame is already the media's own
    shape, so there is nothing to crop away - and cropping here hid the
    edges of the very thing being judged. */
@@ -718,6 +717,19 @@ nav strong { color: var(--text); }
  * still reserves the space, so the dates stay on one line across the strip. */
 .upcoming-day i { display: grid; place-items: center; min-width: 15px; height: 15px; margin-top: 1px; padding: 0 4px; border-radius: 999px; background: var(--link); color: var(--on-ink); font-size: 9px; font-style: normal; font-weight: 700; line-height: 1; }
 .upcoming-day i.empty { background: none; }
+/* Counting: where the number will sit, a small skeleton that breathes once a
+ * second - the same shape the count will take, so nothing shifts when it
+ * lands, and no day reads as finished before the rest. */
+.upcoming-day i.pending {
+  inline-size: 17px;
+  background: var(--line-strong);
+  animation: upcoming-pending 1.6s ease-in-out infinite;
+}
+@keyframes upcoming-pending {
+  0%, 100% { opacity: .45; }
+  50% { opacity: .9; }
+}
+@media (prefers-reduced-motion: reduce) { .upcoming-day i.pending { animation: none; opacity: .55; } }
 
 .upcoming-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .upcoming-list > li { display: grid; grid-template-columns: auto 38px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 2px; border-top: 1px solid var(--line); }
@@ -774,7 +786,11 @@ nav strong { color: var(--text); }
 /* Not on a selected slot. `:hover:not(:disabled)` outweighs `.selected`, so it
  * recoloured the label green over the green fill selection had already given
  * it, and the time vanished into its own background. */
-.week-slot:hover:not(:disabled):not(.selected) { border-style: solid; border-color: var(--green); color: var(--green); }
+/* The hover fills green with white text rather than only repainting the label:
+ * in today's column the slot sits on the pale green day fill, and green text
+ * over that read as black-on-green. Same pair the chosen slot wears, so what
+ * hover previews is exactly what clicking lands. */
+.week-slot:hover:not(:disabled):not(.selected) { border-style: solid; border-color: var(--green); background: var(--green); color: var(--on-ink); }
 .week-slot.selected { border-style: solid; border-color: var(--green); background: var(--green); color: var(--on-ink); font-weight: 600; }
 /* Selected is already green on green, so hovering deepens the fill rather than
  * touching the text. */
@@ -782,7 +798,13 @@ nav strong { color: var(--text); }
 .week-slot.taken { border-style: solid; border-color: var(--line-strong); background: var(--panel-raised); color: var(--text); }
 .week-slot:disabled { border-style: dotted; opacity: .45; cursor: default; }
 .week-slot em { margin-inline-start: 4px; border-radius: 999px; padding: 0 4px; background: var(--green); color: var(--on-ink); font-size: 9px; font-style: normal; font-weight: 700; }
-.week-extra { border-radius: var(--radius-sm); padding: 2px 4px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: center; }
+/* On a hovered slot the fill is green too, which would swallow the pill - so
+ * the count inverts and stays a mark beside the time rather than melting
+ * into the button. */
+.week-slot:hover:not(:disabled):not(.selected) em { background: var(--on-ink); color: var(--green); }
+/* The same size as the slot labels it sits among: at 10px these read as a
+ * smaller class of thing rather than a post at an off-slot time. */
+.week-extra { border-radius: var(--radius-sm); padding: 2px 4px; background: var(--panel-raised); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; text-align: center; }
 /* How many posts share that off-rhythm time - the same mark the slots carry. */
 .week-extra em { margin-inline-start: 3px; color: var(--muted-soft); font-size: 10px; font-style: normal; font-weight: 600; }
 .week-legend { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
@@ -850,13 +872,6 @@ nav strong { color: var(--text); }
 .slot-remove { display: grid; place-items: center; width: 18px; min-height: 18px; padding: 0; border: none; border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; }
 .slot-remove:hover { background: var(--line); color: var(--text); }
 .slot-add { display: flex; flex-wrap: wrap; gap: 6px; }
-/* One line. Left alone the time input, the day chooser and the button
-   stacked into three rows: the chooser is a `.ui-select`, which is
-   `width: 100%` by design because it fills the field it is given - and here
-   the field is a row, so it is told how much of the row to take. */
-.slot-add { align-items: center; }
-.slot-add > input { inline-size: auto; min-inline-size: 0; }
-.slot-add .ui-select { flex: 0 1 190px; inline-size: auto; }
 .publish-form .slot-add input, .publish-form .slot-add select { width: auto; min-height: 32px; padding: 4px 8px; }
 .slot-presets { display: grid; gap: 6px; }
 .slot-presets > span { color: var(--muted); font-size: 11px; font-weight: 600; }
@@ -889,8 +904,7 @@ nav strong { color: var(--text); }
 /* Takes the row the cards were on while it is open, because the name being
    typed belongs to one of them and a field under twelve belongs to none. */
 .slot-preset-rename { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.slot-preset-delete:hover:not(:disabled) { color: var(--bad); background: var(--bad-bg); }
-.slot-preset-delete:disabled { cursor: not-allowed; opacity: .5; }
+.slot-preset-rename input { min-width: 0; flex: 1 1 180px; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: inherit; font: inherit; }
 .slot-preset-save { display: flex; gap: 6px; align-items: center; }
 .slot-preset-save input { min-width: 0; flex: 1; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: inherit; }
 .page-schedule-assignments { display: grid; gap: 8px; margin: 0 12px 12px; padding: 12px; border-top: 1px solid var(--line); }
@@ -1283,6 +1297,10 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .capability-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 .capability-table th[scope="row"] { min-width: 150px; }
 .capability-table th[scope="row"] small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; }
+/* The qualifier under a media fact ("Cannot fetch a URL…"), on its own line the
+   way the tagline sits under the engine name - JSX puts the two text nodes
+   adjacent, so inline they read as one word-salad sentence. */
+.capability-table td small.capability-media-note { display: block; margin-top: 1px; color: var(--muted); font-size: 10px; font-weight: 500; }
 .capability-engine { text-align: center; }
 .capability-cell { text-align: center; }
 .capability-network { display: flex; gap: 7px; align-items: center; }
@@ -1370,7 +1388,10 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
    is what puts the filename and its three buttons on one line, and that also
    stops the item being a list-item at all - so ::marker had nothing to draw and
    the numbers this list exists to show were simply absent. */
-.carousel-list { display: grid; gap: 4px; margin: 0; padding-inline-start: 0; list-style: none; counter-reset: carousel; }
+/* One explicit column, floored at zero: an implicit `auto` track sizes itself
+   to the longest filename, so a download's long title widened every row past
+   the panel and pushed the badges and reorder buttons underneath the rail. */
+.carousel-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 0; padding-inline-start: 0; list-style: none; counter-reset: carousel; }
 .carousel-list li { display: flex; gap: 6px; align-items: center; font-size: 11px; }
 .carousel-list li::before { counter-increment: carousel; content: counter(carousel) "."; flex: none; min-inline-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .carousel-list code { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1418,9 +1439,7 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 /* On a narrow screen the aside is under the composer rather than beside it, so
    the stage can be shorter still - the caption is what is being worked on. */
 @media (max-width: 760px) {
-  .post-preview-frame .blur-preview,
-  .post-preview-frame .blur-preview-launch { block-size: clamp(150px, 30vw, 220px); }
-  .post-preview-frame { aspect-ratio: 1 / 1; }
+  .post-preview { --preview-max-height: clamp(180px, 40vw, 260px); }
   .carousel-list code { font-size: 10px; }
 }
 /* The probe's own words on the waiting screen. Monospace because it carries a
@@ -1554,8 +1573,7 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-outings { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; }
 /* The same cap the approval inbox puts on its previews. These are vertical
    clips: at full width a single one is taller than the row that opened it. */
-.campaign-outings .post-preview-frame { max-block-size: min(28vh, 220px); }
-.campaign-outings .post-preview { margin: 0; padding: 9px; }
+.campaign-outings .post-preview { --preview-max-height: min(45vh, 320px); margin: 0; padding: 9px; }
 .campaign-rehearsal-list > article { display: grid; gap: 7px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-rehearsal-list > article > header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .campaign-rehearsal-list > article > header strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

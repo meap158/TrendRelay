@@ -1601,7 +1601,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    of them a morning's scrolling. The question being asked is "is this the
    right video and does the caption read", which a shorter frame answers just
    as well. */
-.campaign-approval-list .post-preview-frame { max-block-size: min(34vh, 260px); }
+.campaign-approval-list .post-preview-frame { --preview-max-height: min(34vh, 260px); }
 .campaign-approval-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-content: start; min-width: 0; }
 .campaign-approval-facts > * { min-width: 0; max-width: 100%; }
 /* Owned here: the approval inbox is a Campaigns surface, and its base rule
@@ -1620,13 +1620,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    as a footnote to one post. */
 .campaign-approval-actions-hint { display: block; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .campaign-approval-actions-hint strong { color: var(--text); font-weight: 600; }
-/* The width follows the capped height and the clip's own ratio, so a vertical
-   video shows in full at its shape - as the composer's preview does - rather
-   than forced to the column's width and letterboxed to a thin strip. The ratio
-   fallback also keeps a frame with no poster yet from collapsing to nothing. */
-.campaign-approval-list .post-preview-frame {
-  inline-size: min(100%, calc(min(34vh, 260px) * var(--preview-ratio, 0.8)));
-}
 /* A tool's notes, read inside the modal now: the dialog carries the panel
    chrome and scrolls the body, so only the text itself is styled here. */
 .tool-docs-body { margin: 0; padding: 14px 16px; border-radius: var(--radius); background: var(--panel-raised); font: 12px/1.65 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -2260,12 +2253,17 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-analytics-chart > div:first-child strong { font-size: 12px; }
 .campaign-analytics-chart > div:first-child small { color: var(--muted); font-size: 10px; }
 .campaign-analytics-trend { position: relative; display: grid; gap: 3px; min-width: 0; }
-.campaign-trend-plot { position: relative; min-width: 0; }
+.campaign-trend-plot { --campaign-y-axis-width: 32px; display: grid; grid-template-columns: var(--campaign-y-axis-width) minmax(0, 1fr); gap: 8px; min-width: 0; }
+.campaign-trend-canvas { position: relative; min-width: 0; }
 .campaign-trend-plot svg { display: block; inline-size: 100%; block-size: clamp(120px, 18vw, 190px); overflow: visible; }
-.campaign-analytics-trend line { stroke: var(--line); stroke-width: .45; vector-effect: non-scaling-stroke; }
+.campaign-analytics-trend line { vector-effect: non-scaling-stroke; }
+.campaign-analytics-trend line.campaign-trend-gridline { stroke: color-mix(in srgb, var(--line) 72%, transparent); stroke-width: .55; stroke-dasharray: 2 3; }
+.campaign-analytics-trend line.campaign-trend-y-axis,
+.campaign-analytics-trend line.campaign-trend-y-tick { stroke: var(--line-strong); stroke-width: 1; }
 .campaign-analytics-trend polygon { fill: color-mix(in srgb, var(--link) 10%, transparent); }
 .campaign-analytics-trend polyline { fill: none; stroke: var(--link); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.campaign-trend-scale { position: absolute; z-index: 1; inset: 2px auto 2px 0; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.campaign-trend-y-labels { position: relative; min-width: 0; color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.campaign-trend-y-labels span { position: absolute; inset-block-start: var(--trend-tick-y); inset-inline-end: 0; max-inline-size: 100%; overflow: hidden; transform: translateY(-50%); text-overflow: ellipsis; white-space: nowrap; }
 .campaign-analytics-trend line.campaign-trend-guide { stroke: color-mix(in srgb, var(--link) 55%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
 .campaign-trend-active-dot { position: absolute; z-index: 2; inset-block-start: clamp(4px, var(--trend-point-y), calc(100% - 4px)); inset-inline-start: clamp(4px, var(--trend-point-x), calc(100% - 4px)); box-sizing: border-box; inline-size: 8px; block-size: 8px; transform: translate(-50%, -50%); border: 2px solid var(--panel); border-radius: 50%; background: var(--link); box-shadow: 0 1px 2px rgb(0 0 0 / 20%); pointer-events: none; }
 .campaign-trend-hit-area { fill: transparent; stroke: transparent; stroke-width: .5; cursor: crosshair; pointer-events: all; }
@@ -2277,7 +2275,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-trend-tooltip dl > div.selected { border-color: var(--link); }
 .campaign-trend-tooltip dt { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-trend-tooltip dd { margin: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.campaign-analytics-trend > span { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; }
+.campaign-analytics-trend > span.campaign-trend-dates { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 9px; }
 .campaign-analytics-lower { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(220px, .7fr); gap: 14px; align-items: start; }
 .campaign-top-content, .campaign-analytics-coverage { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-top-content > header { display: flex; align-items: end; justify-content: space-between; gap: 10px; padding: 12px 14px; border-block-end: 1px solid var(--line); }
