@@ -5031,8 +5031,8 @@ export function AutopilotPanel({
             description="Everything below is one post. The campaign adds the disclosure and the product link to it, differently on each account - what that comes to is composed underneath, exactly as each one will receive it."
             headerAction={
               // Beside the ×, so saving does not mean scrolling a long form
-              // to its end. The same submit as the button down there - the
-              // `form` attribute reaches the form from outside it.
+              // to its end. The `form` attribute reaches the form from outside
+              // it, leaving one predictable submit action for the whole modal.
               <Button type="submit" form="campaign-edit-content" variant="primary"
                 busy={busy === "edit-copy"}>Save post</Button>
             }
@@ -5365,7 +5365,6 @@ export function AutopilotPanel({
                 </ul>
               )}
             </section>
-            <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post</Button>
           </form>
           </Dialog>
         )}
