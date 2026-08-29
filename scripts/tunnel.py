@@ -103,7 +103,10 @@ def wait_for_connector(child: subprocess.Popen, health_port: int, seconds: float
 def supervise(config: dict[str, str], parent_pid: int) -> int:
     # The server the tunnel forwards to: started here, so configuring a tunnel is
     # all it takes to serve the workspace, and stopped when this supervisor ends.
-    service.start_server()
+    # Tie the MCP child to this supervisor. If the launcher force-stops this
+    # process on Windows, `finally` never runs; without the parent watch the
+    # old MCP process keeps serving yesterday's in-memory tool schema.
+    service.start_server(parent_pid=os.getpid())
     ready = wait_for_local_server()
     if not ready["ok"]:
         # Said once, on the console, in the words the Tools tab uses. A tunnel

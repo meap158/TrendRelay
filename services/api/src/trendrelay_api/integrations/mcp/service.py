@@ -169,7 +169,7 @@ def _environment() -> dict[str, str]:
     return env
 
 
-def start_server(force: bool = False) -> dict[str, Any]:
+def start_server(force: bool = False, *, parent_pid: int | None = None) -> dict[str, Any]:
     global SERVER_PROCESS
     with LOCK:
         if not mcp_available():
@@ -191,8 +191,11 @@ def start_server(force: bool = False) -> dict[str, Any]:
         )
         MCP_DIR.mkdir(parents=True, exist_ok=True)
         log = open(LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115 - lives with the child
+        command = [sys.executable, str(MCP_SCRIPT)]
+        if parent_pid:
+            command.extend(["--parent-pid", str(parent_pid)])
         SERVER_PROCESS = subprocess.Popen(
-            [sys.executable, str(MCP_SCRIPT)],
+            command,
             cwd=PROJECT_ROOT,
             env={**_environment(), PORT_ENV: str(chosen)},
             stdout=log,

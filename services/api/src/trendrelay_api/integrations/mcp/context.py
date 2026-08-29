@@ -482,6 +482,7 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
             str(view["id"]), view.get("resolved_post_type")
         )
         view["effective_post_type"] = _post_type_for(SimpleNamespace(
+            media_path=item.video_path,
             image_paths=item.image_paths,
             platform=view["platform"],
             post_type=configured,

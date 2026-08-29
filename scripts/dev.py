@@ -669,6 +669,12 @@ def build_services(
             [str(python), "scripts/tunnel.py", "--parent-pid", str(os.getpid())],
             "blue",
             restart_on_exit=False,
+            # The tunnel owns the MCP process, whose tool definitions are
+            # imported once. Restart this supervisor alongside the backend
+            # whenever that Python contract changes, otherwise filesystem-read
+            # SOPs can describe new tools while an old server keeps exposing
+            # yesterday's list until somebody manually restarts the app.
+            reload_roots=("services/api/src", "scripts"),
             # Optional on purpose: with no tunnel configured, tunnel.py does its
             # nothing and exits 0, which is the common case on a dev machine. It
             # was left required, so that expected clean exit was read as a fatal

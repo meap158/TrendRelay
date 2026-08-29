@@ -127,11 +127,18 @@ def _post_type_for(execution: Any) -> str | None:
     """
     from trendrelay_api.integrations.publishing import post_type_for_media
 
+    images = list(getattr(execution, "image_paths", None) or [])
+    # Scheduled executions always carry `media_path`, including the empty
+    # string for a deliberate text post. Lightweight preview objects predating
+    # text-only posts do not; there, no pictures historically meant video and
+    # must keep the destination's Reel/Story choice.
+    has_media_path = hasattr(execution, "media_path")
+    has_video = bool(getattr(execution, "media_path", "")) if has_media_path else not images
     return post_type_for_media(
         execution.platform,
         execution.post_type,
-        has_video=bool(execution.media_path),
-        has_images=bool(execution.image_paths),
+        has_video=has_video,
+        has_images=bool(images),
     )
 
 

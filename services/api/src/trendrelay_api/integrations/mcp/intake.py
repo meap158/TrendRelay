@@ -143,6 +143,44 @@ def _download_media(url: str) -> tuple[bytes, str]:
     return _fetch_bytes(url, limit=MAX_VIDEO_BYTES, what="file")
 
 
+def _attachment_url(value: dict[str, Any] | str | None, direct_url: str | None) -> str:
+    """Resolve a client-materialized attachment, with a useful refusal otherwise.
+
+    A file-param attachment is an object because the client must turn its own
+    private file reference into a temporary URL the server can fetch. A bare
+    file id or a path mounted in the model's runtime names bytes this machine
+    cannot access; accepting either as though it were a URL only produces a
+    misleading format or scheme error later.
+    """
+    if isinstance(value, dict):
+        candidate = next(
+            (
+                value.get(key)
+                for key in ("download_url", "file_url", "image_url", "url")
+                if value.get(key)
+            ),
+            None,
+        )
+    else:
+        candidate = value
+    candidate = candidate or direct_url
+    source = str(candidate or "").strip()
+    if not source:
+        raise ValueError(
+            "Provide a source: attach one file directly to this upload tool, "
+            "or pass image_url/media_url as a direct public https URL."
+        )
+    if not source.startswith("https://"):
+        raise ValueError(
+            "This is a file id or filesystem path, not a transferable file. "
+            "TrendRelay cannot read another tool's private file registry or "
+            "mounted runtime. Attach the generated file directly to this "
+            "upload tool so the client supplies a temporary download URL, or "
+            "pass a direct public https URL."
+        )
+    return source
+
+
 def _upload_root() -> Path:
     from trendrelay_api.config import get_settings
     from trendrelay_api.tool_registry import PROJECT_ROOT
@@ -158,7 +196,7 @@ def _upload_root() -> Path:
 
 def upload_image(
     workspace_id: str,
-    image: dict[str, Any] | None = None,
+    image: dict[str, Any] | str | None = None,
     image_url: str | None = None,
     title: str = "",
     caption: str | None = None,
@@ -177,13 +215,8 @@ def upload_image(
     string that has no business in a database. Provenance worth keeping goes in
     ``source_url``, which the caller states on purpose.
     """
-    fetched_from = (image or {}).get("download_url") or image_url
-    if not fetched_from or not str(fetched_from).strip():
-        raise ValueError(
-            "Provide the image: attach one (it arrives as the `image` file "
-            "parameter) or pass `image_url`."
-        )
-    data, content_type = fetch(str(fetched_from).strip())
+    fetched_from = _attachment_url(image, image_url)
+    data, content_type = fetch(fetched_from)
     return _ingest_fetched(
         workspace_id, data, content_type, _IMAGE_TYPES,
         title=title, caption=caption, creator=creator,
@@ -193,7 +226,7 @@ def upload_image(
 
 def upload_media(
     workspace_id: str,
-    media: dict[str, Any] | None = None,
+    media: dict[str, Any] | str | None = None,
     media_url: str | None = None,
     title: str = "",
     caption: str | None = None,
@@ -211,13 +244,8 @@ def upload_media(
     in the Library through the ordinary ingest pipeline under the
     'mcp-upload' source.
     """
-    fetched_from = (media or {}).get("download_url") or media_url
-    if not fetched_from or not str(fetched_from).strip():
-        raise ValueError(
-            "Provide the file: attach one (it arrives as the `media` file "
-            "parameter) or pass `media_url`."
-        )
-    data, content_type = fetch(str(fetched_from).strip())
+    fetched_from = _attachment_url(media, media_url)
+    data, content_type = fetch(fetched_from)
     return _ingest_fetched(
         workspace_id, data, content_type, {**_IMAGE_TYPES, **_VIDEO_TYPES},
         title=title, caption=caption, creator=creator,

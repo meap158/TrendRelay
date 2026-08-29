@@ -418,7 +418,7 @@ def build_server(workspace_id: str) -> FastMCP:
         meta={"openai/fileParams": ["image"]},
     )
     def upload_image(
-        image: dict[str, Any] | None = None,
+        image: dict[str, Any] | str | None = None,
         image_url: str | None = None,
         title: str = "",
         caption: str | None = None,
@@ -454,7 +454,7 @@ def build_server(workspace_id: str) -> FastMCP:
         meta={"openai/fileParams": ["media"]},
     )
     def upload_media(
-        media: dict[str, Any] | None = None,
+        media: dict[str, Any] | str | None = None,
         media_url: str | None = None,
         title: str = "",
         caption: str | None = None,

@@ -54,6 +54,15 @@ def test_the_tunnel_service_is_optional_and_not_restarted(dev_module) -> None:
     assert tunnel.restart_on_exit is False
 
 
+def test_the_tunnel_reloads_the_mcp_contract_with_python_changes(dev_module) -> None:
+    """SOP files are live-read; the in-memory tool schema must stay as current."""
+    services = dev_module.build_services(include_desktop=False, may_terminate=False)
+    tunnel = next(item for item in services if item.name == "Tunnel")
+
+    assert "services/api/src" in tunnel.reload_roots
+    assert "scripts" in tunnel.reload_roots
+
+
 def test_the_supervisor_starts_the_mcp_server_itself() -> None:
     """The second link: configuring a tunnel is all it takes to serve.
 
@@ -77,3 +86,10 @@ def test_the_supervisor_starts_the_mcp_server_itself() -> None:
     # And before the client is launched: a client pointed at a server that is
     # not up forwards to whatever else is on that port.
     assert names.index("start_server") < names.index("Popen")
+    start = next(
+        node for node in ast.walk(supervise)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "start_server"
+    )
+    assert any(keyword.arg == "parent_pid" for keyword in start.keywords)
