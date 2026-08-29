@@ -1861,14 +1861,23 @@ function LibraryContent() {
               <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => patchFilters({ mediaKind: "image" })}>{t("library.images")} <span>{mediaCount("image")}</span></button>
               <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
             </div>
-            <label>{t("library.sortLabel")}
-              <Select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
-                <option value="newest">{t("library.sortNewest")}</option>
-                <option value="oldest">{t("library.sortOldest")}</option>
-                <option value="title">{t("library.sortTitle")}</option>
-                <option value="duration">{t("library.sortLongest")}</option>
-              </Select>
-            </label>
+            <div className="library-arrange-controls">
+              <label>{t("library.sortLabel")}
+                <Select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
+                  <option value="newest">{t("library.sortNewest")}</option>
+                  <option value="oldest">{t("library.sortOldest")}</option>
+                  <option value="title">{t("library.sortTitle")}</option>
+                  <option value="duration">{t("library.sortLongest")}</option>
+                </Select>
+              </label>
+              <label>{t("library.group")}
+                <Select aria-label={t("library.groupLabel")} value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
+                  <option value="none">{t("library.noGrouping")}</option>
+                  <option value="channel">{t("library.channel")}</option>
+                  <option value="source">{t("library.source")}</option>
+                </Select>
+              </label>
+            </div>
           </nav>
 
           <AssetFilters
@@ -1876,15 +1885,7 @@ function LibraryContent() {
             facets={facets}
             fields={["channel", "platform", "effect", "processing", "downloaded"]}
             onChange={setFilters}
-          >
-            <label>{t("library.group")}
-              <Select aria-label={t("library.groupLabel")} value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
-                <option value="none">{t("library.noGrouping")}</option>
-                <option value="channel">{t("library.channel")}</option>
-                <option value="source">{t("library.source")}</option>
-              </Select>
-            </label>
-          </AssetFilters>
+          />
           <div className="library-collection-toolbar">
             <strong aria-live="polite">
               {loadingAssets ? "Filtering…" : `${total} ${total === 1 ? "item" : "items"}`}
