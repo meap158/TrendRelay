@@ -22,6 +22,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -255,6 +256,17 @@ class CampaignQueueItem(Base):
         CheckConstraint(
             "state IN ('draft','approved','paused','retired')",
             name="valid_queue_item_state",
+        ),
+        # "Is this clip already in that campaign?", asked once per row of a
+        # library filter. Both columns are indexed separately and neither is
+        # selective on its own: SQLite chose the workspace index - which every
+        # row of the table shares - and scanned the whole queue for each of
+        # three thousand assets, which measured 12.8 seconds for one filtered
+        # page. Together they are a point lookup: the same answer in 0.03.
+        Index(
+            "ix_campaign_queue_items_campaign_asset",
+            "campaign_id",
+            "asset_id",
         ),
     )
 
