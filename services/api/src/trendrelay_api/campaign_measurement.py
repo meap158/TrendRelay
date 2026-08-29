@@ -41,6 +41,42 @@ MAX_SNAPSHOTS = 20
 #: a figure nothing downstream understands.
 METRIC_FIELDS = ("views", "likes", "comments", "shares", "saves", "watch_seconds")
 
+
+def _clean(metrics: dict[str, Any]) -> dict[str, float]:
+    """The recognised numbers, as floats. What a snapshot would actually store."""
+    return {
+        field: float(metrics[field])
+        for field in METRIC_FIELDS
+        if isinstance(metrics.get(field), (int, float))
+    }
+
+
+def _reads_as_nothing(metrics: dict[str, Any]) -> bool:
+    """Whether this read says every figure is zero.
+
+    Not the same as a post that earned nothing. A network that has not
+    reported to its scheduler yet is relayed as zeros rather than as silence -
+    Buffer documents exactly this, that a metric the network did not supply
+    reads 0 - so a read of all zeros is the one shape that means "ask again"
+    and "there is nothing to see" equally.
+    """
+    cleaned = _clean(metrics)
+    return bool(cleaned) and not any(cleaned.values())
+
+
+def _believed_after(index: int) -> timedelta:
+    """How long a window waits before an all-zero read is taken at face value.
+
+    The next window's own delay, and for the last window twice its own: a zero
+    is believed once there has been at least as long again to hear otherwise.
+    Without a bound the retry never ends, and a post that genuinely earned
+    nothing would be polled forever against a request budget that publishing
+    needs.
+    """
+    if index + 1 < len(MEASUREMENT_WINDOWS):
+        return MEASUREMENT_WINDOWS[index + 1][1]
+    return MEASUREMENT_WINDOWS[index][1] * 2
+
 #: One reader per provider id, given the execution and returning metric fields
 #: or None when the post cannot be read. Empty on purpose - see the module
 #: docstring. Registration is the extension point.
@@ -105,12 +141,7 @@ def record_snapshot(
             f"Only a published execution can be measured; this one is {execution.state}."
         )
     moment = at or datetime.now(UTC)
-    cleaned = {
-        field: float(metrics[field])
-        for field in METRIC_FIELDS
-        if isinstance(metrics.get(field), (int, float))
-    }
-    snapshot = {"at": moment.isoformat(), "window": window, "metrics": cleaned}
+    snapshot = {"at": moment.isoformat(), "window": window, "metrics": _clean(metrics)}
     existing = list(execution.performance_snapshots or [])
     existing.append(snapshot)
     execution.performance_snapshots = existing[-MAX_SNAPSHOTS:]
@@ -134,6 +165,14 @@ def collect_snapshots(
     Cheap when nothing can be read: with no reader registered this reports the
     providers it cannot ask and touches nothing. Failures to read are skipped,
     not recorded - an unread window stays due and is retried on the next pass.
+
+    A read of all zeros is skipped the same way, until there has been long
+    enough to hear otherwise. It is not a failure and not an observation: a
+    network that has not reported to its scheduler yet is relayed as zeros, so
+    recording one froze "not known yet" into the campaign as "earned nothing"
+    and closed the window against ever being asked again. Sixty-nine posts
+    were reopened by hand for this before the cause was found, and four more
+    arrived the same way afterwards.
     """
     moment = now or datetime.now(UTC)
     captured = 0
@@ -152,17 +191,29 @@ def collect_snapshots(
                 unreadable.add(execution.provider)
             continue
         published_at = execution.published_at
-        if published_at and published_at.tzinfo is None:
+        if published_at is None:
+            continue
+        if published_at.tzinfo is None:
             published_at = published_at.replace(tzinfo=UTC)
         done = _windows_captured(execution)
-        for window, delay in MEASUREMENT_WINDOWS:
-            if window in done or not published_at:
+        due = [
+            (index, window)
+            for index, (window, delay) in enumerate(MEASUREMENT_WINDOWS)
+            if window not in done and moment >= published_at + delay
+        ]
+        if not due:
+            continue
+        # Once per post, not once per window. A reader answers about the post
+        # rather than about the window, so asking again for each due window
+        # spent three requests on one answer - against the same budget the
+        # Buffer reader has to reserve publishing capacity out of.
+        metrics = reader(execution)
+        if metrics is None:
+            continue
+        nothing = _reads_as_nothing(metrics)
+        for index, window in due:
+            if nothing and moment < published_at + _believed_after(index):
                 continue
-            if moment < published_at + delay:
-                continue
-            metrics = reader(execution)
-            if metrics is None:
-                break
             record_snapshot(execution, metrics, window=window, at=moment)
             captured += 1
     return {"captured": captured, "unreadable_providers": sorted(unreadable)}

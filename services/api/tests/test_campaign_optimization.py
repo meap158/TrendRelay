@@ -261,6 +261,98 @@ def test_engagement_reads_the_latest_snapshot_not_the_sum(session) -> None:
     assert found["d1"]["posts_measured"] == 1
 
 
+# --- a read of nothing is not an observation of nothing ---------------------------
+
+
+def test_a_read_of_all_zeros_leaves_the_window_due(session) -> None:
+    """The corruption that reopened sixty-nine posts by hand.
+
+    A network that has not reported to its scheduler yet is relayed as zeros,
+    not as silence. Recording that froze "not known yet" into the campaign as
+    "earned nothing" - and because the window was then captured, it was never
+    asked again.
+    """
+    row = execution(session, "x1", "published")
+    PROVIDER_METRIC_READERS["buffer"] = lambda _execution: {
+        "views": 0, "likes": 0, "comments": 0, "shares": 0,
+    }
+    try:
+        result = collect_snapshots(session, now=NOW + timedelta(hours=3))
+    finally:
+        PROVIDER_METRIC_READERS.pop("buffer", None)
+
+    assert result["captured"] == 0
+    assert row.performance_snapshots == []
+    assert row.state == "published", "still due, not measured"
+
+
+def test_the_same_window_records_once_a_figure_arrives(session) -> None:
+    """Skipping is a retry, not a refusal: the window is still there to fill."""
+    row = execution(session, "x1", "published")
+    answers = iter([
+        {"views": 0, "likes": 0},
+        {"views": 140, "likes": 3},
+    ])
+    PROVIDER_METRIC_READERS["buffer"] = lambda _execution: next(answers)
+    try:
+        first = collect_snapshots(session, now=NOW + timedelta(hours=3))
+        second = collect_snapshots(session, now=NOW + timedelta(hours=4))
+    finally:
+        PROVIDER_METRIC_READERS.pop("buffer", None)
+
+    assert first["captured"] == 0
+    assert second["captured"] == 1
+    assert latest_metrics(row) == {"views": 140.0, "likes": 3.0}
+
+
+def test_a_zero_is_believed_once_there_has_been_time_to_hear_otherwise(session) -> None:
+    """Otherwise a post that genuinely earned nothing is polled forever.
+
+    The bound is the next window's own delay - the 2h window believes a zero
+    at 24h - so a real zero still lands, against a request budget publishing
+    needs its share of.
+    """
+    row = execution(session, "x1", "published")
+    PROVIDER_METRIC_READERS["buffer"] = lambda _execution: {"views": 0, "likes": 0}
+    try:
+        early = collect_snapshots(session, now=NOW + timedelta(hours=23))
+        settled = collect_snapshots(session, now=NOW + timedelta(hours=25))
+    finally:
+        PROVIDER_METRIC_READERS.pop("buffer", None)
+
+    assert early["captured"] == 0, "23h is still inside the 2h window's grace"
+    # The 2h window is now believed, and the 24h window is due but has its own
+    # grace running to 7d.
+    assert settled["captured"] == 1
+    assert [snap["window"] for snap in row.performance_snapshots] == ["2h"]
+    assert latest_metrics(row) == {"views": 0.0, "likes": 0.0}
+    assert row.state == "measured"
+
+
+def test_one_read_serves_every_window_that_is_due(session) -> None:
+    """A reader answers about the post, so asking per window bought nothing.
+
+    Three due windows used to cost three requests for one answer, out of the
+    budget the Buffer reader reserves publishing capacity from.
+    """
+    row = execution(session, "x1", "published")
+    calls = {"n": 0}
+
+    def reader(_execution):
+        calls["n"] += 1
+        return {"views": 500, "comments": 4}
+
+    PROVIDER_METRIC_READERS["buffer"] = reader
+    try:
+        result = collect_snapshots(session, now=NOW + timedelta(days=8))
+    finally:
+        PROVIDER_METRIC_READERS.pop("buffer", None)
+
+    assert result["captured"] == 3, "2h, 24h and 7d all fell due"
+    assert calls["n"] == 1, "and one read answered for all three"
+    assert [snap["window"] for snap in row.performance_snapshots] == ["2h", "24h", "7d"]
+
+
 # --- a second login of the same engine -------------------------------------------
 
 
