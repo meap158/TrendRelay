@@ -49,6 +49,19 @@ def _anchored(database_url: str) -> str:
     return f"sqlite:///{PROJECT_ROOT / raw}"
 
 
+def configured_database_url() -> str:
+    """Which database this install actually opens, wherever it was started.
+
+    The same answer `create_database_engine` uses, exposed because Alembic has
+    to reach it too: `migrations/env.py` built its URL straight from settings,
+    so `alembic upgrade head` run from `services/api` created and migrated an
+    empty `services/api/.data/trendrelay.db` and reported success, while the
+    database the API opens stayed on the old revision. A migration that runs
+    against the wrong file is worse than one that fails - nothing says so.
+    """
+    return _anchored(get_settings().database_url)
+
+
 def create_database_engine(url: str | None = None):
     database_url = _anchored(url or get_settings().database_url)
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}

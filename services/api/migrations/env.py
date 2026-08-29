@@ -3,11 +3,14 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from trendrelay_api.config import get_settings
+from trendrelay_api.database import configured_database_url
 from trendrelay_api.models import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+# The database the API opens, not one named relative to whatever directory
+# alembic was invoked from: the two differ exactly when it matters, and the
+# wrong one is created empty and migrated in silence.
+config.set_main_option("sqlalchemy.url", configured_database_url().replace("%", "%%"))
 if config.config_file_name:
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata
