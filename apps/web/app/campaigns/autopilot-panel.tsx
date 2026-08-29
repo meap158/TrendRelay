@@ -5283,6 +5283,7 @@ export function AutopilotPanel({
             workspaceId={workspaceId}
             apiFetch={apiFetch}
             currentKind={editing.video_path ? "video" : editing.image_paths.length ? "image" : null}
+            campaignId={campaignId}
             onClose={() => setSwappingMedia(false)}
             onPick={(media) => {
               setEditingMedia(media);
@@ -6667,6 +6668,7 @@ function MediaSwapDialog({
   workspaceId,
   apiFetch,
   currentKind,
+  campaignId,
   onClose,
   onPick,
 }: {
@@ -6675,6 +6677,10 @@ function MediaSwapDialog({
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   /** What the post holds now, so the grid opens on like-for-like media. */
   currentKind: "video" | "image" | null;
+  /** Which campaign the replacement is for, so "not already in this campaign"
+      can be offered here too. Swapping is when it is most useful: the reason
+      a post is being changed is often that its clip is a repeat. */
+  campaignId: string;
   onClose: () => void;
   onPick: (media: {
     video_path: string;
@@ -6767,9 +6773,10 @@ function MediaSwapDialog({
           facets={picker.facets}
           fields={[
             "query", "mediaKind", "effect", "channel", "platform", "processing",
-            "length", "downloaded",
+            "length", "downloaded", "notInCampaign",
           ]}
           cleared={currentKind ? { mediaKind: currentKind } : {}}
+          campaignId={campaignId}
           onChange={(next) => picker.setFilters(next)}
         />
         <ul className="campaign-media-grid">
