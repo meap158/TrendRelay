@@ -859,6 +859,13 @@ const TAGGED_PER_PAGE = 20;
 
 const QUEUE_BATCH = 8;
 
+/** How many composer rows are drawn at a time, and how many more each
+    "Show more" adds. Enough that an ordinary selection is drawn whole and
+    the control never appears; small enough that a select-all is not a frozen
+    tab. Also what one round of offer matching covers, so no drawn row is
+    left without its suggestions. */
+const DRAFT_ROWS_STEP = 50;
+
 /** One request's worth of clips, which is the assets endpoint's own ceiling. */
 /** Rows of the ready-to-post queue shown per page. */
 const QUEUE_PAGE_SIZE = 50;
@@ -1978,6 +1985,49 @@ export function AutopilotPanel({
           }]
         : []),
   ];
+  /**
+   * How many of the rows are drawn at once.
+   *
+   * Every row is a thumbnail and two text boxes, and none of this is
+   * virtualised: three thousand of them measured 45,000 nodes and twenty
+   * seconds of frozen tab on the click that made them. Every package still
+   * queues - what is bounded is what is rendered, the way the picker behind
+   * this form bounds what it draws of a library of thousands.
+   *
+   * Copy lives in `draftCopy`, keyed by package, so a row that is not drawn
+   * keeps whatever was written for it - and a package with nothing written is
+   * queued with the placeholder the API stands in, which is the workflow this
+   * form already documents: picked today, written later.
+   */
+  const [draftShown, setDraftShown] = useState(DRAFT_ROWS_STEP);
+  // Back to the first window whenever the composer opens on a different
+  // selection, adjusted during render rather than in an effect: an effect
+  // would draw three thousand rows once and then throw them away.
+  const [windowedFor, setWindowedFor] = useState(drafting);
+  if (windowedFor !== drafting) {
+    setWindowedFor(drafting);
+    setDraftShown(DRAFT_ROWS_STEP);
+  }
+  /** Which rows have already been asked about, so growing the window asks
+      only for the rows it added - and an asset the matcher found nothing for
+      is not asked about again on every press. */
+  const askedForMatches = useRef<Set<string>>(new Set());
+  useEffect(() => { askedForMatches.current = new Set(); }, [drafting]);
+  /**
+   * The rows to draw: the first of them, plus the carousel wherever it fell.
+   *
+   * Pictures ride at the end of the list, so a selection of three thousand
+   * videos and six pictures put the one row whose *shape* has to be confirmed
+   * - how many ride together, whether any destination takes a gallery, the
+   * split control - three thousand rows below the fold. It is at most one row,
+   * so it is simply carried into view rather than reordering what queues.
+   */
+  const shownPosts = draftPosts.length <= draftShown
+    ? draftPosts
+    : [
+        ...draftPosts.slice(0, draftShown),
+        ...draftPosts.slice(draftShown).filter((entry) => entry.kind === "carousel"),
+      ];
   const copyFor = (id: string): PostCopy =>
     draftCopy[id] ?? { body: "", hashtags: "" };
   const setCopyFor = (id: string, patch: Partial<PostCopy>) =>
@@ -2841,8 +2891,7 @@ export function AutopilotPanel({
    * banner over a panel somebody opened to write copy is noise about a feature
    * they were not using yet.
    */
-  const loadRowMatches = useCallback(async (assets: LibraryAsset[]) => {
-    const ids = assets.map((asset) => asset.id);
+  const loadRowMatches = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
     try {
       const body = await json<{ assets: Record<string, { matches: OfferMatch[] }> }>(
@@ -2852,16 +2901,43 @@ export function AutopilotPanel({
           // No count of its own: how many products a post carries is the
           // campaign's setting, and asking for a different number here is how
           // the preview came to show two where the campaign allows one.
-          body: JSON.stringify({ asset_ids: ids.slice(0, 100) }),
+          body: JSON.stringify({ asset_ids: ids }),
         }),
       );
-      setRowMatches(Object.fromEntries(
-        Object.entries(body.assets).map(([id, found]) => [id, found.matches]),
-      ));
+      // Merged, because this is asked once per batch of rows drawn rather
+      // than once for the whole selection: replacing would strip the
+      // suggestions off every row already written against.
+      setRowMatches((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          Object.entries(body.assets).map(([id, found]) => [id, found.matches]),
+        ),
+      }));
     } catch {
-      setRowMatches({});
+      // Quietly, and only for the rows asked about. Clearing the map would
+      // blank suggestions that did arrive, over a feature nobody invoked.
     }
   }, [apiFetch, base]);
+
+  /**
+   * Suggestions for the rows on screen, asked for as they are drawn.
+   *
+   * This used to ask once for the whole selection and send `ids.slice(0, 100)`
+   * - so a composer opened on three thousand packages showed products on
+   * ninety-nine of them and said nothing about the rest, which reads as a
+   * matcher that found nothing rather than a request that was cut. Asking for
+   * the drawn rows instead means the cut cannot happen: the window is smaller
+   * than the endpoint's own limit, and every row that is on screen has been
+   * asked about.
+   */
+  const shownLeadIds = shownPosts.map((entry) => entry.assets[0].id).join(",");
+  useEffect(() => {
+    const missing = (shownLeadIds ? shownLeadIds.split(",") : [])
+      .filter((id) => !askedForMatches.current.has(id));
+    if (!missing.length) return;
+    for (const id of missing) askedForMatches.current.add(id);
+    void loadRowMatches(missing);
+  }, [shownLeadIds, loadRowMatches]);
 
   function resetDraftProducts() {
     setDraftProductMode("smart");
@@ -4250,11 +4326,10 @@ export function AutopilotPanel({
               />
               <Button variant="primary" size="sm" disabled={!selectedLibrary.length}
                 onClick={() => {
+                  // Matching follows the rows that get drawn, so it is not
+                  // asked for here: opening the composer is what makes rows,
+                  // and the effect that watches them asks for exactly those.
                   setDrafting(selectedLibrary);
-                  // Matched as the composer opens, so the suggestions are
-                  // already there when the first row is read rather than
-                  // arriving under the cursor a moment later.
-                  void loadRowMatches(selectedLibrary);
                 }}>Write campaign copy</Button>
               {selectedLibrary.length > 0 && (
                 <Button variant="quiet" size="sm" onClick={() => setSelectedAssets({})}>
@@ -4402,7 +4477,7 @@ export function AutopilotPanel({
                 so neither is written here. */}
             <p className="autopilot-note">{t("autopilot.copyHelp")}</p>
             <ol className="draft-posts">
-              {draftPosts.map((entry) => {
+              {shownPosts.map((entry) => {
                 const lead = entry.assets[0];
                 const written = copyFor(entry.id);
                 return (
@@ -4494,6 +4569,23 @@ export function AutopilotPanel({
                 );
               })}
             </ol>
+            {/* What is not drawn, and what happens to it - because a form
+                showing fifty rows over a button reading "Add 3,001 posts" has
+                to account for the difference somewhere, and the queue is the
+                wrong place to find out. */}
+            {draftPosts.length > draftShown && (
+              <p className="autopilot-note autopilot-draft-rest" role="status">
+                <span>
+                  Writing {Math.min(draftShown, draftPosts.length).toLocaleString()}
+                  {" "}of {draftPosts.length.toLocaleString()} posts here. The rest
+                  {" "}queue with their copy still to be written.
+                </span>
+                <Button variant="quiet" size="sm" onClick={() =>
+                  setDraftShown((shown) => shown + DRAFT_ROWS_STEP)}>
+                  Show {Math.min(DRAFT_ROWS_STEP, draftPosts.length - draftShown)} more
+                </Button>
+              </p>
+            )}
             {/* The product decision belongs to the package, made here rather
                 than discovered later: what gets approved is a post whose
                 products were already decided - smartly or by hand. */}
