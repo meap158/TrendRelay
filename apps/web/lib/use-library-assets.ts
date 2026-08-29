@@ -35,20 +35,22 @@ import {
   type AssetFilterValues,
 } from "./asset-filters";
 
-/** The endpoint's own page ceiling; asking for more is a 422, not more rows. */
-export const ASSET_PAGE_SIZE = 100;
+import {
+  ASSET_PAGE_SIZE,
+  SELECT_ALL_ASSET_CEILING,
+  SELECT_ALL_CONCURRENCY,
+  selectAllOffsets,
+} from "./select-all-plan";
 
-/**
- * How many whole assets a select-all may walk to.
- *
- * Whole rows, because a composer needs the asset and not its id. Bounded so
- * "everything matching" over an enormous library is a stated limit rather
- * than a hung dialog - and stated in the interface wherever it may bite.
- */
-export const SELECT_ALL_ASSET_CEILING = 1000;
-
-/** The server's own id-selection ceiling (`MAX_SELECTABLE` on the API). */
-export const SELECT_ALL_ID_CEILING = 10000;
+// The limits are a surface's business as much as this hook's - a picker that
+// names its ceiling in the bar has to read it from somewhere - so they carry
+// on being reachable from here rather than from two places.
+export {
+  ASSET_PAGE_SIZE,
+  SELECT_ALL_ASSET_CEILING,
+  SELECT_ALL_ID_CEILING,
+  selectAllOffsets,
+} from "./select-all-plan";
 
 /** How long typing settles before it becomes a request. */
 const DEBOUNCE_MS = 220;
@@ -59,10 +61,19 @@ export type LibraryAssetRow = { id: string; media_kind: string };
 type ListResponse<A> = { assets?: A[]; facets?: AssetFacets; total?: number };
 
 /** Each asset once, in arrival order - a picker is a selection, and an asset
-    listed twice means nothing except a duplicate React key. */
+    listed twice means nothing except a duplicate React key. Arrivals are
+    weighed against each other as well as against what is held: pages cut at
+    different moments overlap by a row when something was inserted between
+    them, and two pages of one walk can now be in flight together. */
 function mergeAssets<A extends LibraryAssetRow>(current: A[], arrived: A[]): A[] {
   const seen = new Set(current.map((asset) => asset.id));
-  return [...current, ...arrived.filter((asset) => !seen.has(asset.id))];
+  const merged = [...current];
+  for (const asset of arrived) {
+    if (seen.has(asset.id)) continue;
+    seen.add(asset.id);
+    merged.push(asset);
+  }
+  return merged;
 }
 
 export function useLibraryAssets<A extends LibraryAssetRow>({
@@ -203,33 +214,53 @@ export function useLibraryAssets<A extends LibraryAssetRow>({
   /**
    * Every matching asset as whole rows, for a composer that needs them.
    *
-   * Pages until the matches run out or the stated ceiling is reached, and
-   * returns null if the filter changed underneath - a walk of a query nobody
+   * Handed back to the caller and nowhere else. It used to pour what it
+   * collected into the list on screen as well, which tied how much could be
+   * selected to how much could be drawn - and since nothing here is
+   * virtualised, that capped the selection at a thousand tiles. Selecting is
+   * not showing: the grid keeps the pages that were actually paged to, the
+   * caller holds the rest, and "showing 300 of 1,407" stays true while all
+   * 1,407 are ticked. Paging is left exactly where it was found, so Load more
+   * still carries on from the row it was on.
+   *
+   * Returns null if the filter changed underneath - a walk of a query nobody
    * is looking at is abandoned, not finished.
    */
   const fetchAllMatching = useCallback(async (): Promise<A[] | null> => {
     const mine = generation.current;
+    // The size actually sent, not the size asked for: `request` clamps to the
+    // endpoint's page ceiling, and a stride wider than the page it fetches
+    // walks over rows without ever reporting a gap.
+    const step = Math.min(pageSize, ASSET_PAGE_SIZE);
     setLoading("all");
     try {
-      let collected = [...assets];
-      let at = offset.current;
-      let matching = total;
-      while (at < Math.min(matching, SELECT_ALL_ASSET_CEILING)) {
-        const body = await request(filtersRef.current, at, pageSize);
-        if (generation.current !== mine) return null;
-        const arrived = body.assets ?? [];
-        // No progress means the end, whatever the count said. Without this a
-        // total that disagrees with the rows on hand spins forever.
-        if (!arrived.length) break;
-        collected = mergeAssets(collected, kept(arrived));
-        at += arrived.length;
-        if (body.total !== undefined) matching = body.total;
-      }
-      setAssets(collected);
-      offset.current = at;
-      setFetched(at);
+      // The first page settles the count before the rest are planned against
+      // it. The total on hand can predate the current filter, and a plan cut
+      // from a stale one either stops short of the matches or asks for pages
+      // that are not there.
+      const first = await request(filtersRef.current, 0, step);
+      if (generation.current !== mine) return null;
+      const opened = first.assets ?? [];
+      const matching = first.total ?? opened.length;
+      const rest = selectAllOffsets(matching, step, SELECT_ALL_ASSET_CEILING).slice(1);
+
+      // Held by offset rather than by arrival, so the selection keeps the
+      // order the server sorted it in and not the order the network answered.
+      const pages: A[][] = [kept(opened)];
+      let handout = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(SELECT_ALL_CONCURRENCY, rest.length) }, async () => {
+          for (let index = handout++; index < rest.length; index = handout++) {
+            const body = await request(filtersRef.current, rest[index], step);
+            if (generation.current !== mine) return;
+            pages[index + 1] = kept(body.assets ?? []);
+          }
+        }),
+      );
+      if (generation.current !== mine) return null;
+
       setTotal(matching);
-      return collected;
+      return mergeAssets([], pages.flat());
     } catch (reason) {
       if (generation.current === mine) {
         setFailure(
@@ -240,7 +271,7 @@ export function useLibraryAssets<A extends LibraryAssetRow>({
     } finally {
       if (generation.current === mine) setLoading("");
     }
-  }, [assets, kept, pageSize, request, total]);
+  }, [kept, pageSize, request]);
 
   /** Every matching id, by the server's own fast path - for a surface that
       acts on ids and does not need the rows hauled over. */

@@ -866,10 +866,11 @@ const QUEUE_PAGE_SIZE = 50;
 /**
  * How many clips the picker will hold at once.
  *
- * The shared library hook's own select-all bound: a select-all pages until it
- * has them, held as whole assets because the composer renders each one.
- * Beyond it the filter is the better tool, and the bar says so rather than
- * stopping short and letting the number look like the whole match.
+ * The shared library hook's own select-all bound, which is the server's: a
+ * select-all pages until it has them, held as whole assets because the
+ * composer renders each one. Beyond it the filter is the better tool, and the
+ * bar says so *before* the button is pressed rather than stopping short and
+ * letting the number look like the whole match.
  */
 const PICKER_CEILING = SELECT_ALL_ASSET_CEILING;
 
@@ -2424,11 +2425,19 @@ export function AutopilotPanel({
    * result into this surface's selection. Null means the filter changed
    * under the walk, and a selection of a query nobody is looking at is not
    * made.
+   *
+   * Added to what is held rather than put in its place. The picker keeps a
+   * selection across a change of filter on purpose - and now says so above
+   * the grid - so narrowing to Videos and reaching for all of them must not
+   * be the one gesture that quietly throws the held pictures away.
    */
   async function selectAllMatching() {
     const collected = await picker.fetchAllMatching();
     if (collected) {
-      setSelectedAssets(Object.fromEntries(collected.map((asset) => [asset.id, asset])));
+      setSelectedAssets((current) => ({
+        ...current,
+        ...Object.fromEntries(collected.map((asset) => [asset.id, asset])),
+      }));
     }
   }
 
@@ -3343,6 +3352,29 @@ export function AutopilotPanel({
       Object.entries(current).filter(([, asset]) => asset.media_kind === selectedKind),
     ));
   }
+  /** What a select-all would actually tick: every match, or the ceiling if
+      there are more matches than the picker may hold at once. */
+  const reachableCount = Math.min(matchingCount, PICKER_CEILING);
+  /**
+   * Whether the selection already covers everything within reach.
+   *
+   * Counted without the off-kind clips, because those are matches of a filter
+   * that is no longer on: six pictures held over from before would otherwise
+   * make a hundred and ten videos look like all hundred and sixteen.
+   */
+  const everyMatchSelected = reachableCount > 0
+    && selectedLibrary.length - selectedOffKind.length >= reachableCount;
+  /**
+   * Why the button will not say the number in the head, said where it is read
+   * rather than after it is pressed.
+   *
+   * Only past the ceiling is narrowing still the answer - and until this was
+   * carried into the unselected line too, the head said 1,407, the button said
+   * 1,000, and nothing on screen joined them up.
+   */
+  const ceilingNote = matchingCount > PICKER_CEILING
+    ? `${PICKER_CEILING.toLocaleString()} at a time — narrow the filter to reach the rest`
+    : "";
   /**
    * Which of this campaign's destinations could carry a carousel.
    *
@@ -4089,7 +4121,7 @@ export function AutopilotPanel({
             <div className="campaign-media-browser-head">
               <div>
                 <strong>{selectedLibrary.length
-                ? `${selectedLibrary.length} selected`
+                ? `${selectedLibrary.length.toLocaleString()} selected`
                 : t("autopilot.chooseMedia")}</strong>
                 <small>{matchingCount.toLocaleString()} matching · showing {library.length}</small>
                 {/* Said where the count is, because it is that count being
@@ -4167,7 +4199,10 @@ export function AutopilotPanel({
               >{allLoadedSelected && <ActionIcon name="confirm" size={12} />}</span>
               <span className="campaign-media-summary">{selectedLibrary.length
                 ? [
-                    `${selectedLibrary.length} ready for campaign actions`,
+                    // Grouped like every other count on this row. A selection
+                    // could not reach four figures while the ceiling was a
+                    // thousand, so "3938" beside "3,938 matching" is new.
+                    `${selectedLibrary.length.toLocaleString()} ready for campaign actions`,
                     // Pictures post as one carousel, so how many there are is
                     // the shape of the post rather than a count of files -
                     // and after "select all" it is worth being able to see it
@@ -4176,24 +4211,29 @@ export function AutopilotPanel({
                     matchingCount > library.length
                       ? `${library.length} of ${matchingCount.toLocaleString()} loaded`
                       : "",
-                    // Only past the ceiling is narrowing still the answer.
-                    matchingCount > PICKER_CEILING
-                      ? `${PICKER_CEILING.toLocaleString()} at a time — narrow the filter to reach the rest`
-                      : "",
+                    ceilingNote,
                   ].filter(Boolean).join(" · ")
-                : `Select clips to edit or add to the campaign${
+                : [
+                    "Select clips to edit or add to the campaign",
                     matchingCount > library.length
-                      ? ` · showing ${library.length} of ${matchingCount.toLocaleString()}`
-                      : ""
-                  }`}</span>
+                      ? `showing ${library.length} of ${matchingCount.toLocaleString()}`
+                      : "",
+                    ceilingNote,
+                  ].filter(Boolean).join(" · ")}</span>
               {/* The pair the Library carries: the box ticks what is loaded,
                   this reaches the rest. Named with the real number so it is
                   never mistaken for the count already on screen. */}
-              {matchingCount > library.length && library.length < PICKER_CEILING && (
+              {matchingCount > library.length && !everyMatchSelected && (
                 <Button variant="secondary" size="sm" busy={picker.loading === "all"}
                   onClick={() => void selectAllMatching()}>
-                  Select all {Math.min(matchingCount, PICKER_CEILING).toLocaleString()} matching
+                  Select all {reachableCount.toLocaleString()} matching
                 </Button>
+              )}
+              {/* Said once it is done, because the button that said it is now
+                  gone and its absence on its own reads as a control that
+                  failed to appear. The Library says the same in the same words. */}
+              {matchingCount > library.length && everyMatchSelected && (
+                <Badge tone="good">{t("library.everyMatchSelected")}</Badge>
               )}
               {matchingCount > library.length && library.length < PICKER_CEILING && (
                 <Button variant="quiet" size="sm" busy={picker.loading === "more"}
