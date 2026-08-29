@@ -936,6 +936,7 @@ def plan_campaign(
             from trendrelay_api.campaign_autopilot import resolve_placement
             from trendrelay_api.integrations.publishing import (
                 first_comment_deliverable,
+                thread_deliverable,
                 topic_deliverable,
             )
 
@@ -1010,6 +1011,9 @@ def plan_campaign(
                     bio_hint=bio_hint_for(item, autopilot),
                     placement_override=destination.link_placement,
                     comment_deliverable=comment_ok,
+                    thread_deliverable=thread_deliverable(
+                        destination.provider, destination.platform
+                    ),
                     # Operator-authored comments and replies form one content
                     # package with the caption the campaign generates. Merged
                     # by the composer, which is also what the editor previews.
@@ -1314,9 +1318,13 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
             CampaignQueueItem.body != PLACEHOLDER_BODY,
             # A post still waiting for its media is not ready either - the
             # mirror of the placeholder body, from the two-visit MCP flow.
+            # A copy-only post is not that: it has no media because it wants
+            # none, and the scheduler posts it. Demanding a file of it made
+            # the checklist ask for copy that was already written.
             or_(
                 CampaignQueueItem.video_path != "",
                 func.json_array_length(CampaignQueueItem.image_paths) > 0,
+                CampaignQueueItem.text_only.is_(True),
             ),
         )
     ) or 0
@@ -1340,12 +1348,13 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
                 CampaignQueueItem.campaign_id == autopilot.campaign_id,
                 CampaignQueueItem.state == "approved",
                 CampaignQueueItem.body != PLACEHOLDER_BODY,
-            # A post still waiting for its media is not ready either - the
-            # mirror of the placeholder body, from the two-visit MCP flow.
-            or_(
-                CampaignQueueItem.video_path != "",
-                func.json_array_length(CampaignQueueItem.image_paths) > 0,
-            ),
+                # The same three cases as the ready count above: written, and
+                # either carrying media or deliberately carrying none.
+                or_(
+                    CampaignQueueItem.video_path != "",
+                    func.json_array_length(CampaignQueueItem.image_paths) > 0,
+                    CampaignQueueItem.text_only.is_(True),
+                ),
             )
         ).all()
         account_ids = {item.id for item in destinations if item.enabled}

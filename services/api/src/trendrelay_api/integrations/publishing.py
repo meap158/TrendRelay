@@ -683,6 +683,22 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
     return False
 
 
+def thread_deliverable(provider: str | None, platform: str | None) -> bool:
+    """Whether this exact engine/network pair can publish reply posts.
+
+    A follow-up is not necessarily a thread. Facebook through Zernio can send
+    a first comment, for example, but has nowhere to send a second reply. The
+    campaign editor needs this narrower answer instead of treating every
+    `first_comment_deliverable` destination as thread-capable.
+    """
+    engine = _engine_of(provider)
+    if engine == "buffer":
+        return platform in THREAD_PLATFORMS
+    if engine == "zernio":
+        return platform in ZERNIO_THREAD_PLATFORMS
+    return False
+
+
 def topic_deliverable(provider: str | None, platform: str | None) -> bool:
     """Whether this destination's engine can attach a Threads topic here.
 
@@ -1088,7 +1104,7 @@ class PublishRequest(BaseModel):
                         )
                 if incompatible:
                     raise ValueError(
-                        "Text-only posts are not supported by "
+                        "Copy-only posts are not supported by "
                         + ", ".join(sorted(set(incompatible)))
                         + ". Attach media or choose a text-capable post format."
                     )
@@ -1512,13 +1528,9 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
     chosen_platforms = [target.platform for target in request.targets]
 
     if request.thread:
-        if provider.id != "buffer":
-            raise ValueError(
-                f"{provider.label} does not publish threads. Remove the replies, or "
-                "switch to Buffer for the networks that support them."
-            )
         threadable = [
-            platform for platform in set(chosen_platforms) if platform in THREAD_PLATFORMS
+            platform for platform in set(chosen_platforms)
+            if thread_deliverable(provider.id, platform)
         ]
         if not threadable:
             names = ", ".join(sorted(PLATFORM_LABELS[p] for p in set(chosen_platforms)))
@@ -2789,7 +2801,7 @@ def _buffer_metadata(
             # The media rides the thread's root entry, not the post-level
             # assets: Buffer builds a threaded post from this array and ignores
             # the top-level assets once it is present, which is how a threaded
-            # video came to publish as text only. `ThreadedPostInput` declares
+            # video came to publish as copy only. `ThreadedPostInput` declares
             # its own `assets`, so the root carries the clip and the replies do
             # not.
             entries = []
@@ -4020,7 +4032,7 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "media_source": (
             "approved local file" if uses_local_media
             else "public media URL" if request.media_url
-            else "text only"
+            else "copy only"
         ),
         "video_path": request.video_path if uses_local_media else None,
         "media_url": request.media_url,

@@ -246,11 +246,11 @@ class QueueItemCreate(BaseModel):
         if video and images:
             raise ValueError("A package is either a video or pictures, not both.")
         if self.text_only and (video or images):
-            raise ValueError("A text-only package cannot also carry media.")
+            raise ValueError("A copy-only package cannot also carry media.")
         if not video and not images and not self.media_later and not self.text_only:
             raise ValueError("A package needs copy, a video, or at least one picture.")
         if self.text_only and not self.body.strip():
-            raise ValueError("A text-only package needs copy.")
+            raise ValueError("A copy-only package needs copy.")
         return self
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
@@ -376,6 +376,7 @@ def _destination_view(
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
         limits_for,
+        thread_deliverable,
         topic_deliverable,
     )
 
@@ -424,6 +425,9 @@ def _destination_view(
         # here, so the package editor can show at a glance which destinations
         # a written comment will actually reach.
         "follow_up_deliverable": first_comment_deliverable(item.provider, item.platform),
+        # Posting one comment is not the same as publishing a thread. Facebook
+        # through Zernio has the former but not the latter.
+        "thread_deliverable": thread_deliverable(item.provider, item.platform),
         # Whether a Threads topic can be attached here - Threads only, and only
         # through an engine whose schema declares the field.
         "topic_deliverable": topic_deliverable(item.provider, item.platform),
@@ -1251,7 +1255,7 @@ def _apply_media_change(
     video = (body.video_path or "").strip()
     images = [path.strip() for path in (body.image_paths or []) if path.strip()]
     # The same rule the package was created under, restated on the way in: one
-    # kind of media. Neither is an intentional text-only post; the body remains
+    # kind of media. Neither is an intentional copy-only post; the body remains
     # required by QueueItemUpdate and the publish request, so clearing media
     # cannot create an empty post.
     if video and images:
@@ -1261,7 +1265,7 @@ def _apply_media_change(
     wants_text_only = body.text_only is True
     if wants_text_only and (video or images):
         raise HTTPException(
-            status_code=422, detail="A text-only package cannot also carry media."
+            status_code=422, detail="A copy-only package cannot also carry media."
         )
     if not video and not images and not wants_text_only:
         raise HTTPException(
@@ -1600,6 +1604,7 @@ def compose_queue_item(
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
         limits_for,
+        thread_deliverable,
     )
 
     matches, strategy = chosen_matches(
@@ -1637,6 +1642,9 @@ def compose_queue_item(
                 bio_hint=bio_hint,
                 placement_override=destination.link_placement,
                 comment_deliverable=comment_ok,
+                thread_deliverable=thread_deliverable(
+                    destination.provider, destination.platform
+                ),
                 written_first_comment=draft.first_comment,
                 written_thread=draft.thread or (),
             )
@@ -2227,8 +2235,8 @@ def preview_autopilot(
     ).all()
     # Deferred: campaign_runner imports this module lazily for its links, and
     # a top-level import back at it would close that circle.
-    from trendrelay_api.campaign_runner import _outcome_of
     from trendrelay_api.campaign_measurement import latest_metrics
+    from trendrelay_api.campaign_runner import _outcome_of
     from trendrelay_api.publication_models import PublicationExecution
 
     # Each measured post's latest engagement, keyed by the job it rode in, so a
@@ -2455,6 +2463,8 @@ def run_autopilot_now(
 
 
 def _execution_view(item: PublicationExecution) -> dict[str, Any]:
+    from trendrelay_api.integrations.publishing import thread_deliverable
+
     return {
         "id": item.id,
         "state": item.state,
@@ -2465,6 +2475,7 @@ def _execution_view(item: PublicationExecution) -> dict[str, Any]:
         "destination_label": item.destination_label,
         "platform": item.platform,
         "provider": item.provider,
+        "thread_deliverable": thread_deliverable(item.provider, item.platform),
         "asset_id": item.asset_id,
         "asset_version_id": item.asset_version_id,
         "media_sha256": item.media_sha256,
@@ -2612,6 +2623,23 @@ def _held_execution(
             detail=f"Only a held execution can be decided; this one is {execution.state}.",
         )
     return execution
+
+
+def _omit_unsupported_thread(execution: PublicationExecution) -> int:
+    """Remove legacy replies an execution's exact destination cannot send.
+
+    New plans never freeze these replies. Existing held rows may predate that
+    rule, though, and approving one must not keep failing on content the editor
+    no longer offers. The root post and its first comment remain unchanged.
+    """
+    from trendrelay_api.integrations.publishing import thread_deliverable
+
+    replies = list(execution.thread or [])
+    if not replies or thread_deliverable(execution.provider, execution.platform):
+        return 0
+    execution.thread = []
+    execution.updated_at = utc_now()
+    return len(replies)
 
 
 @router.post("/{campaign_id}/autopilot/account-recommendations")
@@ -2826,6 +2854,7 @@ def approve_autopilot_execution(
     execution = _held_execution(session, workspace_id, campaign_id, execution_id)
     from trendrelay_api.campaign_runner import approve_execution
 
+    omitted_replies = _omit_unsupported_thread(execution)
     try:
         approve_execution(session, autopilot, execution, publish_now=body.publish_now)
     except ValueError as error:
@@ -2837,6 +2866,7 @@ def approve_autopilot_execution(
             "execution_id": execution.id,
             "state": execution.state,
             "publish_now": body.publish_now,
+            "omitted_unsupported_replies": omitted_replies,
         },
     )
     return {"execution": _execution_view(execution)}
@@ -2870,7 +2900,18 @@ def edit_autopilot_execution(
     if "first_comment" in body.model_fields_set:
         execution.first_comment = (body.first_comment or "").strip() or None
     if body.thread is not None:
-        execution.thread = [part.strip() for part in body.thread if part.strip()]
+        replies = [part.strip() for part in body.thread if part.strip()]
+        from trendrelay_api.integrations.publishing import thread_deliverable
+
+        if replies and not thread_deliverable(execution.provider, execution.platform):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{execution.destination_label or execution.platform} cannot publish "
+                    "a thread through this connection. Remove the replies."
+                ),
+            )
+        execution.thread = replies
     # Stamped so a later settings change leaves this post alone. What the
     # campaign composes is the campaign's to recompose; what somebody wrote
     # here is theirs.
@@ -3054,6 +3095,7 @@ def approve_autopilot_executions(
             })
             continue
         try:
+            omitted_replies = _omit_unsupported_thread(execution)
             approve_execution(
                 session, autopilot, execution, publish_now=body.publish_now
             )
@@ -3082,6 +3124,7 @@ def approve_autopilot_executions(
                 "state": execution.state,
                 "publish_now": body.publish_now,
                 "batch": True,
+                "omitted_unsupported_replies": omitted_replies,
             },
         )
     return {

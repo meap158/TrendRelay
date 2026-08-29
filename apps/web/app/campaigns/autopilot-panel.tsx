@@ -456,6 +456,8 @@ type Destination = {
   accepts_carousel?: boolean;
   /** Whether a first comment or thread reply can be delivered here. */
   follow_up_deliverable?: boolean;
+  /** Whether this exact connection can publish additional reply posts. */
+  thread_deliverable?: boolean;
   /** Whether a Threads topic tag can be attached here. */
   topic_deliverable?: boolean;
   /** Whether this network has a title field at all. */
@@ -592,6 +594,9 @@ type HeldExecution = {
   scheduled_at: string | null;
   destination_label: string | null;
   platform: string | null;
+  provider: string;
+  /** Exact provider/network capability, not merely a thread-shaped network. */
+  thread_deliverable: boolean;
   caption: string;
   title: string | null;
   held_reason: string | null;
@@ -1482,6 +1487,7 @@ function HeldPreview({
       source={item.media_path ? media(item.media_path) : undefined}
       carousel={item.image_paths.length ? item.image_paths.map(media) : undefined}
       sourceIsImage={!item.media_path && item.image_paths.length > 0}
+      copyOnly={!item.media_path && item.image_paths.length === 0}
     />
   );
 }
@@ -1634,6 +1640,7 @@ function QueueRehearsal({
                   carousel={item.image_paths.length > 1
                     ? item.image_paths.map(media) : undefined}
                   wantsCarousel={item.image_paths.length > 1}
+                  copyOnly={item.text_only}
                 />
               )}
               {/* Named for the network it lands on. On Threads there is no
@@ -2050,6 +2057,13 @@ export function AutopilotPanel({
   const [selectionAction, setSelectionAction] = useState<LibrarySelectionActionId | null>(null);
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
+  const threadAccounts = destinations.filter((item) => item.thread_deliverable);
+  const canPublishReplies = threadAccounts.length > 0;
+  const threadUnavailableMessage = destinations.length
+    ? `Replies are unavailable for this campaign. ${[...new Set(destinations.map(
+        (item) => `${platformLabels[item.platform]} through ${item.provider_label ?? item.provider}`,
+      ))].join(", ")} ${destinations.length === 1 ? "does" : "do"} not publish threads.`
+    : "Replies are unavailable until this campaign has a thread-capable account.";
   const [editingPostTypes, setEditingPostTypes] = useState<Record<string, string>>({});
   /**
    * A media replacement staged in the editor. Null means the post keeps what
@@ -2065,6 +2079,16 @@ export function AutopilotPanel({
   } | null>(null);
   /** A staged copy-only post. Separate from null, which means keep media. */
   const [editingMediaRemoved, setEditingMediaRemoved] = useState(false);
+  /**
+   * Marking a post with no media as one that posts anyway.
+   *
+   * "Remove media" only ever appeared on a post that had some, so a post
+   * created words-first - the MCP flow, and the one people actually hit - had
+   * no way to become copy-only at all. It read "Text only" in this dialog and
+   * was skipped by the scheduler as awaiting media, which are two different
+   * answers to the same question.
+   */
+  const [editingCopyOnly, setEditingCopyOnly] = useState(false);
   const [swappingMedia, setSwappingMedia] = useState(false);
   // The campaign's own wording, overridden for this post. Empty means the
   // campaign's, which is why these are strings rather than nullable: the field
@@ -2100,6 +2124,21 @@ export function AutopilotPanel({
     "trendrelay.campaigns.workTab",
     "overview",
     oneOf("overview", "posts", "content"),
+  );
+  /**
+   * Whether the post-format overrides start open, remembered.
+   *
+   * Open by default, because a closed disclosure is where per-account format
+   * choices went to be forgotten: the row it hid is the one that decides
+   * whether a post lands as a Reel or a feed post. Closing it is a real
+   * preference, so it survives - and it survives across posts, since the
+   * dialog is rebuilt per post and would otherwise spring open every time
+   * somebody who wants it shut opens another one.
+   */
+  const [formatsOpen, setFormatsOpen] = usePersistedState<boolean>(
+    "trendrelay.campaigns.postFormatsOpen",
+    true,
+    (value): value is boolean => typeof value === "boolean",
   );
   const automaticPreview = useRef(false);
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
@@ -2870,13 +2909,18 @@ export function AutopilotPanel({
         body: String(values.get("body") ?? "").trim(),
         hashtags: String(values.get("hashtags") ?? "").split(/[\s,]+/).filter(Boolean),
         first_comment: String(values.get("first_comment") ?? "").trim() || null,
-        thread: editingReplies.map((part) => part.trim()).filter(Boolean),
+        thread: canPublishReplies
+          ? editingReplies.map((part) => part.trim()).filter(Boolean)
+          : [],
         offer_ids: editing.offer_ids,
         disclosure: editingDisclosure.trim() || null,
         bio_hint: editingBioHint.trim() || null,
       });
     }, 350);
-  }, [composeDraft, editing, editingReplies, editingDisclosure, editingBioHint]);
+  }, [
+    canPublishReplies, composeDraft, editing, editingReplies,
+    editingDisclosure, editingBioHint,
+  ]);
 
   // On opening, and after every change this component owns rather than the
   // form: the replies, and the two wordings.
@@ -2967,6 +3011,7 @@ export function AutopilotPanel({
     setEditingPostTypes(item.post_type_overrides ?? {});
     setEditingMedia(null);
     setEditingMediaRemoved(false);
+    setEditingCopyOnly(false);
     setSwappingMedia(false);
     openEditorWording(item);
   }
@@ -3947,9 +3992,11 @@ export function AutopilotPanel({
                           caption: String(form.get("caption") ?? ""),
                           first_comment:
                             String(form.get("first_comment") ?? "").trim() || null,
-                          thread: item.thread.map((_, index) =>
-                            String(form.get(`reply-${index}`) ?? "").trim(),
-                          ).filter(Boolean),
+                          thread: item.thread_deliverable
+                            ? item.thread.map((_, index) =>
+                                String(form.get(`reply-${index}`) ?? "").trim(),
+                              ).filter(Boolean)
+                            : [],
                         });
                       }}
                     >
@@ -3967,7 +4014,7 @@ export function AutopilotPanel({
                         <textarea name="first_comment" rows={3} maxLength={2000}
                           defaultValue={item.first_comment ?? ""} />
                       </label>
-                      {item.thread.map((reply, index) => (
+                      {item.thread_deliverable && item.thread.map((reply, index) => (
                         <label key={`${item.id}-edit-reply-${index}`}>
                           Reply {index + 1}
                           <textarea name={`reply-${index}`} rows={2}
@@ -3987,12 +4034,21 @@ export function AutopilotPanel({
                         <strong>First comment</strong>
                         <pre>{item.first_comment}</pre>
                       </>}
-                      {item.thread.map((reply, index) => (
+                      {item.thread_deliverable && item.thread.map((reply, index) => (
                         <div key={`${item.id}-reply-${index}`}>
                           <strong>Reply {index + 1}</strong>
                           <pre>{reply}</pre>
                         </div>
                       ))}
+                      {!item.thread_deliverable && item.thread.length > 0 && (
+                        <p className="campaign-capability-note compact" role="note">
+                          <strong>No replies or thread</strong>
+                          <span>{item.destination_label ?? item.platform} cannot publish
+                            replies through {item.provider}. The {item.thread.length}
+                            {" "}saved repl{item.thread.length === 1 ? "y" : "ies"}
+                            {" "}will be omitted when this post is approved.</span>
+                        </p>
+                      )}
                       <p className="autopilot-note" role="status">{item.held_reason}</p>
                       {canEdit && (
                         <>
@@ -4753,12 +4809,16 @@ export function AutopilotPanel({
                           delivery guard learned to refuse them. */}
                       No copy yet — this post is skipped until somebody writes it.
                     </span>
-                  ) : !item.video_path && !item.image_paths.length ? (
+                  ) : !item.video_path && !item.image_paths.length
+                      && !item.text_only ? (
                     // The mirror case, from the words-first MCP flow: the copy
                     // exists and the clip does not, and the scheduler skips it
                     // just the same until media is attached in Edit content.
+                    // A copy-only post is deliberately not this: it has no
+                    // media because it wants none, and the scheduler runs it.
                     <span className="autopilot-queue-copy autopilot-needs-copy">
-                      No media yet — this post is skipped until some is attached.
+                      No media yet — this post is skipped until media is attached,
+                      or you post it as copy only in Edit content.
                     </span>
                   ) : (
                     <span className="autopilot-queue-copy">{item.body}</span>
@@ -4778,7 +4838,7 @@ export function AutopilotPanel({
                       <em>{destinations.length} {destinations.length === 1 ? "account" : "accounts"}</em>
                     )}
                     {item.first_comment && <em>+ {followUpFieldName.toLowerCase()}</em>}
-                    {item.thread.length > 0 && (
+                    {canPublishReplies && item.thread.length > 0 && (
                       <em>+ {item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
                     )}
                   {/* What this post would carry, and when it would carry
@@ -5057,7 +5117,12 @@ export function AutopilotPanel({
                     .split(/[\s,]+/).filter(Boolean),
                   first_comment: String(form.get("first_comment") ?? "").trim() || null,
                   topic: String(form.get("topic") ?? "").trim() || "",
-                  thread: editingReplies.map((part) => part.trim()).filter(Boolean),
+                  // Replies are destination capabilities, not generic text.
+                  // Clearing legacy values here prevents a Facebook/Zernio
+                  // post from carrying hidden data its engine will reject.
+                  thread: canPublishReplies
+                    ? editingReplies.map((part) => part.trim()).filter(Boolean)
+                    : [],
                   // Empty goes back to the campaign's wording rather than
                   // storing an empty disclosure, which is the one thing a post
                   // with a product attached may not have.
@@ -5067,7 +5132,7 @@ export function AutopilotPanel({
                   // Only when a replacement was staged: an absent field
                   // leaves the media exactly as it was, which is what saving
                   // this form has always meant.
-                  ...(editingMediaRemoved ? {
+                  ...(editingMediaRemoved || editingCopyOnly ? {
                     video_path: "",
                     image_paths: [],
                     asset_id: null,
@@ -5081,8 +5146,8 @@ export function AutopilotPanel({
                 }),
               }));
               closePostEditor();
-              return editingMediaRemoved
-                ? "Post updated as text only."
+              return editingMediaRemoved || editingCopyOnly
+                ? "Post updated as copy only. It is no longer waiting for media."
                 : editingMedia ? "Post updated, media and all." : "Campaign copy updated.";
             });
           }}>
@@ -5102,13 +5167,26 @@ export function AutopilotPanel({
                       ? "" : staged ? staged.video_path : editing.video_path;
                     const images = editingMediaRemoved
                       ? [] : staged ? staged.image_paths : editing.image_paths;
+                    // "No media yet" and "Copy only" are different answers,
+                    // and this said the second when it meant the first: a post
+                    // still waiting for a clip was labelled as one that posts
+                    // without one, while the scheduler went on skipping it.
                     const shape = video
                       ? "Video"
                       : images.length > 1 ? `Carousel · ${images.length} pictures`
                         : images.length === 1 ? "Image"
-                          : "Text only";
+                          : editingCopyOnly || editing.text_only
+                            ? "Copy only"
+                            : "No media yet";
                     if (editingMediaRemoved) {
-                      return "Text only — removes the current media when you save.";
+                      return "Copy only — removes the current media when you save.";
+                    }
+                    if (editingCopyOnly) {
+                      return "Copy only — this post goes out with no media when you save.";
+                    }
+                    if (shape === "No media yet") {
+                      return "No media yet — this post is skipped until media is "
+                        + "attached, or you post it as copy only.";
                     }
                     return staged
                       ? `${shape} — replaces the current media when you save.`
@@ -5123,6 +5201,17 @@ export function AutopilotPanel({
                         setEditingMediaRemoved(false);
                       }}>
                       Keep current media
+                    </Button>
+                  )}
+                  {/* The way out of the skip, for a post that has no media to
+                      remove. Without it the only route to a copy-only post was
+                      to attach media and then take it away again. */}
+                  {!editingMedia && !editingMediaRemoved && !editing.text_only
+                    && !editing.video_path && !editing.image_paths.length && (
+                    <Button type="button"
+                      variant={editingCopyOnly ? "quiet" : "secondary"} size="sm"
+                      onClick={() => setEditingCopyOnly(!editingCopyOnly)}>
+                      {editingCopyOnly ? "Keep waiting for media" : "Post as copy only"}
                     </Button>
                   )}
                   {!editingMediaRemoved && Boolean(
@@ -5213,7 +5302,11 @@ export function AutopilotPanel({
             {destinations.some((destination) => (
               compatiblePostTypes(destination, editing).length > 1
             )) && (
-              <details className="campaign-dialog-more campaign-format-overrides">
+              <details
+                className="campaign-dialog-more campaign-format-overrides"
+                open={formatsOpen}
+                onToggle={(event) => setFormatsOpen(event.currentTarget.open)}
+              >
                 <summary>
                   <strong>Post formats</strong>
                   <small>Uses each account&apos;s default unless you override this post.</small>
@@ -5264,35 +5357,46 @@ export function AutopilotPanel({
                     (item) => platformLabels[item.platform]))].join(", ")}. Where the product link goes here too, your words lead and the link follows them in the same comment.`
                 : "No account on this campaign can deliver one. Anything written here is kept but not sent."}</small>
             </label>
-            <fieldset className="campaign-reply-editor">
-              <legend>Replies / thread
-                <FeatureReach
-                  chosen={[...new Set(destinations.map((item) => item.platform))]}
-                  supported={[...new Set(destinations
-                    .filter((item) => item.follow_up_deliverable)
-                    .map((item) => item.platform))]}
-                />
-              </legend>
-              <small>Replies publish in this order after the primary post. Product links generated by smart matching appear after these replies.</small>
-              {editingReplies.map((reply, index) => (
-                <div key={index}>
-                  <textarea rows={3} maxLength={5000} value={reply}
-                    aria-label={`Reply ${index + 1}`}
-                    placeholder={`Reply ${index + 1}`}
-                    onChange={(event) => setEditingReplies((current) => current.map(
-                      (part, partIndex) => partIndex === index ? event.target.value : part,
-                    ))} />
-                  <Button type="button" variant="quiet" size="sm"
-                    onClick={() => setEditingReplies((current) => current.filter(
-                      (_part, partIndex) => partIndex !== index,
-                    ))}>Remove</Button>
-                </div>
-              ))}
-              <Button type="button" variant="secondary" size="sm"
-                onClick={() => setEditingReplies((current) => [...current, ""])}>
-                Add reply
-              </Button>
-            </fieldset>
+            {canPublishReplies ? (
+              <fieldset className="campaign-reply-editor">
+                <legend>Replies / thread
+                  <FeatureReach
+                    chosen={[...new Set(destinations.map((item) => item.platform))]}
+                    supported={[...new Set(threadAccounts.map((item) => item.platform))]}
+                  />
+                </legend>
+                <small>Replies publish in this order only on {threadAccounts.map(
+                  (item) => item.label,
+                ).join(", ")}. Product links generated by smart matching appear after them.</small>
+                {editingReplies.map((reply, index) => (
+                  <div key={index}>
+                    <textarea rows={3} maxLength={5000} value={reply}
+                      aria-label={`Reply ${index + 1}`}
+                      placeholder={`Reply ${index + 1}`}
+                      onChange={(event) => setEditingReplies((current) => current.map(
+                        (part, partIndex) => partIndex === index ? event.target.value : part,
+                      ))} />
+                    <Button type="button" variant="quiet" size="sm"
+                      onClick={() => setEditingReplies((current) => current.filter(
+                        (_part, partIndex) => partIndex !== index,
+                      ))}>Remove</Button>
+                  </div>
+                ))}
+                <Button type="button" variant="secondary" size="sm"
+                  onClick={() => setEditingReplies((current) => [...current, ""])}>
+                  Add reply
+                </Button>
+              </fieldset>
+            ) : (
+              <p className="campaign-capability-note" role="note">
+                <strong>No replies or thread</strong>
+                <span>{threadUnavailableMessage}</span>
+                {editing.thread.length > 0 && (
+                  <small>{editing.thread.length} saved repl{editing.thread.length === 1
+                    ? "y" : "ies"} will be removed when you save.</small>
+                )}
+              </p>
+            )}
             {/* What is being edited is two thirds of the post. The campaign
                 supplies the rest, and it used to supply it invisibly: somebody
                 writing a caption here had no way to know a disclosure would be

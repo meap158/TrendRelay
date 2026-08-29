@@ -1701,6 +1701,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-reply-editor legend { padding-inline: 4px; color: var(--text); font-size: 11px; font-weight: 700; }
 .campaign-reply-editor > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
 .campaign-reply-editor > .ui-button { justify-self: start; }
+.campaign-capability-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--panel); color: var(--muted); font-size: 11px; line-height: 1.4; }
+.campaign-capability-note strong { color: var(--text); white-space: nowrap; }
+.campaign-capability-note small { grid-column: 2; color: var(--muted); }
+.campaign-capability-note.compact { grid-template-columns: auto minmax(0, 1fr); padding: 7px 9px; }
 .campaign-one-off-handoff { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-block-start: 1px solid var(--line); padding: 14px; background: var(--panel-raised); }
 .campaign-one-off-handoff > div { display: grid; gap: 3px; }
 .campaign-one-off-handoff p { margin: 0; color: var(--muted); font-size: 11px; }
@@ -1929,6 +1933,8 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .campaign-work-tabs small { display: none; }
   .campaign-one-off-handoff { display: grid; }
   .campaign-reply-editor > div { grid-template-columns: 1fr; }
+  .campaign-capability-note, .campaign-capability-note.compact { grid-template-columns: 1fr; }
+  .campaign-capability-note small { grid-column: 1; }
 }
 
 /* What the campaign's settings add up to, said before the switch is thrown.

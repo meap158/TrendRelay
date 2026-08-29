@@ -451,6 +451,7 @@ def compose_for_post(
     *,
     written_first_comment: str | None = None,
     written_thread: Sequence[str] = (),
+    thread_deliverable: bool = True,
     **composed: Any,
 ) -> ComposedPost:
     """The whole post as it will be published, words and generated parts merged.
@@ -483,8 +484,11 @@ def compose_for_post(
         ),
         placement=post.placement,
         thread=(
-            *(part.strip() for part in written_thread if part.strip()),
-            *post.thread,
+            (
+                *(part.strip() for part in written_thread if part.strip()),
+                *post.thread,
+            )
+            if thread_deliverable else ()
         ),
     )
 

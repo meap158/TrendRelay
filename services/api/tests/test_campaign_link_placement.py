@@ -20,7 +20,10 @@ from trendrelay_api.campaign_autopilot import (
     resolve_placement,
 )
 from trendrelay_api.integrations import publishing
-from trendrelay_api.integrations.publishing import first_comment_deliverable
+from trendrelay_api.integrations.publishing import (
+    first_comment_deliverable,
+    thread_deliverable,
+)
 
 #: The interface's own list of languages, read from the file that defines it
 #: rather than copied here, so adding a locale to the picker without teaching
@@ -103,6 +106,14 @@ def test_zernio_joins_buffer_on_comment_networks_and_threads_bluesky_only() -> N
     assert first_comment_deliverable("zernio", "twitter") is False
     assert first_comment_deliverable("bundle_social", "instagram") is False
     assert first_comment_deliverable("woopsocial", "facebook") is False
+
+    # The narrower question drives reply inputs. Facebook has a first comment
+    # through both engines but is not a multi-post thread destination.
+    assert thread_deliverable("buffer", "facebook") is False
+    assert thread_deliverable("zernio", "facebook") is False
+    assert thread_deliverable("buffer", "threads") is True
+    assert thread_deliverable("zernio", "bluesky") is True
+    assert thread_deliverable("zernio", "threads") is False
 
 
 def test_other_engines_say_they_drop_comments_instead_of_dropping_silently() -> None:

@@ -1204,11 +1204,21 @@ def test_a_thread_within_the_limit_passes_even_though_the_total_exceeds_it(
     publishing._validate_request(publishing.PROVIDERS["buffer"], body)
 
 
-def test_an_engine_that_cannot_thread_says_so(media_file: Path) -> None:
+def test_a_destination_that_cannot_thread_says_so(media_file: Path) -> None:
     body = request(media_file, thread=["Reply"])
 
-    with pytest.raises(ValueError, match="Zernio does not publish threads"):
+    with pytest.raises(ValueError, match="None of the chosen destinations take a thread"):
         publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+
+def test_zernio_accepts_a_bluesky_thread(media_file: Path) -> None:
+    body = request(
+        media_file,
+        thread=["Reply"],
+        targets=[publishing.PublishTarget(platform="bluesky", integration_id="a1")],
+    )
+
+    publishing._validate_request(publishing.PROVIDERS["zernio"], body)
 
 
 def test_a_thread_with_no_threadable_destination_is_refused(media_file: Path) -> None:
@@ -1886,11 +1896,11 @@ def test_buffer_text_only_preview_does_not_demand_media_hosting(
 
     preview = publishing.preview_publish(body)
 
-    assert preview["media_source"] == "text only"
+    assert preview["media_source"] == "copy only"
 
 
 def test_text_only_still_refuses_a_media_required_surface() -> None:
-    with pytest.raises(ValueError, match="Text-only posts are not supported"):
+    with pytest.raises(ValueError, match="Copy-only posts are not supported"):
         publishing.PublishRequest(
             workspace_id="workspace-1",
             caption="A video platform still needs a video.",
@@ -1919,7 +1929,7 @@ def test_a_video_post_still_needs_its_media() -> None:
         "date": datetime.now(UTC) + timedelta(hours=2),
         "targets": [publishing.PublishTarget(platform="tiktok", integration_id="a1")],
     }
-    with pytest.raises(ValueError, match="Text-only posts are not supported"):
+    with pytest.raises(ValueError, match="Copy-only posts are not supported"):
         publishing.PublishRequest(**payload)
     # A public URL is the other way to have media, and is enough on its own.
     assert publishing.PublishRequest(**payload, media_url="https://cdn.example.com/c.mp4")

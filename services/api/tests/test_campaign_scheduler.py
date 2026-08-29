@@ -12,9 +12,9 @@ from sqlalchemy.pool import StaticPool
 from trendrelay_api import campaign_scheduler as scheduler
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.autopilot_models import (
-    CampaignOffer,
     CampaignAutopilot,
     CampaignDestination,
+    CampaignOffer,
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_scheduler import (
@@ -529,6 +529,41 @@ def test_an_unwritten_post_counts_as_approved_but_not_as_ready(session) -> None:
     assert status["queue_ready"] == 1
 
 
+def test_a_copy_only_post_counts_as_ready(session) -> None:
+    """It has everything it needs, so the checklist must stop asking for more.
+
+    Readiness demanded a video or a picture, which is right for a post still
+    waiting on media and wrong for one that wants none. The scheduler already
+    knew the difference and would happily post it; only this count did not, so
+    a campaign whose one written post was copy-only reported nothing ready and
+    told the operator to go and write copy that was already there.
+    """
+    from trendrelay_api.campaign_scheduler import campaign_status
+
+    destination(session, "d1", "facebook")
+    slot(session, 12)
+    queue_item(session, "q-copy-only", video_path="", image_paths=[], text_only=True)
+    pilot = autopilot(session)
+
+    status = campaign_status(session, pilot)
+
+    assert status["queue_ready"] == 1
+    # And it is a real outing, so the queue is not reported as already spent.
+    assert status["remaining_outings"] == 1
+
+
+def test_a_post_still_waiting_for_media_is_still_not_ready(session) -> None:
+    """The distinction the fix above must not flatten."""
+    from trendrelay_api.campaign_scheduler import campaign_status
+
+    destination(session, "d1", "facebook")
+    slot(session, 12)
+    queue_item(session, "q-awaiting", video_path="", image_paths=[], text_only=False)
+    pilot = autopilot(session)
+
+    assert campaign_status(session, pilot)["queue_ready"] == 0
+
+
 def test_a_resting_account_hands_its_slot_to_the_next_one(session) -> None:
     """One blocked account must not empty the whole horizon.
 
@@ -659,6 +694,22 @@ def test_operator_comments_and_replies_stay_with_the_content_package(session) ->
 
     assert posts[0].first_comment == "A useful follow-up note."
     assert posts[0].thread == ("First planned reply.", "Second planned reply.")
+
+
+def test_replies_are_omitted_for_a_destination_that_only_takes_a_comment(session) -> None:
+    destination(session, "d1", "facebook", provider="zernio")
+    slot(session, 12)
+    queue_item(
+        session,
+        "q1",
+        first_comment="This comment can be delivered.",
+        thread=["This reply cannot."],
+    )
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert posts[0].first_comment == "This comment can be delivered."
+    assert posts[0].thread == ()
 
 
 def test_a_written_comment_does_not_delete_the_affiliate_link(session) -> None:

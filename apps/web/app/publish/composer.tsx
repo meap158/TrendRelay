@@ -390,6 +390,7 @@ export function PostPreview({
   autoPlay,
   carousel,
   wantsCarousel,
+  copyOnly,
   showsTitle: showsTitleProp,
   width = "mobile",
   avatar,
@@ -447,6 +448,15 @@ export function PostPreview({
    * control.
    */
   wantsCarousel?: boolean;
+  /**
+   * Whether this post goes out with no media on purpose.
+   *
+   * Different from having none yet, and the preview has to say which. An
+   * empty frame reading "Choose a clip to see its frame here" is a request
+   * for something a copy-only post is never going to have - so it draws no
+   * frame at all, which is also what the network will draw.
+   */
+  copyOnly?: boolean;
 }) {
   const t = useT();
   const story = postTypeLabel.toLowerCase() === "story";
@@ -505,8 +515,13 @@ export function PostPreview({
           <small>{platformLabels[platform]} · {postTypeLabel}</small>
         </span>
       </figcaption>
-      <div
-        className="post-preview-frame"
+      {/* No frame at all for a post that carries no media by design. The
+          alternative is an empty box asking for a clip that is never coming,
+          which is both a wrong instruction and a wrong preview: the network
+          will not draw a media area either. */}
+      {!copyOnly && (
+        <div
+          className="post-preview-frame"
         // Not on a Story. That surface is 9:16 full bleed whatever the clip is,
         // and the CSS says so - but an inline variable beats any rule, so
         // measuring one here would quietly replace the network's shape with the
@@ -629,7 +644,8 @@ export function PostPreview({
             >&#8250;</button>
           </>
         )}
-      </div>
+        </div>
+      )}
       {story ? (
         <p className="post-preview-note">
           A Story fills the screen and carries no caption. It disappears after 24 hours.

@@ -130,7 +130,7 @@ def _post_type_for(execution: Any) -> str | None:
     images = list(getattr(execution, "image_paths", None) or [])
     # Scheduled executions always carry `media_path`, including the empty
     # string for a deliberate text post. Lightweight preview objects predating
-    # text-only posts do not; there, no pictures historically meant video and
+    # copy-only posts do not; there, no pictures historically meant video and
     # must keep the destination's Reel/Story choice.
     has_media_path = hasattr(execution, "media_path")
     has_video = bool(getattr(execution, "media_path", "")) if has_media_path else not images
@@ -397,14 +397,17 @@ def recompose_held(
     because their words are not the campaign's to rewrite. So is one whose
     queue item has gone: there is no copy left to compose from.
     """
-    from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
-    from trendrelay_api.campaign_autopilot_api import offer_link_url
     from trendrelay_api.autopilot_models import (
         CampaignQueueItem,
         bio_hint_for,
         disclosure_for,
     )
-    from trendrelay_api.integrations.publishing import first_comment_deliverable
+    from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
+    from trendrelay_api.integrations.publishing import (
+        first_comment_deliverable,
+        thread_deliverable,
+    )
 
     moment = now or datetime.now(UTC)
     query = select(PublicationExecution).where(
@@ -467,6 +470,9 @@ def recompose_held(
                 bio_hint=bio_hint_for(item, autopilot),
                 placement_override=destination.link_placement,
                 comment_deliverable=first_comment_deliverable(
+                    destination.provider, destination.platform
+                ),
+                thread_deliverable=thread_deliverable(
                     destination.provider, destination.platform
                 ),
                 written_first_comment=item.first_comment,
@@ -559,7 +565,7 @@ def _media_ready(execution: PublicationExecution) -> str | None:
             return f"A frozen image file is missing: {missing[0]}"
         return None
     if not execution.media_path:
-        # An intentional text-only post has nothing to freeze. Whether its
+        # An intentional copy-only post has nothing to freeze. Whether its
         # destination accepts copy alone was checked while planning and again
         # by PublishRequest before the durable job is created.
         return None
