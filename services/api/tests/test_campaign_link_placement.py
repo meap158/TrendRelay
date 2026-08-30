@@ -190,6 +190,31 @@ def test_the_composer_follows_the_destination_s_configuration() -> None:
     )
 
 
+def test_a_first_comment_post_keeps_its_hashtags_in_the_caption() -> None:
+    """The one composing branch that lost them.
+
+    Every other placement appends the hashtags to the caption - the bio and
+    thread branches delegate to `compose`, the caption branch appends them
+    itself - but the first-comment branch built its caption from disclosure
+    and body alone. A Facebook-via-Zernio campaign, whose link lives in the
+    first comment, posted every caption with the hashtags silently gone.
+    """
+    composed = compose_products(
+        platform="facebook",
+        body="Three ways to pull a better espresso.",
+        hashtags=["espresso", "#coffee"],
+        products=[("Espresso kit", "https://tr.example/c/abc")],
+        disclosure="Affiliate link.",
+        placement_override="first_comment",
+        comment_deliverable=True,
+    )
+
+    assert composed.placement.placement == "first_comment"
+    assert "#espresso #coffee" in composed.caption
+    # The comment is still only the link; hashtags belong to the caption.
+    assert "#espresso" not in (composed.first_comment or "")
+
+
 def test_a_bio_override_keeps_the_caption_pointing_at_the_profile() -> None:
     composed = compose_products(
         platform="facebook",

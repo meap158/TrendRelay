@@ -439,9 +439,18 @@ def compose_products(
             placement=placement,
         )
 
-    # Kept for engines that may gain a safe first-comment placement policy.
+    # The first-comment placement: the links follow the post as its first
+    # comment, and the caption keeps everything else - including the hashtags,
+    # which this branch alone used to drop while every other placement kept
+    # them. A Facebook-via-Zernio campaign lives entirely in this branch, so
+    # its captions went out with the hashtags silently gone.
+    parts = [disclosure.strip(), root_body]
+    if hashtags:
+        parts.append(" ".join(
+            f"#{tag.lstrip('#')}" for tag in hashtags if tag.strip()
+        ))
     return ComposedPost(
-        caption="\n\n".join(part for part in (disclosure.strip(), root_body) if part),
+        caption="\n\n".join(part for part in parts if part),
         first_comment="\n".join(f"{name}: {link}" for name, link in products),
         placement=placement,
     )
