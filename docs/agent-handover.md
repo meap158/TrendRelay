@@ -227,18 +227,20 @@ execution and the engine request. The carousel is already done end to end and is
 the pattern to copy.
 
 ### Per-row "Publish now" on the timeline
-Deliberately **not** built. `delivery: "now"` is now selectable up front, which
-covers the simple case. A per-row button is harder than it looks: a scheduled
-row means the engine already holds that post with a due time, so publishing it
-then must modify the existing job rather than create a second one. Needs:
-- an endpoint beside `approve` / `dismiss`, accepting only `queued` and
-  `failed` (never `running` - that is the duplicate race; never `succeeded`);
-- a verified answer to whether Zernio can update a scheduled post, as Buffer
-  can;
-- the same confirmation gate `approve` uses.
+Built for the half that is safe, and only that half. A *planned* row is a
+forecast - the engine holds nothing - so its Publish now creates the first and
+only job, through `publish_queue_item_now` scoped to that row's
+`destination_id`, and the next plan reflows the remaining posts into the freed
+slot. Posts can also be **locked to one slot** (`pinned_slot` on the queue
+item, the `/slots` and `/queue/{id}/slot` endpoints, MCP's `get_day_slots` /
+`pin_post_slot`): a locked post is spent nowhere else, takes its slot ahead of
+the rotation, and reflow moves around it.
 
-Do not ship this without the per-engine answer. Double-posting to a real
-account is the failure the runner's circuit breaker exists to prevent.
+Still deliberately not built: publish-now on a row an engine already holds
+(scheduled/queued executions). That must modify the existing job rather than
+create a second one, and needs the per-engine answer on updating a scheduled
+post before it is safe. Double-posting to a real account is the failure the
+runner's circuit breaker exists to prevent.
 
 ### Copy generation
 Packages accept media without copy and carry `PLACEHOLDER_BODY`, reporting

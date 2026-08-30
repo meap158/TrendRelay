@@ -144,9 +144,16 @@ video controls, and a preview of a post is not a file on offer.
   Buffer, repeatedly, with the engine's own error on the row. A carousel aimed
   at a network that cannot take one would fail the same way. `photo_carousel_
   platforms` exists in Publish and the campaign path does not read it.
-- **No per-row "Publish now".** `delivery: "now"` is selectable up front, which
-  covers the simple case without risk. A per-row button must modify the job the
-  engine already holds rather than create a second one - see the handover.
+- **Per-row "Publish now" exists only for rows no engine holds yet.** A
+  *planned* timeline row is a forecast - no job exists - so its Publish now
+  safely creates the first and only job, scoped to that row's account, and the
+  next plan reflows the rest forward. A row already handed to an engine
+  (scheduled/queued) still has no per-row publish, for the original reason:
+  that would mean modifying the engine's job rather than creating a second one.
+- **A post can be locked to one slot.** `pinned_slot` on the queue item; the
+  scheduler spends it nowhere else and hands it that slot ahead of the
+  rotation. Set from the timeline row, the editor's Posting time section, or
+  MCP's `pin_post_slot`; cleared automatically once the outing publishes.
 - **No carousel has actually posted.** The path is built and tested end to end
   but has never been exercised against a live engine. Watch the first one.
 - **Nothing generates copy.** Placeholder only, by decision; MCP later.
