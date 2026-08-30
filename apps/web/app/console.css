@@ -1712,9 +1712,15 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-edit-slot-options button em { color: var(--muted); font-size: 9px; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
 
 /* The planned row's own actions - Edit, Publish now, and the slot lock -
-   kept to one compact strip beside the badge. */
+   kept to one compact strip beside the badge. A locked row's pin button wears
+   the link tone as a standing state, not only a glyph swap: the colour says
+   "engaged" at a glance the way a toggled filter does. */
 .campaign-entry-actions { display: inline-flex; flex: none; align-items: center; gap: 2px; }
-.campaign-entry-actions .ui-button[aria-pressed="true"] { color: var(--link); }
+.campaign-entry-actions .ui-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--link) 45%, var(--line));
+  color: var(--link);
+  background: color-mix(in srgb, var(--link) 12%, var(--panel));
+}
 .autopilot-compose label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .autopilot-compose textarea, .autopilot-compose input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }

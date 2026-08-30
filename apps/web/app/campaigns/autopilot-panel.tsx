@@ -3057,11 +3057,20 @@ export function AutopilotPanel({
     }
   }
 
-  /** Lock the post being edited to one chosen slot, or release its lock. */
+  /**
+   * Lock the post being edited to one chosen slot, or release its lock.
+   *
+   * Targeted like the timeline's toggle rather than through `run()`, so the
+   * open dialog and the page behind it stay put. The one difference: a pin
+   * chosen here can *move* the post to another moment, so if a plan is on
+   * screen it is re-read quietly in the background - the old rows stay
+   * visible until the fresh ones arrive instead of blanking.
+   */
   async function setEditorSlot(slot: SlotOption | null) {
     if (!editing) return;
     const editingId = editing.id;
-    await run(`pin-editor-${editingId}`, async () => {
+    setBusy(`pin-editor-${editingId}`);
+    try {
       const body = await json<{ item: QueueItem }>(
         await apiFetch(`${base}/queue/${editingId}/slot`, {
           method: "POST",
@@ -3071,21 +3080,29 @@ export function AutopilotPanel({
             : { release: true }),
         }),
       );
-      // The dialog stays open, so its copy of the post must say what the
-      // queue now says - run() reloads the list, not this staged object.
+      const fields = {
+        pinned_slot: body.item.pinned_slot,
+        pinned_destination_id: body.item.pinned_destination_id,
+      };
+      patchQueueItem(editingId, fields);
+      // The dialog holds its own staged copy of the post; it must say what
+      // the queue now says.
       setEditing((current) => (current && current.id === editingId
-        ? {
-            ...current,
-            pinned_slot: body.item.pinned_slot,
-            pinned_destination_id: body.item.pinned_destination_id,
-          }
+        ? { ...current, ...fields }
         : current));
       setSlotDay("");
       setSlotOptions(null);
-      return slot
+      succeed(slot
         ? "Locked to that slot. Early publishes reflow around it; this post will not move."
-        : "Unlocked. The post flows with the rotation again.";
-    });
+        : "Unlocked. The post flows with the rotation again.");
+    } catch (reason) {
+      fail(explainFailure(reason, "The slot lock could not be changed."));
+      return;
+    } finally {
+      setBusy("");
+    }
+    // After the busy flag is back down, so the quiet replan owns its own.
+    if (slot && showingPlan.current) await loadPreview(false);
   }
 
   /** Close the editor and return to whichever view opened it. */
@@ -3558,22 +3575,48 @@ export function AutopilotPanel({
     });
   }
 
-  /** Lock a planned outing to exactly this slot, or hand it back. */
+  /** One queued post updated in place, for writes too small to justify the
+      full reload `run()` performs. Blanking and re-planning the whole outlook
+      to flip a lock made a two-field write read as a page reload. */
+  function patchQueueItem(itemId: string, fields: Partial<QueueItem>) {
+    setQueue((current) => current.map((item) =>
+      item.id === itemId ? { ...item, ...fields } : item));
+  }
+
+  /**
+   * Lock a planned outing to exactly this slot, or hand it back.
+   *
+   * Deliberately not through `run()`: the lock names the slot the row already
+   * occupies, so the forecast is unchanged and nothing needs re-planning -
+   * only the badge and the icon, which read from the queue item patched here.
+   */
   async function togglePlannedPin(entry: TimelineEntry) {
     if (!entry.queue_item_id) return;
+    const itemId = entry.queue_item_id;
     const pinned = entryIsPinned(entry);
-    await run(`pin-entry-${entry.key}`, async () => {
-      await json(await apiFetch(`${base}/queue/${entry.queue_item_id}/slot`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(pinned
-          ? { release: true }
-          : { at: entry.at, destination_id: entry.destination_id }),
-      }));
-      return pinned
+    setBusy(`pin-entry-${entry.key}`);
+    try {
+      const body = await json<{ item: QueueItem }>(
+        await apiFetch(`${base}/queue/${itemId}/slot`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(pinned
+            ? { release: true }
+            : { at: entry.at, destination_id: entry.destination_id }),
+        }),
+      );
+      patchQueueItem(itemId, {
+        pinned_slot: body.item.pinned_slot,
+        pinned_destination_id: body.item.pinned_destination_id,
+      });
+      succeed(pinned
         ? "Unlocked. The post flows with the rotation again."
-        : "Locked to this slot. Early publishes reflow around it; this post will not move.";
-    });
+        : "Locked to this slot. Early publishes reflow around it; this post will not move.");
+    } catch (reason) {
+      fail(explainFailure(reason, "The slot lock could not be changed."));
+    } finally {
+      setBusy("");
+    }
   }
 
   async function batchPublishQueue({ force = false }: { force?: boolean } = {}) {
