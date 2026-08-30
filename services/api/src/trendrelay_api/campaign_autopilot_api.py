@@ -8,7 +8,7 @@ next day looks like before anything is created.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -483,6 +483,17 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "offer_match": item.offer_match,
         "state": item.state,
         "position": item.position,
+        # The lock, when one is set: this post waits for exactly this moment
+        # instead of flowing with the rotation. Null is the ordinary,
+        # reflowable case. Stamped UTC on the way out: SQLite hands the stored
+        # moment back naive, and a naive ISO string is read as *local* time by
+        # every browser, which put the badge three-to-twelve hours off.
+        "pinned_slot": (
+            item.pinned_slot.replace(tzinfo=UTC)
+            if item.pinned_slot and item.pinned_slot.tzinfo is None
+            else item.pinned_slot
+        ),
+        "pinned_destination_id": item.pinned_destination_id,
         "times_posted": item.times_posted,
         "last_posted_at": item.last_posted_at,
         "last_posted_by_destination": dict(item.last_posted_by_destination or {}),
@@ -1232,6 +1243,138 @@ def batch_publish_queue(
         )
     return outcome
 
+
+def _slot_view(entry: dict[str, Any]) -> dict[str, Any]:
+    """One slot as the panel and MCP read it - the datetime made ISO."""
+    return {**entry, "at": entry["at"].isoformat()}
+
+
+def _parse_day(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422, detail="Give the day as YYYY-MM-DD."
+        ) from error
+
+
+@router.get("/{campaign_id}/slots")
+def campaign_day_slot_availability(
+    workspace_id: str,
+    campaign_id: str,
+    day: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    item_id: str | None = None,
+) -> dict[str, Any]:
+    """One day's posting slots and what already claims each of them.
+
+    What the slot picker and the MCP assignment tool both read before locking
+    a post anywhere: the campaign's own posting times for that day, each one
+    free, taken by a committed post, locked by another pin, or already past.
+    `item_id` names the post being placed so its own current pin reads as free
+    to it rather than as a rival's claim.
+    """
+    from trendrelay_api.campaign_slots import day_slots, workspace_zone
+
+    membership(session, workspace_id, user.id)
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    slots = day_slots(
+        session, autopilot, day=_parse_day(day), exclude_item_id=item_id
+    )
+    return {
+        "day": day,
+        "timezone": str(workspace_zone(session, workspace_id)),
+        "slots": [_slot_view(entry) for entry in slots],
+    }
+
+
+class QueueSlotRequest(BaseModel):
+    """Lock one queued post to a posting slot, or hand it back to the rotation."""
+
+    #: The day to place the post on, as YYYY-MM-DD in the workspace timezone.
+    #: Required unless `at` or `release` says otherwise.
+    day: str | None = None
+    #: An exact slot moment, when the caller has already chosen one. Must be
+    #: one of the campaign's materialised posting times.
+    at: datetime | None = None
+    #: Narrows an explicit `at` to one account; otherwise the free account at
+    #: that moment is chosen.
+    destination_id: str | None = None
+    #: Clears the lock instead of setting one.
+    release: bool = False
+
+
+@router.post("/{campaign_id}/queue/{item_id}/slot")
+def assign_queue_item_slot(
+    workspace_id: str,
+    campaign_id: str,
+    item_id: str,
+    body: QueueSlotRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Lock one queued post to one posting slot, or release the lock.
+
+    With `at` the choice is explicit and validated against the day's slots;
+    with only `day` the most fitting free slot is chosen - the earliest still
+    ahead, preferring an account this post has never been on. Either way the
+    lock is honoured by the scheduler: the post is spent nowhere else, and
+    early publishes reflow around it without moving it.
+    """
+    from trendrelay_api.campaign_slots import (
+        pin_item_to_slot,
+        release_pin,
+        workspace_zone,
+    )
+
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+
+    if body.release:
+        release_pin(item)
+        audit(
+            session, request, workspace_id, user.id,
+            "campaign.queue_item_slot_released", "campaign_queue_item", item.id, {},
+        )
+        return {"item": _queue_view(item), "pinned": None}
+
+    if body.day is None and body.at is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Say where to lock it: a day, an exact slot time, or release=true.",
+        )
+    if body.day is not None:
+        day = _parse_day(body.day)
+    else:
+        # The day the chosen moment falls on, in the schedule's own timezone.
+        at_utc = body.at if body.at.tzinfo else body.at.replace(tzinfo=UTC)
+        day = at_utc.astimezone(workspace_zone(session, workspace_id)).date()
+    try:
+        chosen = pin_item_to_slot(
+            session, autopilot, item,
+            day=day, at=body.at, destination_id=body.destination_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.queue_item_slot_pinned", "campaign_queue_item", item.id,
+        {"at": chosen["at"].isoformat(), "destination_id": chosen["destination_id"]},
+    )
+    return {"item": _queue_view(item), "pinned": _slot_view(chosen)}
 
 
 @router.patch("/{campaign_id}/queue/{item_id}")

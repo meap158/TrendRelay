@@ -599,6 +599,24 @@ def plan_campaign(
     ).all())
     approved = [item for item in queue if item.state == "approved"]
 
+    # A pinned post waits for exactly its slot. Split out before anything is
+    # planned so the rotation never spends it on some other moment, and so its
+    # own moment can hand it the turn regardless of queue position. A pin to a
+    # moment already more than the grace window in the past cannot be filled -
+    # the slot is gone - so it is reported rather than silently reassigned:
+    # moving it is precisely what the lock says not to do.
+    pinned_by_moment: dict[datetime, list[CampaignQueueItem]] = {}
+    missed_pins: list[CampaignQueueItem] = []
+    for item in approved:
+        when = _as_utc(item.pinned_slot)
+        if not when:
+            continue
+        if when < now - GRACE:
+            missed_pins.append(item)
+        else:
+            pinned_by_moment.setdefault(when, []).append(item)
+    flexible = [item for item in approved if not item.pinned_slot]
+
     # What is already committed but not yet settled. A reservation holds its
     # slot and its queue item without counting as posted - only reconciliation
     # writes the posted stamps - so everything the planner must not double-book
@@ -702,6 +720,18 @@ def plan_campaign(
         candidates = [chosen] + [
             rank for rank in scheduled_ranks if rank.destination_id != chosen.destination_id
         ]
+        # A pin that names an account outranks the cadence's choice of account
+        # for this moment: the lock was somebody's decision about where as well
+        # as when, and offering the slot to a higher-ranked neighbour first
+        # would spend it before the named account is even asked.
+        pins_here = pinned_by_moment.get(moment) or []
+        pin_destinations = {
+            item.pinned_destination_id
+            for item in pins_here
+            if item.pinned_destination_id
+        }
+        if pin_destinations:
+            candidates.sort(key=lambda rank: rank.destination_id not in pin_destinations)
         # Two buffers, both flushed once the slot is settled, because the run
         # note counts a reason as "N of M slots" and a slot now tries several
         # accounts - appending as they were found counted one slot as many.
@@ -738,8 +768,17 @@ def plan_campaign(
             ):
                 slot_notes.append(f"{destination.label} already has a post at this time.")
                 continue
+            # Pinned posts for this exact moment lead the pool - the lock is
+            # the strongest claim on the slot - followed by the rotation. A
+            # post pinned to any other moment is not in the pool at all: being
+            # spent early is the thing the lock exists to prevent.
+            pool = [
+                item for item in pins_here
+                if not item.pinned_destination_id
+                or item.pinned_destination_id == destination.id
+            ] + flexible
             eligible = _eligible_items(
-                approved,
+                pool,
                 destination_id=destination.id,
                 now=moment,
                 min_recycle_days=autopilot.min_recycle_days,
@@ -784,7 +823,7 @@ def plan_campaign(
                     queue,
                     approved,
                     rested=_eligible_items(
-                        approved,
+                        pool,
                         destination_id=destination.id,
                         now=moment,
                         min_recycle_days=autopilot.min_recycle_days,
@@ -1098,6 +1137,18 @@ def plan_campaign(
             f"{len(names)} post(s) still need media attached and are skipped "
             f"until it is: {shown}" + (f", and {rest} more." if rest > 0 else ".")
         )
+    if missed_pins:
+        names = [
+            _short_source_name(item.title or item.id) for item in missed_pins
+        ]
+        shown = ", ".join(names[:2])
+        rest = len(names) - 2
+        notes.append(
+            f"{len(names)} post(s) are locked to a posting time that has "
+            f"already passed and wait there: {shown}"
+            + (f", and {rest} more." if rest > 0 else ".")
+            + " Unlock them or pick a new slot."
+        )
 
     return scheduled, _explain_run(scheduled, notes, len(upcoming))
 
@@ -1260,6 +1311,11 @@ def record_published(
                 )
             ) or 0
         ) + 1
+        # A pin is one outing's instruction, spent when that outing exists.
+        # Left in place it would lock the item's next cycle to a moment
+        # already gone.
+        item.pinned_slot = None
+        item.pinned_destination_id = None
     destination = (
         session.get(CampaignDestination, execution.destination_id)
         if execution.destination_id

@@ -2308,3 +2308,131 @@ def test_campaign_analytics_rejects_an_unknown_workspace_timezone(workspace) -> 
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Unknown analytics timezone."
+
+
+# --- locking a post to a posting slot ----------------------------------------
+
+
+def _posting_slot(workspace_id: str, hour: int = 12) -> None:
+    from trendrelay_api.models import PublishingSlot
+
+    with TestingSession.begin() as session:
+        session.add(PublishingSlot(
+            id=f"slot-{hour}", workspace_id=workspace_id,
+            weekday=-1, hour=hour, minute=0,
+        ))
+
+
+def _slot_destination(workspace_id: str, campaign_id: str) -> str:
+    return request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/destinations",
+        json={
+            "provider": "buffer", "integration_id": "acct-1",
+            "platform": "tiktok", "label": "brand on TikTok",
+        },
+    ).json()["destination"]["id"]
+
+
+def test_a_day_of_slots_can_be_read_with_their_standing(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _slot_destination(workspace, campaign_id)
+    _posting_slot(workspace)
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+
+    body = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/slots",
+        params={"day": tomorrow},
+    ).json()
+
+    assert body["day"] == tomorrow
+    assert len(body["slots"]) == 1
+    assert body["slots"][0]["status"] == "free"
+    assert body["slots"][0]["at"].startswith(tomorrow)
+
+
+def test_a_post_can_be_locked_to_the_most_fitting_slot_of_a_day(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    _slot_destination(workspace, campaign_id)
+    _posting_slot(workspace)
+    item_id = queued(workspace, campaign_id, "locked")
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+
+    body = request(
+        "POST", f"{base}/queue/{item_id}/slot", json={"day": tomorrow},
+    )
+
+    assert body.status_code == 200, body.text
+    pinned = body.json()["pinned"]
+    assert pinned["at"].startswith(tomorrow)
+    assert body.json()["item"]["pinned_slot"] is not None
+    assert body.json()["item"]["pinned_destination_id"] == pinned["destination_id"]
+
+    # The day now reports that slot as held by this post to everyone else.
+    slots = request(
+        "GET", f"{base}/slots", params={"day": tomorrow},
+    ).json()["slots"]
+    assert slots[0]["status"] == "pinned"
+    assert slots[0]["pinned_item_id"] == item_id
+    # But as free to the post itself, so re-locking is a no-op rather than a clash.
+    own_view = request(
+        "GET", f"{base}/slots", params={"day": tomorrow, "item_id": item_id},
+    ).json()["slots"]
+    assert own_view[0]["status"] == "free"
+
+
+def test_a_second_post_cannot_take_a_locked_slot(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    _slot_destination(workspace, campaign_id)
+    _posting_slot(workspace)
+    first = queued(workspace, campaign_id, "first")
+    second = queued(workspace, campaign_id, "second")
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+    request("POST", f"{base}/queue/{first}/slot", json={"day": tomorrow})
+
+    refused = request(
+        "POST", f"{base}/queue/{second}/slot", json={"day": tomorrow},
+    )
+
+    assert refused.status_code == 409
+    assert "spoken for" in refused.json()["detail"]
+
+
+def test_a_lock_can_be_released_back_to_the_rotation(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    _slot_destination(workspace, campaign_id)
+    _posting_slot(workspace)
+    item_id = queued(workspace, campaign_id, "locked")
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+    request("POST", f"{base}/queue/{item_id}/slot", json={"day": tomorrow})
+
+    released = request(
+        "POST", f"{base}/queue/{item_id}/slot", json={"release": True},
+    )
+
+    assert released.status_code == 200
+    assert released.json()["pinned"] is None
+    assert released.json()["item"]["pinned_slot"] is None
+
+
+def test_a_time_that_is_not_a_posting_slot_is_refused(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    _slot_destination(workspace, campaign_id)
+    _posting_slot(workspace)
+    item_id = queued(workspace, campaign_id, "post")
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date()
+    invented = datetime(
+        tomorrow.year, tomorrow.month, tomorrow.day, 13, 30, tzinfo=UTC
+    ).isoformat()
+
+    refused = request(
+        "POST", f"{base}/queue/{item_id}/slot", json={"at": invented},
+    )
+
+    assert refused.status_code == 409
+    assert "not one of this campaign's posting slots" in refused.json()["detail"]

@@ -1679,3 +1679,130 @@ def test_a_text_only_post_is_scheduled_on_a_text_capable_destination(session) ->
     assert posts[0].video_path == ""
     assert posts[0].image_paths == ()
     assert "requires media" not in note
+
+
+# --- locking a post to one posting slot ---------------------------------------
+
+
+def test_a_pinned_post_takes_exactly_its_slot_ahead_of_the_rotation(session) -> None:
+    """The lock is the strongest claim on its slot, whatever the queue order."""
+    pilot = autopilot(session)
+    destination(session, "d1", "tiktok")
+    slot(session, 10)
+    slot(session, 18)
+    queue_item(session, "first", position=0)
+    queue_item(
+        session, "second", position=1,
+        pinned_slot=datetime(2026, 8, 10, 10, 0, tzinfo=UTC),
+        pinned_destination_id="d1",
+    )
+
+    posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+    by_time = {post.at: post.queue_item_id for post in posts}
+    assert by_time[datetime(2026, 8, 10, 10, 0, tzinfo=UTC)] == "second"
+    assert by_time[datetime(2026, 8, 10, 18, 0, tzinfo=UTC)] == "first"
+
+
+def test_a_pinned_post_is_not_spent_on_any_other_slot(session) -> None:
+    """Being spent early is the thing the lock exists to prevent."""
+    pilot = autopilot(session)
+    destination(session, "d1", "tiktok")
+    slot(session, 10)
+    slot(session, 18)
+    queue_item(
+        session, "locked",
+        pinned_slot=datetime(2026, 8, 10, 18, 0, tzinfo=UTC),
+    )
+
+    posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+    assert [post.at for post in posts] == [datetime(2026, 8, 10, 18, 0, tzinfo=UTC)]
+    assert posts[0].queue_item_id == "locked"
+
+
+def test_a_pin_naming_an_account_sends_the_slot_there(session) -> None:
+    """The pin decides where as well as when, over the cadence's own choice."""
+    pilot = autopilot(session)
+    destination(session, "d1", "tiktok")
+    destination(session, "d2", "youtube")
+    slot(session, 10)
+    queue_item(
+        session, "locked",
+        pinned_slot=datetime(2026, 8, 10, 10, 0, tzinfo=UTC),
+        pinned_destination_id="d2",
+    )
+    queue_item(session, "flexible", position=1)
+
+    posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+    pinned_outing = next(
+        post for post in posts
+        if post.at == datetime(2026, 8, 10, 10, 0, tzinfo=UTC)
+    )
+    assert pinned_outing.destination_id == "d2"
+    assert pinned_outing.queue_item_id == "locked"
+
+
+def test_a_pin_whose_time_has_passed_is_reported_not_reassigned(session) -> None:
+    """Moving it quietly is exactly what the lock says not to do."""
+    pilot = autopilot(session)
+    destination(session, "d1", "tiktok")
+    slot(session, 10)
+    queue_item(
+        session, "stale", title="Morning clip",
+        pinned_slot=NOW - timedelta(days=1),
+    )
+
+    posts, note = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+    assert posts == []
+    assert "already passed" in note
+    assert "Morning clip" in note
+
+
+def test_publishing_a_pinned_post_releases_the_lock(session) -> None:
+    """A pin is one outing's instruction, spent when that outing exists."""
+    pilot = autopilot(session)
+    destination(session, "d1", "tiktok")
+    slot(session, 10)
+    item = queue_item(
+        session, "locked",
+        pinned_slot=datetime(2026, 8, 10, 10, 0, tzinfo=UTC),
+        pinned_destination_id="d1",
+    )
+
+    posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+    executions = _reserve(session, pilot, posts)
+    record_published(session, executions[0], now=NOW + timedelta(hours=2))
+    session.commit()
+
+    item = session.get(CampaignQueueItem, "locked")
+    assert item.pinned_slot is None
+    assert item.pinned_destination_id is None
+
+
+def test_the_rotation_reflows_around_an_early_publish(session) -> None:
+    """Publish a post ahead of its slot and the next one shifts in behind it."""
+    pilot = autopilot(session)
+    destination(session, "d1", "tiktok")
+    slot(session, 10)
+    slot(session, 18)
+    first = queue_item(session, "first", position=0)
+    queue_item(session, "second", position=1)
+
+    posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+    assert {post.queue_item_id for post in posts} == {"first", "second"}
+
+    # "first" goes out by hand at 9:00 instead of waiting for its 10:00 slot -
+    # what the timeline's per-row publish does, reduced to its posted stamp.
+    stamps = dict(first.last_posted_by_destination or {})
+    stamps["d1"] = NOW.isoformat()
+    first.last_posted_by_destination = stamps
+    first.times_posted = 1
+    session.commit()
+
+    replanned, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+    by_time = {post.at: post.queue_item_id for post in replanned}
+    assert by_time[datetime(2026, 8, 10, 10, 0, tzinfo=UTC)] == "second"

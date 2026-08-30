@@ -340,6 +340,18 @@ class CampaignQueueItem(Base):
     #: Draft until approved. Autopilot only ever draws approved items and never
     #: approves one itself.
     state: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    #: The exact posting moment this post is locked to, in UTC. None - the
+    #: ordinary case - leaves the post to the rotation: the scheduler assigns
+    #: it the next open slot from the campaign's posting times and is free to
+    #: move it when an earlier publish empties a slot. Set, the post waits for
+    #: exactly this moment, takes it ahead of the rotation, and no reflow
+    #: touches it. Cleared by `record_published` once the outing it named has
+    #: happened, so a repeating post's next cycle is not locked to a moment
+    #: already gone.
+    pinned_slot: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: The account the pin names, when it names one. None locks the time alone
+    #: and leaves the account to the ranking at that moment.
+    pinned_destination_id: Mapped[str | None] = mapped_column(String(64))
     #: Position in the rotation. A posted item is pushed to the back rather than
     #: consumed, which is what makes the campaign keep running.
     position: Mapped[int] = mapped_column(Integer, default=0, index=True)
