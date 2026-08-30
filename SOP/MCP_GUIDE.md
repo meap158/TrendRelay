@@ -32,8 +32,11 @@ the MCP server's general policy; do not invent a procedure or broaden authority.
    before declaring completion.
 
 For `campaigns.fill-needs-copy`, load the SOP, read the live campaign and each
-post's context, write only fields reported as missing, refresh after each batch,
-and use a final fresh queue read as completion evidence.
+post's context, and write only fields reported as missing. The queue read is
+paginated: choose `limit` from 1 to 250 (50 by default), start at `offset: 0`,
+and use `more` / `next_offset` for read-only traversal. Once writes begin,
+refresh from offset zero because completed rows leave the result set. Use a
+final fresh queue read as completion evidence.
 
 For `campaigns.add-post-with-media`, load the SOP before choosing an intake
 tool. Check the campaign and Library first. A new file is one upload call per

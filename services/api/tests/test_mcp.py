@@ -149,6 +149,18 @@ def test_the_server_offers_only_the_allowed_tools() -> None:
     assert not [n for n in refused if n in names], "a refused operation was offered"
 
 
+def test_the_needs_copy_tool_exposes_bounded_pagination_arguments() -> None:
+    built = server.build_server("ws")
+    tools = {tool.name: tool for tool in asyncio.run(built.list_tools())}
+    properties = tools["list_posts_needing_copy"].inputSchema["properties"]
+
+    assert properties["limit"]["default"] == 50
+    assert properties["limit"]["minimum"] == 1
+    assert properties["limit"]["maximum"] == 250
+    assert properties["offset"]["default"] == 0
+    assert properties["offset"]["minimum"] == 0
+
+
 def test_the_campaign_sops_are_discovered_by_action() -> None:
     catalogue = sops.list_sops()
     assert [entry["action"] for entry in catalogue] == [
@@ -196,12 +208,62 @@ def test_the_server_exposes_the_sop_catalog_and_action_template() -> None:
 
 
 def test_list_posts_needing_copy_finds_the_uncaptioned_post(session) -> None:
-    posts = context.list_posts_needing_copy(session, "ws")
+    page = context.list_posts_needing_copy(session, "ws")
+    posts = page["posts"]
     assert [p["item_id"] for p in posts] == ["q1"]
+    assert page == {
+        "posts": posts,
+        "total": 1,
+        "limit": 50,
+        "offset": 0,
+        "returned": 1,
+        "more": False,
+        "next_offset": None,
+    }
     only = posts[0]
     assert only["video_title"] == "study_kit_752"  # the extension is dropped
     assert only["products"][0]["product_name"] == "Big Pen Pouch"
     assert not only["has_caption"]
+
+
+def test_posts_needing_copy_are_paged_with_a_stable_next_offset(session) -> None:
+    for position in range(1, 5):
+        session.add(CampaignQueueItem(
+            id=f"q{position + 1}", workspace_id="ws", campaign_id="camp",
+            state="approved", created_by="local-admin",
+            title=f"clip-{position}", body=PLACEHOLDER_BODY, hashtags=[],
+            position=position, offer_ids=[], last_posted_by_destination={},
+        ))
+    session.commit()
+
+    first = context.list_posts_needing_copy(session, "ws", limit=2)
+    second = context.list_posts_needing_copy(
+        session, "ws", limit=2, offset=first["next_offset"],
+    )
+    last = context.list_posts_needing_copy(
+        session, "ws", limit=2, offset=second["next_offset"],
+    )
+
+    assert [post["item_id"] for post in first["posts"]] == ["q1", "q2"]
+    assert [post["item_id"] for post in second["posts"]] == ["q3", "q4"]
+    assert [post["item_id"] for post in last["posts"]] == ["q5"]
+    assert (
+        first["total"], first["returned"], first["more"], first["next_offset"],
+    ) == (5, 2, True, 2)
+    assert (
+        last["offset"], last["returned"], last["more"], last["next_offset"],
+    ) == (4, 1, False, None)
+
+
+@pytest.mark.parametrize("limit", [0, 251])
+def test_posts_needing_copy_refuses_unsafe_page_sizes(session, limit) -> None:
+    with pytest.raises(ValueError, match="limit must be between 1 and 250"):
+        context.list_posts_needing_copy(session, "ws", limit=limit)
+
+
+def test_posts_needing_copy_refuses_negative_offsets(session) -> None:
+    with pytest.raises(ValueError, match="offset must be zero or greater"):
+        context.list_posts_needing_copy(session, "ws", offset=-1)
 
 
 def test_get_post_context_carries_product_destination_and_need(session) -> None:
@@ -566,7 +628,7 @@ def test_a_post_needing_copy_says_how_long_the_clip_runs(session) -> None:
     item_id = clip_with_duration(session, duration_ms=7400)
 
     card = next(
-        post for post in context.list_posts_needing_copy(session, "ws")
+        post for post in context.list_posts_needing_copy(session, "ws")["posts"]
         if post["item_id"] == item_id
     )
     full = context.get_post_context(session, "ws", item_id)

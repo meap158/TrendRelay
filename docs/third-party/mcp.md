@@ -34,8 +34,11 @@ first action is `campaigns.fill-needs-copy`.
 **Reads** give it the context to write well:
 
 - `list_campaigns` - every campaign, and how many posts still need a caption.
-- `list_posts_needing_copy` - the posts to help with, each a compact card: what
-  the clip is and what it sells.
+- `list_posts_needing_copy` - a bounded page of posts to help with, each a
+  compact card describing the clip and what it sells. It defaults to 50 rows,
+  accepts caller-controlled `limit` (1-250) and `offset`, and returns `total`,
+  `returned`, `more`, and `next_offset`. After writing copy, refresh from offset
+  zero because completed rows leave the result set.
 - `get_post_context` - everything for one post: the video, the attached product
   and its commission, every destination the post reaches and where a first
   comment or thread reply lands there, the campaign's brief, and any copy already

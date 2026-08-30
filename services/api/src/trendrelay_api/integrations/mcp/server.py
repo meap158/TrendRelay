@@ -10,9 +10,9 @@ registered here, so they are absent from the listing and refused by name.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from trendrelay_api.integrations.mcp import context, intake, policy, schedules, sops, writes
 
@@ -40,6 +40,20 @@ class OpenAIFile(BaseModel):
     file_name: str = None  # type: ignore[assignment]
 
 
+CopyPageLimit = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=context.MAX_COPY_PAGE_SIZE,
+        description="Posts to return. Use a smaller page to conserve model context.",
+    ),
+]
+CopyPageOffset = Annotated[
+    int,
+    Field(ge=0, description="Zero-based position of the first post to return."),
+]
+
+
 def _file_value(value: OpenAIFile | None) -> dict[str, Any] | None:
     return value.model_dump(exclude_none=True) if value is not None else None
 
@@ -48,8 +62,9 @@ INSTRUCTIONS = (
     "queued without a caption yet.\n\n"
     "Before an action, use `list_sops` and `get_sop` to load the reviewed SOP "
     "that matches it. For campaign copy, start with action "
-    "`campaigns.fill-needs-copy`, then use `list_posts_needing_copy` to see what "
-    "needs writing and "
+    "`campaigns.fill-needs-copy`, then page through `list_posts_needing_copy` "
+    "using `limit`, `offset`, `more` and `next_offset` to see what needs writing without "
+    "loading the whole queue at once, and "
     "`get_post_context` for one post: it gives the video, the attached product and "
     "what it pays, every destination the post reaches and where a first comment or "
     "thread reply lands there, and the campaign's brief. Write with "
@@ -240,15 +255,22 @@ def build_server(workspace_id: str) -> FastMCP:
     @server.tool(
         name="list_posts_needing_copy",
         description=(
-            "Posts that are queued but have no caption written yet. Pass a "
-            "campaign_id to narrow it. Each entry says what the clip is, how "
-            "long it runs, and what it sells."
+            "A page of posts that are queued but have no caption written yet. "
+            "Pass campaign_id to narrow it; adjust limit and offset as needed. "
+            "The response includes total, more and next_offset. Each compact "
+            "entry says what the clip is, how long it runs, and what it sells."
         ),
     )
-    def list_posts_needing_copy(campaign_id: str | None = None) -> list[dict[str, Any]]:
+    def list_posts_needing_copy(
+        campaign_id: str | None = None,
+        limit: CopyPageLimit = context.DEFAULT_COPY_PAGE_SIZE,
+        offset: CopyPageOffset = 0,
+    ) -> dict[str, Any]:
         return _call(
             "list_posts_needing_copy",
-            lambda s: context.list_posts_needing_copy(s, workspace_id, campaign_id),
+            lambda s: context.list_posts_needing_copy(
+                s, workspace_id, campaign_id, limit=limit, offset=offset,
+            ),
         )
 
     @server.tool(

@@ -3,7 +3,7 @@ id: campaigns.fill-needs-copy
 action: campaigns.fill-needs-copy
 title: Fill campaign posts that need copy
 summary: Adaptively write only missing campaign copy from live campaign, post, platform, and product context.
-version: 1
+version: 2
 tags: [campaigns, copywriting, needs-copy]
 aliases: [fill-campaign-needs-copy, campaigns.needs-copy, write-campaign-copy]
 ---
@@ -19,7 +19,7 @@ Do not rely on old queue state, previous campaign assumptions, or memory of lang
 
 ## 2. Identify the campaign and pull the live queue
 
-Start with the campaign's current `needs copy` list. Use the live queue as the source of truth for which posts need work, which campaign they belong to, and whether caption, first comment, thread, title, or disclosure is actually missing. Do not write fields that are not needed.
+Start with the campaign's current `needs copy` list. Call `list_posts_needing_copy` with a deliberate `limit` and `offset` (start at `offset: 0`), then follow `more` and `next_offset` until the requested scope is complete. The default page is 50 posts and the maximum is 250; prefer smaller pages when post context is large. Use the live queue as the source of truth for which posts need work, which campaign they belong to, and whether caption, first comment, thread, title, or disclosure is actually missing. Do not write fields that are not needed.
 
 ## 3. Pull post context before writing
 
@@ -110,11 +110,11 @@ If part of a post is already populated and approved, do not rewrite it unless it
 
 ## 20. Process the full current batch
 
-Continue through the live queue unless the user specifies a limit, subset, specific items, or review-first workflow.
+Continue through the live queue page by page unless the user specifies a limit, subset, specific items, or review-first workflow. Do not assume the first page is the full queue: stop only when `more` is false or the requested scope is complete.
 
 ## 21. Refresh the queue after each batch
 
-After finishing the current set, call the live `needs copy` list again. New posts may have entered while processing. Continue until the queue is empty or the user's requested scope is complete.
+After finishing the current page, call the live `needs copy` list again from `offset: 0`. Completed posts leave the result set, so reusing an old nonzero offset after writes can skip work. Continue from the refreshed page until the queue is empty or the user's requested scope is complete.
 
 ## 22. Verify before declaring completion
 

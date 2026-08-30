@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.autopilot_models import (
@@ -20,6 +20,9 @@ from trendrelay_api.autopilot_models import (
 )
 from trendrelay_api.models import Campaign
 from trendrelay_api.opportunity_models import Product, ProductOffer
+
+DEFAULT_COPY_PAGE_SIZE = 50
+MAX_COPY_PAGE_SIZE = 250
 
 
 def _placeholder_body() -> str:
@@ -378,35 +381,77 @@ def _post_summary(
 
 
 def list_posts_needing_copy(
-    session: Session, workspace_id: str, campaign_id: str | None = None
-) -> list[dict[str, Any]]:
+    session: Session,
+    workspace_id: str,
+    campaign_id: str | None = None,
+    *,
+    limit: int = DEFAULT_COPY_PAGE_SIZE,
+    offset: int = 0,
+) -> dict[str, Any]:
     """The posts an assistant should help with: queued, but no caption written.
 
-    A compact card each - what the clip is, what it sells, whether a first
-    comment or thread is still blank - so the assistant can pick one and call
-    `get_post_context` for the full picture.
+    A bounded page of compact cards - what each clip is and what it sells - so
+    the assistant can choose work without filling its context window, then call
+    `get_post_context` for the full picture. Pagination metadata says exactly
+    whether and where another page begins.
     """
+    if not 1 <= limit <= MAX_COPY_PAGE_SIZE:
+        raise ValueError(
+            f"limit must be between 1 and {MAX_COPY_PAGE_SIZE}; received {limit}."
+        )
+    if offset < 0:
+        raise ValueError(f"offset must be zero or greater; received {offset}.")
+
     placeholder = _placeholder_body()
-    query = select(CampaignQueueItem).where(
+    conditions = (
         CampaignQueueItem.workspace_id == workspace_id,
         CampaignQueueItem.body == placeholder,
     )
     if campaign_id:
-        query = query.where(CampaignQueueItem.campaign_id == campaign_id)
-    items = session.scalars(query.order_by(CampaignQueueItem.position)).all()
+        conditions += (CampaignQueueItem.campaign_id == campaign_id,)
+    total = session.scalar(
+        select(func.count(CampaignQueueItem.id)).where(*conditions)
+    ) or 0
+    items = list(session.scalars(
+        select(CampaignQueueItem)
+        .where(*conditions)
+        # Position is only unique within a campaign. The stable tie-breakers
+        # keep page boundaries from moving between otherwise identical calls.
+        .order_by(
+            CampaignQueueItem.campaign_id,
+            CampaignQueueItem.position,
+            CampaignQueueItem.id,
+        )
+        .offset(offset)
+        .limit(limit)
+    ).all())
+    campaign_ids = {item.campaign_id for item in items}
     campaigns = {
         c.id: c for c in session.scalars(
-            select(Campaign).where(Campaign.workspace_id == workspace_id)
+            select(Campaign).where(
+                Campaign.workspace_id == workspace_id,
+                Campaign.id.in_(campaign_ids),
+            )
         ).all()
-    }
+    } if campaign_ids else {}
     assets = _asset_index(session, list(items))
-    return [
+    posts = [
         _post_summary(
             session, item, campaigns.get(item.campaign_id),
             assets.get(item.asset_id) if item.asset_id else None,
         )
         for item in items
     ]
+    more = offset + len(posts) < total
+    return {
+        "posts": posts,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "returned": len(posts),
+        "more": more,
+        "next_offset": offset + len(posts) if more else None,
+    }
 
 
 def get_campaign_config(session: Session, workspace_id: str, campaign_id: str) -> dict[str, Any]:
