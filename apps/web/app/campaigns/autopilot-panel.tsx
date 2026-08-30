@@ -3984,7 +3984,8 @@ export function AutopilotPanel({
             const ready = autopilot.queue_ready;
             const needsCopy = queue.filter((item) => item.needs_copy).length;
             const needsMedia = queue.filter((item) =>
-              !item.needs_copy && !item.video_path && !item.image_paths.length).length;
+              !item.needs_copy && !item.text_only
+              && !item.video_path && !item.image_paths.length).length;
             return (
               <p className="autopilot-approval-summary" role="status">
                 <strong>{waiting}</strong> waiting for you

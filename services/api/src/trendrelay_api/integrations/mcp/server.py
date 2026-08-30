@@ -568,7 +568,9 @@ def build_server(workspace_id: str) -> FastMCP:
             "asset, or several image assets as a carousel - or none, to "
             "draft the words first and attach media with set_post_media "
             "once it is uploaded; the campaign skips the post with a note "
-            "until it has media. How many a "
+            "until it has media. Pass text_only=true (with a caption and no "
+            "assets) for a deliberate copy-only post that publishes as words "
+            "alone and is never held for media. How many a "
             "carousel may hold is the network's own figure - X swipes "
             "through 4, Instagram and Facebook 10, LinkedIn 20, TikTok 35 - "
             "and `carousel_warnings` names any destination this post "
@@ -593,6 +595,7 @@ def build_server(workspace_id: str) -> FastMCP:
         thread: list[str] | None = None,
         topic: str | None = None,
         post_types: dict[str, str] | None = None,
+        text_only: bool = False,
     ) -> dict[str, Any]:
         return _call(
             "create_campaign_post",
@@ -600,7 +603,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 s, workspace_id, campaign_id, asset_ids,
                 caption=caption, title=title, hashtags=hashtags,
                 first_comment=first_comment, thread=thread, topic=topic,
-                post_types=post_types,
+                post_types=post_types, text_only=text_only,
             ),
         )
 
@@ -613,18 +616,22 @@ def build_server(workspace_id: str) -> FastMCP:
             "with upload_media, wait for get_import_status, then attach "
             "here. Pass append=true to add pictures onto the post's existing "
             "carousel one upload at a time instead of replacing the whole "
-            "package (a video always stands alone). Refused on a post "
+            "package (a video always stands alone). Pass text_only=true "
+            "with no assets to make the draft a deliberate copy-only post "
+            "that publishes as words alone. Refused on a post "
             "already in rotation; changing what a promoted post publishes is "
             "the operator's act in the app."
         ),
     )
     def set_post_media(
-        item_id: str, asset_ids: list[str], append: bool = False
+        item_id: str, asset_ids: list[str],
+        append: bool = False, text_only: bool = False,
     ) -> dict[str, Any]:
         return _call(
             "set_post_media",
             lambda s: writes.set_post_media(
-                s, workspace_id, item_id, asset_ids, append=append
+                s, workspace_id, item_id, asset_ids,
+                append=append, text_only=text_only,
             ),
         )
 

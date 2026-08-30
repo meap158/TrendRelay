@@ -801,6 +801,7 @@ def create_campaign_post(
     thread: list[str] | None = None,
     topic: str | None = None,
     post_types: dict[str, str] | None = None,
+    text_only: bool = False,
 ) -> dict[str, Any]:
     """Propose one post into a campaign, as a draft the operator promotes.
 
@@ -826,6 +827,11 @@ def create_campaign_post(
             "A post needs at least its words or its media. Send a caption - "
             "media can follow with set_post_media once uploaded - or name "
             "Library assets to start from the media instead."
+        )
+    if text_only and assets:
+        raise ValueError(
+            "A copy-only post carries no media. Drop the asset_ids, or drop "
+            "text_only to post the media with these words."
         )
 
     if caption is not None:
@@ -864,8 +870,10 @@ def create_campaign_post(
         # Deliberate: an assistant may draft the words first and attach the
         # clip with set_post_media once it is uploaded. The scheduler skips a
         # media-less post with a note until then, exactly as it skips one
-        # whose copy is still the placeholder.
-        media_later=not assets,
+        # whose copy is still the placeholder. A copy-only post is neither:
+        # it has no media because it wants none, and posts as it is.
+        media_later=not assets and not text_only,
+        text_only=text_only,
         asset_id=assets[0].id if assets else None,
         body=caption or "",
         title=title,

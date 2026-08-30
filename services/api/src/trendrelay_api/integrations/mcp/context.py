@@ -362,6 +362,8 @@ def _post_summary(
         "media_kind": (
             "carousel" if item.image_paths
             else "video" if item.video_path
+            # Copy-only is a shape, not a gap: the words are the whole post.
+            else "text only" if item.text_only
             # Drafted words-first; the scheduler skips it until media arrives.
             else "none yet"
         ),
@@ -557,8 +559,12 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
             for d in follow_up["per_destination"]
         ),
         # The media, for a post drafted words-first over MCP: attach it with
-        # set_post_media once its upload lands.
-        "media": not item.video_path and not (item.image_paths or []),
+        # set_post_media once its upload lands. A copy-only post is whole
+        # without any - text_only was its author's decision.
+        "media": (
+            not item.video_path and not (item.image_paths or [])
+            and not item.text_only
+        ),
         "topic": item.topic is None and bool(topic_reach),
     }
     return {
@@ -568,6 +574,8 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "media_kind": (
             "carousel" if item.image_paths
             else "video" if item.video_path
+            # Copy-only is a shape, not a gap: the words are the whole post.
+            else "text only" if item.text_only
             # Drafted words-first; the scheduler skips it until media arrives.
             else "none yet"
         ),

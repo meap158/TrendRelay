@@ -2347,3 +2347,49 @@ def test_a_video_never_appends_because_it_stands_alone(session) -> None:
 
     with pytest.raises(ValueError, match="stands alone"):
         writes.set_post_media(session, "ws", view["id"], ["clip1"], append=True)
+
+
+def test_a_deliberate_text_post_is_whole_without_media(session) -> None:
+    """text_only is a shape, not a gap: the words are the whole post."""
+    from trendrelay_api.integrations.mcp import intake
+    from trendrelay_api.integrations.mcp.context import get_post_context
+
+    view = intake.create_campaign_post(
+        session, "ws", "camp", [], caption="Words alone.", text_only=True,
+    )
+
+    assert view["text_only"] is True
+    ctx = get_post_context(session, "ws", view["id"])
+    assert ctx["media_kind"] == "text only"
+    assert ctx["needs"]["media"] is False, "a copy-only post is not waiting for media"
+
+
+def test_text_only_with_assets_is_a_contradiction_named(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    _image_asset(session)
+    with pytest.raises(ValueError, match="copy-only"):
+        intake.create_campaign_post(
+            session, "ws", "camp", ["img1"], caption="Words.", text_only=True,
+        )
+
+
+def test_a_words_first_draft_can_settle_as_copy_only(session) -> None:
+    """The two-visit flow's third ending: the media that was coming turns out
+    to be none, said explicitly rather than left as a post forever waiting."""
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Just this.")
+    settled = writes.set_post_media(session, "ws", view["id"], [], text_only=True)
+
+    assert settled["text_only"] is True
+    assert "copy-only" in settled["note"]
+
+
+def test_text_only_and_assets_cannot_be_sent_together_to_set_media(session) -> None:
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session)
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Just this.")
+    with pytest.raises(ValueError, match="alone"):
+        writes.set_post_media(session, "ws", view["id"], ["img1"], text_only=True)

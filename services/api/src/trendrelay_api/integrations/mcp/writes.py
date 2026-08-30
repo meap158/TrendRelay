@@ -141,6 +141,7 @@ def set_post_media(
     item_id: str,
     asset_ids: list[str],
     append: bool = False,
+    text_only: bool = False,
 ) -> dict[str, Any]:
     """Attach or replace a draft post's media, from Library assets.
 
@@ -180,6 +181,24 @@ def set_post_media(
             "Only a draft's media can be set from here. This post is "
             f"{item.state}; ask the operator to change its media in the app."
         )
+    if text_only:
+        # The deliberate no-media shape: the words are the whole post. An
+        # explicit flag rather than an empty list, so "I forgot the assets"
+        # and "there should be none" cannot be mistaken for each other.
+        if asset_ids or append:
+            raise ValueError(
+                "text_only carries no assets and nothing to append. Send it "
+                "alone to make this a copy-only post."
+            )
+        update = QueueItemUpdate(video_path="", image_paths=[], text_only=True)
+        apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
+        session.commit()
+        view = _queue_view(item)
+        view["note"] = (
+            "Now a copy-only post: it publishes as words alone. Still a "
+            "draft; the operator promotes it in the app."
+        )
+        return view
     if not asset_ids:
         raise ValueError("Name at least one Library asset to attach.")
 
