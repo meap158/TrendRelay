@@ -272,3 +272,110 @@ def set_post_media(
         "into the rotation in the app."
     )
     return view
+
+
+def pin_post_slot(
+    session: Session,
+    workspace_id: str,
+    item_id: str,
+    *,
+    day: str | None = None,
+    time: str | None = None,
+    release: bool = False,
+) -> dict[str, Any]:
+    """Lock a post to one of the campaign's posting slots, or release it.
+
+    A scheduling write, not an approval: it decides when an already-written
+    post goes out, never whether. With only a day the most fitting free slot
+    is chosen - the earliest still ahead, preferring an account the post has
+    never been on - and with a time as well, exactly that slot is validated
+    and claimed. The scheduler honours the lock: the post is spent nowhere
+    else, and early publishes reflow around it without moving it.
+    """
+    from datetime import date as date_type
+    from datetime import datetime
+
+    from trendrelay_api.campaign_autopilot_api import _queue_view
+    from trendrelay_api.campaign_slots import (
+        day_slots,
+        pin_item_to_slot,
+        release_pin,
+        workspace_zone,
+    )
+
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise LookupError(f"No queue item {item_id!r} in this workspace.")
+    if item.state == "retired":
+        raise ValueError("This post is retired; a retired post is not scheduled at all.")
+
+    from trendrelay_api.autopilot_models import CampaignAutopilot
+
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == item.campaign_id
+        )
+    )
+    if not autopilot:
+        raise ValueError("This campaign has no autopilot yet; nothing schedules it.")
+
+    if release:
+        release_pin(item)
+        session.commit()
+        view = _queue_view(item)
+        view["note"] = (
+            "Unlocked. The post flows with the rotation again and takes the "
+            "next open slot in its turn."
+        )
+        return view
+
+    if not day:
+        raise ValueError(
+            "Name the day to lock it to, as YYYY-MM-DD, or pass release=true "
+            "to unlock it."
+        )
+    try:
+        target_day = date_type.fromisoformat(day)
+    except ValueError as error:
+        raise ValueError("Give the day as YYYY-MM-DD.") from error
+    at = None
+    if time:
+        found = re.fullmatch(r"(\d{1,2}):(\d{2})", time.strip())
+        if not found:
+            raise ValueError("Give the time as HH:MM, in the workspace timezone.")
+        zone = workspace_zone(session, workspace_id)
+        at = datetime(
+            target_day.year, target_day.month, target_day.day,
+            int(found.group(1)), int(found.group(2)), tzinfo=zone,
+        )
+
+    chosen = pin_item_to_slot(session, autopilot, item, day=target_day, at=at)
+    session.commit()
+    view = _queue_view(item)
+    others = [
+        entry for entry in day_slots(
+            session, autopilot, day=target_day, exclude_item_id=item.id
+        )
+        if entry["status"] == "free"
+    ]
+    view["locked"] = {
+        "at": chosen["at"].isoformat(),
+        "destination": chosen["destination_label"],
+        "platform": chosen["platform"],
+    }
+    view["note"] = (
+        f"Locked to {chosen['at'].isoformat()} on {chosen['destination_label']}. "
+        "The scheduler holds this slot for it and will not move it when other "
+        f"posts publish early. {len(others)} other free slot(s) remain that day."
+        + (
+            " Still a draft; the operator promotes it into the rotation in the app."
+            if item.state == "draft"
+            else ""
+        )
+    )
+    return view

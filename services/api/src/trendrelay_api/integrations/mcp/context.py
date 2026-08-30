@@ -7,6 +7,7 @@ what the operator sees, and the two cannot drift. Nothing here writes.
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 
 from sqlalchemy import func, select
@@ -586,6 +587,20 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "products": _resolve_products(session, item),
         "topic": item.topic,
         "topic_deliverable_on": topic_reach,
+        # The lock, when one is set: this post waits for exactly this moment
+        # instead of flowing with the rotation. Set or released with
+        # pin_post_slot; read the day's openings with get_day_slots.
+        "locked_slot": (
+            # Stamped UTC: SQLite returns the stored moment naive, and a bare
+            # ISO string reads as local time to whoever parses it.
+            (
+                item.pinned_slot.replace(tzinfo=UTC)
+                if item.pinned_slot.tzinfo is None
+                else item.pinned_slot
+            ).isoformat()
+            if item.pinned_slot
+            else None
+        ),
         "destinations": destination_views,
         "follow_up_landing": follow_up,
         # The workspace's posting times, so the assistant knows the cadence the

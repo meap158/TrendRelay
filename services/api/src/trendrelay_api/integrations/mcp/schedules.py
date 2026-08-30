@@ -114,6 +114,46 @@ def get_campaign_posting_times(
     }
 
 
+def get_day_slots(
+    session: Session, workspace_id: str, campaign_id: str, day: str,
+    item_id: str | None = None,
+) -> dict[str, Any]:
+    """One day's concrete posting slots and what already claims each of them.
+
+    What to read before locking a post anywhere: every (account, moment) the
+    campaign owns that day, each free, taken by a committed post, locked by
+    another post's pin, or already past. `item_id` names the post being
+    placed, so its own current lock reads as free to it rather than as a
+    rival's claim.
+    """
+    from datetime import date as date_type
+
+    from trendrelay_api.campaign_slots import day_slots
+
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = session.scalar(select(CampaignAutopilot).where(
+        CampaignAutopilot.campaign_id == campaign_id
+    ))
+    if not autopilot:
+        raise ValueError(
+            "This campaign has no autopilot configured yet, so it has nothing "
+            "to schedule. Set it up in the app first."
+        )
+    try:
+        target = date_type.fromisoformat(day)
+    except ValueError as error:
+        raise ValueError("Give the day as YYYY-MM-DD.") from error
+    entries = day_slots(session, autopilot, day=target, exclude_item_id=item_id)
+    workspace = _workspace(session, workspace_id)
+    return {
+        "campaign_id": campaign_id,
+        "day": day,
+        "timezone": workspace.timezone,
+        "slots": [{**entry, "at": entry["at"].isoformat()} for entry in entries],
+        "free": sum(1 for entry in entries if entry["status"] == "free"),
+    }
+
+
 def create_posting_preset(
     session: Session,
     workspace_id: str,

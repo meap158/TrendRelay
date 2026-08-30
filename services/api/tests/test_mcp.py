@@ -114,11 +114,11 @@ def test_every_operation_is_classified_on_purpose() -> None:
 def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
     assert policy.allowed_operations() == [
         "create_campaign_post", "create_posting_preset", "get_campaign_config",
-        "get_campaign_posting_times", "get_import_status",
+        "get_campaign_posting_times", "get_day_slots", "get_import_status",
         "get_post_context", "get_sop", "list_campaigns", "list_library_assets",
         "list_posting_times",
         "list_posts_needing_copy", "list_published_posts", "list_sops",
-        "set_campaign_posting_times",
+        "pin_post_slot", "set_campaign_posting_times",
         "set_page_posting_times", "set_post_media", "set_workspace_posting_times",
         "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
@@ -2393,3 +2393,61 @@ def test_text_only_and_assets_cannot_be_sent_together_to_set_media(session) -> N
     view = intake.create_campaign_post(session, "ws", "camp", [], caption="Just this.")
     with pytest.raises(ValueError, match="alone"):
         writes.set_post_media(session, "ws", view["id"], ["img1"], text_only=True)
+
+
+# --- locking a post to one posting slot ---------------------------------------
+
+
+def _tomorrow_with_a_noon_slot(session) -> str:
+    from datetime import UTC, datetime, timedelta
+
+    from trendrelay_api.models import PublishingSlot
+
+    session.add(PublishingSlot(
+        id="slot-12", workspace_id="ws", weekday=-1, hour=12, minute=0,
+    ))
+    session.commit()
+    return (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+
+
+def test_a_day_of_slots_can_be_read_and_a_post_locked_to_one(session) -> None:
+    """The assigning flow: read the day's openings, claim the most fitting,
+    and the claim is visible to the next reader - then released on request."""
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+
+    day = schedules.get_day_slots(session, "ws", "camp", tomorrow)
+    assert day["free"] == 1
+    assert day["slots"][0]["status"] == "free"
+
+    view = writes.pin_post_slot(session, "ws", "q1", day=tomorrow)
+    assert view["pinned_slot"] is not None
+    assert view["locked"]["destination"] == "Threads"
+    assert "Locked to" in view["note"]
+
+    after = schedules.get_day_slots(session, "ws", "camp", tomorrow)
+    assert after["slots"][0]["status"] == "pinned"
+    assert after["slots"][0]["pinned_item_id"] == "q1"
+    # But free to the post itself, so re-locking is a no-op rather than a clash.
+    own = schedules.get_day_slots(session, "ws", "camp", tomorrow, item_id="q1")
+    assert own["slots"][0]["status"] == "free"
+
+    released = writes.pin_post_slot(session, "ws", "q1", release=True)
+    assert released["pinned_slot"] is None
+    assert "rotation" in released["note"]
+
+
+def test_a_time_that_is_not_a_posting_slot_is_refused_over_mcp(session) -> None:
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+
+    with pytest.raises(ValueError, match="not one of this campaign's posting slots"):
+        writes.pin_post_slot(session, "ws", "q1", day=tomorrow, time="13:30")
+
+
+def test_the_lock_shows_in_the_posts_context(session) -> None:
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+    writes.pin_post_slot(session, "ws", "q1", day=tomorrow, time="12:00")
+
+    found = context.get_post_context(session, "ws", "q1")
+
+    assert found["locked_slot"] is not None
+    assert found["locked_slot"].startswith(tomorrow)

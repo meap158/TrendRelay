@@ -102,6 +102,14 @@ EXPOSURE: dict[str, Access] = {
     "set_campaign_posting_times": Access.WORKSPACE_WRITE,
     "set_page_posting_times": Access.WORKSPACE_WRITE,
     "set_workspace_posting_times": Access.WORKSPACE_WRITE,
+    # A day's concrete slots and their standing - a read, and the thing to ask
+    # before locking anything.
+    "get_day_slots": Access.READ,
+    # Locking one already-written post to one already-scheduled moment is the
+    # schedule argument at its narrowest: it decides *when* authorised work
+    # happens, for one post rather than for the campaign. It approves nothing
+    # and sends nothing - a draft it locks still waits for a person.
+    "pin_post_slot": Access.WORKSPACE_WRITE,
     # --- Workspace writes: media in, and a post proposed -------------------
     # An upload adds a file to the Library through the same ingest as an
     # operator's import - immutable, deduplicated, audited - and publishes

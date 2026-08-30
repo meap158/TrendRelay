@@ -92,7 +92,12 @@ INSTRUCTIONS = (
     "a set of times without putting it in front of anything, then "
     "`set_campaign_posting_times`, `set_page_posting_times` or "
     "`set_workspace_posting_times` puts it into effect. Times are HH:MM on the "
-    "workspace's own clock, not UTC.\n\n"
+    "workspace's own clock, not UTC. One post can also be locked to one "
+    "concrete slot: `get_day_slots` reads a day's openings - free, taken, "
+    "locked or past - and `pin_post_slot` claims the most fitting free one "
+    "(or the exact time you name) and holds the post there; other posts "
+    "reflow around a lock, never through it, and release=true hands the post "
+    "back to the rotation.\n\n"
     "You write drafts and schedules only. You cannot approve, publish, deploy, "
     "connect an account or sign in - those stay a person's decision in the app. "
     "Changing a schedule moves when already-approved posts go out; it never sends "
@@ -668,6 +673,54 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="get_day_slots",
+        description=(
+            "One day's concrete posting slots for a campaign and what claims "
+            "each of them: free, taken by a committed post, locked by another "
+            "post's pin, or already past. Read this before pin_post_slot to "
+            "see what is available. Day is YYYY-MM-DD in the workspace "
+            "timezone; pass item_id for the post being placed so its own "
+            "current lock reads as free to it."
+        ),
+    )
+    def get_day_slots(
+        campaign_id: str, day: str, item_id: str | None = None
+    ) -> dict[str, Any]:
+        return _call(
+            "get_day_slots",
+            lambda s: schedules.get_day_slots(
+                s, workspace_id, campaign_id, day, item_id=item_id
+            ),
+        )
+
+    @server.tool(
+        name="pin_post_slot",
+        description=(
+            "Lock a campaign post to one of that day's posting slots, or "
+            "release the lock. With only a day (YYYY-MM-DD) the most fitting "
+            "free slot is chosen - the earliest still ahead, preferring an "
+            "account the post has never been on - and with time (HH:MM, "
+            "workspace timezone) exactly that slot is claimed. A locked post "
+            "is spent nowhere else, and other posts reflow around it when "
+            "something publishes early. Pass release=true to hand it back to "
+            "the rotation. A scheduling write, not an approval: a draft still "
+            "waits for the operator to promote it."
+        ),
+    )
+    def pin_post_slot(
+        item_id: str,
+        day: str | None = None,
+        time: str | None = None,
+        release: bool = False,
+    ) -> dict[str, Any]:
+        return _call(
+            "pin_post_slot",
+            lambda s: writes.pin_post_slot(
+                s, workspace_id, item_id, day=day, time=time, release=release
+            ),
+        )
+
+    @server.tool(
         name="create_posting_preset",
         description=(
             "Save a named set of posting times, as HH:MM in the workspace's "
@@ -776,6 +829,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     ),
     "Posting schedule": (
         "list_posting_times", "get_campaign_posting_times",
+        "get_day_slots", "pin_post_slot",
         "create_posting_preset", "set_campaign_posting_times",
         "set_page_posting_times", "set_workspace_posting_times",
     ),
