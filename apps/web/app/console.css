@@ -1691,6 +1691,30 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-edit-media-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .campaign-edit-media-strip img { height: 110px; flex: none; border-radius: var(--radius-sm); object-fit: cover; }
 .campaign-media-picker { display: grid; gap: 10px; }
+
+/* Posting time: the compact rotation-or-locked row in the post editor. The
+   slot picker only unfolds once a day is chosen, so the section costs one
+   row to everyone not using it. */
+.campaign-edit-slot { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.campaign-edit-slot-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.campaign-edit-slot-head strong { font-size: 12px; }
+.campaign-edit-slot-head small { min-width: 160px; flex: 1 1 200px; margin-inline-end: auto; color: var(--muted); font-size: 11px; font-weight: 400; }
+.campaign-edit-slot-day { display: inline-flex !important; flex: none; align-items: center; gap: 6px; margin-inline-start: auto; }
+.campaign-edit-slot-day span { color: var(--muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.campaign-edit-slot-day input { width: auto !important; padding: 4px 6px !important; font-size: 11px; }
+.campaign-edit-slot-note { color: var(--muted); font-size: 11px; font-weight: 400; }
+.campaign-edit-slot-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.campaign-edit-slot-options button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--text); font-size: 11px; cursor: pointer; }
+.campaign-edit-slot-options button:hover:not(:disabled) { border-color: var(--link); }
+.campaign-edit-slot-options button:disabled { border-color: var(--line); color: var(--muted); background: var(--panel-raised); cursor: not-allowed; }
+.campaign-edit-slot-options button time { font-weight: 700; font-variant-numeric: tabular-nums; }
+.campaign-edit-slot-options button span { overflow: hidden; max-inline-size: 160px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-edit-slot-options button em { color: var(--muted); font-size: 9px; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
+
+/* The planned row's own actions - Edit, Publish now, and the slot lock -
+   kept to one compact strip beside the badge. */
+.campaign-entry-actions { display: inline-flex; flex: none; align-items: center; gap: 2px; }
+.campaign-entry-actions .ui-button[aria-pressed="true"] { color: var(--link); }
 .autopilot-compose label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .autopilot-compose textarea, .autopilot-compose input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }
@@ -2221,6 +2245,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-queue-product > em.product { min-width: 0; }
 /* A caveat on the chip beside it, not a chip of its own. */
 .campaign-queue-facts em.soft { padding-inline: 0; background: transparent; font-style: italic; }
+/* The locked-slot chip: the one fact in the row that names a commitment
+   rather than a property, so it keeps its glyph and the text colour. */
+.campaign-queue-facts em.campaign-queue-lock { display: inline-flex; align-items: center; gap: 3px; color: var(--text); }
 
 /* --- Campaign performance overview --------------------------------------- */
 /* The campaign's outcome is a dashboard, not another settings form. KPI cards

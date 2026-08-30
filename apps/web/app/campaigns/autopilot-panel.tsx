@@ -509,6 +509,11 @@ type QueueItem = {
   bio_hint: string | null;
   state: "draft" | "approved" | "paused" | "retired";
   position: number;
+  /** The exact moment this post is locked to, or null to flow with the
+      rotation. A locked post is spent nowhere else, and early publishes
+      reflow around it without moving it. */
+  pinned_slot: string | null;
+  pinned_destination_id: string | null;
   times_posted: number;
   last_posted_at: string | null;
   last_posted_by_destination?: Record<string, string>;
@@ -742,6 +747,16 @@ type TimelineEntry = {
   placement: string | null;
   reason: string | null;
   route: { label: string; detail: string } | null;
+};
+
+/** One concrete posting slot on one day, with what already claims it. */
+type SlotOption = {
+  at: string;
+  destination_id: string;
+  destination_label: string;
+  platform: string;
+  status: "free" | "taken" | "pinned" | "past";
+  pinned_item_id: string | null;
 };
 
 /** A post's own engagement, once the engine has been read back. Every field is
@@ -2066,6 +2081,12 @@ export function AutopilotPanel({
       ))].join(", ")} ${destinations.length === 1 ? "does" : "do"} not publish threads.`
     : "Replies are unavailable until this campaign has a thread-capable account.";
   const [editingPostTypes, setEditingPostTypes] = useState<Record<string, string>>({});
+  /** The day whose posting slots the editor is showing, as YYYY-MM-DD.
+      Empty means the picker is closed and the post's current arrangement -
+      in rotation, or locked - simply stands. */
+  const [slotDay, setSlotDay] = useState("");
+  /** That day's slots with their standing, or null while they load. */
+  const [slotOptions, setSlotOptions] = useState<SlotOption[] | null>(null);
   /**
    * A media replacement staged in the editor. Null means the post keeps what
    * it has - which is what saving has always meant, and still the default.
@@ -3014,7 +3035,57 @@ export function AutopilotPanel({
     setEditingMediaRemoved(false);
     setEditingCopyOnly(false);
     setSwappingMedia(false);
+    setSlotDay("");
+    setSlotOptions(null);
     openEditorWording(item);
+  }
+
+  /** Read one day's slots for the editor's picker. */
+  async function loadEditorSlots(day: string) {
+    if (!editing || !day) return;
+    setSlotOptions(null);
+    try {
+      const body = await json<{ slots: SlotOption[] }>(
+        await apiFetch(
+          `${base}/slots?day=${day}&item_id=${encodeURIComponent(editing.id)}`,
+        ),
+      );
+      setSlotOptions(body.slots);
+    } catch (reason) {
+      fail(explainFailure(reason, "That day's slots could not be read."));
+      setSlotOptions([]);
+    }
+  }
+
+  /** Lock the post being edited to one chosen slot, or release its lock. */
+  async function setEditorSlot(slot: SlotOption | null) {
+    if (!editing) return;
+    const editingId = editing.id;
+    await run(`pin-editor-${editingId}`, async () => {
+      const body = await json<{ item: QueueItem }>(
+        await apiFetch(`${base}/queue/${editingId}/slot`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(slot
+            ? { at: slot.at, destination_id: slot.destination_id }
+            : { release: true }),
+        }),
+      );
+      // The dialog stays open, so its copy of the post must say what the
+      // queue now says - run() reloads the list, not this staged object.
+      setEditing((current) => (current && current.id === editingId
+        ? {
+            ...current,
+            pinned_slot: body.item.pinned_slot,
+            pinned_destination_id: body.item.pinned_destination_id,
+          }
+        : current));
+      setSlotDay("");
+      setSlotOptions(null);
+      return slot
+        ? "Locked to that slot. Early publishes reflow around it; this post will not move."
+        : "Unlocked. The post flows with the rotation again.";
+    });
   }
 
   /** Close the editor and return to whichever view opened it. */
@@ -3435,6 +3506,73 @@ export function AutopilotPanel({
         return `Published immediately to ${pubCount} account${pubCount === 1 ? "" : "s"}.`;
       }
       return `No accounts published: ${body.skipped.map((s) => `${s.label}: ${s.reason}`).join("; ")}`;
+    });
+  }
+
+  /** Whether this planned outing is the very slot its post is locked to. */
+  function entryIsPinned(entry: TimelineEntry): boolean {
+    const item = entry.queue_item_id ? queueById.get(entry.queue_item_id) : undefined;
+    if (!item?.pinned_slot) return false;
+    return new Date(item.pinned_slot).getTime() === new Date(entry.at).getTime()
+      && (!item.pinned_destination_id
+        || item.pinned_destination_id === entry.destination_id);
+  }
+
+  /**
+   * Publish one planned outing immediately, to exactly its account.
+   *
+   * Narrower than the queue row's Publish now on purpose: that one sends the
+   * post to every eligible account, while a timeline row is one outing on one
+   * account at one time - so this sends only that. The rotation reflows
+   * behind it: the freed slot is offered to the next post on the next plan.
+   */
+  async function publishPlannedEntry(entry: TimelineEntry) {
+    if (!entry.queue_item_id || !entry.destination_id) return;
+    const label = entry.destination?.label ?? "this account";
+    const when = new Date(entry.at).toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      timeZone: readerZone,
+    });
+    if (!window.confirm(
+      `Publish "${displayTitle(entry.title) || "this post"}" to ${label} now, `
+      + `instead of waiting for ${when}?\n\nThe remaining planned posts shift `
+      + "to fill the freed slot; a locked post keeps its own.",
+    )) return;
+    await run(`publish-entry-${entry.key}`, async () => {
+      const body = await json<{
+        published: Array<{ destination_label: string }>;
+        skipped: Array<{ label: string; reason: string }>;
+      }>(
+        await apiFetch(`${base}/queue/${entry.queue_item_id}/publish`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ destination_ids: [entry.destination_id] }),
+        }),
+      );
+      if (body.published.length) {
+        return `Published to ${body.published[0].destination_label} immediately. `
+          + "The remaining posts reflow to fill the slot.";
+      }
+      return `Not published: ${body.skipped
+        .map((skip) => `${skip.label}: ${skip.reason}`).join("; ")}`;
+    });
+  }
+
+  /** Lock a planned outing to exactly this slot, or hand it back. */
+  async function togglePlannedPin(entry: TimelineEntry) {
+    if (!entry.queue_item_id) return;
+    const pinned = entryIsPinned(entry);
+    await run(`pin-entry-${entry.key}`, async () => {
+      await json(await apiFetch(`${base}/queue/${entry.queue_item_id}/slot`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(pinned
+          ? { release: true }
+          : { at: entry.at, destination_id: entry.destination_id }),
+      }));
+      return pinned
+        ? "Unlocked. The post flows with the rotation again."
+        : "Locked to this slot. Early publishes reflow around it; this post will not move.";
     });
   }
 
@@ -4976,6 +5114,16 @@ export function AutopilotPanel({
                     {destinations.length > 0 && (
                       <em>{destinations.length} {destinations.length === 1 ? "account" : "accounts"}</em>
                     )}
+                    {item.pinned_slot && (
+                      <em className="campaign-queue-lock"
+                        title="Locked to this posting slot. The rotation will not move it; unlock it from the editor or the timeline.">
+                        <ActionIcon name="pin" size={10} />
+                        {new Date(item.pinned_slot).toLocaleString(undefined, {
+                          month: "short", day: "numeric", hour: "numeric",
+                          minute: "2-digit", timeZone: readerZone,
+                        })}
+                      </em>
+                    )}
                     {item.first_comment && <em>+ {followUpFieldName.toLowerCase()}</em>}
                     {canPublishReplies && item.thread.length > 0 && (
                       <em>+ {item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
@@ -5408,6 +5556,79 @@ export function AutopilotPanel({
                   </div>
                 );
               })()}
+            </section>
+            {/* When it posts, in one compact row. The ordinary answer is the
+                rotation - the next open slot, reflowing when an earlier post
+                goes out early - and the alternative is a lock on one concrete
+                slot. The picker only unfolds when a day is chosen, so the
+                form's height is unchanged for everyone not using it. */}
+            <section className="campaign-edit-slot">
+              <div className="campaign-edit-slot-head">
+                <strong>Posting time</strong>
+                {editing.pinned_slot ? (
+                  <>
+                    <Badge tone="good"
+                      title="The scheduler holds this slot for it; early publishes reflow around it.">
+                      Locked · {new Date(editing.pinned_slot).toLocaleString(undefined, {
+                        month: "short", day: "numeric", hour: "numeric",
+                        minute: "2-digit", timeZone: readerZone,
+                      })}
+                    </Badge>
+                    <Button type="button" variant="quiet" size="sm"
+                      busy={busy === `pin-editor-${editing.id}`}
+                      onClick={() => void setEditorSlot(null)}>
+                      Unlock
+                    </Button>
+                  </>
+                ) : (
+                  <small>In rotation — takes the next open slot, and can shift
+                    when an earlier post publishes early.</small>
+                )}
+                <label className="campaign-edit-slot-day">
+                  <span>Lock to a day</span>
+                  <input type="date" value={slotDay}
+                    min={new Date().toLocaleDateString("en-CA", { timeZone: readerZone })}
+                    onChange={(event) => {
+                      setSlotDay(event.target.value);
+                      void loadEditorSlots(event.target.value);
+                    }} />
+                </label>
+              </div>
+              {slotDay && (
+                slotOptions === null ? (
+                  <small className="campaign-edit-slot-note">Reading that day&apos;s slots…</small>
+                ) : slotOptions.length === 0 ? (
+                  <small className="campaign-edit-slot-note">
+                    No posting time falls on that day for this campaign&apos;s
+                    accounts. Pick another day, or add posting times in Setup.
+                  </small>
+                ) : (
+                  <div className="campaign-edit-slot-options" role="list"
+                    aria-label="That day's posting slots">
+                    {slotOptions.map((option) => (
+                      <button type="button" role="listitem"
+                        key={`${option.at}-${option.destination_id}`}
+                        disabled={option.status !== "free"
+                          || busy === `pin-editor-${editing.id}`}
+                        data-status={option.status}
+                        title={option.status === "free"
+                          ? `Lock this post to ${option.destination_label} at this time`
+                          : option.status === "taken"
+                            ? "A post is already committed here"
+                            : option.status === "pinned"
+                              ? "Another post is locked to this slot"
+                              : "This time has already passed"}
+                        onClick={() => void setEditorSlot(option)}>
+                        <time>{new Date(option.at).toLocaleTimeString(undefined, {
+                          hour: "numeric", minute: "2-digit", timeZone: readerZone,
+                        })}</time>
+                        <span>{option.destination_label}</span>
+                        {option.status !== "free" && <em>{option.status}</em>}
+                      </button>
+                    ))}
+                  </div>
+                )
+              )}
             </section>
             {/* The title, description and close now come from the Dialog frame,
                 so the form opens straight into its first field. */}
@@ -6667,8 +6888,10 @@ export function AutopilotPanel({
                               </Badge>
                             ) : (
                               <Badge tone={entry.problem ? "warn" : "neutral"}
-                                title={plannedMeaning(autopilot.delivery)}>
-                                Planned
+                                title={entryIsPinned(entry)
+                                  ? "Locked to this slot: the scheduler holds it here and early publishes reflow around it."
+                                  : plannedMeaning(autopilot.delivery)}>
+                                {entryIsPinned(entry) ? "Planned · locked" : "Planned"}
                               </Badge>
                             )}
                             {/* Beside the badge, which is where the grid puts
@@ -6682,11 +6905,38 @@ export function AutopilotPanel({
                             {canEdit && entry.kind === "planned"
                               && entry.queue_item_id
                               && queueById.has(entry.queue_item_id) && (
-                              <Button variant="quiet" size="sm"
-                                onClick={() => openPostEditor(
-                                  queueById.get(entry.queue_item_id!)!, "posts")}>
-                                Edit
-                              </Button>
+                              // A div on purpose: the destination row styles
+                              // every direct child span as a stacked grid for
+                              // the label column, and buttons in that grid
+                              // pile vertically.
+                              <div className="campaign-entry-actions">
+                                <Button variant="quiet" size="sm"
+                                  onClick={() => openPostEditor(
+                                    queueById.get(entry.queue_item_id!)!, "posts")}>
+                                  Edit
+                                </Button>
+                                <Tooltip content={`Publish this post to ${entry.destination?.label
+                                  ?? "its account"} immediately. The remaining planned posts shift to fill the slot.`}>
+                                  <Button variant="quiet" size="sm"
+                                    busy={busy === `publish-entry-${entry.key}`}
+                                    onClick={() => void publishPlannedEntry(entry)}>
+                                    Publish now
+                                  </Button>
+                                </Tooltip>
+                                <Tooltip content={entryIsPinned(entry)
+                                  ? "Unlock: let the rotation move this post to another slot again."
+                                  : "Lock this post to exactly this slot. It will not shift when other posts publish early."}>
+                                  <Button variant="quiet" size="sm" iconOnly
+                                    aria-pressed={entryIsPinned(entry)}
+                                    busy={busy === `pin-entry-${entry.key}`}
+                                    aria-label={entryIsPinned(entry)
+                                      ? "Unlock this post from its slot"
+                                      : "Lock this post to this slot"}
+                                    onClick={() => void togglePlannedPin(entry)}>
+                                    <ActionIcon name={entryIsPinned(entry) ? "unpin" : "pin"} />
+                                  </Button>
+                                </Tooltip>
+                              </div>
                             )}
                           </div>
                           <h4>{entry.post_url ? (
@@ -6875,15 +7125,43 @@ export function AutopilotPanel({
                       </Badge>
                     ) : (
                       <Badge tone={entry.problem ? "warn" : "neutral"}
-                        title={plannedMeaning(autopilot.delivery)}>
-                        Planned
+                        title={entryIsPinned(entry)
+                          ? "Locked to this slot: the scheduler holds it here and early publishes reflow around it."
+                          : plannedMeaning(autopilot.delivery)}>
+                        {entryIsPinned(entry) ? "Planned · locked" : "Planned"}
                       </Badge>
                     )}
                     {editable ? (
-                      <Button variant="quiet" size="sm"
-                        onClick={() => openPostEditor(queueById.get(entry.queue_item_id!)!, "posts")}>
-                        Edit
-                      </Button>
+                      <span className="campaign-entry-actions">
+                        <Button variant="quiet" size="sm"
+                          onClick={() => openPostEditor(queueById.get(entry.queue_item_id!)!, "posts")}>
+                          Edit
+                        </Button>
+                        {/* Icon-only on the card: the foot is a strip, and the
+                            words are on the tooltip where they cost nothing. */}
+                        <Tooltip content={`Publish to ${entry.destination?.label
+                          ?? "its account"} immediately; the rest shift to fill the slot.`}>
+                          <Button variant="quiet" size="sm" iconOnly
+                            busy={busy === `publish-entry-${entry.key}`}
+                            aria-label="Publish this post now"
+                            onClick={() => void publishPlannedEntry(entry)}>
+                            <ActionIcon name="publish" />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={entryIsPinned(entry)
+                          ? "Unlock: let the rotation move this post again."
+                          : "Lock this post to exactly this slot."}>
+                          <Button variant="quiet" size="sm" iconOnly
+                            aria-pressed={entryIsPinned(entry)}
+                            busy={busy === `pin-entry-${entry.key}`}
+                            aria-label={entryIsPinned(entry)
+                              ? "Unlock this post from its slot"
+                              : "Lock this post to this slot"}
+                            onClick={() => void togglePlannedPin(entry)}>
+                            <ActionIcon name={entryIsPinned(entry) ? "unpin" : "pin"} />
+                          </Button>
+                        </Tooltip>
+                      </span>
                     ) : entry.post_url ? (
                       <a className="campaign-grid-open" href={entry.post_url}
                         target="_blank" rel="noreferrer">Open</a>
@@ -7022,7 +7300,37 @@ export function AutopilotPanel({
                     </Badge>
                   ) : (
                     <Badge tone={entry.problem ? "warn" : "neutral"}
-                      title={plannedMeaning(autopilot.delivery)}>Planned</Badge>
+                      title={entryIsPinned(entry)
+                        ? "Locked to this slot: the scheduler holds it here and early publishes reflow around it."
+                        : plannedMeaning(autopilot.delivery)}>
+                      {entryIsPinned(entry) ? "Planned · locked" : "Planned"}
+                    </Badge>
+                  )}
+                  {selectable && (
+                    <span className="campaign-entry-actions">
+                      <Tooltip content={`Publish to ${destination?.label
+                        ?? "its account"} immediately; the rest shift to fill the slot.`}>
+                        <Button variant="quiet" size="sm" iconOnly
+                          busy={busy === `publish-entry-${entry.key}`}
+                          aria-label="Publish this post now"
+                          onClick={() => void publishPlannedEntry(entry)}>
+                          <ActionIcon name="publish" />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content={entryIsPinned(entry)
+                        ? "Unlock: let the rotation move this post again."
+                        : "Lock this post to exactly this slot."}>
+                        <Button variant="quiet" size="sm" iconOnly
+                          aria-pressed={entryIsPinned(entry)}
+                          busy={busy === `pin-entry-${entry.key}`}
+                          aria-label={entryIsPinned(entry)
+                            ? "Unlock this post from its slot"
+                            : "Lock this post to this slot"}
+                          onClick={() => void togglePlannedPin(entry)}>
+                          <ActionIcon name={entryIsPinned(entry) ? "unpin" : "pin"} />
+                        </Button>
+                      </Tooltip>
+                    </span>
                   )}
                 </li>
               );

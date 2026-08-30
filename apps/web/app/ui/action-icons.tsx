@@ -17,6 +17,8 @@ import {
   List,
   MicVocal,
   Pencil,
+  Pin,
+  PinOff,
   Play,
   Plus,
   RefreshCw,
@@ -79,6 +81,11 @@ export const ACTION_ICONS = {
   reveal: Eye,
   hide: EyeOff,
   play: Play,
+  // Locking a post to one posting slot, and handing it back. A pair on
+  // purpose: the glyph shows the action, not the state, so the filled pin
+  // always means "lock this here" and the crossed one "release it".
+  pin: Pin,
+  unpin: PinOff,
   add: Plus,
   confirm: Check,
   expand: ChevronRight,
