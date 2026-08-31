@@ -46,6 +46,11 @@ Two changes since the record above, re-measured against live profiles:
 
 Net for a signed-out operator: a profile fetch lands the newest ~44 posts, and re-running the profile on a cadence keeps it complete going forward (nothing is missed unless a creator posts more than the window between runs). History deeper than the window still needs a signed-in session, exactly as concluded above. Job summaries and the connection status now say this instead of leaving it to be read off the counts.
 
+Two additions make the gap visible and closable from the Download tab:
+
+- **Coverage**: the `profile-stats` provider command (a venv-side script over the signed client) reads each profile's declared 作品 total - `get_user_info` answers a signed-out session - and jobs pair it with how many of that author's posts the provider database holds across all runs. The row wears one pill per profile ("DJ益仔(缢囝) 317/324"), amber while short, green when whole.
+- **Fetch missing**: every finished batch can be re-queued in one click. The run lists each source afresh and skips everything already held (the provider dedupes by post id and file), so it costs one listing when complete, tops up when new posts land - and because every run pages while `has_more` holds, it fetches the *whole* profile the moment Douyin serves deep pages again. The full-profile goal needs no code change to come back; only Douyin's wall to lift, or a login.
+
 ---
 
 The remainder of this section is the **investigation record** for why anonymous deep pagination is blocked. It is history, not current behaviour.
