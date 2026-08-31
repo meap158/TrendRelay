@@ -304,9 +304,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .job-status.failed { color: var(--red); }
 .job-status.running { color: var(--warn); }
 .job-error { color: var(--red); }
-.artifact-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; padding: 12px; border-radius: var(--radius-sm); background: #fafafa; border: 1px solid var(--line); }
+.artifact-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--radius-sm); background: #fafafa; border: 1px solid var(--line); }
+.download-artifact-thumbnail { display: block; width: 42px; height: 42px; border-radius: 5px; object-fit: cover; background: var(--panel-raised); }
+.download-artifact-thumbnail.is-empty { border: 1px dashed var(--line); }
 .artifact-row > div { display: grid; gap: 4px; min-width: 0; }
-.artifact-row > div:first-child strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-row > div:nth-child(2) strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .artifact-row small { color: var(--muted); font-size: 11px; }
 .artifact-row > div:last-child { display: flex; flex-wrap: nowrap; gap: 8px; }
 .artifact-row a { padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); font-size: 12px; font-weight: 500; text-decoration: none; background: var(--panel); transition: background 150ms; }
@@ -933,7 +935,8 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .queue-heading, .download-job { padding-inline: 16px; }
   .queue-heading-actions { justify-content: flex-start; }
   .queue-filters { padding-inline: 16px; }
-  .artifact-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .artifact-row { grid-template-columns: 42px minmax(0, 1fr); align-items: center; }
+  .artifact-row > div:last-child { grid-column: 1 / -1; padding-inline-start: 52px; }
   .artifact-row > div:last-child { flex-wrap: wrap; justify-content: flex-start; overflow: visible; }
 }
 /* Compact Douyin workflow */
@@ -1314,7 +1317,17 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   /* Its own line under the button rather than competing with it for one row.
      The aside wraps by itself; this only says the chips take the whole line
      and take it second. */
-  .queue-filter-strip { flex-basis: 100%; order: 1; }
+  .campaign-queue-card > .ui-card-head-region,
+  .campaign-queue-card > .ui-card-head-region .ui-card-head,
+  .campaign-queue-card > .ui-card-head-region .ui-card-aside {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+  .campaign-queue-card > .ui-card-head-region .ui-card-aside {
+    inline-size: 100%;
+    justify-content: flex-start;
+  }
+  .queue-filter-strip { flex: 1 1 100%; inline-size: 100%; max-inline-size: 100%; order: 1; }
 }
 .campaign-queue-card > .ui-card-head-region {
   position: sticky;
@@ -1636,6 +1649,27 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-queue > li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue > li.approved { border-inline-start: 3px solid var(--green); }
 .campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
+.campaign-queue-secondary-actions { display: contents; }
+.campaign-queue-actions [data-destructive-icon="true"]:hover,
+.campaign-queue-actions [data-destructive-icon="true"]:focus-visible {
+  border-color: color-mix(in srgb, var(--red) 42%, var(--line));
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, var(--panel));
+}
+.campaign-queue-actions > .campaign-queue-compact-actions { display: none; }
+
+/* A compact queue is easier to scan than a row of equally loud commands.
+   Below this width, four buttons leave the post itself only a few characters
+   per line and make every card several lines taller. Keep the immediate action
+   visible and progressively disclose the secondary commands through the same
+   keyboard- and touch-friendly action menu used elsewhere in the app. */
+@media (max-width: 820px) {
+  .autopilot-queue { gap: 6px; }
+  .autopilot-queue > li { gap: 8px; padding: 8px; }
+  .autopilot-queue-copy { -webkit-line-clamp: 1; }
+  .campaign-queue-secondary-actions { display: none; }
+  .campaign-queue-actions > .campaign-queue-compact-actions { display: inline-flex; }
+}
 
 .autopilot-account-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .autopilot-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; }
@@ -1662,15 +1696,37 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
 @media (max-width: 700px) {
   .autopilot-destinations > li { grid-template-columns: minmax(0, 1fr) auto; }
-  /* The still keeps its column. This rule predates the thumbnail, and with
-     four children in two columns the clip was squeezed into a sliver beside
-     its own title - which is the one thing a row about a video should not
-     lose when the screen narrows. */
-  .autopilot-queue > li { grid-template-columns: auto minmax(0, 1fr); }
-  .autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr); }
-  .autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr); }
-  .autopilot-queue > li > .ui-badge { grid-column: 1 / -1; justify-self: start; }
-  .autopilot-queue > li > .campaign-queue-actions { grid-column: 1 / -1; justify-content: flex-start; margin-top: 2px; }
+  /* Keep identity, copy and state on the first row. The old two-column rule
+     lost to the more-specific selectable template, then forced both state and
+     actions onto separate full-width rows. This explicit compact template
+     preserves the thumbnail and spends only one extra line on actions. */
+  .autopilot-queue.selectable > li {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+  .autopilot-queue:not(.selectable) > li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .autopilot-queue.selectable > li.copy-only {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .autopilot-queue:not(.selectable) > li.copy-only {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .autopilot-queue > li > .ui-badge { grid-column: auto; justify-self: start; }
+  .autopilot-queue.selectable > li > .campaign-queue-actions {
+    grid-column: 3 / -1;
+    justify-content: flex-start;
+  }
+  .autopilot-queue:not(.selectable) > li > .campaign-queue-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+  .autopilot-queue.selectable > li.copy-only > .campaign-queue-actions {
+    grid-column: 2 / -1;
+  }
+  .autopilot-queue:not(.selectable) > li.copy-only > .campaign-queue-actions {
+    grid-column: 1 / -1;
+  }
   .campaign-mode-options { grid-template-columns: 1fr; }
   .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }
@@ -2309,7 +2365,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-trend-tooltip dt { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-trend-tooltip dd { margin: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .campaign-analytics-trend > span.campaign-trend-dates { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 9px; }
-.campaign-analytics-lower { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(220px, .7fr); gap: 14px; align-items: start; }
+/* One column. The coverage note used to sit beside the posts in a .7fr track
+   with a 220px floor - about a quarter of the row for three short lines - and
+   `align-items: start` left the rest of that track empty down the whole
+   height. The posts are what somebody opened this to look at. */
+.campaign-analytics-lower { display: grid; gap: 10px; align-items: start; }
 .campaign-top-content, .campaign-analytics-coverage { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-top-content > header { display: flex; align-items: end; justify-content: space-between; gap: 10px; padding: 12px 14px; border-block-end: 1px solid var(--line); }
 .campaign-top-content > header > div { display: grid; gap: 2px; min-width: 0; }
@@ -2317,7 +2377,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-top-content > header small { color: var(--muted); font-size: 10px; }
 .campaign-top-content > header label { display: flex; flex: none; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 600; }
 .campaign-top-content > header .ui-select { min-inline-size: 122px; }
-.campaign-top-content ol { display: grid; grid-auto-columns: minmax(180px, 31%); grid-auto-flow: column; gap: 10px; margin: 0; overflow-x: auto; overscroll-behavior-inline: contain; padding: 12px 14px 14px; cursor: grab; list-style: none; scroll-snap-type: inline proximity; scrollbar-width: thin; touch-action: pan-y; }
+.campaign-top-content ol { display: grid; grid-auto-columns: minmax(180px, 24%); grid-auto-flow: column; gap: 10px; margin: 0; overflow-x: auto; overscroll-behavior-inline: contain; padding: 12px 14px 14px; cursor: grab; list-style: none; scroll-snap-type: inline proximity; scrollbar-width: thin; touch-action: pan-y; }
 .campaign-top-content ol:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
 .campaign-top-content ol.is-dragging { cursor: grabbing; scroll-snap-type: none; user-select: none; }
 .campaign-top-content ol.is-dragging a { pointer-events: none; }
@@ -2342,16 +2402,19 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-top-open { display: inline-flex; align-items: center; justify-content: space-between; gap: 5px; margin-block-start: 3px; border-block-start: 1px solid var(--line); padding-block-start: 7px; color: var(--link); font-size: 9px; font-weight: 700; text-decoration: none; }
 .campaign-top-open:hover { text-decoration: underline; }
 .campaign-analytics-empty { margin: 0; padding: 18px 14px; color: var(--muted); font-size: 11px; }
-.campaign-analytics-coverage { display: grid; gap: 7px; padding: 13px 14px; }
+/* A strip, not a panel: a row of short facts that wraps, so it costs one line
+   on a wide screen and grows only when there is something wrong to say. */
+.campaign-analytics-coverage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 9px 14px; }
+.campaign-analytics-coverage > strong { flex: none; }
 .campaign-analytics-coverage p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .campaign-analytics-coverage p b { color: var(--text); font-variant-numeric: tabular-nums; }
 .campaign-analytics-coverage > small { color: var(--muted); font-size: 9px; line-height: 1.45; }
-.campaign-analytics-coverage p.campaign-analytics-gap { margin-block-start: 5px; border-block-start: 1px solid var(--line); padding-block-start: 10px; }
+/* Its own line, and coloured. The facts beside it are provenance; this is
+   something not working, and in a wrapping strip it would otherwise read
+   as one more fact tucked in at the end of the row. */
+.campaign-analytics-coverage p.campaign-analytics-gap { flex: 1 0 100%; margin-block-start: 2px; color: var(--amber); }
 .campaign-analytics-gap strong { color: var(--text); }
 
-@media (max-width: 900px) {
-  .campaign-analytics-lower { grid-template-columns: minmax(0, 1fr); }
-}
 @media (max-width: 600px) {
   .campaign-analytics > .ui-card-head { align-items: stretch; }
   .campaign-analytics > .ui-card-head .ui-card-aside,

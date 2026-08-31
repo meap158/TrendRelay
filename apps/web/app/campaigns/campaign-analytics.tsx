@@ -52,6 +52,8 @@ type Analytics = {
   top_content: {
     id: string;
     asset_id: string | null;
+    media_path: string;
+    image_paths: string[];
     title: string;
     platform: string | null;
     destination: string | null;
@@ -103,6 +105,25 @@ function compact(value: number) {
   }).format(value);
 }
 
+/** A human scale: 184 tops out at 200, not at the data's arbitrary peak. */
+function trendScale(values: number[]) {
+  const highest = Math.max(...values, 0);
+  if (highest <= 0) return { maximum: 1, ticks: [0, 1] };
+  const roughStep = highest / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const fraction = roughStep / magnitude;
+  const niceFraction = fraction < 1.5 ? 1 : fraction < 3 ? 2 : fraction < 7 ? 5 : 10;
+  // These are counts. Decimal ticks imply precision the providers do not
+  // report and are especially noisy for daily post counts.
+  const step = Math.max(1, niceFraction * magnitude);
+  const maximum = Math.ceil(highest / step) * step;
+  const ticks = Array.from(
+    { length: Math.round(maximum / step) + 1 },
+    (_, index) => index * step,
+  );
+  return { maximum, ticks };
+}
+
 function comparison(current: number | null, previous: number | null) {
   if (current === null) return { label: "Not available", tone: "flat" };
   const baseline = previous ?? 0;
@@ -134,15 +155,18 @@ function TrendLine({
 }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const values = data.map((day) => day[metric]);
-  const maximum = Math.max(...values, 1);
+  const { maximum, ticks } = trendScale(values);
+  const plotTop = 4;
+  const plotBottom = 42;
+  const plotHeight = plotBottom - plotTop;
   const points = data.map((day, index) => {
     const value = day[metric];
     const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
-    const y = 42 - (value / maximum) * 36;
+    const y = plotBottom - (value / maximum) * plotHeight;
     return { day, x, y };
   });
   const path = points.map(({ x, y }) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
-  const area = `0,42 ${path} 100,42`;
+  const area = `0,${plotBottom} ${path} 100,${plotBottom}`;
   const first = data.at(0)?.date;
   const last = data.at(-1)?.date;
   const active = activeIndex === null ? null : points[activeIndex] ?? null;
@@ -178,56 +202,76 @@ function TrendLine({
   return (
     <div className="campaign-analytics-trend">
       <div className="campaign-trend-plot">
-        <div className="campaign-trend-scale" aria-hidden="true">
-          <span>{compact(maximum)}</span><span>0</span>
+        <div className="campaign-trend-y-labels" aria-hidden="true">
+          {[...ticks].reverse().map((tick) => {
+            const y = plotBottom - (tick / maximum) * plotHeight;
+            return (
+              <span key={tick} style={{
+                "--trend-tick-y": `${(y / 44) * 100}%`,
+              } as CSSProperties}>{compact(tick)}</span>
+            );
+          })}
         </div>
-        <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="group"
-          aria-label={`${CHART_LABELS[metric]} trend. ${compact(values.reduce((sum, value) => sum + value, 0))} total.`}>
-          <line x1="0" x2="100" y1="42" y2="42" />
-          <polygon points={area} />
-          <polyline points={path} />
+        <div className="campaign-trend-canvas">
+          <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="group"
+            aria-label={`${CHART_LABELS[metric]} trend. Y-axis from 0 to ${compact(maximum)}. ${compact(values.reduce((sum, value) => sum + value, 0))} total.`}>
+            {ticks.map((tick) => {
+              const y = plotBottom - (tick / maximum) * plotHeight;
+              return <line key={`grid-${tick}`} className="campaign-trend-gridline"
+                x1="0" x2="100" y1={y} y2={y} />;
+            })}
+            <line className="campaign-trend-y-axis" x1="0" x2="0"
+              y1={plotTop} y2={plotBottom} />
+            {ticks.map((tick) => {
+              const y = plotBottom - (tick / maximum) * plotHeight;
+              return <line key={`tick-${tick}`} className="campaign-trend-y-tick"
+                x1="0" x2="0.8" y1={y} y2={y} />;
+            })}
+            <polygon points={area} />
+            <polyline points={path} />
+            {active ? (
+              <line className="campaign-trend-guide" x1={active.x} x2={active.x}
+                y1={plotTop} y2={plotBottom} />
+            ) : null}
+            <rect className="campaign-trend-hit-area" x="0" y="0" width="100" height="44"
+              tabIndex={0} role="slider" aria-label="Inspect the campaign trend by date"
+              aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)}
+              aria-valuenow={activeIndex ?? Math.max(0, points.length - 1)}
+              aria-valuetext={spokenPoint ? pointLabel(spokenPoint.day) : "No chart data"}
+              onPointerMove={(event) => setActiveIndex(nearestIndex(event))}
+              onPointerDown={(event) => setActiveIndex(nearestIndex(event))}
+              onPointerLeave={() => setActiveIndex(null)}
+              onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+              onBlur={() => setActiveIndex(null)}
+              onKeyDown={moveByKeyboard} />
+          </svg>
           {active ? (
-            <line className="campaign-trend-guide" x1={active.x} x2={active.x}
-              y1="4" y2="42" />
+            <span className="campaign-trend-active-dot" aria-hidden="true"
+              style={{
+                "--trend-point-x": `${active.x}%`,
+                "--trend-point-y": `${(active.y / 44) * 100}%`,
+              } as CSSProperties} />
           ) : null}
-          <rect className="campaign-trend-hit-area" x="0" y="0" width="100" height="44"
-            tabIndex={0} role="slider" aria-label="Inspect the campaign trend by date"
-            aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)}
-            aria-valuenow={activeIndex ?? Math.max(0, points.length - 1)}
-            aria-valuetext={spokenPoint ? pointLabel(spokenPoint.day) : "No chart data"}
-            onPointerMove={(event) => setActiveIndex(nearestIndex(event))}
-            onPointerDown={(event) => setActiveIndex(nearestIndex(event))}
-            onPointerLeave={() => setActiveIndex(null)}
-            onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
-            onBlur={() => setActiveIndex(null)}
-            onKeyDown={moveByKeyboard} />
-        </svg>
-        {active ? (
-          <span className="campaign-trend-active-dot" aria-hidden="true"
-            style={{
-              "--trend-point-x": `${active.x}%`,
-              "--trend-point-y": `${(active.y / 44) * 100}%`,
-            } as CSSProperties} />
-        ) : null}
-      </div>
-      {active ? (
-        <div className="campaign-trend-tooltip" role="status"
-          style={{ "--trend-x": `${Math.min(82, Math.max(18, active.x))}%` } as CSSProperties}>
-          <strong>{dateLabel(active.day.date)}</strong>
-          <dl>
-            <div className={metric === "views" ? "selected" : ""}>
-              <dt>Views</dt><dd>{compact(active.day.views)}</dd>
+          {active ? (
+            <div className="campaign-trend-tooltip" role="status"
+              style={{ "--trend-x": `${Math.min(82, Math.max(18, active.x))}%` } as CSSProperties}>
+              <strong>{dateLabel(active.day.date)}</strong>
+              <dl>
+                <div className={metric === "views" ? "selected" : ""}>
+                  <dt>Views</dt><dd>{compact(active.day.views)}</dd>
+                </div>
+                <div className={metric === "engagement" ? "selected" : ""}>
+                  <dt>Engagement</dt><dd>{compact(active.day.engagement)}</dd>
+                </div>
+                <div className={metric === "published" ? "selected" : ""}>
+                  <dt>Published</dt><dd>{compact(active.day.published)}</dd>
+                </div>
+              </dl>
             </div>
-            <div className={metric === "engagement" ? "selected" : ""}>
-              <dt>Engagement</dt><dd>{compact(active.day.engagement)}</dd>
-            </div>
-            <div className={metric === "published" ? "selected" : ""}>
-              <dt>Published</dt><dd>{compact(active.day.published)}</dd>
-            </div>
-          </dl>
+          ) : null}
         </div>
-      ) : null}
-      <span><time dateTime={first}>{first ? new Date(`${first}T00:00:00`).toLocaleDateString(undefined, {
+      </div>
+      <span className="campaign-trend-dates"><time dateTime={first}>{first ? new Date(`${first}T00:00:00`).toLocaleDateString(undefined, {
         month: "short", day: "numeric",
       }) : ""}</time><time dateTime={last}>{last ? new Date(`${last}T00:00:00`).toLocaleDateString(undefined, {
         month: "short", day: "numeric",
@@ -273,23 +317,35 @@ function Scorecard({
 
 function TopPostThumbnail({
   assetId,
+  mediaPath,
+  imagePaths,
   workspaceId,
   title,
   apiFetch,
 }: {
   assetId: string | null;
+  mediaPath: string;
+  imagePaths: string[];
   workspaceId: string;
   title: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
-  const source = assetId
-    ? `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`
-    : "";
+  const frozenPath = imagePaths[0] ?? mediaPath;
+  // A published execution retains the exact frozen media path even when an
+  // old Library row has no generated thumbnail. The publishing preview route
+  // serves stills directly and resolves a video's Library thumbnail, making
+  // it the durable source for both kinds. Asset identity remains the fallback
+  // for records created before frozen paths were returned by analytics.
+  const source = frozenPath
+    ? `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(frozenPath)}`
+    : assetId
+      ? `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`
+      : "";
   const { objectUrl } = useOpaqueMedia(
     source,
     "thumbnail.jpg",
     "image/jpeg",
-    Boolean(assetId),
+    Boolean(source),
     apiFetch,
   );
   return objectUrl ? (
@@ -516,11 +572,13 @@ export function CampaignAnalytics({
                           <a className="campaign-top-thumb-link" href={post.post_url}
                             target="_blank" rel="noreferrer"
                             aria-label={`Open ${post.title} on ${socialPlatformLabel(post.platform)}`}>
-                            <TopPostThumbnail assetId={post.asset_id} workspaceId={workspaceId}
+                            <TopPostThumbnail assetId={post.asset_id} mediaPath={post.media_path}
+                              imagePaths={post.image_paths} workspaceId={workspaceId}
                               title={post.title} apiFetch={apiFetch} />
                           </a>
                         ) : (
-                          <TopPostThumbnail assetId={post.asset_id} workspaceId={workspaceId}
+                          <TopPostThumbnail assetId={post.asset_id} mediaPath={post.media_path}
+                            imagePaths={post.image_paths} workspaceId={workspaceId}
                             title={post.title} apiFetch={apiFetch} />
                         )}
                         <span className="campaign-top-rank">{index + 1}</span>
@@ -551,6 +609,18 @@ export function CampaignAnalytics({
               )}
             </section>
 
+            {/* A strip under the posts rather than a column beside them.
+                
+                Three short lines of provenance held a 220px-minimum column at
+                .7fr - about a quarter of the row - and `align-items: start`
+                left the rest of that column empty all the way down. The posts
+                are the thing somebody came to look at, and they were sharing
+                a scroller with the space this was not using.
+                
+                It also belongs here: the coverage qualifies every number
+                above it, the chart as much as the cards, so it reads better
+                as a footnote to the section than as a neighbour of one part
+                of it. */}
             <aside className="campaign-analytics-coverage">
               <strong>Data coverage</strong>
               <p><b>{data.coverage.measured}</b> of <b>{data.coverage.published}</b> published posts have provider metrics.</p>
