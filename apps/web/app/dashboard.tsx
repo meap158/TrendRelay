@@ -39,16 +39,33 @@ type LibraryProgress = {
   cancelled: number;
   active: number;
 };
+/** One source's coverage: what the profile declares vs what we hold. */
+type SourceStat = {
+  url: string;
+  kind: string;
+  sec_uid?: string;
+  nickname?: string;
+  /** The profile's own 作品 count, read from Douyin at job end. */
+  declared_total?: number;
+  /** How many of that author's posts the downloader holds, across all runs. */
+  held?: number;
+  error?: string;
+};
 type DownloadJob = {
   id: string;
   status: string;
   error?: string | null;
   created_at: string;
   payload: {
-    request?: { urls?: string[]; mode?: string; limit?: number };
+    request?: { urls?: string[]; mode?: string; limit?: number; media_kinds?: string[] };
     output_root?: string;
   };
-  result?: { artifacts?: Artifact[]; summary?: string; creator_urls?: string[] } | null;
+  result?: {
+    artifacts?: Artifact[];
+    summary?: string;
+    creator_urls?: string[];
+    source_stats?: SourceStat[];
+  } | null;
   progress?: DownloadProgress;
   library_progress?: LibraryProgress;
 };
@@ -316,6 +333,7 @@ export default function Dashboard() {
   const [clearingHistory, setClearingHistory] = useState(false);
   const [resumingJobId, setResumingJobId] = useState("");
   const [cancellingJobId, setCancellingJobId] = useState("");
+  const [refetchingJobId, setRefetchingJobId] = useState<string | null>(null);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_JOB_COUNT);
   // Announced over the page rather than inside it. Rendering these in flow
@@ -519,6 +537,49 @@ export default function Dashboard() {
       fail(reason instanceof Error ? reason.message : "Download could not start.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Queue the same sources again, downloading only what is missing.
+   *
+   * The re-run lists each source afresh and skips everything already saved -
+   * the downloader dedupes by post id and by file - so a batch marked
+   * downloaded is exactly as re-runnable as a fresh one. This is how a capped
+   * profile is topped up after new posts land, and how it completes itself
+   * the moment Douyin serves a deeper listing again.
+   */
+  async function refetchMissing(job: DownloadJob) {
+    const request = job.payload.request;
+    const jobUrls = request?.urls ?? [];
+    if (!jobUrls.length) return;
+    if (!canFetch) {
+      fail("Connect the Douyin session before re-checking this batch.");
+      return;
+    }
+    setRefetchingJobId(job.id);
+    clearStatus();
+    try {
+      await json(await apiFetch("/api/workspaces/" + workspaceId + "/media/douyin/downloads", {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          urls: jobUrls,
+          mode: request?.mode ?? "post",
+          media_kinds: request?.media_kinds ?? ["video"],
+          limit: request?.limit ?? 0,
+          incremental: true,
+          confirm_external_action: true,
+        }),
+      }));
+      setQueueFilter("active");
+      setVisibleJobCount(INITIAL_JOB_COUNT);
+      succeed(`Re-checking ${jobUrls.length === 1 ? "the source" : jobUrls.length + " sources"} for missing videos. Anything already saved is skipped.`);
+      await refreshJobs();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The re-check could not start.");
+    } finally {
+      setRefetchingJobId(null);
     }
   }
 
@@ -821,6 +882,17 @@ export default function Dashboard() {
                   <Button variant="secondary" size="sm" disabled={cancellingJobId === job.id} onClick={() => void cancelDownload(job.id)}><ActionIcon name="dismiss" />{cancellingJobId === job.id ? "Stopping…" : "Stop download"}</Button>
                 </div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
+                  {/* Every finished batch can be re-checked, downloaded ones
+                      included: the run lists each source afresh and skips
+                      what is already saved, so it costs one listing when
+                      nothing is missing - and tops the batch up when a capped
+                      profile has new posts or Douyin serves a deeper list. */}
+                  {sources.length > 0 && !ACTIVE_STATUSES.has(current) && <Button variant="secondary" size="sm"
+                    title="Re-check these sources and download anything missing. Files already saved are skipped."
+                    disabled={refetchingJobId === job.id}
+                    onClick={() => void refetchMissing(job)}>
+                    <ActionIcon name="refresh" />{refetchingJobId === job.id ? "Queuing…" : "Fetch missing"}
+                  </Button>}
                   {sources.length > 0 && <Button variant="secondary" size="sm" onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</Button>}
                   {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title={t("downloads.addCreatorProfile")} onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}
                   {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">{t("downloads.openSource")}</a>}
@@ -832,6 +904,28 @@ export default function Dashboard() {
                     )}>{t("downloads.openLibrary")}</Link>
                   )}
                 </div>}
+                {/* Coverage, where a count can be honest about its ceiling:
+                    what we hold of each profile against the total its page
+                    declares. Held is cumulative across every run, so a batch
+                    completed over several fetches still reads whole. */}
+                {(job.result?.source_stats ?? []).some((stat) => stat.declared_total) && (
+                  <div className="download-coverage" aria-label="Profile coverage">
+                    {(job.result?.source_stats ?? []).filter((stat) => stat.declared_total).map((stat) => {
+                      const held = stat.held ?? 0;
+                      const total = stat.declared_total ?? 0;
+                      const complete = total > 0 && held >= total;
+                      const who = stat.nickname ?? shortSource(stat.url);
+                      return (
+                        <span key={stat.url} className={complete ? "coverage-complete" : "coverage-partial"}
+                          title={`${held} of the ${total} posts ${who} declares are downloaded${complete
+                            ? "."
+                            : ". Douyin currently caps signed-out profile fetches at the newest posts - Fetch missing tops it up as new posts land, and takes everything the moment a deeper listing is served; signing in lifts the cap."}`}>
+                          {who} <b>{held}/{total}</b>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
                 {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}><ActionIcon name="confirm" />{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}><ActionIcon name="play" />{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}
                 {current === "empty" && !job.error && <div className="job-error"><strong>{t("downloads.noneSaved")}</strong><span>{t("downloads.reuseLinks")}</span><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div>}

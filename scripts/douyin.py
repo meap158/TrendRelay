@@ -31,11 +31,12 @@ REVISION = "ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7"
 #: and before the pip install that copies the source into the venv.
 PATCH_FILES = (
     ROOT / "scripts" / "patches" / "douyin-anonymous-first-page.patch",
+    ROOT / "scripts" / "patches" / "douyin-media-kind-filter.patch",
 )
 #: What a finished install writes to the marker. Includes the local patch
 #: generation so bumping a patch makes existing installs read as stale and
 #: reinstall, the same way bumping the revision does.
-LOCAL_BUILD = f"{REVISION}+trendrelay.2"
+LOCAL_BUILD = f"{REVISION}+trendrelay.3"
 DEFAULT_OUTPUT = ROOT / ".data" / "downloads" / "douyin"
 DEFAULT_DATABASE = ROOT / ".data" / "douyin" / "dy_downloader.db"
 DEFAULT_COOKIE_FILE = ROOT / ".data" / "douyin" / "cookies.json"
@@ -460,6 +461,15 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         # saves the bandwidth rather than fetching and discarding it.
         "cover": bool(getattr(args, "covers", False)),
         "music": bool(getattr(args, "music", False)),
+        # The provider otherwise treats a photo-note/gallery as primary media
+        # and downloads every image even with `cover` off. For TrendRelay,
+        # `--covers` is the opt-in to images as a kind: without it, skip gallery
+        # posts before any of their files are transferred.
+        "media_types": (
+            ["video", "gallery"]
+            if getattr(args, "covers", False)
+            else ["video"]
+        ),
         # Off: the provider's browser fallback opens a window that Douyin's
         # anti-bot caps or challenges anyway, so it added a popup mid-download
         # for no gain. A profile is paginated whole over the signed
@@ -503,6 +513,53 @@ def list_media_files(root: Path) -> set[Path]:
 def _search_snapshots(output: Path) -> list[Path]:
     board = output / "search"
     return sorted(board.glob("*.jsonl")) if board.is_dir() else []
+
+
+PROFILE_STATS_SCRIPT = ROOT / "scripts" / "douyin_profile_stats.py"
+
+
+def profile_stats(args: argparse.Namespace) -> int:
+    """Each profile URL's declared post total, as JSON on stdout.
+
+    Runs the venv-side script that borrows the provider's signed client:
+    `get_user_info` answers a signed-out session with the author's
+    `aweme_count`, the number the profile page prints as 作品 - which is what
+    lets a download report "41 of 882" instead of a bare count.
+    """
+    cookies, _source = resolve_cookies()
+    if not cookies_are_ready(cookies):
+        print(cookie_setup_message(), file=sys.stderr)
+        return 4
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".json", delete=False, encoding="utf-8"
+    ) as handle:
+        json.dump(cookies, handle, ensure_ascii=False)
+        cookie_path = Path(handle.name)
+    try:
+        completed = subprocess.run(
+            [
+                str(tool_python()), str(PROFILE_STATS_SCRIPT),
+                "--cookies", str(cookie_path), *args.urls,
+            ],
+            cwd=ROOT,
+            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=args.timeout,
+        )
+    finally:
+        with contextlib.suppress(OSError):
+            cookie_path.unlink()
+    if completed.stderr:
+        print(completed.stderr.strip(), file=sys.stderr)
+    if completed.returncode != 0:
+        return completed.returncode
+    # Nicknames are routinely CJK and the Windows console is routinely
+    # cp1252; write the JSON as UTF-8 bytes rather than let print() choke.
+    sys.stdout.buffer.write(completed.stdout.strip().encode("utf-8"))
+    sys.stdout.buffer.write(b"\n")
+    return 0
 
 
 def hot_topic(args: argparse.Namespace) -> int:
@@ -998,6 +1055,13 @@ def build_parser() -> argparse.ArgumentParser:
     hot_topics.add_argument("--limit", type=positive_integer, default=10)
     hot_topics.add_argument("--timeout", type=positive_integer, default=180)
     hot_topics.set_defaults(handler=hot_topic)
+    stats = subparsers.add_parser(
+        "profile-stats",
+        help="Each profile URL's declared post total, as JSON. No download.",
+    )
+    stats.add_argument("urls", nargs="+")
+    stats.add_argument("--timeout", type=positive_integer, default=120)
+    stats.set_defaults(handler=profile_stats)
     return parser
 
 
@@ -1023,6 +1087,8 @@ def main() -> int:
         return topic(args)
     if args.command == "trending":
         return trending(args)
+    if args.command == "profile-stats":
+        return profile_stats(args)
     return batch_download(args)
 
 

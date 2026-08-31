@@ -88,3 +88,29 @@ def test_single_video_runs_keep_incremental_either_way(monkeypatch) -> None:
         monkeypatch, "https://www.douyin.com/video/7412345", signed_in=False,
     )
     assert "--incremental" in command
+
+
+def test_coverage_line_reads_held_over_declared() -> None:
+    line = douyin._coverage_line([
+        {"url": "u1", "kind": "profile", "nickname": "DJ", "declared_total": 324, "held": 317},
+        {"url": "u2", "kind": "video"},
+        {"url": "u3", "kind": "profile", "declared_total": 412, "held": 39},
+    ])
+    assert line == "Profile coverage: DJ 317/324, profile 39/412."
+
+
+def test_coverage_line_counts_the_overflow_instead_of_listing_it() -> None:
+    stats = [
+        {"url": f"u{i}", "kind": "profile", "nickname": f"p{i}",
+         "declared_total": 100, "held": i}
+        for i in range(5)
+    ]
+    line = douyin._coverage_line(stats)
+    assert "p0 0/100" in line and "p2 2/100" in line
+    assert "and 2 more" in line
+    assert "p4" not in line
+
+
+def test_coverage_line_is_silent_without_declared_totals() -> None:
+    assert douyin._coverage_line([]) == ""
+    assert douyin._coverage_line([{"url": "u", "kind": "video"}]) == ""

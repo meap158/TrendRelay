@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -73,15 +74,25 @@ COOKIE_ENV_KEYS = (
 )
 SUPPORTED_CONTENT_PATHS = ("/video/", "/note/", "/user/", "/mix/", "/music/")
 
-#: What a profile fetch means to a signed-out session, said on the job rather
-#: than left to be discovered from the count. Douyin's login wall (late August
-#: 2026) hides everything past a profile's newest ~40 posts from anonymous
-#: callers - the website's own wall, enforced on the API too.
+#: The provider's own dedupe database, which records every fetched post with
+#: its author - the source for "how many of this profile do we hold".
+DY_DATABASE = PROJECT_ROOT / ".data" / "douyin" / "dy_downloader.db"
+
+#: How long the declared-total lookup may take for a whole batch of profile
+#: URLs. One resolve plus one profile read each; generous, not open-ended.
+PROFILE_STATS_TIMEOUT_SECONDS = 240
+
+#: What a capped profile fetch means, said on the job rather than left to be
+#: discovered from the count. Douyin started walling signed-out profile
+#: listings in late August 2026 - whole profiles downloaded fine until then,
+#: and every run still takes everything the session is offered, so if the wall
+#: lifts the same run fetches the whole profile again.
 ANONYMOUS_PROFILE_NOTE = (
-    "Douyin shows a signed-out session only a profile's newest ~40 posts - "
-    "its login wall, which the website shows too. Re-run the profile to pick "
-    "up new posts; the full history needs a signed-in Douyin session "
-    "(Connect on the Download tab)."
+    "Douyin is currently serving signed-out sessions only a profile's newest "
+    "posts (whole profiles downloaded in full until late August 2026, and "
+    "every run takes all it is offered - if the wall lifts, the same re-run "
+    "fetches everything). Re-run the source to top up; a signed-in session "
+    "lifts the cap entirely."
 )
 
 
@@ -101,6 +112,110 @@ def _session_signed_in() -> bool:
 
 def _is_profile_source(url: str) -> bool:
     return "/user/" in urlparse(url).path.lower()
+
+
+def _profile_stats(urls: list[str]) -> list[dict[str, Any]]:
+    """Each URL's declared post total, from the provider's signed client.
+
+    A read, not a download: `profile-stats` resolves short links, and for
+    profile URLs asks the user-info endpoint - which answers a signed-out
+    session - for the author's declared 作品 count. Failures degrade to an
+    empty list rather than failing the job: coverage is an annotation on a
+    download, never a precondition for one.
+    """
+    try:
+        completed = subprocess.run(
+            [
+                sys.executable, str(DOWNLOAD_SCRIPT), "profile-stats",
+                *urls, "--timeout", str(PROFILE_STATS_TIMEOUT_SECONDS - 30),
+            ],
+            cwd=PROJECT_ROOT,
+            env=_environment(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=PROFILE_STATS_TIMEOUT_SECONDS,
+        )
+        if completed.returncode != 0:
+            return []
+        parsed = json.loads(completed.stdout.strip() or "[]")
+        return parsed if isinstance(parsed, list) else []
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+
+
+def _held_counts(sec_uids: list[str]) -> dict[str, int]:
+    """How many posts of each author the provider's database already holds.
+
+    Read from a backup copy: the database is SQLite in WAL mode and may be
+    mid-write by the download itself, and the backup API is the one read that
+    sees a consistent snapshot.
+    """
+    if not sec_uids or not DY_DATABASE.is_file():
+        return {}
+    import sqlite3  # noqa: PLC0415 - the one function that reads this file
+    import tempfile  # noqa: PLC0415
+
+    snapshot = Path(tempfile.gettempdir()) / f"dy_coverage_{os.getpid()}.db"
+    try:
+        source = sqlite3.connect(str(DY_DATABASE))
+        try:
+            copy = sqlite3.connect(str(snapshot))
+            try:
+                source.backup(copy)
+                marks = ",".join("?" for _ in sec_uids)
+                rows = copy.execute(
+                    "select author_sec_uid, count(*) from aweme "
+                    f"where author_sec_uid in ({marks}) group by author_sec_uid",
+                    sec_uids,
+                ).fetchall()
+                return {str(uid): int(count) for uid, count in rows}
+            finally:
+                copy.close()
+        finally:
+            source.close()
+    except sqlite3.Error:
+        return {}
+    finally:
+        with contextlib.suppress(OSError):
+            snapshot.unlink()
+
+
+def _coverage_stats(urls: list[str]) -> list[dict[str, Any]]:
+    """Per-source coverage: what the profile declares vs what we hold."""
+    if not any(_is_profile_source(url) or urlparse(url).hostname == "v.douyin.com"
+               for url in urls):
+        return []
+    stats = _profile_stats(urls)
+    sec_uids = [str(s["sec_uid"]) for s in stats if s.get("sec_uid")]
+    held = _held_counts(sec_uids)
+    for entry in stats:
+        uid = str(entry.get("sec_uid") or "")
+        if uid:
+            entry["held"] = held.get(uid, 0)
+    return stats
+
+
+def _coverage_line(stats: list[dict[str, Any]]) -> str:
+    """One compact sentence of profile coverage, or nothing to say."""
+    profiles = [
+        entry for entry in stats
+        if entry.get("kind") == "profile" and entry.get("declared_total")
+    ]
+    if not profiles:
+        return ""
+    parts = [
+        f"{entry.get('nickname') or 'profile'} "
+        f"{int(entry.get('held') or 0)}/{int(entry['declared_total'])}"
+        for entry in profiles[:3]
+    ]
+    rest = len(profiles) - 3
+    return (
+        "Profile coverage: " + ", ".join(parts)
+        + (f", and {rest} more" if rest > 0 else "") + "."
+    )
 
 
 def _supported_source_url(url: str) -> bool:
@@ -1084,11 +1199,29 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         summary = f"Fetched {len(artifacts)} media file(s)"
         if source_errors:
             summary = f"{summary}; {len(source_errors)} source(s) failed"
-        if (
-            any(_is_profile_source(url) for url in request.get("urls", []))
-            and not _session_signed_in()
-        ):
-            summary = f"{summary}. {ANONYMOUS_PROFILE_NOTE}"
+        # Coverage, measured after the downloads so "held" includes them: the
+        # profile's declared 作品 total against what the provider's database
+        # holds for that author across every run - the honest answer to "do we
+        # have this profile", which one run's count alone cannot give.
+        source_stats = (
+            [] if payload.get("resume_from_disk")
+            else _coverage_stats(list(request.get("urls", [])))
+        )
+        coverage = _coverage_line(source_stats)
+        if coverage:
+            summary = f"{summary}. {coverage}"
+        incomplete_profiles = any(
+            entry.get("kind") == "profile"
+            and entry.get("declared_total")
+            and int(entry.get("held") or 0) < int(entry["declared_total"])
+            for entry in source_stats
+        )
+        wall_worth_naming = incomplete_profiles or (
+            not source_stats
+            and any(_is_profile_source(url) for url in request.get("urls", []))
+        )
+        if wall_worth_naming and not _session_signed_in():
+            summary = f"{summary} {ANONYMOUS_PROFILE_NOTE}"
         result = {
             **payload,
             "status": "succeeded",
