@@ -2273,6 +2273,12 @@ def campaign_analytics(
             "date": (local_today - timedelta(days=offset)).isoformat(),
             "views": 0.0,
             "engagement": 0.0,
+            # Engagement's own parts, carried separately so the page can chart
+            # every series rather than only the blended sum.
+            "likes": 0.0,
+            "comments": 0.0,
+            "shares": 0.0,
+            "saves": 0.0,
             "published": 0,
         }
         for offset in range(days - 1, -1, -1)
@@ -2294,6 +2300,8 @@ def campaign_analytics(
             day["published"] += 1
             day["views"] += float(metrics.get("views", 0))
             day["engagement"] += engagement
+            for field in ("likes", "comments", "shares", "saves"):
+                day[field] += float(metrics.get(field, 0))
         snapshots = execution.performance_snapshots or []
         if snapshots:
             observed = snapshots[-1].get("at")
@@ -2326,8 +2334,8 @@ def campaign_analytics(
         reverse=True,
     )
     for item in daily:
-        item["views"] = round(float(item["views"]), 2)
-        item["engagement"] = round(float(item["engagement"]), 2)
+        for field in ("views", "engagement", "likes", "comments", "shares", "saves"):
+            item[field] = round(float(item[field]), 2)
     for item in top_content:
         item["published_at"] = item["published_at"].isoformat()
 

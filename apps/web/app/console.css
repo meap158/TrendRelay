@@ -2378,6 +2378,20 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-trend-peak[data-below] { transform: translate(-50%, 7px); }
 
 .campaign-analytics-trend > span.campaign-trend-dates { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 9px; }
+
+/* The every-metric strip: seven small charts, each on its own scale, so the
+   shape of every series is visible at once instead of only the selected
+   one's. The selected tile wears the link tone the way a toggled control
+   does; the axis and the tooltip stay with the big chart it feeds. */
+.campaign-trend-minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 6px; }
+.campaign-trend-minis > button { display: grid; gap: 2px; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 9px 5px; background: var(--panel-raised); text-align: start; cursor: pointer; }
+.campaign-trend-minis > button:hover { border-color: var(--link); }
+.campaign-trend-minis > button.selected { border-color: var(--link); background: color-mix(in srgb, var(--link) 7%, var(--panel)); }
+.campaign-trend-minis > button > span { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-trend-minis > button > b { font-size: 13px; font-variant-numeric: tabular-nums; }
+.campaign-trend-minis > button svg { display: block; inline-size: 100%; block-size: 26px; }
+.campaign-trend-minis > button polygon { fill: color-mix(in srgb, var(--link) 10%, transparent); }
+.campaign-trend-minis > button polyline { fill: none; stroke: var(--link); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 /* One column. The coverage note used to sit beside the posts in a .7fr track
    with a 220px floor - about a quarter of the row for three short lines - and
    `align-items: start` left the rest of that track empty down the whole

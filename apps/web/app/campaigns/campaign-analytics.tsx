@@ -25,7 +25,8 @@ import { platformLabels, type PublishingPlatform } from "../publishing-icons";
 
 type AnalyticsRange = "today" | "7d" | "28d" | "90d";
 type RankingMetric = "views" | "engagement" | "likes" | "comments" | "shares" | "saves";
-type ChartMetric = "views" | "engagement" | "published";
+type ChartMetric =
+  | "views" | "engagement" | "likes" | "comments" | "shares" | "saves" | "published";
 
 type Totals = {
   views: number;
@@ -48,7 +49,16 @@ type Analytics = {
   ends_at: string;
   current: Totals;
   previous: Totals;
-  daily: { date: string; views: number; engagement: number; published: number }[];
+  daily: {
+    date: string;
+    views: number;
+    engagement: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    published: number;
+  }[];
   top_content: {
     id: string;
     asset_id: string | null;
@@ -92,11 +102,19 @@ const RANKING_LABELS: Record<RankingMetric, string> = {
   saves: "Saves",
 };
 
+//: Declared in display order: reach first, the engagement blend, then its
+//: parts, then output. The tooltip and the every-metric strip both read this.
 const CHART_LABELS: Record<ChartMetric, string> = {
   views: "Views",
   engagement: "Engagement",
+  likes: "Likes",
+  comments: "Comments",
+  shares: "Shares",
+  saves: "Saves",
   published: "Content published",
 };
+
+const CHART_METRICS = Object.keys(CHART_LABELS) as ChartMetric[];
 
 function compact(value: number) {
   return new Intl.NumberFormat(undefined, {
@@ -292,16 +310,15 @@ function TrendLine({
             <div className="campaign-trend-tooltip" role="status"
               style={{ "--trend-x": `${Math.min(82, Math.max(18, active.x))}%` } as CSSProperties}>
               <strong>{dateLabel(active.day.date)}</strong>
+              {/* Every series the API sends, not only the charted one: the
+                  tooltip is where one day's numbers are read side by side. */}
               <dl>
-                <div className={metric === "views" ? "selected" : ""}>
-                  <dt>Views</dt><dd>{compact(active.day.views)}</dd>
-                </div>
-                <div className={metric === "engagement" ? "selected" : ""}>
-                  <dt>Engagement</dt><dd>{compact(active.day.engagement)}</dd>
-                </div>
-                <div className={metric === "published" ? "selected" : ""}>
-                  <dt>Published</dt><dd>{compact(active.day.published)}</dd>
-                </div>
+                {CHART_METRICS.map((key) => (
+                  <div key={key} className={metric === key ? "selected" : ""}>
+                    <dt>{key === "published" ? "Published" : CHART_LABELS[key]}</dt>
+                    <dd>{compact(active.day[key])}</dd>
+                  </div>
+                ))}
               </dl>
             </div>
           ) : null}
@@ -313,6 +330,53 @@ function TrendLine({
         month: "short", day: "numeric",
       }) : ""}</time></span>
     </div>
+  );
+}
+
+/**
+ * One metric's small chart in the every-metric strip under the big one.
+ *
+ * Small multiples rather than one overlaid chart, on purpose: views outnumber
+ * saves a thousandfold here, and seven series on one axis is one line and six
+ * flat ones - which is exactly the "only the biggest number gets a chart"
+ * problem this strip exists to fix. Each mini carries its own scale, so every
+ * metric's *shape* is readable, and choosing one promotes it to the big chart
+ * where the axis and the tooltip live.
+ */
+function MiniTrend({
+  data,
+  metric,
+  selected,
+  onSelect,
+}: {
+  data: Analytics["daily"];
+  metric: ChartMetric;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const values = data.map((day) => day[metric]);
+  const maximum = Math.max(...values, 1);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const top = 2;
+  const bottom = 26;
+  const points = data.map((day, index) => {
+    const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
+    const y = bottom - ((day[metric]) / maximum) * (bottom - top);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+  const path = points.join(" ");
+  return (
+    <button type="button" className={selected ? "selected" : undefined}
+      aria-pressed={selected}
+      title={`Chart ${CHART_LABELS[metric].toLowerCase()} above`}
+      onClick={onSelect}>
+      <span>{CHART_LABELS[metric]}</span>
+      <b>{compact(total)}</b>
+      <svg viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points={`0,${bottom} ${path} 100,${bottom}`} />
+        <polyline points={path} />
+      </svg>
+    </button>
   );
 }
 
@@ -440,7 +504,9 @@ export function CampaignAnalytics({
   const [chartMetric, setChartMetric] = usePersistedState<ChartMetric>(
     `${preferenceScope}.chartMetric`,
     "views",
-    oneOf<ChartMetric>("views", "engagement", "published"),
+    oneOf<ChartMetric>(
+      "views", "engagement", "likes", "comments", "shares", "saves", "published",
+    ),
   );
   const [data, setData] = useState<Analytics | null>(null);
   const [busy, setBusy] = useState(false);
@@ -582,6 +648,23 @@ export function CampaignAnalytics({
               <small>Grouped by the date each post was published</small>
             </div>
             <TrendLine data={data.daily} metric={chartMetric} />
+            {/* Every metric charted at once, each on its own honest scale.
+                The big chart answers "how did this metric move"; this strip
+                answers "how did everything move", and hands any of them to
+                the big chart on a click. */}
+            <div className="campaign-trend-minis" role="group"
+              aria-label="Every metric's trend for this period. Select one to chart it in detail above.">
+              {CHART_METRICS.map((key) => (
+                <MiniTrend key={key} data={data.daily} metric={key}
+                  selected={chartMetric === key}
+                  onSelect={() => {
+                    setChartMetric(key);
+                    // The ranking below follows where it can: posts cannot be
+                    // ranked by "published", which is a fact about a day.
+                    if (key !== "published") setRanking(key);
+                  }} />
+              ))}
+            </div>
           </section>
 
           <div className="campaign-analytics-lower">
