@@ -303,6 +303,11 @@ function sinceLabel(iso: string) {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** TikTok's cap on a photo post's slideshow title, which Zernio fills from
+    the post's shared content and refuses over - the API's number, mirrored
+    here so the composer can preflight what the engine would refuse. */
+const TIKTOK_PHOTO_TITLE_LIMIT = 90;
+
 const DRAFT_KEY = "trendrelay.publish.draft";
 
 /**
@@ -789,6 +794,23 @@ export default function PublishPage() {
   const isCarousel = carouselTargetCount > 0;
   const tooManyImages = imageCapacity > 0 && imagePaths.length > imageCapacity;
   /**
+   * The TikTok photo-carousel wrinkle, mirrored from the delivery path.
+   *
+   * TikTok spends a photo post's shared content on its 90-character slideshow
+   * title. On a TikTok-only post the engine wrapper builds that title itself -
+   * the written title, else the caption's first line, trimmed - and the full
+   * caption rides as the description, so nothing needs doing here beyond
+   * saying so. A post shared with other networks cannot do that: they need
+   * the full caption in the same shared field, so the engine refuses the
+   * combination - and the refusal belongs on the submit button before the
+   * post is written, not in a failed delivery after it.
+   */
+  const tiktokPhotoChosen = chosenAccounts.some((account) =>
+    account.platform === "tiktok"
+    && (postTypes[account.id] ?? postTypesFor(account.id)[0]?.id) === "photo");
+  const tiktokPhotoShared = tiktokPhotoChosen
+    && chosenAccounts.some((account) => account.platform !== "tiktok");
+  /**
    * Whether any chosen destination can carry a topic.
    *
    * Asked of the engine delivering that destination rather than of the network,
@@ -1148,6 +1170,10 @@ export default function PublishPage() {
           : "An image post cannot share one delivery with a video-only destination. Send those separately."
       : tooManyImages
         ? `This image post has ${imagePaths.length} images and the tightest destination takes ${imageCapacity}`
+      : tiktokPhotoShared && caption.length > TIKTOK_PHOTO_TITLE_LIMIT
+        ? "A TikTok photo carousel spends the shared caption on its "
+          + `${TIKTOK_PHOTO_TITLE_LIMIT}-character slideshow title. Publish it `
+          + "as its own post, or shorten the caption."
       : topicProblem
         ? topicProblem
       : !caption.trim()
@@ -3592,6 +3618,19 @@ export default function PublishPage() {
               <small className={`char-count${captionOver > 0 ? " over" : captionOver > -20 ? " close" : ""}`}>
                 {caption.length.toLocaleString()} / {captionLimit.caption.toLocaleString()}
                 <i>tightest: {platformLabels[captionLimit.platform as PublishingPlatform]}</i>
+              </small>
+            )}
+            {/* What TikTok does with a photo post's words, said where the
+                words are written. On a TikTok-only carousel the engine builds
+                the 90-character slideshow title itself and posts the full
+                caption as the description; shared with other networks that
+                trick is impossible and the submit button explains. */}
+            {tiktokPhotoChosen && !tiktokPhotoShared && (
+              <small>
+                TikTok shows a {TIKTOK_PHOTO_TITLE_LIMIT}-character slideshow
+                title over the pictures — your title, or this caption&apos;s
+                first line, trimmed to fit. The full caption posts as the
+                description.
               </small>
             )}
           </label>
