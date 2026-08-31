@@ -1,5 +1,5 @@
 diff --git a/core/downloader_base.py b/core/downloader_base.py
-index 058e60a..074a0a4 100644
+index 058e60a..213ac30 100644
 --- a/core/downloader_base.py
 +++ b/core/downloader_base.py
 @@ -174,6 +174,20 @@ class BaseDownloader(ABC):
@@ -15,7 +15,7 @@ index 058e60a..074a0a4 100644
 +            recorded = ""
 +            if self.database and hasattr(self.database, "recorded_file_path"):
 +                recorded = await self.database.recorded_file_path(aweme_id)
-+            if recorded and Path(recorded).is_file():
++            if recorded and self._recorded_media_exists(recorded, aweme_id):
 +                logger.info(
 +                    "Aweme %s already held at %s, skipping", aweme_id, recorded
 +                )
@@ -23,7 +23,37 @@ index 058e60a..074a0a4 100644
              logger.info(
                  "Aweme %s exists in database but media file not found locally, retry download",
                  aweme_id,
-@@ -447,6 +461,19 @@ class BaseDownloader(ABC):
+@@ -186,6 +200,29 @@ class BaseDownloader(ABC):
+ 
+         return True
+ 
++    def _recorded_media_exists(self, recorded: str, aweme_id: str) -> bool:
++        # TrendRelay: rows from before the per-file recording recorded the
++        # post *directory*, so a bare is_file() re-downloaded whole held
++        # profiles. A directory counts when a file inside it carries the
++        # aweme id in its name - the same identity the local index matches.
++        candidate = Path(recorded)
++        if candidate.is_file():
++            return True
++        if not candidate.is_dir() or not aweme_id:
++            return False
++        cache = getattr(self, "_recorded_dir_cache", None)
++        if cache is None:
++            cache = {}
++            self._recorded_dir_cache = cache
++        listing = cache.get(recorded)
++        if listing is None:
++            try:
++                listing = [entry.name for entry in candidate.iterdir()]
++            except OSError:
++                listing = []
++            cache[recorded] = listing
++        return any(aweme_id in name for name in listing)
++
+     def _is_locally_downloaded(self, aweme_id: str) -> bool:
+         if not aweme_id:
+             return False
+@@ -447,6 +484,19 @@ class BaseDownloader(ABC):
          save_dir = file_context["save_dir"]
          downloaded_files: List[Path] = []
  
