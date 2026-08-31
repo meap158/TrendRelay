@@ -1,3 +1,48 @@
+diff --git a/core/downloader_base.py b/core/downloader_base.py
+index 058e60a..074a0a4 100644
+--- a/core/downloader_base.py
++++ b/core/downloader_base.py
+@@ -174,6 +174,20 @@ class BaseDownloader(ABC):
+             return False
+ 
+         if in_db and not in_local:
++            # TrendRelay: "not in this folder" is not "not on disk". Jobs
++            # download into per-job folders, so the local index misses every
++            # file an earlier job fetched, and retrying re-downloaded whole
++            # already-held profiles (a re-check of one profile pulled 7GB it
++            # already had). The database records where the file went; if it
++            # is still there, the post is held and is skipped.
++            recorded = ""
++            if self.database and hasattr(self.database, "recorded_file_path"):
++                recorded = await self.database.recorded_file_path(aweme_id)
++            if recorded and Path(recorded).is_file():
++                logger.info(
++                    "Aweme %s already held at %s, skipping", aweme_id, recorded
++                )
++                return False
+             logger.info(
+                 "Aweme %s exists in database but media file not found locally, retry download",
+                 aweme_id,
+@@ -447,6 +461,19 @@ class BaseDownloader(ABC):
+         save_dir = file_context["save_dir"]
+         downloaded_files: List[Path] = []
+ 
++        allowed_media_types = self.config.get("media_types")
++        if (
++            isinstance(allowed_media_types, list)
++            and media_type not in allowed_media_types
++        ):
++            logger.info(
++                "Skipping %s aweme %s because this run requested %s",
++                media_type,
++                aweme_id,
++                ", ".join(str(item) for item in allowed_media_types),
++            )
++            return True
++
+         session = await self.api_client.get_session()
+         video_path: Optional[Path] = None
+         # 可选资产（封面/音乐/头像）相互独立且不影响主媒体成败：先登记
 diff --git a/core/user_modes/base_strategy.py b/core/user_modes/base_strategy.py
 index 033a070..ba897a8 100644
 --- a/core/user_modes/base_strategy.py
@@ -47,3 +92,27 @@ index 5c7ed45..ad23ee3 100644
              page = self._normalize_page_data(page_data)
              page_items = self.select_items(page)
  
+diff --git a/storage/database.py b/storage/database.py
+index 8023e53..b25d17f 100644
+--- a/storage/database.py
++++ b/storage/database.py
+@@ -241,6 +241,19 @@ class Database:
+         result = await cursor.fetchone()
+         return result is not None
+ 
++    async def recorded_file_path(self, aweme_id: str) -> str:
++        # TrendRelay: where the post's file already lives, if anywhere. The
++        # caller checks existence; jobs download into per-job folders, so
++        # "not in this folder" says nothing about "not on disk".
++        db = await self._get_conn()
++        cursor = await db.execute(
++            "SELECT file_path FROM aweme WHERE aweme_id = ? "
++            "AND file_path IS NOT NULL AND file_path != ''",
++            (aweme_id,),
++        )
++        row = await cursor.fetchone()
++        return str(row[0]) if row and row[0] else ""
++
+     # Preserving upsert: metadata-ish fields always update, but download
+     # artifacts (file_path / metadata / download_time) and enrichments
+     # (cover_urls / job_id) survive upserts that arrive without them.
