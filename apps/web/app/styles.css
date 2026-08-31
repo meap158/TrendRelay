@@ -647,9 +647,18 @@ nav strong { color: var(--text); }
 .preview-surface::after { content: ""; position: absolute; inset: 45% 0 0; background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, .55)); }
 .preview-surface > * { position: relative; z-index: 1; }
 
-/* Down the right, in the order every one of these networks uses: react,
-   reply, send on, keep, more. */
+/* Down the right, in whichever order this network stacks them - the icons
+   themselves come from SURFACE_FURNITURE, because the four surfaces that get
+   a rail do not agree on what is in it. */
 .preview-surface-rail { display: grid; gap: 14px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 10px 74px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
+
+/* A Story wears its furniture at the top, so the wash goes there too. */
+.preview-surface.is-story::after { inset: 0 0 55%; background: linear-gradient(to top, transparent, rgba(0, 0, 0, .5)); }
+.preview-surface-story { display: grid; gap: 8px; align-self: start; padding: 8px 10px; color: var(--on-media); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+/* One segment, part-watched: enough to read as a Story rather than as a
+   loading bar, without claiming a number of frames nobody has chosen. */
+.preview-surface-progress { display: block; block-size: 2px; border-radius: 999px; background: rgba(255, 255, 255, .35); }
+.preview-surface-progress i { display: block; inline-size: 38%; block-size: 100%; border-radius: 999px; background: var(--on-media); }
 
 .preview-surface-foot { display: grid; gap: 4px; padding: 0 46px 10px 12px; color: var(--on-media); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
 .preview-surface-who { display: flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 600; }
@@ -665,6 +674,8 @@ nav strong { color: var(--text); }
    take it. */
 .preview-surface-caption { display: -webkit-box; overflow: hidden; margin: 0; color: var(--on-media); font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .preview-surface-audio { display: flex; gap: 5px; align-items: center; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+/* Facebook sets the sound in a pill; the others print it on the video. */
+.preview-surface-audio.chip { justify-self: start; max-inline-size: 100%; margin-block-start: 2px; padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, .45); text-shadow: none; }
 
 /* How each width frames a full-bleed surface.
 

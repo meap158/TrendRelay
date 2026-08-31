@@ -5,11 +5,16 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Forward,
   Heart,
+  type LucideIcon,
   MessageCircle,
   MoreHorizontal,
+  MoreVertical,
   Music2,
   Send,
+  ThumbsDown,
+  ThumbsUp,
 } from "lucide-react";
 import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
 import { apiBaseUrl } from "../../lib/api";
@@ -21,6 +26,7 @@ import {
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
+import { SURFACE_FURNITURE, type RailAction } from "./preview-surfaces";
 import {
   AssetFilters,
   type AssetFacets,
@@ -370,6 +376,21 @@ export function MediaPicker({
   );
 }
 
+/** Which icon stands for each action, and how big this surface draws it.
+    The rails themselves are in `preview-surfaces.ts`; this is only the
+    alphabet they are written in. */
+const RAIL_ICONS: Record<RailAction, readonly [LucideIcon, number]> = {
+  heart: [Heart, 20],
+  thumbUp: [ThumbsUp, 20],
+  thumbDown: [ThumbsDown, 20],
+  comment: [MessageCircle, 20],
+  send: [Send, 20],
+  share: [Forward, 20],
+  save: [Bookmark, 20],
+  more: [MoreHorizontal, 18],
+  menu: [MoreVertical, 18],
+};
+
 /**
  * How the post will read on the network it is going to.
  *
@@ -504,6 +525,35 @@ export function PostPreview({
   };
   const showsTitle = showsTitleProp
     ?? (platform === "youtube" || platform === "reddit" || platform === "pinterest");
+  /**
+   * This network's own furniture, or none.
+   *
+   * No entry means no rail. A network that gains a Reel later gets a preview
+   * with nothing down the side rather than Instagram's buttons, which is what
+   * this table exists to stop.
+   */
+  const furniture = SURFACE_FURNITURE[platform];
+  const account = (
+    <span className="preview-surface-who">
+      {/* The account's own picture where its engine sends one, and the
+          platform mark where it does not - which is half of them. Not a grey
+          circle: an empty ring reads as a picture that failed rather than one
+          nobody has.
+
+          `no-referrer` because this is the engine's CDN rather than ours, and
+          a preview is not a reason to tell it which page somebody is
+          composing on. */}
+      <i>
+        {avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatar} alt="" loading="lazy" referrerPolicy="no-referrer" />
+        ) : (
+          <PlatformIcon platform={platform} size={13} />
+        )}
+      </i>
+      <b>{furniture?.at ? `@${handle || "your account"}` : handle || "your account"}</b>
+    </span>
+  );
 
   return (
     <figure
@@ -560,56 +610,40 @@ export function PostPreview({
             ? t("composer.choosePicturesForFrames")
             : t("composer.chooseClipForFrame")}</p>
         )}
-        {/* The surface's own furniture, over the media the way the network
-            draws it: who posted, what they said, and the rail of actions down
-            the side. Without it a 9:16 clip previews as a bare video and the
-            question "will the caption clear the buttons" cannot be asked.
-
-            The actions carry no counts. Every number here would be invented -
-            this post has not been published and has no engagement - and a
-            preview that shows "17.3K" is a preview somebody can misread as a
-            forecast. The shapes are what make it legible as Instagram; the
-            figures would only make it a lie. */}
+        {/* The surface's own furniture, over the media the way that network
+            draws it: who posted, what they said, and its own actions. Without
+            it a 9:16 clip previews as a bare video and the question "will the
+            caption clear the buttons" cannot be asked - and with the wrong
+            network's buttons it is answered about the wrong network. Which
+            buttons those are is `SURFACE_FURNITURE`. */}
         {overlaid && showing && (
-          <div className="preview-surface" aria-hidden="true">
-            <div className="preview-surface-rail">
-              <Heart size={20} />
-              <MessageCircle size={20} />
-              <Send size={20} />
-              <Bookmark size={20} />
-              <MoreHorizontal size={18} />
-            </div>
+          <div className={`preview-surface${story ? " is-story" : ""}`} aria-hidden="true">
+            {/* A Story has no rail. Its furniture is at the top - the segment
+                bar and who is posting - and its actions are a reply box, not
+                a column of buttons. */}
+            {story ? (
+              <div className="preview-surface-story">
+                <span className="preview-surface-progress"><i /></span>
+                {account}
+              </div>
+            ) : furniture ? (
+              <div className="preview-surface-rail">
+                {furniture.rail.map((action) => {
+                  const [Icon, size] = RAIL_ICONS[action];
+                  return <Icon key={action} size={size} />;
+                })}
+              </div>
+            ) : null}
             {!story && (
               <div className="preview-surface-foot">
-                <span className="preview-surface-who">
-                  {/* The account's own picture where its engine sends one,
-                      and the platform mark where it does not - which is half
-                      of them. Not a grey circle: an empty ring reads as a
-                      picture that failed rather than one nobody has.
-
-                      `no-referrer` because this is the engine's CDN rather
-                      than ours, and a preview is not a reason to tell it which
-                      page somebody is composing on. */}
-                  <i>
-                    {avatar ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={avatar}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <PlatformIcon platform={platform} size={13} />
-                    )}
-                  </i>
-                  <b>{handle || "your account"}</b>
-                </span>
+                {account}
                 {caption && <p className="preview-surface-caption">{caption}</p>}
-                <span className="preview-surface-audio">
-                  <Music2 size={11} />
-                  {handle || "your account"} · Original audio
-                </span>
+                {furniture && (
+                  <span className={`preview-surface-audio${furniture.chip ? " chip" : ""}`}>
+                    <Music2 size={11} />
+                    {furniture.audio(handle || "your account")}
+                  </span>
+                )}
               </div>
             )}
           </div>
