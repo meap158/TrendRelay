@@ -170,6 +170,26 @@ function TrendLine({
   const first = data.at(0)?.date;
   const last = data.at(-1)?.date;
   const active = activeIndex === null ? null : points[activeIndex] ?? null;
+  /**
+   * The one point worth labelling without being asked.
+   *
+   * A tooltip enhances; it must not be the only way to read a number, and the
+   * peak is the number everybody wants - the chart's whole shape is one spike
+   * and "how high" was unanswerable without finding the hover.
+   *
+   * The extreme only, never a number on every point: direct labels work
+   * because they are sparing. Nothing is labelled when the series is flat or
+   * empty, because then there is no extreme to point at.
+   */
+  const peakIndex = values.reduce(
+    (best, value, index) => (value > (values[best] ?? -1) ? index : best),
+    0,
+  );
+  const peak = values.length > 1
+    && (values[peakIndex] ?? 0) > 0
+    && new Set(values).size > 1
+    ? points[peakIndex] ?? null
+    : null;
   const spokenPoint = active ?? points.at(-1);
   const dateLabel = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString(
     undefined,
@@ -245,6 +265,22 @@ function TrendLine({
               onBlur={() => setActiveIndex(null)}
               onKeyDown={moveByKeyboard} />
           </svg>
+          {/* Hidden while that point is the hovered one - the tooltip is
+              already saying it, and two readouts of one number at one place
+              read as two numbers. */}
+          {peak && peakIndex !== activeIndex ? (
+            <span className="campaign-trend-peak" aria-hidden="true"
+              /* Below its point when there is no room above it. A label that
+                 does not fit is moved, never clipped, and a peak that fills
+                 the plot leaves nothing overhead. */
+              data-below={peak.y / 44 < 0.2 ? "" : undefined}
+              style={{
+                // Clamped so a label at either end is not clipped by the plot
+                // it belongs to; it is centred on its point everywhere else.
+                "--trend-point-x": `${Math.min(92, Math.max(8, peak.x))}%`,
+                "--trend-point-y": `${(peak.y / 44) * 100}%`,
+              } as CSSProperties}>{compact(values[peakIndex] ?? 0)}</span>
+          ) : null}
           {active ? (
             <span className="campaign-trend-active-dot" aria-hidden="true"
               style={{

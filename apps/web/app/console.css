@@ -2346,7 +2346,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-trend-canvas { position: relative; min-width: 0; }
 .campaign-trend-plot svg { display: block; inline-size: 100%; block-size: clamp(120px, 18vw, 190px); overflow: visible; }
 .campaign-analytics-trend line { vector-effect: non-scaling-stroke; }
-.campaign-analytics-trend line.campaign-trend-gridline { stroke: color-mix(in srgb, var(--line) 72%, transparent); stroke-width: .55; stroke-dasharray: 2 3; }
+/* Solid hairlines, one shade off the surface. Dashed they read as a
+   projection or a threshold rather than as a grid, and they were the
+   busiest thing behind a number somebody is trying to read. Quiet comes
+   from the stroke being faint, not from it being broken up. */
+.campaign-analytics-trend line.campaign-trend-gridline { stroke: color-mix(in srgb, var(--line) 72%, transparent); stroke-width: .55; }
 .campaign-analytics-trend line.campaign-trend-y-axis,
 .campaign-analytics-trend line.campaign-trend-y-tick { stroke: var(--line-strong); stroke-width: 1; }
 .campaign-analytics-trend polygon { fill: color-mix(in srgb, var(--link) 10%, transparent); }
@@ -2357,13 +2361,22 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-trend-active-dot { position: absolute; z-index: 2; inset-block-start: clamp(4px, var(--trend-point-y), calc(100% - 4px)); inset-inline-start: clamp(4px, var(--trend-point-x), calc(100% - 4px)); box-sizing: border-box; inline-size: 8px; block-size: 8px; transform: translate(-50%, -50%); border: 2px solid var(--panel); border-radius: 50%; background: var(--link); box-shadow: 0 1px 2px rgb(0 0 0 / 20%); pointer-events: none; }
 .campaign-trend-hit-area { fill: transparent; stroke: transparent; stroke-width: .5; cursor: crosshair; pointer-events: all; }
 .campaign-trend-hit-area:focus { outline: none; stroke: color-mix(in srgb, var(--link) 38%, transparent); }
-.campaign-trend-tooltip { position: absolute; z-index: 3; inset-block-start: 5px; inset-inline-start: var(--trend-x); display: grid; min-inline-size: 190px; gap: 6px; transform: translateX(-50%); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 9px; color: var(--text); background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: var(--shadow-sm); pointer-events: none; }
-.campaign-trend-tooltip > strong { font-size: 10px; }
+.campaign-trend-tooltip { position: absolute; z-index: 3; inset-block-start: 5px; inset-inline-start: var(--trend-x); display: grid; min-inline-size: 232px; gap: 8px; transform: translateX(-50%); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 11px 13px; color: var(--text); background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: var(--shadow-sm); pointer-events: none; }
+.campaign-trend-tooltip > strong { font-size: 11px; }
 .campaign-trend-tooltip dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
 .campaign-trend-tooltip dl > div { display: grid; gap: 1px; min-width: 0; border-inline-start: 2px solid var(--line); padding-inline-start: 6px; }
 .campaign-trend-tooltip dl > div.selected { border-color: var(--link); }
-.campaign-trend-tooltip dt { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.campaign-trend-tooltip dd { margin: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* The value leads and the name follows: the reader already has the date and
+   came for the number. At 8px against an 11px value both were small enough
+   to squint at, which is the opposite of a readout. */
+.campaign-trend-tooltip dt { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-trend-tooltip dd { margin: 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+/* The peak, labelled where it is. Text tokens rather than the series colour:
+   the line beside it already carries the identity, and a coloured number
+   reads as a second series. Sits above its point, and above the fill. */
+.campaign-trend-peak { position: absolute; z-index: 2; inset-block-start: var(--trend-point-y); inset-inline-start: var(--trend-point-x); transform: translate(-50%, calc(-100% - 7px)); border-radius: 999px; padding: 1px 6px; color: var(--text); background: color-mix(in srgb, var(--panel) 88%, transparent); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.campaign-trend-peak[data-below] { transform: translate(-50%, 7px); }
+
 .campaign-analytics-trend > span.campaign-trend-dates { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 9px; }
 /* One column. The coverage note used to sit beside the posts in a .7fr track
    with a 220px floor - about a quarter of the row for three short lines - and
