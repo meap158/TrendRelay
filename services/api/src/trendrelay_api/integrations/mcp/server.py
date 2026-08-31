@@ -237,12 +237,17 @@ def build_server(workspace_id: str) -> FastMCP:
             "Posts that already went out, ranked by the interactions they "
             "earned - likes, comments, shares and saves - with the copy that "
             "earned them: caption, first comment, thread, the products it "
-            "linked and a permalink. Use it to write from what worked rather "
-            "than from the brief alone. Narrow with campaign_id or platform; "
-            "sort_by takes interactions (default), views, likes, comments, "
-            "shares, saves or watch_seconds. A post nobody has read back yet "
-            "says measured: false and carries no figures - that is not the "
-            "same as a post that got nothing, and it never outranks one."
+            "linked and a permalink. Every post also names the clip behind it "
+            "(video_title, asset_id, duration_seconds) so a winner can be "
+            "found again and used, and carries every figure at once in "
+            "`metrics` - views, likes, comments, shares, saves, watch_seconds "
+            "- so one call answers what did well without asking again per "
+            "measure. `sort_by` only decides the order: interactions "
+            "(default), views, likes, comments, shares, saves or "
+            "watch_seconds. Narrow with campaign_id or platform. A post "
+            "nobody has read back yet says measured: false and carries no "
+            "figures - that is not the same as a post that got nothing, and "
+            "it never outranks one."
         ),
     )
     def list_published_posts(

@@ -726,8 +726,11 @@ def list_published_posts(
     }
     offers = _offer_names(session, workspace_id)
 
+    executions = session.scalars(query).all()
+    clips = _clip_index(session, workspace_id, executions)
+
     posts: list[dict[str, Any]] = []
-    for execution in session.scalars(query).all():
+    for execution in executions:
         metrics = latest_metrics(execution)
         measured = bool(metrics)
         posts.append({
@@ -750,6 +753,15 @@ def list_published_posts(
             "link_placement": execution.placement,
             "products": [offers.get(offer_id, offer_id) for offer_id in execution.offer_ids or []],
             "media_kind": "images" if execution.image_paths else "video",
+            # Which clip earned this. Without it the whole list is unusable for
+            # the thing it exists for: an assistant told a post took 1,133
+            # views can read the copy that earned them and has no way to say
+            # which video it was, or to find it again.
+            #
+            # The Library id as well as the name, because the name is for a
+            # person to recognise and the id is what `list_library_assets`
+            # and `create_campaign_post` take.
+            **_clip_of(execution, clips),
             "measured": measured,
             # Whether figures could ever arrive for this post, which is a fact
             # about the engine that published it rather than about the post.
@@ -770,6 +782,57 @@ def list_published_posts(
         reverse=True,
     )
     return posts[:max(1, min(limit, 100))]
+
+
+def _clip_index(
+    session: Session, workspace_id: str, executions: list[Any]
+) -> dict[str, Any]:
+    """Every Library asset behind a page of published posts, in one query.
+
+    A post can outlive its asset - the file is what went out and the Library
+    row is what describes it - so a missing row is a name this cannot give
+    rather than an error.
+    """
+    ids = {execution.asset_id for execution in executions if execution.asset_id}
+    if not ids:
+        return {}
+    from trendrelay_api.media_models import MediaAsset
+
+    found = session.scalars(
+        select(MediaAsset).where(
+            MediaAsset.id.in_(ids), MediaAsset.workspace_id == workspace_id
+        )
+    ).all()
+    return {asset.id: asset for asset in found}
+
+
+def _clip_of(execution: Any, clips: dict[str, Any]) -> dict[str, Any]:
+    """What this post was made of, named so somebody can find it again."""
+    asset = clips.get(execution.asset_id or "")
+    name = ""
+    if asset is not None and (asset.title or "").strip():
+        name = asset.title.strip()
+    else:
+        # The file's own name when the Library no longer describes it: a post
+        # outlives its asset, and the path is still there.
+        path = execution.media_path or (
+            execution.image_paths[0] if execution.image_paths else ""
+        )
+        name = path.replace("\\", "/").rsplit("/", 1)[-1] if path else ""
+    # Trimmed however it was found, which is what `_asset_title` does for a
+    # post that still needs copy. Two tools describing one clip have to name it
+    # the same way, or an assistant reading both cannot tell it is one clip.
+    for suffix in (".mp4", ".mov", ".webm", ".mkv", ".jpg", ".jpeg", ".png", ".webp"):
+        if name.lower().endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return {
+        "video_title": name or None,
+        "asset_id": execution.asset_id,
+        "duration_seconds": _duration_seconds(asset),
+        # How many pictures a carousel carried, and nothing for a video.
+        "image_count": len(execution.image_paths) if execution.image_paths else None,
+    }
 
 
 def _offer_names(session: Session, workspace_id: str) -> dict[str, str]:

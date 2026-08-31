@@ -2451,3 +2451,107 @@ def test_the_lock_shows_in_the_posts_context(session) -> None:
 
     assert found["locked_slot"] is not None
     assert found["locked_slot"].startswith(tomorrow)
+
+
+# --- which clip earned it, and every figure at once -----------------------------
+
+
+def test_a_published_post_names_the_clip_that_earned_it(session) -> None:
+    """The list exists so an assistant can write from what worked. Knowing a
+    post took a thousand views is only actionable if the clip behind it can be
+    found again - the copy alone does not say which video it was.
+    """
+    _image_asset(session, "img1", r"S:\media\winner.png")
+    session.query(__import__("trendrelay_api.media_models", fromlist=["MediaAsset"])
+                  .MediaAsset).filter_by(id="img1").update({"title": "A winning clip"})
+    session.commit()
+    _published(session, "ex1", asset_id="img1")
+
+    [post] = context.list_published_posts(session, "ws", None, None, "interactions", 10)
+
+    assert post["video_title"] == "A winning clip"
+    # The id too: the name is for a person to recognise, the id is what
+    # `list_library_assets` and `create_campaign_post` actually take.
+    assert post["asset_id"] == "img1"
+
+
+def test_a_post_whose_asset_has_left_the_library_still_names_its_file(
+    session,
+) -> None:
+    """A post outlives its asset - the file is what went out, the Library row
+    is only what describes it - so the path is the name of last resort."""
+    _published(session, "ex1", media_path=r"S:\media\2026-08-06_a_clip.mp4")
+
+    [post] = context.list_published_posts(session, "ws", None, None, "interactions", 10)
+
+    assert post["video_title"] == "2026-08-06_a_clip"
+    assert post["asset_id"] is None
+
+
+def test_a_clip_is_named_the_same_way_by_both_tools(session) -> None:
+    """`list_posts_needing_copy` trims the extension and this one did not, so
+    one clip appeared under two names to an assistant reading both."""
+    _published(session, "ex1", media_path=r"S:\media\same_clip.mp4")
+
+    [post] = context.list_published_posts(session, "ws", None, None, "interactions", 10)
+
+    assert not post["video_title"].endswith(".mp4")
+
+
+def test_one_call_carries_every_figure_rather_than_the_sorted_one(session) -> None:
+    """`sort_by` decides the order and nothing else.
+
+    Asking six times to learn six measures would be six reads of the same rows,
+    and an assistant comparing posts needs them side by side anyway.
+    """
+    _published(session, "ex1", performance_snapshots=_snapshot(
+        views=900.0, likes=30.0, comments=4.0, shares=2.0, saves=1.0,
+        watch_seconds=1200.0,
+    ))
+
+    for order in ("interactions", "views", "likes", "watch_seconds"):
+        [post] = context.list_published_posts(session, "ws", None, None, order, 10)
+        assert set(post["metrics"]) >= {
+            "views", "likes", "comments", "shares", "saves", "watch_seconds"
+        }, order
+        assert post["interactions"] == 37.0
+
+
+def test_a_carousel_says_how_many_pictures_it_carried(session) -> None:
+    _published(
+        session, "ex1", media_path="",
+        image_paths=[r"S:\a.png", r"S:\b.png", r"S:\c.png"],
+    )
+
+    [post] = context.list_published_posts(session, "ws", None, None, "interactions", 10)
+
+    assert post["media_kind"] == "images"
+    assert post["image_count"] == 3
+
+
+def test_naming_the_clips_costs_one_query_for_a_whole_page(session) -> None:
+    """A page of twenty winners must not be twenty lookups."""
+    from trendrelay_api.media_models import MediaAsset
+
+    for index in range(6):
+        _image_asset(session, f"a{index}", rf"S:\media\{index}.png")
+        _published(session, f"ex{index}", asset_id=f"a{index}")
+
+    seen = {"queries": 0}
+    real = MediaAsset.__table__
+
+    from sqlalchemy import event
+    engine = session.get_bind()
+
+    def count(_conn, _cursor, statement, *_args):
+        if real.name in statement and "SELECT" in statement:
+            seen["queries"] += 1
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        posts = context.list_published_posts(session, "ws", None, None, "interactions", 20)
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+    assert len(posts) == 6
+    assert seen["queries"] == 1, f"{seen['queries']} lookups for one page"
