@@ -660,7 +660,10 @@ nav strong { color: var(--text); }
 /* Fills the ring, cropped square like every network crops it. */
 .preview-surface-who i img { inline-size: 100%; block-size: 100%; border-radius: 999px; object-fit: cover; }
 /* Two lines, like the real one: past that a caption is behind a More. */
-.preview-surface-caption { display: -webkit-box; overflow: hidden; margin: 0; font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* Says its own colour rather than inheriting one. The furniture around it
+   is white on video by definition, and inheritance is what let a page rule
+   take it. */
+.preview-surface-caption { display: -webkit-box; overflow: hidden; margin: 0; color: var(--on-media); font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .preview-surface-audio { display: flex; gap: 5px; align-items: center; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* How each width frames a full-bleed surface.
@@ -691,7 +694,13 @@ nav strong { color: var(--text); }
    to it reads from cache instead of starting a request and blanking the box.
    Given a size rather than display:none so the load is never skipped. */
 .preview-preload { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
-.post-preview-frame p { margin: 0; padding: 0 16px; color: var(--muted); text-align: center; line-height: 1.5; }
+/* The frame's own placeholder - "choose a clip to see this" - and nothing
+   else. A direct child, because the surface drawn over the media carries a
+   caption in a `p` too, and this rule was reaching it: an overlay meant to
+   be white-on-video came out muted grey, centred, padded and at the wrong
+   line height, because an inherited colour loses to any declaration however
+   distant. */
+.post-preview-frame > p { margin: 0; padding: 0 16px; color: var(--muted); text-align: center; line-height: 1.5; }
 .post-preview-copy { display: grid; gap: 3px; }
 .post-preview-copy strong { font-weight: 500; }
 .post-preview-copy p { margin: 0; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
