@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { File as FileIcon, ImageOff, RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { useT } from "./i18n-provider";
@@ -18,8 +18,9 @@ import { useJobs } from "./jobs-provider";
 import { useWorkspace } from "./workspace-provider";
 import { readTabSnapshot, refreshTabSnapshot } from "../lib/tab-snapshots";
 import { downloadLibraryHref } from "../lib/job-links";
+import { useOpaqueMedia } from "../lib/media-preview";
 
-type Artifact = { path: string; name: string; size_bytes: number };
+type Artifact = { path: string; name: string; size_bytes: number; sha256?: string };
 type DownloadProgress = {
   folder_exists: boolean;
   files_downloaded: number;
@@ -64,6 +65,66 @@ type MediaStatus = {
   tiktok: { installed: boolean; active: boolean; reason: string };
 };
 type QueueFilter = "all" | "active" | "completed" | "attention";
+
+function DownloadArtifactThumbnail({
+  artifact,
+  workspaceId,
+  apiFetch,
+}: {
+  artifact: Artifact;
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const previewable = /\.(?:mp4|m4v|mov|webm|mkv|jpe?g|png|webp|gif)$/i.test(artifact.path);
+  const source = previewable
+    ? `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(artifact.path)}${artifact.sha256 ? `&sha256=${artifact.sha256}` : ""}`
+    : "";
+  const { objectUrl, problem } = useOpaqueMedia(
+    source,
+    artifact.path,
+    "image/jpeg",
+    Boolean(source),
+    apiFetch,
+  );
+
+  if (objectUrl) {
+    // eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL
+    return <img className="download-artifact-thumbnail" src={objectUrl} alt="" loading="lazy" />;
+  }
+
+  /**
+   * Three reasons a row has no picture, drawn as three different things.
+   *
+   * It used to be one empty box for all of them, which reads as a frame that
+   * failed to load rather than as a placeholder - and a file still being
+   * fetched looked exactly like one that will never have a thumbnail.
+   *
+   * Said in the drawing rather than in words: these sit four to a batch beside
+   * a filename that already names the file, and a line of text under each one
+   * would be four sentences saying what a glyph says at a glance.
+   */
+  if (!previewable) {
+    // Nothing to preview and nothing coming - a sidecar, a text file, audio.
+    return (
+      <span className="download-artifact-thumbnail is-empty" aria-hidden="true">
+        <FileIcon />
+      </span>
+    );
+  }
+  if (problem) {
+    // A picture was expected and did not arrive.
+    return (
+      <span className="download-artifact-thumbnail is-empty" aria-hidden="true">
+        <ImageOff />
+      </span>
+    );
+  }
+  // Still coming. A shimmer says so honestly - it is the one state where
+  // something really is on its way, which is why the other two do not use it.
+  return (
+    <span className="download-artifact-thumbnail is-pending" aria-hidden="true" />
+  );
+}
 
 const ACTIVE_STATUSES = new Set([
   "queued", "running", "in_progress", "pending", "processing", "downloading_preparing",
@@ -776,6 +837,7 @@ export default function Dashboard() {
                 {current === "empty" && !job.error && <div className="job-error"><strong>{t("downloads.noneSaved")}</strong><span>{t("downloads.reuseLinks")}</span><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
                 {artifacts.length > 0 && <div className="artifact-list">
                   {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
+                    <DownloadArtifactThumbnail artifact={artifact} workspaceId={workspaceId} apiFetch={apiFetch} />
                     <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
                     <div><Link href={"/library?asset=" + encodeURIComponent(artifact.path)}>{t("downloads.openInLibrary")}</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>{t("downloads.plan")}</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>{t("nav.publish")}</Link></div>
                   </div>)}

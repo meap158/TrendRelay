@@ -306,7 +306,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .job-error { color: var(--red); }
 .artifact-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--radius-sm); background: #fafafa; border: 1px solid var(--line); }
 .download-artifact-thumbnail { display: block; width: 42px; height: 42px; border-radius: 5px; object-fit: cover; background: var(--panel-raised); }
-.download-artifact-thumbnail.is-empty { border: 1px dashed var(--line); }
+/* A placeholder that looks placed rather than broken. The glyph is what
+   says "a picture belongs here"; an empty dashed box says "a picture failed
+   to arrive here", which was true for one of the three states and wrong for
+   the other two. */
+.download-artifact-thumbnail.is-empty { display: grid; place-items: center; border: 1px solid var(--line); color: var(--muted); }
+.download-artifact-thumbnail.is-empty svg { inline-size: 17px; block-size: 17px; }
+/* Still coming. A quiet sweep across the box, which is the one honest use
+   of a skeleton: something really is on its way. Held still for anyone who
+   asked not to be moved at. */
+.download-artifact-thumbnail.is-pending { border: 1px solid var(--line); background: linear-gradient(100deg, var(--panel-raised) 30%, color-mix(in srgb, var(--line) 55%, var(--panel-raised)) 50%, var(--panel-raised) 70%) 0 0 / 300% 100%; animation: download-thumb-wait 1.4s ease-in-out infinite; }
+@keyframes download-thumb-wait { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .download-artifact-thumbnail.is-pending { animation: none; background: var(--panel-raised); }
+}
 .artifact-row > div { display: grid; gap: 4px; min-width: 0; }
 .artifact-row > div:nth-child(2) strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .artifact-row small { color: var(--muted); font-size: 11px; }
@@ -2371,11 +2384,13 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    to squint at, which is the opposite of a readout. */
 .campaign-trend-tooltip dt { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-trend-tooltip dd { margin: 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
-/* The peak, labelled where it is. Text tokens rather than the series colour:
-   the line beside it already carries the identity, and a coloured number
-   reads as a second series. Sits above its point, and above the fill. */
-.campaign-trend-peak { position: absolute; z-index: 2; inset-block-start: var(--trend-point-y); inset-inline-start: var(--trend-point-x); transform: translate(-50%, calc(-100% - 7px)); border-radius: 999px; padding: 1px 6px; color: var(--text); background: color-mix(in srgb, var(--panel) 88%, transparent); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
-.campaign-trend-peak[data-below] { transform: translate(-50%, 7px); }
+/* Direct values, labelled where they happened. Text tokens rather than the
+   series colour: the line already carries the identity, and a coloured
+   number reads as a second series. A quiet panel chip keeps grid lines from
+   crossing the digits without giving each value button-like weight. */
+.campaign-trend-value { position: absolute; z-index: 2; inset-block-start: var(--trend-point-y); inset-inline-start: var(--trend-point-x); transform: translate(-50%, calc(-100% - 6px)); border-radius: 999px; padding: 1px 4px; color: var(--text); background: color-mix(in srgb, var(--panel) 88%, transparent); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.campaign-trend-value[data-stagger] { transform: translate(-50%, calc(-100% - 17px)); }
+.campaign-trend-value[data-below] { transform: translate(-50%, 6px); }
 
 .campaign-analytics-trend > span.campaign-trend-dates { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 9px; }
 
