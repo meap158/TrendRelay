@@ -410,8 +410,23 @@ export function CampaignAnalytics({
   timezone: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
-  const campaignId = base.split("/").at(-1) ?? "campaign";
-  const preferenceScope = `trendrelay.campaigns.analytics.${workspaceId}.${campaignId}`;
+  /**
+   * How somebody wants to look at a campaign, remembered per workspace.
+   *
+   * These were scoped per campaign, so switching from one to the next reset
+   * the window and the sort. That is the wrong boundary for what they are: a
+   * period and a sort are a way of looking, not a fact about a campaign, and
+   * switching campaigns is usually *comparing* them - which four different
+   * windows quietly makes impossible. Setting "7 days" on one and reading
+   * "28 days" on the next, with nothing on screen saying they differ, is worse
+   * than not remembering at all.
+   *
+   * Per workspace rather than global because a workspace is a brand with its
+   * own reporting rhythm. The other campaign preferences beside this one - the
+   * work tab, the timeline view, the queue filter - are already carried across
+   * campaigns, so this was also the only one that did not.
+   */
+  const preferenceScope = `trendrelay.campaigns.analytics.${workspaceId}`;
   const [range, setRange] = usePersistedState<AnalyticsRange>(
     `${preferenceScope}.range`,
     "28d",
