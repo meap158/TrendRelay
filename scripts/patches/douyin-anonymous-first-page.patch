@@ -1,0 +1,49 @@
+diff --git a/core/user_modes/base_strategy.py b/core/user_modes/base_strategy.py
+index 033a070..ba897a8 100644
+--- a/core/user_modes/base_strategy.py
++++ b/core/user_modes/base_strategy.py
+@@ -112,7 +112,14 @@ class BaseUserModeStrategy(ABC):
+         while has_more:
+             await self.downloader.rate_limiter.acquire()
+             request_cursor = max_cursor
+-            page_data = await fetcher(sec_uid, request_cursor, 20)
++            # TrendRelay: ask for the biggest page the server will give.
++            # Douyin caps an anonymous session at its FIRST response - later
++            # cursored pages come back empty - but honours a large first page:
++            # measured 2026-09-01, count=20 yields 20 items where count=100
++            # yields 44 (the server's anonymous ceiling; 200 gives the same).
++            # A signed-in session paginates regardless, and per-page size is
++            # server-clamped, so the bigger ask costs nothing there either.
++            page_data = await fetcher(sec_uid, request_cursor, 100)
+             page = self._normalize_page_data(page_data)
+             page_items = self.select_items(page)
+             if not page_items:
+@@ -171,7 +178,7 @@ class BaseUserModeStrategy(ABC):
+         self,
+         fetcher,
+         *fetch_args: Any,
+-        count: int = 20,
++        count: int = 100,
+     ) -> List[Dict[str, Any]]:
+         entries: List[Dict[str, Any]] = []
+         max_cursor = 0
+diff --git a/core/user_modes/post_strategy.py b/core/user_modes/post_strategy.py
+index 5c7ed45..ad23ee3 100644
+--- a/core/user_modes/post_strategy.py
++++ b/core/user_modes/post_strategy.py
+@@ -31,7 +31,14 @@ class PostUserModeStrategy(BaseUserModeStrategy):
+         while has_more:
+             await self.downloader.rate_limiter.acquire()
+             request_cursor = max_cursor
+-            page_data = await fetcher(sec_uid, request_cursor, 20)
++            # TrendRelay: ask for the biggest page the server will give.
++            # Douyin caps a signed-out session at its FIRST response - the
++            # cursored pages after it come back empty - but honours a large
++            # first page: measured 2026-09-01, count=20 returns 20 items where
++            # count=100 returns 44 (the anonymous ceiling; 200 gives the
++            # same). Signed-in sessions paginate regardless and the per-page
++            # size is server-clamped, so the bigger ask costs nothing there.
++            page_data = await fetcher(sec_uid, request_cursor, 100)
+             page = self._normalize_page_data(page_data)
+             page_items = self.select_items(page)
+ 

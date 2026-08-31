@@ -26,6 +26,16 @@ VENV_DIR = TOOL_ROOT / "venv"
 MARKER = TOOL_ROOT / "installed-revision.txt"
 REPOSITORY = "https://github.com/jiji262/douyin-downloader.git"
 REVISION = "ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7"
+#: Local patches applied on top of the pinned revision, in order. Each is a
+#: `git diff` against a fresh checkout; install applies them after checkout
+#: and before the pip install that copies the source into the venv.
+PATCH_FILES = (
+    ROOT / "scripts" / "patches" / "douyin-anonymous-first-page.patch",
+)
+#: What a finished install writes to the marker. Includes the local patch
+#: generation so bumping a patch makes existing installs read as stale and
+#: reinstall, the same way bumping the revision does.
+LOCAL_BUILD = f"{REVISION}+trendrelay.2"
 DEFAULT_OUTPUT = ROOT / ".data" / "downloads" / "douyin"
 DEFAULT_DATABASE = ROOT / ".data" / "douyin" / "dy_downloader.db"
 DEFAULT_COOKIE_FILE = ROOT / ".data" / "douyin" / "cookies.json"
@@ -86,6 +96,15 @@ def install_provider(include_login_browser: bool) -> int:
 
     run_checked(["git", "fetch", "--depth", "1", "origin", REVISION], cwd=SOURCE_DIR)
     run_checked(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=SOURCE_DIR)
+    # `checkout --detach` keeps non-conflicting local edits, so an earlier
+    # patched install would make the patches fail as already-applied; a hard
+    # reset makes the tree the pristine pinned revision every patch was
+    # written against. They must land before the pip install below, which
+    # copies the source tree into the venv - patching only the checkout would
+    # change nothing the tool actually runs.
+    run_checked(["git", "reset", "--hard", "FETCH_HEAD"], cwd=SOURCE_DIR)
+    for patch in PATCH_FILES:
+        run_checked(["git", "apply", str(patch)], cwd=SOURCE_DIR)
 
     if not tool_python().is_file():
         run_checked([sys.executable, "-m", "venv", str(VENV_DIR)])
@@ -105,13 +124,13 @@ def install_provider(include_login_browser: bool) -> int:
     if include_login_browser:
         run_checked([str(tool_python()), "-m", "playwright", "install", "chromium"])
 
-    MARKER.write_text(f"{REVISION}\n", encoding="utf-8")
-    print(f"Douyin provider installed at revision {REVISION[:12]}.")
+    MARKER.write_text(f"{LOCAL_BUILD}\n", encoding="utf-8")
+    print(f"Douyin provider installed at revision {REVISION[:12]} (local patches applied).")
     return check_provider()
 
 
 def check_provider() -> int:
-    if not MARKER.is_file() or MARKER.read_text(encoding="utf-8").strip() != REVISION:
+    if not MARKER.is_file() or MARKER.read_text(encoding="utf-8").strip() != LOCAL_BUILD:
         print(
             "Douyin provider is not installed at the pinned revision.", file=sys.stderr
         )
@@ -141,8 +160,9 @@ def check_provider() -> int:
     elif cookie_status["ready"]:
         print(
             f"Douyin cookies ready, anonymous ({cookie_status['source']}). "
-            "Whole profiles and single links download. A "
-            "connected account fetches whole profiles and topic search."
+            "Single links download; a profile fetches its newest ~40 posts "
+            "(Douyin's login wall hides the rest from signed-out sessions). "
+            "A signed-in account fetches whole profiles and topic search."
         )
     else:
         print(
@@ -781,12 +801,15 @@ def skip_downloaded_videos(urls: list[str]) -> list[str]:
     return kept
 
 
-# A profile URL is left as-is for the provider, which paginates the whole
-# profile through the signed API - measured at 297 of 308 videos for an
-# anonymous caller. The browser enumerator that once tried to scroll past it was
-# retired: Douyin's anti-bot caps or challenges any automated browser, so it
-# only ever harvested an unpredictable 8-26 and added a popup window mid-run for
-# no gain. Whole profiles need a signed-in account (see docs/third-party).
+# A profile URL is left as-is for the provider, which pages it through the
+# signed API. Anonymously that yields the profile's newest ~44 posts and no
+# more: Douyin serves a signed-out session one (large) first response and
+# answers every cursored page after it with an empty 200 - the same login wall
+# the website shows since late August 2026, when whole anonymous profiles
+# (measured 297 of 308 that spring) stopped. The browser enumerator that once
+# tried to scroll past it stays retired: the anti-bot caps or challenges any
+# automated browser. Whole profiles need a signed-in account
+# (see docs/third-party/douyin-downloader.md).
 
 
 def batch_download(args: argparse.Namespace) -> int:

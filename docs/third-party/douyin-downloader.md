@@ -36,6 +36,16 @@ The upstream `browser_fallback` is **disabled** (`browser_fallback.enabled: fals
 
 Whole profiles need a caller Douyin trusts, and the two legitimate ways to be one are a **signed-in account** (which pages the profile through the API) or a **managed data API** (e.g. TikHub `fetch_user_post_videos`, paid). Reverse-engineering the anti-bot to forge that trust is out of scope. A free route exists but is manual - a console script run in the operator's own (trusted) browser to harvest the list, pasted into the Download tab, which accepts up to 400 links.
 
+### The wall widened, and the window with it (2026-09-01)
+
+Two changes since the record above, re-measured against live profiles:
+
+- **The login wall now reaches hand-driven browsers too.** A signed-out visitor opening a profile by hand sees a handful of tiles and 「登录后查看更多作品」; the manual console-harvest route above is therefore mostly dead - there is nothing to scroll. Whole anonymous profile fetches that still worked mid-August (297/297, 137/137 in `download_history`) stopped: four fresh profiles fetched on 2026-08-31 all stopped at exactly 20.
+- **The first response honours a large `count`.** The cap is "one response per session", not "20 items": `count=100` returns **44** items where `count=20` returns 20 (`count=200` also returns 44 - the server's anonymous ceiling). The pinned provider paged with `count=20` and was leaving more than half the available window on the table, so `scripts/patches/douyin-anonymous-first-page.patch` (applied by `scripts/douyin.py install`, marker `+trendrelay.1`) raises the page size to 100.
+- **Anonymous profile runs skip `--incremental`.** Incremental keeps only items newer than the newest already held - correct for a paginating session, but a signed-out listing is one fixed window, so the filter silently dropped the older half of the window on the run that could have fetched it. The provider's own aweme-id and file dedupe make the full pass cheap.
+
+Net for a signed-out operator: a profile fetch lands the newest ~44 posts, and re-running the profile on a cadence keeps it complete going forward (nothing is missed unless a creator posts more than the window between runs). History deeper than the window still needs a signed-in session, exactly as concluded above. Job summaries and the connection status now say this instead of leaving it to be read off the counts.
+
 ---
 
 The remainder of this section is the **investigation record** for why anonymous deep pagination is blocked. It is history, not current behaviour.

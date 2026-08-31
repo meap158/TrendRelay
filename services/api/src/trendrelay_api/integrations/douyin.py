@@ -73,6 +73,35 @@ COOKIE_ENV_KEYS = (
 )
 SUPPORTED_CONTENT_PATHS = ("/video/", "/note/", "/user/", "/mix/", "/music/")
 
+#: What a profile fetch means to a signed-out session, said on the job rather
+#: than left to be discovered from the count. Douyin's login wall (late August
+#: 2026) hides everything past a profile's newest ~40 posts from anonymous
+#: callers - the website's own wall, enforced on the API too.
+ANONYMOUS_PROFILE_NOTE = (
+    "Douyin shows a signed-out session only a profile's newest ~40 posts - "
+    "its login wall, which the website shows too. Re-run the profile to pick "
+    "up new posts; the full history needs a signed-in Douyin session "
+    "(Connect on the Download tab)."
+)
+
+
+def _session_signed_in() -> bool:
+    """Whether the saved Douyin session belongs to an actual account.
+
+    `sessionid` is the one cookie only a login sets - the same marker the
+    capture script waits for - so its absence is what makes a session
+    anonymous, however complete its other cookies are.
+    """
+    try:
+        cookies = json.loads(COOKIE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return bool(isinstance(cookies, dict) and cookies.get("sessionid"))
+
+
+def _is_profile_source(url: str) -> bool:
+    return "/user/" in urlparse(url).path.lower()
+
 
 def _supported_source_url(url: str) -> bool:
     parsed = urlparse(url)
@@ -630,7 +659,16 @@ def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tu
         command.append("--covers")
     if "audio" in kinds:
         command.append("--music")
-    if request["incremental"]:
+    if request["incremental"] and not (
+        _is_profile_source(url) and not _session_signed_in()
+    ):
+        # Incremental keeps only items newer than the newest already
+        # downloaded. For a signed-out profile fetch the listing is one fixed
+        # window - the newest ~40, nothing deeper - so that filter silently
+        # drops the *older* half of the window on exactly the run that could
+        # have fetched it (a 20-post first grab left the next 24 invisible to
+        # every later incremental run). The provider already skips media it
+        # holds, by aweme id and by file, so a full pass costs one listing.
         command.append("--incremental")
     try:
         completed = subprocess.run(
@@ -1046,6 +1084,11 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         summary = f"Fetched {len(artifacts)} media file(s)"
         if source_errors:
             summary = f"{summary}; {len(source_errors)} source(s) failed"
+        if (
+            any(_is_profile_source(url) for url in request.get("urls", []))
+            and not _session_signed_in()
+        ):
+            summary = f"{summary}. {ANONYMOUS_PROFILE_NOTE}"
         result = {
             **payload,
             "status": "succeeded",
