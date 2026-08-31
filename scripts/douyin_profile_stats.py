@@ -61,7 +61,13 @@ def main() -> int:
     parser.add_argument("urls", nargs="+")
     args = parser.parse_args()
     results = asyncio.run(collect(args.cookies, list(args.urls)))
-    json.dump(results, sys.stdout, ensure_ascii=False)
+    # Pure ASCII on the pipe, escapes for everything else: this JSON crosses
+    # two subprocess boundaries on Windows, and one legacy-codepage decode
+    # anywhere in that chain mangles a CJK nickname beyond repair. ASCII is
+    # invariant under every codepage; json.loads restores the real characters
+    # at the far end.
+    sys.stdout.buffer.write(json.dumps(results, ensure_ascii=True).encode("ascii"))
+    sys.stdout.buffer.write(b"\n")
     return 0
 
 
