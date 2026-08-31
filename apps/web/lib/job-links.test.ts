@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { assetHref, downloadLibraryHref, notificationHref } from "./job-links.ts";
+import {
+  assetHref,
+  downloadFileLibraryHref,
+  downloadLibraryHref,
+  notificationHref,
+} from "./job-links.ts";
 
 test("a finished job links to the asset it produced", () => {
   assert.equal(
@@ -84,5 +89,22 @@ test("a download batch links by its durable id instead of listing every asset", 
   assert.equal(
     downloadLibraryHref("download_0123456789abcdef", "Downloaded from a profile"),
     "/library?download=download_0123456789abcdef&from=download&notice=Downloaded+from+a+profile",
+  );
+});
+
+test("one downloaded file opens by the hash of its contents, not by its path", () => {
+  // The path in the download folder is not the path of the entry ingestion
+  // makes, so it could only ever open the Library and select nothing.
+  assert.equal(
+    downloadFileLibraryHref("a".repeat(64), "2026-08-07_a clip.mp4"),
+    `/library?file=${"a".repeat(64)}&from=download&notice=2026-08-07_a+clip.mp4`,
+  );
+});
+
+test("a downloaded file with no name of its own still says where it came from", () => {
+  assert.equal(
+    new URLSearchParams(downloadFileLibraryHref("b".repeat(64), "  ").split("?")[1])
+      .get("notice"),
+    "Downloaded file",
   );
 });

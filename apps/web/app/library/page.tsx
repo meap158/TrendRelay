@@ -1115,6 +1115,11 @@ function LibraryContent() {
   const notificationAssetQuery = searchParams.get("assets") ?? "";
   const notificationTitle = notificationActionTitle(searchParams.get("notice") ?? "");
   const downloadJobId = searchParams.get("download") ?? "";
+  // One downloaded file, addressed by the hash of its contents. Checked here
+  // rather than trusted, so a hand-edited URL narrows the library to nothing
+  // on the server instead of being sent there as a filter it will reject.
+  const fileHash = (searchParams.get("file") ?? "").trim().toLowerCase();
+  const downloadFileHash = /^[a-f0-9]{64}$/.test(fileHash) ? fileHash : "";
   const notificationAssetIds = useMemo(
     () => notificationAssetsFromQuery(notificationAssetQuery),
     [notificationAssetQuery],
@@ -1222,8 +1227,9 @@ function LibraryContent() {
     const params = assetFilterParams(filters);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
     if (downloadJobId) params.set("download_job_id", downloadJobId);
+    if (downloadFileHash) params.set("sha256", downloadFileHash);
     return params;
-  }, [downloadJobId, filters, notificationAssetIds]);
+  }, [downloadFileHash, downloadJobId, filters, notificationAssetIds]);
 
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
@@ -1237,6 +1243,7 @@ function LibraryContent() {
     const params = assetFilterParams(latestFilters.current);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
     if (downloadJobId) params.set("download_job_id", downloadJobId);
+    if (downloadFileHash) params.set("sha256", downloadFileHash);
     params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
     const suffix = `?${params}`;
@@ -1295,7 +1302,7 @@ function LibraryContent() {
         setLoadedWorkspaceId(nextWorkspace);
       }
     }
-  }, [apiFetch, downloadJobId, notificationAssetIds, workspaceId]);
+  }, [apiFetch, downloadFileHash, downloadJobId, notificationAssetIds, workspaceId]);
 
   useEffect(() => {
     const mediaJobs = notificationJobs.filter((job) => Boolean(job.assetId));
@@ -1322,6 +1329,7 @@ function LibraryContent() {
     url.searchParams.delete("asset");
     url.searchParams.delete("assets");
     url.searchParams.delete("download");
+    url.searchParams.delete("file");
     url.searchParams.delete("from");
     url.searchParams.delete("notice");
     router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
@@ -1820,12 +1828,22 @@ function LibraryContent() {
         <aside className="library-browser">
           <div className="library-browser-sticky-controls">
             <div className="library-browser-toolbar">
-          {(notificationAssetIds.length > 0 || downloadJobId) && (
+          {(notificationAssetIds.length > 0 || downloadJobId || downloadFileHash) && (
             <div className="library-notification-view" role="status">
               <span className="library-notification-copy">
-                <strong>{notificationTitle || (downloadJobId ? "Downloaded batch" : t("library.fromNotifications"))}</strong>
+                <strong title={notificationTitle || undefined}>{notificationTitle || (downloadJobId ? "Downloaded batch" : downloadFileHash ? "Downloaded file" : t("library.fromNotifications"))}</strong>
                 <small>
-                  {downloadJobId
+                  {downloadFileHash
+                    ? loadingAssets
+                      ? "Finding this file…"
+                      // A downloaded file reaches the Library some time after
+                      // it reaches the disk, and it can be removed from the
+                      // Library later. Either way it is genuinely not here,
+                      // which is worth saying rather than showing as empty.
+                      : total
+                        ? "One file from your downloads"
+                        : "This file is not in your Library yet"
+                    : downloadJobId
                     ? loadingAssets
                       ? "Filtering this download…"
                       : `${total.toLocaleString()} ${total === 1 ? "item" : "items"} from this download`

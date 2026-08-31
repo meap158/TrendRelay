@@ -93,3 +93,24 @@ export function downloadLibraryHref(jobId: string, title = "Downloaded batch"): 
   });
   return `/library?${params}`;
 }
+
+/**
+ * Open the one Library entry made from a single downloaded file.
+ *
+ * By content hash, because that is the only thing the two ends share: the
+ * downloader knows where it wrote the file, and ingestion copies it into the
+ * hash-addressed store, so the entry's path is never the path in the download
+ * folder. Linking by that path opened the Library and selected nothing.
+ *
+ * The hash is a server-side filter for the same reason the batch id is - it
+ * finds the file wherever it sits in a library of thousands, rather than
+ * hoping it landed on the first page.
+ */
+export function downloadFileLibraryHref(sha256: string, name: string): string {
+  const params = new URLSearchParams({
+    file: sha256,
+    from: "download",
+    notice: name.trim().slice(0, 140) || "Downloaded file",
+  });
+  return `/library?${params}`;
+}

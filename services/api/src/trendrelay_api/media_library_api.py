@@ -570,6 +570,15 @@ class AssetFilter(BaseModel):
     #: Assets produced by one downloader run. Unlike explicit ids this can
     #: represent thousands of files without putting thousands of ids in a URL.
     download_job_id: str | None = None
+    #: The content hash of one original file.
+    #:
+    #: A downloaded file and the library entry made from it share nothing else:
+    #: ingestion copies the file into the hash-addressed store, so the entry's
+    #: path is not the path the downloader wrote. The hash is what already
+    #: joins them everywhere in the API - it is how ingestion recognises a
+    #: duplicate, and how a deleted download is matched to the entry to remove.
+    #: It is unique within a workspace, so this narrows to at most one asset.
+    sha256: str | None = None
     #: Keep only what this campaign's queue does not already hold.
     #:
     #: Filling a campaign is the one place where the interesting question is
@@ -681,6 +690,8 @@ def asset_conditions(
     values: list[Any] = [MediaAsset.workspace_id == workspace_id]
     if filters.asset_ids:
         values.append(MediaAsset.id.in_(filters.asset_ids))
+    if filters.sha256:
+        values.append(MediaAsset.original_sha256 == filters.sha256)
     if filters.download_job_id:
         batch_id = filters.download_job_id
         escaped_batch_id = batch_id.replace("_", r"\_")
@@ -793,6 +804,7 @@ def list_asset_ids(
     download_job_id: Annotated[
         str | None, Query(pattern=r"^download_[a-f0-9]{16}$")
     ] = None,
+    sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
@@ -807,7 +819,7 @@ def list_asset_ids(
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
-        not_in_campaign=not_in_campaign,
+        sha256=sha256, not_in_campaign=not_in_campaign,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -848,6 +860,7 @@ def list_assets(
     download_job_id: Annotated[
         str | None, Query(pattern=r"^download_[a-f0-9]{16}$")
     ] = None,
+    sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -865,7 +878,7 @@ def list_assets(
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
-        not_in_campaign=not_in_campaign,
+        sha256=sha256, not_in_campaign=not_in_campaign,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:

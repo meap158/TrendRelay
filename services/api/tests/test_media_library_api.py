@@ -747,6 +747,54 @@ def test_a_download_batch_narrows_the_list_and_selection_without_an_id_list() ->
     }
 
 
+def test_one_downloaded_file_is_found_by_the_hash_of_its_contents() -> None:
+    """The link Downloads puts on a single file has only the hash to go on.
+
+    Ingestion copies a download into the hash-addressed store, so the entry's
+    path is never the path in the download folder, and the id is not known
+    until the entry exists. The hash is unique within a workspace, so it
+    narrows to exactly the file that was clicked - wherever it sits in a
+    library too long to page through.
+    """
+    workspace_id = create_workspace()
+    wanted = f"{7:064x}"
+    with TestingSession.begin() as session:
+        for index in range(3):
+            session.add(
+                MediaAsset(
+                    id=f"asset-hash-{index}",
+                    workspace_id=workspace_id,
+                    title=f"Downloaded asset {index}",
+                    media_kind="video",
+                    source_type="douyin-download",
+                    original_path=f"/library/{index}/original.mp4",
+                    original_sha256=wanted if index == 1 else f"{index + 200:064x}",
+                    mime_type="video/mp4",
+                    size_bytes=10,
+                    created_by="library-owner",
+                )
+            )
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    listed = asyncio.run(request("GET", f"{base}/assets?sha256={wanted}"))
+    selectable = asyncio.run(request("GET", f"{base}/assets/ids?sha256={wanted}"))
+
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert [asset["id"] for asset in listed.json()["assets"]] == ["asset-hash-1"]
+    assert selectable.json()["asset_ids"] == ["asset-hash-1"]
+
+    # A file that has been downloaded but not yet added narrows to nothing
+    # rather than to everything, so the destination can say it is not here.
+    missing = asyncio.run(request("GET", f"{base}/assets?sha256={9:064x}"))
+    assert missing.json()["total"] == 0
+
+    # Anything that is not a digest is refused at the door, so a hand-edited
+    # link cannot turn the filter into a free-text search of the library.
+    rejected = asyncio.run(request("GET", f"{base}/assets?sha256=not-a-digest"))
+    assert rejected.status_code == 422
+
+
 def test_a_duplicate_download_keeps_membership_in_each_batch(monkeypatch) -> None:
     workspace_id = create_workspace()
     source = Path("services/api/tests/.download-membership-test.mp4").resolve()

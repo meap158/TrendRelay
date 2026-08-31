@@ -17,7 +17,7 @@ const isDownloadMode = oneOf("post", "like", "mix", "music");
 import { useJobs } from "./jobs-provider";
 import { useWorkspace } from "./workspace-provider";
 import { readTabSnapshot, refreshTabSnapshot } from "../lib/tab-snapshots";
-import { downloadLibraryHref } from "../lib/job-links";
+import { downloadFileLibraryHref, downloadLibraryHref } from "../lib/job-links";
 import { useOpaqueMedia } from "../lib/media-preview";
 
 type Artifact = { path: string; name: string; size_bytes: number; sha256?: string };
@@ -839,7 +839,13 @@ export default function Dashboard() {
                   {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
                     <DownloadArtifactThumbnail artifact={artifact} workspaceId={workspaceId} apiFetch={apiFetch} />
                     <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
-                    <div><Link href={"/library?asset=" + encodeURIComponent(artifact.path)}>{t("downloads.openInLibrary")}</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>{t("downloads.plan")}</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>{t("nav.publish")}</Link></div>
+                    <div><Link href={artifact.sha256
+                      ? downloadFileLibraryHref(artifact.sha256, artifact.name)
+                      // Nothing the downloader writes today lacks a hash. One
+                      // written before it did still opens the batch it belongs
+                      // to, which is where it will be, rather than a Library
+                      // that would select nothing.
+                      : downloadLibraryHref(job.id, artifact.name)}>{t("downloads.openInLibrary")}</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>{t("downloads.plan")}</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>{t("nav.publish")}</Link></div>
                   </div>)}
                   {artifacts.length > 4 && <p className="more-artifacts">+ {artifacts.length - 4} more files in this batch</p>}
                 </div>}
