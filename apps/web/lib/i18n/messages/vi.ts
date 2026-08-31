@@ -610,6 +610,7 @@ export const vi: Messages = {
     disclosureEmpty: "Không có công bố. Sẽ không thêm gì vào chú thích.",
     chooseProductHint: "Chọn từ danh mục",
     bioOnlyHere: "Trên {platforms}, không liên kết nào trong bài bấm được, nên hãy đặt liên kết này ở tiểu sử và để chú thích trỏ tới đó.",
+    tiktokBioCaution: "Trên TikTok, đừng nhắc đến liên kết ở tiểu sử trong chú thích — viết “link in bio” bị coi là spam và có thể dẫn đến vi phạm. Liên kết vẫn hoạt động từ trang cá nhân mà không cần nhắc tới.",
   },
 
   autopilot: {

@@ -599,6 +599,7 @@ export const zh: Messages = {
     disclosureEmpty: "没有披露声明。不会向文案添加任何内容。",
     chooseProductHint: "从商品目录中选择",
     bioOnlyHere: "在 {platforms} 上帖内链接无法点击，请将此链接放在简介，并让文案指向它。",
+    tiktokBioCaution: "在 TikTok 上，文案中不要提及简介里的链接——写“链接在简介”会被视为垃圾信息，可能导致违规。链接无需提及也能从主页生效。",
   },
 
   autopilot: {

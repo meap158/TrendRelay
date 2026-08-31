@@ -36,6 +36,17 @@ CAPTION_LINK_PLATFORMS = frozenset({
 #: profile instead, which is where the tracking link actually lives.
 BIO_LINK_PLATFORMS = frozenset({"instagram", "tiktok"})
 
+#: Bio-placement networks whose caption must NOT say so.
+#:
+#: TikTok's moderation treats off-platform commerce call-outs - the literal
+#: phrase "link in bio" and its translations - as a spam signal: reach is cut
+#: and repeated use risks community-guideline violations. The placement is
+#: unchanged - the link still lives on the profile, which is where a TikTok
+#: link has always lived - but the caption stays silent about it rather than
+#: writing the exact phrase the moderation looks for. Instagram keeps the
+#: hint: the same words are ordinary there.
+BIO_HINT_UNSAFE_PLATFORMS = frozenset({"tiktok"})
+
 #: Deliberately empty, and deliberately still here.
 #:
 #: The engine can post a first comment on Instagram, Facebook and LinkedIn, so
@@ -213,6 +224,11 @@ def resolve_placement(
         if override == "bio":
             return LinkPlacement(
                 "bio",
+                "Configured for this destination: the link lives on the "
+                "profile, and the caption deliberately does not say so - "
+                "TikTok treats \"link in bio\" call-outs as spam and they "
+                "risk violations."
+                if platform in BIO_HINT_UNSAFE_PLATFORMS else
                 "Configured for this destination: the caption points at the "
                 "profile link.",
             )
@@ -253,6 +269,11 @@ def resolve_placement(
     if platform in BIO_LINK_PLATFORMS:
         return LinkPlacement(
             "bio",
+            "No link in a post is clickable here. The link lives on the "
+            "profile, and the caption deliberately does not announce it - "
+            "TikTok treats \"link in bio\" call-outs as spam and they risk "
+            "violations."
+            if platform in BIO_HINT_UNSAFE_PLATFORMS else
             "No link in a post is clickable here, and a comment link costs reach "
             "and gets hidden. The caption points at the profile link instead.",
         )
@@ -326,8 +347,11 @@ def compose(
         parts.append(link)
     elif link and placement.placement == "bio":
         # Names the destination rather than pasting a URL that renders as text
-        # and cannot be tapped.
-        parts.append(bio_hint.strip())
+        # and cannot be tapped - except where naming it is itself the hazard:
+        # TikTok reads "link in bio" as a spam signal, so its caption carries
+        # the copy and the disclosure and says nothing about the profile.
+        if platform not in BIO_HINT_UNSAFE_PLATFORMS:
+            parts.append(bio_hint.strip())
     if hashtags:
         parts.append(" ".join(f"#{tag.lstrip('#')}" for tag in hashtags if tag.strip()))
 

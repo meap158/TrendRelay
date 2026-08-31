@@ -410,7 +410,11 @@ def build_server(workspace_id: str) -> FastMCP:
             "Set this post's own profile-bio hint - the words the campaign turns "
             "into a bio line for networks that carry the link there, overriding the "
             "campaign's default. Write the words only; the campaign adds the link. "
-            "An empty string clears the override back to the campaign's."
+            "An empty string clears the override back to the campaign's. TikTok "
+            "captions never carry this line - TikTok treats 'link in bio' "
+            "call-outs as spam and they risk violations - so it reaches "
+            "Instagram-style bio networks only, and TikTok copy should not "
+            "point at the profile either."
         ),
     )
     def write_bio_hint(item_id: str, bio_hint: str) -> dict[str, Any]:

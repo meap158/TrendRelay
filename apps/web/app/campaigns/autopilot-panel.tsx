@@ -5866,7 +5866,9 @@ export function AutopilotPanel({
                           onClick={() => setEditingBioHint("")}>
                           Use the campaign&apos;s
                         </button></>
-                    ) : "The campaign's wording, where no link in a post is clickable."}</small>
+                    ) : "The campaign's wording, where no link in a post is clickable."}
+                    {destinations.some((item) => item.platform === "tiktok")
+                      && " Never written on TikTok, where a “link in bio” call-out reads as spam and risks violations."}</small>
                   </label>
                 )}
               </div>

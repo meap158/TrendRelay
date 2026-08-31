@@ -175,7 +175,6 @@ export function AffiliateLink({
   }, [platforms, placementByPlatform]);
 
   const captionWorks = (outcomes.caption ?? []).length > 0;
-  const bioOnly = (outcomes.bio ?? []).length > 0;
 
   function addToCaption() {
     if (!offer) return;
@@ -430,11 +429,20 @@ export function AffiliateLink({
             >{t("publish.addToFirstComment")}</Button>
           </div>
 
-          {bioOnly && (
+          {/* Two different instructions wearing one note before this split:
+              "let the caption point at it" is the right advice on Instagram
+              and the exact thing TikTok's moderation reads as spam. */}
+          {(outcomes.bio ?? []).some((platform) => platform !== "tiktok") && (
             <small className="affiliate-note warn">
               {t("publish.bioOnlyHere", {
-                platforms: (outcomes.bio ?? []).join(", "),
+                platforms: (outcomes.bio ?? [])
+                  .filter((platform) => platform !== "tiktok").join(", "),
               })}
+            </small>
+          )}
+          {(outcomes.bio ?? []).includes("tiktok") && (
+            <small className="affiliate-note warn">
+              {t("publish.tiktokBioCaution")}
             </small>
           )}
         </>

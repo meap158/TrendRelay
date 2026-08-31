@@ -636,7 +636,10 @@ def test_the_link_lands_in_the_caption_on_youtube_and_in_the_bio_on_tiktok(sessi
     if "d-tok" in placements:
         assert placements["d-tok"].placement == "bio"
         assert "https://tr.example/c/abc" not in placements["d-tok"].caption
-        assert "Link in bio" in placements["d-tok"].caption
+        # The link still lives on the TikTok profile, but the caption no
+        # longer says so: "link in bio" is a spam signal there and risks
+        # violations, so the call-out is deliberately withheld.
+        assert "Link in bio" not in placements["d-tok"].caption
 
 
 def test_every_scheduled_post_leads_with_the_disclosure(session) -> None:

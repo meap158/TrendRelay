@@ -614,6 +614,7 @@ export const en = {
     disclosureEmpty: "No disclosure. Nothing will be added to the caption.",
     chooseProductHint: "Pick one from the catalogue",
     bioOnlyHere: "On {platforms} no link in a post is clickable, so put this link on the profile and let the caption point at it.",
+    tiktokBioCaution: "On TikTok, keep the caption silent about the profile link — writing “link in bio” reads as spam there and risks violations. The link still works from the profile without being announced.",
   },
 
   autopilot: {

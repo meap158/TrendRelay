@@ -1019,7 +1019,9 @@ export default function CampaignsPage() {
                 onChange={(event) => setNewScaffolding((current) => ({
                   ...current, bioHint: event.target.value,
                 }))} />
-              <small>Used where a link in a post is not clickable.</small>
+              <small>Used where a link in a post is not clickable. Never
+                written on TikTok, where a &ldquo;link in bio&rdquo; call-out
+                reads as spam and risks violations.</small>
             </label>
             <label>Optimise for
               <Select name="priority" defaultValue="balanced">

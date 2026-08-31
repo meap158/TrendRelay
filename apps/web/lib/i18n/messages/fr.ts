@@ -620,6 +620,7 @@ export const fr: Messages = {
     disclosureEmpty: "Aucune mention. Rien ne sera ajouté à la légende.",
     chooseProductHint: "Choisir dans le catalogue",
     bioOnlyHere: "Sur {platforms}, aucun lien dans une publication n’est cliquable : placez ce lien sur le profil et laissez la légende y renvoyer.",
+    tiktokBioCaution: "Sur TikTok, ne mentionnez pas le lien du profil dans la légende — écrire « lien en bio » y est perçu comme du spam et risque une violation. Le lien fonctionne depuis le profil sans être annoncé.",
   },
 
   autopilot: {

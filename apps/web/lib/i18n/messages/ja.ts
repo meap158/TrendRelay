@@ -609,6 +609,7 @@ export const ja: Messages = {
     disclosureEmpty: "表示なし。キャプションには何も追加されません。",
     chooseProductHint: "カタログから選ぶ",
     bioOnlyHere: "{platforms} では投稿内のリンクをタップできないため、このリンクはプロフィールに置き、キャプションからそこを指します。",
+    tiktokBioCaution: "TikTok ではキャプションでプロフィールのリンクに触れないでください。「リンクはプロフィールに」と書くとスパムと見なされ、違反につながる恐れがあります。リンクは告知しなくてもプロフィールから機能します。",
   },
 
   autopilot: {

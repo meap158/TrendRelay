@@ -90,6 +90,22 @@ def test_a_bio_placement_still_discloses_in_the_caption() -> None:
     assert "Link in bio" in post.caption
 
 
+def test_tiktok_never_writes_the_bio_call_out_into_its_caption() -> None:
+    # TikTok reads "link in bio" as a spam signal and repeated use risks
+    # violations - so its caption carries the copy and the disclosure and
+    # stays silent about the profile, while the link still lives there.
+    post = compose(
+        platform="tiktok",
+        body="Three ways to pull a better espresso.",
+        link="https://tr.example/c/abc",
+        disclosure=DISCLOSURE,
+    )
+    assert post.placement.placement == "bio"
+    assert post.caption.startswith(DISCLOSURE)
+    assert "https://tr.example/c/abc" not in post.caption
+    assert "bio" not in post.caption.lower()
+
+
 def test_an_offer_without_a_disclosure_is_refused() -> None:
     with pytest.raises(DisclosureMissing, match="disclosure"):
         compose(
