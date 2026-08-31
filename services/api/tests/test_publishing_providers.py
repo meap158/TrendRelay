@@ -1748,6 +1748,98 @@ def test_zernio_posts_a_carousel_as_images_not_a_video(
     assert body["tiktokSettings"]["express_consent_given"] is True
 
 
+def test_a_long_carousel_caption_becomes_a_short_tiktok_title_not_a_refusal(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """The live failure: Zernio refuses TikTok photo content over 90 characters.
+
+    It does not truncate, whatever its documentation implies - a campaign
+    carousel with a full caption came back "Please shorten it (or post as a
+    TikTok video instead)". So on a TikTok-only photo post the shared
+    `content` is built as the slideshow title - the post's own title, else
+    the caption's first line, trimmed at a word boundary - and the whole
+    caption rides in `tiktokSettings.description`, where TikTok reads the
+    real caption from.
+    """
+    use_provider(monkeypatch, tmp_path, "zernio")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/media/presign":
+            name = kwargs["body"]["filename"]
+            return {
+                "uploadUrl": f"https://upload.example.com/{name}",
+                "publicUrl": f"https://cdn.example.com/{name}",
+            }
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {"post": {"_id": "zer_photo"}}
+        return {}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_http", lambda *args, **kwargs: None)
+
+    long_caption = "Mot ngay binh thuong nhung mood khong binh thuong " * 26
+    publishing._execute_publish(carousel(
+        carousel_images,
+        caption=long_caption,
+        title="Mot ngay binh thuong, mood khong binh thuong",
+        confirm_external_action=True,
+    ))
+
+    body = sent["body"]
+    # The written title leads; it fits the cap, so it goes whole.
+    assert body["content"] == "Mot ngay binh thuong, mood khong binh thuong"
+    assert body["tiktokSettings"]["description"] == long_caption[:4000]
+
+    # Without a title, the caption's first line is trimmed at a word boundary
+    # and owns up to the trim.
+    publishing._execute_publish(carousel(
+        carousel_images, caption=long_caption, confirm_external_action=True,
+    ))
+    untitled = sent["body"]["content"]
+    assert len(untitled) <= publishing.TIKTOK_PHOTO_TITLE_LIMIT
+    assert untitled.endswith("…")
+    assert not untitled[:-1].endswith(" ")
+
+
+def test_a_mixed_network_carousel_with_a_long_caption_is_refused_before_upload(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """One Zernio post shares one `content` across its networks, and a TikTok
+    photo post spends it on the 90-character slideshow title - so a mixed post
+    cannot both title TikTok and caption the rest. Refused with the way out,
+    and before any image is presigned and uploaded."""
+    use_provider(monkeypatch, tmp_path, "zernio")
+    uploads: list[str] = []
+
+    def fake_request(method, path, **kwargs):
+        if path == "/media/presign":
+            uploads.append(kwargs["body"]["filename"])
+        return {}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_http", lambda *args, **kwargs: None)
+
+    # Surfaced as the run's failure: nothing reached the engine, so the
+    # publish pipeline raises the collected refusal rather than a partial.
+    with pytest.raises(RuntimeError, match="slideshow title"):
+        publishing._execute_publish(carousel(
+            carousel_images,
+            caption="A caption well beyond ninety characters " * 5,
+            targets=[
+                publishing.PublishTarget(
+                    platform="tiktok", integration_id="account-1", post_type="photo",
+                ),
+                publishing.PublishTarget(
+                    platform="instagram", integration_id="account-2", post_type="photo",
+                ),
+            ],
+            confirm_external_action=True,
+        ))
+    assert uploads == []
+
+
 def test_woopsocial_posts_a_carousel_as_one_post_of_many_media(
     monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
 ) -> None:

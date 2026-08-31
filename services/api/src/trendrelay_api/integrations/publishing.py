@@ -1725,6 +1725,28 @@ def _post_title(request: PublishRequest) -> str:
     return (first_line or "Untitled")[:200]
 
 
+#: TikTok caps a photo post's slideshow title at 90 characters. Zernio maps a
+#: post's shared `content` field straight onto that title and *refuses* longer
+#: content rather than truncating it - the full caption travels separately in
+#: `tiktokSettings.description`.
+TIKTOK_PHOTO_TITLE_LIMIT = 90
+
+
+def _tiktok_photo_title(request: PublishRequest) -> str:
+    """The slideshow title a TikTok photo post shows over its pictures.
+
+    The post's own title where one was written, else the caption's first line
+    - the same preference every titled engine gets - trimmed to TikTok's cap
+    at a word boundary, so the on-screen title ends on a word rather than
+    mid-syllable, with an ellipsis owning up to the trim.
+    """
+    title = _post_title(request)
+    if len(title) <= TIKTOK_PHOTO_TITLE_LIMIT:
+        return title
+    trimmed = title[: TIKTOK_PHOTO_TITLE_LIMIT - 1].rsplit(" ", 1)[0].rstrip()
+    return (trimmed or title[: TIKTOK_PHOTO_TITLE_LIMIT - 1]).rstrip() + "…"
+
+
 # --------------------------------------------------------------------------- #
 # bundle.social
 # --------------------------------------------------------------------------- #
@@ -2073,6 +2095,29 @@ def _zernio_publish(
     request: PublishRequest, video: Path | None, request_id: str | None = None
 ) -> dict[str, Any]:
     carousel = _is_image_post(request)
+    tiktok_targets = [
+        target for target in request.targets if target.platform == "tiktok"
+    ]
+    if (
+        carousel
+        and tiktok_targets
+        and len(tiktok_targets) != len(request.targets)
+        and len(request.caption) > TIKTOK_PHOTO_TITLE_LIMIT
+    ):
+        # Zernio sends one shared `content` to every platform on a post, and a
+        # TikTok photo post uses it as the slideshow title, which TikTok caps
+        # at 90 characters and Zernio refuses over. On a TikTok-only post the
+        # content becomes a short title below; on a mixed post the other
+        # networks need the full caption in it, so the two cannot share.
+        # Refused here, before any image is uploaded, rather than by the
+        # engine after three presigned puts.
+        raise ValueError(
+            "Zernio sends one shared caption to every network on a post, and "
+            "a TikTok photo post uses it as the slideshow title, capped at "
+            f"{TIKTOK_PHOTO_TITLE_LIMIT} characters - this caption is "
+            f"{len(request.caption)}. Publish the TikTok carousel as its own "
+            "post, or shorten the caption."
+        )
     if carousel:
         # Every image, in swipe order, each presigned and put separately. The
         # order is the post, so the uploads are not parallelised into whatever
@@ -2098,10 +2143,19 @@ def _zernio_publish(
         media_url = None
         media_items = []
     post: dict[str, Any] = {
-        # Kept as the full caption for ordinary image posts. TikTok automatically
-        # truncates this value into its 90-character photo title and reads the
-        # actual caption from `tiktokSettings.description` below.
-        "content": request.caption,
+        # The full caption, except for a TikTok-only photo post: there Zernio
+        # maps `content` onto TikTok's 90-character slideshow title and
+        # refuses anything longer - it does not truncate, whatever its
+        # documentation implies; a 1,289-character carousel caption came back
+        # "Please shorten it (or post as a TikTok video instead)". The real
+        # caption rides in `tiktokSettings.description` below, so the content
+        # here is the short title and nothing is lost.
+        "content": (
+            _tiktok_photo_title(request)
+            if carousel and tiktok_targets
+            and len(tiktok_targets) == len(request.targets)
+            else request.caption
+        ),
         "platforms": [],
         "timezone": "UTC",
     }
