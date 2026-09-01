@@ -195,6 +195,19 @@ def _coverage_stats(urls: list[str]) -> list[dict[str, Any]]:
     return stats
 
 
+def _coverage_pct(held: int, total: int) -> str:
+    """Whole-number share, honest at the edges.
+
+    100% only when actually complete and 0% only when actually empty; anything
+    in between is clamped to 1-99 so rounding never overstates either end.
+    """
+    if total <= 0 or held <= 0:
+        return "0%"
+    if held >= total:
+        return "100%"
+    return f"{min(99, max(1, round(held * 100 / total)))}%"
+
+
 def _coverage_line(stats: list[dict[str, Any]]) -> str:
     """One compact sentence of profile coverage, or nothing to say."""
     profiles = [
@@ -205,13 +218,19 @@ def _coverage_line(stats: list[dict[str, Any]]) -> str:
         return ""
     parts = [
         f"{entry.get('nickname') or 'profile'} "
-        f"{int(entry.get('held') or 0)}/{int(entry['declared_total'])}"
+        f"{int(entry.get('held') or 0)}/{int(entry['declared_total'])} "
+        f"({_coverage_pct(int(entry.get('held') or 0), int(entry['declared_total']))})"
         for entry in profiles[:3]
     ]
     rest = len(profiles) - 3
+    listing = ", ".join(parts) + (f", and {rest} more" if rest > 0 else "")
+    if len(profiles) == 1:
+        return f"Profile coverage: {listing}."
+    held_sum = sum(int(entry.get("held") or 0) for entry in profiles)
+    total_sum = sum(int(entry["declared_total"]) for entry in profiles)
     return (
-        "Profile coverage: " + ", ".join(parts)
-        + (f", and {rest} more" if rest > 0 else "") + "."
+        f"Profile coverage: {held_sum}/{total_sum} posts held "
+        f"({_coverage_pct(held_sum, total_sum)}) - {listing}."
     )
 
 
@@ -1229,6 +1248,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             "library_errors": library_errors,
             "creator_urls": list(dict.fromkeys(creator_urls)),
             "source_errors": source_errors,
+            "source_stats": source_stats,
             "summary": summary,
         }
         return complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)

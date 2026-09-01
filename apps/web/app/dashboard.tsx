@@ -325,6 +325,14 @@ function sourceSignature(job: DownloadJob): string {
   return urls.length ? [...urls].sort().join("\n") : job.id;
 }
 
+/** Whole-number share where 100% means complete and 0% means empty - the
+    in-between is clamped to 1-99 so rounding never overstates either end. */
+function coveragePct(held: number, total: number): string {
+  if (total <= 0 || held <= 0) return "0%";
+  if (held >= total) return "100%";
+  return `${Math.min(99, Math.max(1, Math.round((held * 100) / total)))}%`;
+}
+
 export default function Dashboard() {
   const t = useT();
   const { loading, user, apiFetch, retryAuth, probeError } = useAuth();
@@ -939,25 +947,39 @@ export default function Dashboard() {
                 {/* Coverage, where a count can be honest about its ceiling:
                     what we hold of each profile against the total its page
                     declares. Held is cumulative across every run, so a batch
-                    completed over several fetches still reads whole. */}
-                {(job.result?.source_stats ?? []).some((stat) => stat.declared_total) && (
-                  <div className="download-coverage" aria-label="Profile coverage">
-                    {(job.result?.source_stats ?? []).filter((stat) => stat.declared_total).map((stat) => {
-                      const held = stat.held ?? 0;
-                      const total = stat.declared_total ?? 0;
-                      const complete = total > 0 && held >= total;
-                      const who = stat.nickname ?? shortSource(stat.url);
-                      return (
-                        <span key={stat.url} className={complete ? "coverage-complete" : "coverage-partial"}
-                          title={`${held} of the ${total} posts ${who} declares are downloaded${complete
-                            ? "."
-                            : ". Signed-out sessions fetch a profile's most recent posts. Use Fetch missing to update, or sign in to fetch the full profile."}`}>
-                          {who} <b>{held}/{total}</b>
+                    completed over several fetches still reads whole. A batch
+                    of several profiles leads with its whole-batch share, so
+                    "how much of this is here" is one glance, not arithmetic. */}
+                {(() => {
+                  const stats = (job.result?.source_stats ?? []).filter((stat) => stat.declared_total);
+                  if (stats.length === 0) return null;
+                  const heldSum = stats.reduce((sum, stat) => sum + (stat.held ?? 0), 0);
+                  const totalSum = stats.reduce((sum, stat) => sum + (stat.declared_total ?? 0), 0);
+                  return (
+                    <div className="download-coverage" aria-label="Profile coverage">
+                      {stats.length > 1 && (
+                        <span className={"coverage-total " + (heldSum >= totalSum ? "coverage-complete" : "coverage-partial")}
+                          title={`${heldSum} of the ${totalSum} posts these ${stats.length} profiles declare are downloaded.`}>
+                          All profiles <b>{heldSum}/{totalSum}</b><span className="coverage-pct">{coveragePct(heldSum, totalSum)}</span>
                         </span>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+                      {stats.map((stat) => {
+                        const held = stat.held ?? 0;
+                        const total = stat.declared_total ?? 0;
+                        const complete = total > 0 && held >= total;
+                        const who = stat.nickname ?? shortSource(stat.url);
+                        return (
+                          <span key={stat.url} className={complete ? "coverage-complete" : "coverage-partial"}
+                            title={`${held} of the ${total} posts ${who} declares are downloaded${complete
+                              ? "."
+                              : ". Signed-out sessions fetch a profile's most recent posts. Use Fetch missing to update, or sign in to fetch the full profile."}`}>
+                            {who} <b>{held}/{total}</b><span className="coverage-pct">{coveragePct(held, total)}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
                 {/* The same sources, run before. One compact line per run:
                     the newest run above already tells the batch's current

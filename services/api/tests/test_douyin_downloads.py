@@ -90,13 +90,23 @@ def test_single_video_runs_keep_incremental_either_way(monkeypatch) -> None:
     assert "--incremental" in command
 
 
-def test_coverage_line_reads_held_over_declared() -> None:
+def test_coverage_line_reads_held_over_declared_with_a_total() -> None:
     line = douyin._coverage_line([
         {"url": "u1", "kind": "profile", "nickname": "DJ", "declared_total": 324, "held": 317},
         {"url": "u2", "kind": "video"},
         {"url": "u3", "kind": "profile", "declared_total": 412, "held": 39},
     ])
-    assert line == "Profile coverage: DJ 317/324, profile 39/412."
+    assert line == (
+        "Profile coverage: 356/736 posts held (48%) - "
+        "DJ 317/324 (98%), profile 39/412 (9%)."
+    )
+
+
+def test_coverage_line_for_one_profile_skips_the_redundant_total() -> None:
+    line = douyin._coverage_line([
+        {"url": "u1", "kind": "profile", "nickname": "DJ", "declared_total": 324, "held": 324},
+    ])
+    assert line == "Profile coverage: DJ 324/324 (100%)."
 
 
 def test_coverage_line_counts_the_overflow_instead_of_listing_it() -> None:
@@ -106,9 +116,17 @@ def test_coverage_line_counts_the_overflow_instead_of_listing_it() -> None:
         for i in range(5)
     ]
     line = douyin._coverage_line(stats)
-    assert "p0 0/100" in line and "p2 2/100" in line
+    assert "p0 0/100 (0%)" in line and "p2 2/100 (2%)" in line
+    assert "10/500 posts held (2%)" in line
     assert "and 2 more" in line
     assert "p4" not in line
+
+
+def test_coverage_pct_never_rounds_to_a_false_edge() -> None:
+    assert douyin._coverage_pct(999, 1000) == "99%"
+    assert douyin._coverage_pct(1, 1000) == "1%"
+    assert douyin._coverage_pct(1000, 1000) == "100%"
+    assert douyin._coverage_pct(0, 1000) == "0%"
 
 
 def test_coverage_line_is_silent_without_declared_totals() -> None:
