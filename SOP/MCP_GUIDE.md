@@ -13,7 +13,9 @@ write operation looks convenient.
 | --- | --- | --- |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
 | Add a post with media (existing asset, new upload, or carousel) | `campaigns.add-post-with-media` | `list_campaigns` |
+| Find a post already created (recover a draft's id, attach media later) | (no SOP yet) | `list_campaign_posts` |
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
+| Lock posts to concrete slots, or spread a batch of drafts across days | (no SOP yet) | `get_day_slots` |
 
 For an action not listed here, call `list_sops`. Match its canonical action or
 an alias. If no reviewed SOP exists, follow current explicit user direction and
@@ -46,6 +48,20 @@ TrendRelay attachment, and a failed requested image must never be silently
 replaced with a similar Library asset. For files generated in a client sandbox
 or private filesystem with no public URL, encode the file and pass `media_base64`
 (or a standard `data:<mime>;base64,<data>` URL) to `upload_media`.
+
+To find a post that already exists - most often a words-first draft from an
+earlier conversation whose id is no longer at hand - `list_campaign_posts`
+pages the whole queue whatever the state: filter by campaign, `state`
+(`draft`, `approved`, `paused`, `retired`), `media` (`none yet` finds drafts
+still waiting for theirs) or caption `search`, and each entry carries the
+`item_id` the other tools take, its state, a caption excerpt to recognise it
+by, and any locked slot. Recover the draft rather than creating a duplicate.
+
+For concrete timing, `get_day_slots` reads one day's openings - free, taken,
+locked or past - and `pin_post_slot` claims a named slot or, given only a day,
+the most fitting free one. Locks work on drafts, each lock reserves its slot
+against the next call, and so a batch of drafts spreads across the coming days
+one pin at a time without a collision. A lock schedules; it never approves.
 
 ### Quick path: generate an image, then add it to a campaign
 

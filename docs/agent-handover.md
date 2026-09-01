@@ -234,7 +234,12 @@ only job, through `publish_queue_item_now` scoped to that row's
 slot. Posts can also be **locked to one slot** (`pinned_slot` on the queue
 item, the `/slots` and `/queue/{id}/slot` endpoints, MCP's `get_day_slots` /
 `pin_post_slot`): a locked post is spent nowhere else, takes its slot ahead of
-the rotation, and reflow moves around it.
+the rotation, and reflow moves around it. Locks work on drafts too, and each
+lock reserves its slot against the next, so a batch of drafts spreads across
+days one `pin_post_slot` call at a time. When a draft's id has been lost
+between conversations, MCP's `list_campaign_posts` pages the whole queue
+whatever the state - with media-shape and caption-search filters - so the id
+is recoverable rather than a dead end.
 
 Still deliberately not built: publish-now on a row an engine already holds
 (scheduled/queued executions). That must modify the existing job rather than

@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign - whole, or a piece at a time - for the operator to promote.
-version: 9
+version: 10
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post, set-post-media]
 ---
@@ -11,9 +11,10 @@ aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campai
 
 This SOP covers bringing media into the workspace and proposing a post made
 from it into a campaign - one video, one picture, or several pictures as a
-carousel - sent whole, or assembled a piece at a time. It uses six operations:
+carousel - sent whole, or assembled a piece at a time. It uses seven operations:
 `list_campaigns`, `list_library_assets`, `upload_media`, `get_import_status`,
-`create_campaign_post`, and `set_post_media`.
+`create_campaign_post`, `set_post_media`, and `list_campaign_posts` to find a
+post again when its id is no longer at hand.
 
 `upload_media` takes video and images alike. `upload_image` still exists and
 takes pictures only; prefer `upload_media` when it is offered, so one tool
@@ -237,6 +238,16 @@ create does, so a gallery grown one picture at a time is told the moment it
 outgrows an account rather than at publish time. A video cannot be appended -
 it stands alone - so swapping pictures for a clip means sending the clip
 without `append`.
+
+**Finding the draft again.** Keep the `item_id` each `create_campaign_post`
+returns, but losing it - the media arriving in a later conversation than the
+words did - is not a dead end. `list_campaign_posts` pages the whole queue
+whatever the state: filter `state: draft` with `media: "none yet"` for
+words-first drafts still waiting for their media, or pass `search` with words
+from the caption, and match each draft by its `caption_preview`. Every entry
+carries the `item_id` that `set_post_media` takes. Recover the existing draft
+rather than creating a second one; a duplicate post because an id was lost is
+exactly the mistake this read exists to prevent.
 
 Only a **draft** can be changed this way. Once the operator has promoted a post
 into the rotation they approved it with its media in view, and changing what

@@ -39,6 +39,14 @@ first action is `campaigns.fill-needs-copy`.
   accepts caller-controlled `limit` (1-250) and `offset`, and returns `total`,
   `returned`, `more`, and `next_offset`. After writing copy, refresh from offset
   zero because completed rows leave the result set.
+- `list_campaign_posts` - the whole queue, whatever the state, so a post's
+  `item_id` is always recoverable - a draft captioned in an earlier
+  conversation included. Filters: `campaign_id`, `state` (draft, approved,
+  paused, retired), `media` (video, carousel, `text only`, or `none yet` for
+  words-first drafts still waiting for media), and `search` over captions and
+  titles. Each entry carries its state, a caption excerpt to recognise it by,
+  and the slot it is locked to; pagination follows the same contract as
+  `list_posts_needing_copy`.
 - `get_post_context` - everything for one post: the video, the attached product
   and its commission, every destination the post reaches and where a first
   comment or thread reply lands there, the campaign's brief, and any copy already
