@@ -764,8 +764,7 @@ export default function Dashboard() {
           </div>}
           {providerReady && cookiesReady && !refreshRequired && anonymousSession && <div className="connection-callout connected">
             {/* Anonymous works: single links reliably, and a profile fetches
-                its newest ~40 posts - the most Douyin's login wall leaves a
-                signed-out session. Not a warning; signing in is the only path
+                its most recent posts. Not a warning; signing in is the path
                 to a profile's full history and to topic search. */}
             <div><strong>Douyin connected (signed out)</strong><span>{status?.douyin.connection?.message}</span></div>
             <button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
@@ -919,7 +918,7 @@ export default function Dashboard() {
                         <span key={stat.url} className={complete ? "coverage-complete" : "coverage-partial"}
                           title={`${held} of the ${total} posts ${who} declares are downloaded${complete
                             ? "."
-                            : ". Douyin currently caps signed-out profile fetches at the newest posts - Fetch missing tops it up as new posts land, and takes everything the moment a deeper listing is served; signing in lifts the cap."}`}>
+                            : ". Signed-out sessions fetch a profile's most recent posts. Use Fetch missing to update, or sign in to fetch the full profile."}`}>
                           {who} <b>{held}/{total}</b>
                         </span>
                       );

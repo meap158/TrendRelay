@@ -83,16 +83,13 @@ DY_DATABASE = PROJECT_ROOT / ".data" / "douyin" / "dy_downloader.db"
 PROFILE_STATS_TIMEOUT_SECONDS = 240
 
 #: What a capped profile fetch means, said on the job rather than left to be
-#: discovered from the count. Douyin started walling signed-out profile
-#: listings in late August 2026 - whole profiles downloaded fine until then,
-#: and every run still takes everything the session is offered, so if the wall
-#: lifts the same run fetches the whole profile again.
+#: discovered from the count. Kept neutral and short: the history of when
+#: Douyin changed this behaviour lives in docs/third-party, not in product
+#: copy. Every run still takes everything the session is offered, so deeper
+#: listings are fetched automatically whenever Douyin serves them.
 ANONYMOUS_PROFILE_NOTE = (
-    "Douyin is currently serving signed-out sessions only a profile's newest "
-    "posts (whole profiles downloaded in full until late August 2026, and "
-    "every run takes all it is offered - if the wall lifts, the same re-run "
-    "fetches everything). Re-run the source to top up; a signed-in session "
-    "lifts the cap entirely."
+    "Signed-out sessions fetch a profile's most recent posts. Re-run the "
+    "source to pick up new ones, or sign in to fetch full profiles."
 )
 
 

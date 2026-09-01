@@ -161,8 +161,7 @@ def check_provider() -> int:
     elif cookie_status["ready"]:
         print(
             f"Douyin cookies ready, anonymous ({cookie_status['source']}). "
-            "Single links download; a profile fetches its newest ~40 posts "
-            "(Douyin's login wall hides the rest from signed-out sessions). "
+            "Single links download; profiles fetch their most recent posts. "
             "A signed-in account fetches whole profiles and topic search."
         )
     else:
