@@ -293,6 +293,7 @@ export const ru: Messages = {
     toRetry: "повторить",
     showAllMedia: "Показать все медиа",
     playPreview: "Воспроизвести превью",
+    viewFullSize: "Показать в полном размере",
     loadingPreview: "Загрузка превью…",
     previewUnavailable: "Превью недоступно",
     previewPosition: "{position} из {total}",

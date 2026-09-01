@@ -344,6 +344,26 @@ a.ui-button { text-decoration: none; }
 .ui-choice-option small { color: var(--muted); font-size: 10px; font-weight: 400; line-height: 1.35; }
 .ui-choice-option:has(input:focus-visible) { outline: 2px solid var(--link); outline-offset: 2px; }
 
+/* --- lightbox -------------------------------------------------------------- */
+/* Darker than the dialog's wash and covering everything, because here the
+   ground is not a hint that a panel is in front - it is the room the picture
+   is being looked at in. */
+.ui-lightbox-overlay { position: fixed; inset: 0; z-index: 120; background: color-mix(in srgb, var(--ink) 92%, transparent); }
+/* The whole viewport is the target: anywhere but the picture puts it back. */
+/* One track, capped at the window rather than sized by the picture in it -
+   `minmax(0, 1fr)` and not `1fr`, because an auto track grows to its content
+   and the image's `max-block-size: 100%` then measures itself against the
+   height it just caused. A tall picture overflowed the screen instead of
+   fitting it. */
+.ui-lightbox { position: fixed; z-index: 121; inset: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; padding: 24px; cursor: zoom-out; }
+/* Fitted, never enlarged. A picture smaller than the window is shown at the
+   size it is - blowing a 200px thumbnail up to fill a screen would be showing
+   detail that is not in the file. */
+.ui-lightbox img { max-inline-size: 100%; max-block-size: 100%; object-fit: contain; cursor: default; }
+.ui-lightbox-close { position: absolute; z-index: 1; inset-block-start: 12px; inset-inline-end: 12px; display: grid; place-items: center; inline-size: 34px; block-size: 34px; border: 0; border-radius: 999px; padding: 0; color: var(--on-media); background: color-mix(in srgb, var(--on-media) 12%, transparent); cursor: pointer; }
+.ui-lightbox-close:hover { background: color-mix(in srgb, var(--on-media) 22%, transparent); }
+.ui-lightbox-close:focus-visible { outline: 2px solid var(--on-media); outline-offset: 2px; }
+
 /* --- dialog ---------------------------------------------------------------- */
 .ui-dialog-overlay {
   position: fixed;

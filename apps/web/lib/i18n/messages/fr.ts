@@ -295,6 +295,7 @@ export const fr: Messages = {
     toRetry: "à réessayer",
     showAllMedia: "Afficher tous les médias",
     playPreview: "Lire l'aperçu",
+    viewFullSize: "Voir en taille réelle",
     loadingPreview: "Chargement de l'aperçu…",
     previewUnavailable: "Aperçu indisponible",
     previewPosition: "{position} sur {total}",

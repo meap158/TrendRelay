@@ -290,6 +290,7 @@ export const vi: Messages = {
     toRetry: "cần thử lại",
     showAllMedia: "Hiển thị tất cả nội dung",
     playPreview: "Phát video xem trước",
+    viewFullSize: "Xem ở kích thước đầy đủ",
     loadingPreview: "Đang tải bản xem trước…",
     previewUnavailable: "Không xem trước được",
     previewPosition: "{position} / {total}",

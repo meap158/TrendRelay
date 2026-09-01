@@ -288,6 +288,7 @@ export const ja: Messages = {
     toRetry: "再試行",
     showAllMedia: "すべてのメディアを表示",
     playPreview: "プレビューを再生",
+    viewFullSize: "原寸大で表示",
     loadingPreview: "プレビューを読み込み中…",
     previewUnavailable: "プレビューを表示できません",
     previewPosition: "{total} 件中 {position} 件目",

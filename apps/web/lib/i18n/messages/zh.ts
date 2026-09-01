@@ -282,6 +282,7 @@ export const zh: Messages = {
     toRetry: "待重试",
     showAllMedia: "显示所有媒体",
     playPreview: "播放预览",
+    viewFullSize: "查看原图",
     loadingPreview: "正在加载预览…",
     previewUnavailable: "无法预览",
     previewPosition: "第 {position} / {total} 项",

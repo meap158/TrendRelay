@@ -92,6 +92,17 @@
 /* An image fills the stage the same way a video does, so switching between a
    photo and a clip does not resize the panel under the cursor. */
 .library-preview-image { display: block; width: 100%; height: 100%; object-fit: contain; background: var(--ink); }
+/* The picture is the way to a bigger picture. A button so it is reachable by
+   keyboard and says what it does; the zoom cursor and the corner mark are what
+   say so to the eye, since a picture that opens is otherwise indistinguishable
+   from one that does not. */
+.library-preview-zoom { position: relative; display: block; inline-size: 100%; block-size: 100%; border: 0; padding: 0; background: var(--ink); cursor: zoom-in; }
+.library-preview-zoom-mark { position: absolute; inset-block-end: 8px; inset-inline-end: 8px; display: grid; place-items: center; inline-size: 26px; block-size: 26px; border-radius: 999px; color: var(--on-media); background: color-mix(in srgb, var(--ink) 55%, transparent); opacity: 0; transition: opacity .12s ease; }
+.library-preview-zoom:hover .library-preview-zoom-mark,
+.library-preview-zoom:focus-visible .library-preview-zoom-mark { opacity: 1; }
+/* Never hidden for somebody who cannot see the cursor change or the hover. */
+@media (hover: none) { .library-preview-zoom-mark { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .library-preview-zoom-mark { transition: none; } }
 /* Audio has no picture, so the stage would collapse its controls into a sliver.
    Centred at its natural height, on the same dark stage, it reads as the same
    component rather than a stray input. */

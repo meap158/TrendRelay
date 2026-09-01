@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle, Undo2 } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle, Maximize2, Undo2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,6 +9,7 @@ import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState 
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
 import { mediaTypeFor, opaquePreviewUrl } from "../../lib/media-preview";
+import { Lightbox } from "../ui/lightbox";
 import { useAuth } from "../auth-provider";
 import { type BaseJob, useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
@@ -828,6 +829,15 @@ function MediaPreview({
   // transport surface used here: play, pause and paused.
   const videoRef = useRef<HTMLMediaElement>(null);
   const navigatingRef = useRef(false);
+  /**
+   * Whether the picture is open at full size.
+   *
+   * Lives here rather than above because the lightbox shows the bytes this
+   * component fetched. That also means browsing away closes it, which is the
+   * behaviour wanted: the keys are the dialog's while it is open - see the
+   * guard in the keyboard handler - so nothing can change underneath it.
+   */
+  const [zoomed, setZoomed] = useState(false);
   const rendered = renderedCut(asset.versions);
 
   // Audio and video both have a transport; an image has nothing to play.
@@ -936,6 +946,10 @@ function MediaPreview({
     function navigateWithKeyboard(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      // The lightbox is a modal, and Escape is its way out. Browsing under an
+      // open one would swap the picture being looked at for a different one,
+      // or for a video this view cannot show at all.
+      if (zoomed) return;
       if (event.key === "ArrowLeft" && hasPreviousVideo) {
         event.preventDefault();
         navigateVideo(onPreviousVideo);
@@ -969,8 +983,22 @@ function MediaPreview({
           </button>
         ) : source ? (
           asset.media_kind === "image" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="library-preview-image" src={source} alt={asset.title} />
+            // A button rather than a click handler on the picture: this is
+            // reachable by keyboard, announces what it does, and is the same
+            // affordance a thumbnail has anywhere else.
+            <button
+              type="button"
+              className="library-preview-zoom"
+              aria-label={t("library.viewFullSize")}
+              title={t("library.viewFullSize")}
+              onClick={() => setZoomed(true)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="library-preview-image" src={source} alt={asset.title} />
+              <span className="library-preview-zoom-mark" aria-hidden="true">
+                <Maximize2 size={14} />
+              </span>
+            </button>
           ) : asset.media_kind === "audio" ? (
             // Written out rather than built with createElement so the ref is a
             // real JSX ref: React forbids reading one out of a props object
@@ -1029,6 +1057,14 @@ function MediaPreview({
             onClick={() => { setError(""); setSource(""); setCut("original"); setRequested(true); }}
           >{t("library.cutOriginal")}</button>
         </div>
+      )}
+      {asset.media_kind === "image" && source && (
+        <Lightbox
+          open={zoomed}
+          src={source}
+          alt={asset.title}
+          onClose={() => setZoomed(false)}
+        />
       )}
       <nav className="library-preview-navigation" aria-label={t("library.browsePreviews")}>
         <button type="button" disabled={!hasPreviousVideo} onClick={() => navigateVideo(onPreviousVideo)} aria-label={t("library.previousVideo")} title={t("library.previousVideoKey")}>

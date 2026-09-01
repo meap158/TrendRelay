@@ -288,6 +288,7 @@ export const ar: Messages = {
     toRetry: "لإعادة المحاولة",
     showAllMedia: "عرض كل الوسائط",
     playPreview: "تشغيل المعاينة",
+    viewFullSize: "عرض بالحجم الكامل",
     loadingPreview: "جارٍ تحميل المعاينة…",
     previewUnavailable: "المعاينة غير متاحة",
     previewPosition: "{position} من {total}",

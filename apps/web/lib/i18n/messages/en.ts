@@ -294,6 +294,7 @@ export const en = {
     toRetry: "to retry",
     showAllMedia: "Show all media",
     playPreview: "Play video preview",
+    viewFullSize: "View at full size",
     loadingPreview: "Loading preview…",
     previewUnavailable: "Preview unavailable",
     previewPosition: "{position} of {total}",
