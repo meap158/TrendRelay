@@ -84,7 +84,9 @@ INSTRUCTIONS = (
     "campaign skips a half-finished post with a note until it is whole. A post "
     "you create arrives as a draft outside the "
     "rotation - the operator promotes it in the app - so say it is waiting for "
-    "them.\n\n"
+    "them. Nothing is lost between the halves: `list_campaign_posts` finds "
+    "any post again by state, media shape or words in its caption, so a "
+    "draft written in an earlier conversation can still be given its media.\n\n"
     "For when things post, `list_posting_times` gives the workspace's times, the "
     "presets available and which pages are assigned one; "
     "`get_campaign_posting_times` says what each of a campaign's accounts posts at "
@@ -97,7 +99,9 @@ INSTRUCTIONS = (
     "locked or past - and `pin_post_slot` claims the most fitting free one "
     "(or the exact time you name) and holds the post there; other posts "
     "reflow around a lock, never through it, and release=true hands the post "
-    "back to the rotation.\n\n"
+    "back to the rotation. Locks work on drafts too, and each lock reserves "
+    "its slot against the next, so pinning a batch one by one - say ten "
+    "drafts to the next ten days - spreads them without a collision.\n\n"
     "You write drafts and schedules only. You cannot approve, publish, deploy, "
     "connect an account or sign in - those stay a person's decision in the app. "
     "Changing a schedule moves when already-approved posts go out; it never sends "
@@ -280,6 +284,37 @@ def build_server(workspace_id: str) -> FastMCP:
             "list_posts_needing_copy",
             lambda s: context.list_posts_needing_copy(
                 s, workspace_id, campaign_id, limit=limit, offset=offset,
+            ),
+        )
+
+    @server.tool(
+        name="list_campaign_posts",
+        description=(
+            "A page of the queue's posts whatever their state, so a post's "
+            "item_id can always be found again - a draft captioned in an "
+            "earlier conversation included. Narrow with campaign_id, state "
+            "(draft, approved, paused, retired), media (video, carousel, "
+            "'text only', or 'none yet' for drafts still waiting for theirs) "
+            "or search, which matches captions and titles. Each entry carries "
+            "its state, a caption excerpt to recognise it by, and the slot it "
+            "is locked to if any; the response paginates like "
+            "list_posts_needing_copy."
+        ),
+    )
+    def list_campaign_posts(
+        campaign_id: str | None = None,
+        state: str | None = None,
+        media: str | None = None,
+        search: str | None = None,
+        limit: CopyPageLimit = context.DEFAULT_COPY_PAGE_SIZE,
+        offset: CopyPageOffset = 0,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_campaign_posts",
+            lambda s: context.list_campaign_posts(
+                s, workspace_id, campaign_id,
+                state=state, media=media, search=search,
+                limit=limit, offset=offset,
             ),
         )
 
@@ -713,7 +748,9 @@ def build_server(workspace_id: str) -> FastMCP:
             "is spent nowhere else, and other posts reflow around it when "
             "something publishes early. Pass release=true to hand it back to "
             "the rotation. A scheduling write, not an approval: a draft still "
-            "waits for the operator to promote it."
+            "waits for the operator to promote it. Each lock reserves its "
+            "slot against the next call, so locking a batch of posts one by "
+            "one - each to its own day - spreads them without a collision."
         ),
     )
     def pin_post_slot(
@@ -822,7 +859,7 @@ def exposed_tool_names() -> list[str]:
 TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Guidance": ("list_sops", "get_sop"),
     "Campaign context": (
-        "list_campaigns", "list_posts_needing_copy",
+        "list_campaigns", "list_posts_needing_copy", "list_campaign_posts",
         "get_post_context", "get_campaign_config",
         # What already went out belongs here rather than under Copy: it is
         # read to decide what to write, not a way of writing it.

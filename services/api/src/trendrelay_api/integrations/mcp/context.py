@@ -457,6 +457,129 @@ def list_posts_needing_copy(
     }
 
 
+POST_STATES = ("draft", "approved", "paused", "retired")
+POST_MEDIA_KINDS = ("video", "carousel", "text only", "none yet")
+
+
+def _item_media_kind(item: CampaignQueueItem) -> str:
+    return (
+        "carousel" if item.image_paths
+        else "video" if item.video_path
+        else "text only" if item.text_only
+        else "none yet"
+    )
+
+
+def list_campaign_posts(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str | None = None,
+    *,
+    state: str | None = None,
+    media: str | None = None,
+    search: str | None = None,
+    limit: int = DEFAULT_COPY_PAGE_SIZE,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Every post in the queue, whatever its state - so none is ever lost.
+
+    The listing that makes ids recoverable: a draft written words-first in an
+    earlier conversation can be found again by its caption and given media,
+    instead of being reachable only while the id from its create call is still
+    at hand. Same compact cards and pagination as `list_posts_needing_copy`,
+    plus each post's state, a caption excerpt to recognise it by, and the slot
+    it is locked to if any.
+    """
+    if not 1 <= limit <= MAX_COPY_PAGE_SIZE:
+        raise ValueError(
+            f"limit must be between 1 and {MAX_COPY_PAGE_SIZE}; received {limit}."
+        )
+    if offset < 0:
+        raise ValueError(f"offset must be zero or greater; received {offset}.")
+    if state is not None and state not in POST_STATES:
+        raise ValueError(
+            f"state must be one of {', '.join(POST_STATES)}; received {state!r}."
+        )
+    if media is not None and media not in POST_MEDIA_KINDS:
+        raise ValueError(
+            f"media must be one of {', '.join(POST_MEDIA_KINDS)}; received {media!r}."
+        )
+
+    conditions = (CampaignQueueItem.workspace_id == workspace_id,)
+    if campaign_id:
+        conditions += (CampaignQueueItem.campaign_id == campaign_id,)
+    if state:
+        conditions += (CampaignQueueItem.state == state,)
+    items = list(session.scalars(
+        select(CampaignQueueItem)
+        .where(*conditions)
+        .order_by(
+            CampaignQueueItem.campaign_id,
+            CampaignQueueItem.position,
+            CampaignQueueItem.id,
+        )
+    ).all())
+    # Media shape and caption text live in JSON and free text, so these two
+    # narrow in Python; the page and its total describe the narrowed list.
+    if media:
+        items = [item for item in items if _item_media_kind(item) == media]
+    if search and search.strip():
+        needle = search.strip().lower()
+        placeholder = _placeholder_body()
+        items = [
+            item for item in items
+            if needle in (item.body if item.body != placeholder else "").lower()
+            or needle in (item.title or "").lower()
+        ]
+    total = len(items)
+    page = items[offset:offset + limit]
+
+    campaign_ids = {item.campaign_id for item in page}
+    campaigns = {
+        c.id: c for c in session.scalars(
+            select(Campaign).where(
+                Campaign.workspace_id == workspace_id,
+                Campaign.id.in_(campaign_ids),
+            )
+        ).all()
+    } if campaign_ids else {}
+    assets = _asset_index(session, list(page))
+    placeholder = _placeholder_body()
+    posts = []
+    for item in page:
+        summary = _post_summary(
+            session, item, campaigns.get(item.campaign_id),
+            assets.get(item.asset_id) if item.asset_id else None,
+        )
+        summary["state"] = item.state
+        caption = item.body if item.body != placeholder else ""
+        summary["caption_preview"] = (
+            caption[:157] + "..." if len(caption) > 160 else caption
+        ) or None
+        summary["locked_slot"] = (
+            # Stamped UTC: SQLite returns the stored moment naive, and a bare
+            # ISO string reads as local time to whoever parses it.
+            (
+                item.pinned_slot.replace(tzinfo=UTC)
+                if item.pinned_slot.tzinfo is None
+                else item.pinned_slot
+            ).isoformat()
+            if item.pinned_slot
+            else None
+        )
+        posts.append(summary)
+    more = offset + len(posts) < total
+    return {
+        "posts": posts,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "returned": len(posts),
+        "more": more,
+        "next_offset": offset + len(posts) if more else None,
+    }
+
+
 def get_campaign_config(session: Session, workspace_id: str, campaign_id: str) -> dict[str, Any]:
     """The campaign's own brief and posting configuration, for tone and rules.
 

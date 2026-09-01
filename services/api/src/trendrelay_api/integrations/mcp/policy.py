@@ -77,6 +77,10 @@ EXPOSURE: dict[str, Access] = {
     # --- Reads: context for writing copy -----------------------------------
     "list_campaigns": Access.READ,
     "list_posts_needing_copy": Access.READ,
+    # The whole queue, drafts included, so an id lost between conversations is
+    # recoverable rather than a dead end. The same evidence get_post_context
+    # hands over one post at a time, and it changes nothing.
+    "list_campaign_posts": Access.READ,
     "get_post_context": Access.READ,
     "get_campaign_config": Access.READ,
     # What already went out, and what it earned. A read: it is the evidence

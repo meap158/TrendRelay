@@ -115,7 +115,8 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
     assert policy.allowed_operations() == [
         "create_campaign_post", "create_posting_preset", "get_campaign_config",
         "get_campaign_posting_times", "get_day_slots", "get_import_status",
-        "get_post_context", "get_sop", "list_campaigns", "list_library_assets",
+        "get_post_context", "get_sop", "list_campaign_posts", "list_campaigns",
+        "list_library_assets",
         "list_posting_times",
         "list_posts_needing_copy", "list_published_posts", "list_sops",
         "pin_post_slot", "set_campaign_posting_times",
@@ -264,6 +265,60 @@ def test_posts_needing_copy_refuses_unsafe_page_sizes(session, limit) -> None:
 def test_posts_needing_copy_refuses_negative_offsets(session) -> None:
     with pytest.raises(ValueError, match="offset must be zero or greater"):
         context.list_posts_needing_copy(session, "ws", offset=-1)
+
+
+def test_list_campaign_posts_recovers_a_captioned_draft(session) -> None:
+    # The scenario the tool exists for: copy written in one conversation,
+    # media arriving in another, and the item id kept by neither.
+    session.add(CampaignQueueItem(
+        id="q2", workspace_id="ws", campaign_id="camp", state="draft",
+        created_by="local-admin", video_path="", title="",
+        body="Mặc cho mình, không phải cho ai khác", hashtags=[], position=1,
+        offer_ids=[], last_posted_by_destination={},
+    ))
+    session.commit()
+
+    page = context.list_campaign_posts(
+        session, "ws", state="draft", media="none yet"
+    )
+    assert [p["item_id"] for p in page["posts"]] == ["q2"]
+    found = page["posts"][0]
+    assert found["state"] == "draft"
+    assert found["media_kind"] == "none yet"
+    assert found["caption_preview"].startswith("Mặc cho mình")
+
+    by_words = context.list_campaign_posts(session, "ws", search="không phải")
+    assert [p["item_id"] for p in by_words["posts"]] == ["q2"]
+
+
+def test_list_campaign_posts_lists_every_state_and_carries_the_lock(session) -> None:
+    from datetime import datetime
+
+    item = session.get(CampaignQueueItem, "q1")
+    # Naive on purpose: this is the shape SQLite hands back a stored moment in.
+    item.pinned_slot = datetime(2026, 9, 5, 13, 0)
+    session.commit()
+
+    page = context.list_campaign_posts(session, "ws")
+    assert page["total"] == 1
+    only = page["posts"][0]
+    assert only["state"] == "approved"
+    assert only["locked_slot"] == "2026-09-05T13:00:00+00:00"
+    # A placeholder body is the absence of a caption, not a caption.
+    assert only["caption_preview"] is None
+    assert not only["has_caption"]
+
+
+def test_list_campaign_posts_does_not_search_the_placeholder(session) -> None:
+    page = context.list_campaign_posts(session, "ws", search=PLACEHOLDER_BODY[:12])
+    assert page["total"] == 0
+
+
+def test_list_campaign_posts_refuses_unknown_filters(session) -> None:
+    with pytest.raises(ValueError, match="state"):
+        context.list_campaign_posts(session, "ws", state="published")
+    with pytest.raises(ValueError, match="media"):
+        context.list_campaign_posts(session, "ws", media="gif")
 
 
 def test_get_post_context_carries_product_destination_and_need(session) -> None:
