@@ -309,6 +309,22 @@ function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
   return true;
 }
 
+/**
+ * Runs of the same source list, stacked into one row.
+ *
+ * Fetch missing re-queues a batch's exact sources, so every re-check used to
+ * add another row saying the same thing. The newest run speaks for the group
+ * - its status, its files, its coverage - and the older runs become one
+ * compact history line each inside the row. Order-insensitive on purpose:
+ * the same sources pasted in a different order are still the same batch.
+ */
+type JobGroup = { primary: DownloadJob; earlier: DownloadJob[] };
+
+function sourceSignature(job: DownloadJob): string {
+  const urls = job.payload.request?.urls ?? [];
+  return urls.length ? [...urls].sort().join("\n") : job.id;
+}
+
 export default function Dashboard() {
   const t = useT();
   const { loading, user, apiFetch, retryAuth, probeError } = useAuth();
@@ -349,17 +365,34 @@ export default function Dashboard() {
   const extractedUrls = useMemo(() => sourceUrls(input), [input]);
   const urls = useMemo(() => extractedUrls.filter(isDouyinSource), [extractedUrls]);
   const unsupportedCount = extractedUrls.length - urls.length;
-  const filteredJobs = useMemo(
-    () => jobs.filter((job) => isVisibleForFilter(job, queueFilter)),
-    [jobs, queueFilter],
+  const jobGroups = useMemo(() => {
+    const bySignature = new Map<string, DownloadJob[]>();
+    for (const job of jobs) {
+      const signature = sourceSignature(job);
+      const members = bySignature.get(signature);
+      if (members) members.push(job);
+      else bySignature.set(signature, [job]);
+    }
+    // Jobs arrive newest-first, so each group's first member is its newest
+    // run and the groups themselves sit in newest-first order too.
+    return [...bySignature.values()].map((members): JobGroup => ({
+      primary: members[0], earlier: members.slice(1),
+    }));
+  }, [jobs]);
+  // Filters and counts read the group through its newest run: a batch whose
+  // re-check succeeded is a succeeded batch, and a superseded cancelled run
+  // is history, not something still needing attention.
+  const filteredGroups = useMemo(
+    () => jobGroups.filter((group) => isVisibleForFilter(group.primary, queueFilter)),
+    [jobGroups, queueFilter],
   );
-  const visibleJobs = filteredJobs.slice(0, visibleJobCount);
+  const visibleGroups = filteredGroups.slice(0, visibleJobCount);
   const queueCounts = useMemo(() => ({
-    all: jobs.length,
-    active: jobs.filter((job) => ACTIVE_STATUSES.has(effectiveStatus(job))).length,
-    completed: jobs.filter((job) => effectiveStatus(job) === "succeeded").length,
-    attention: jobs.filter((job) => ["failed", "partial", "empty", "cancelled"].includes(effectiveStatus(job))).length,
-  }), [jobs]);
+    all: jobGroups.length,
+    active: jobGroups.filter((group) => ACTIVE_STATUSES.has(effectiveStatus(group.primary))).length,
+    completed: jobGroups.filter((group) => effectiveStatus(group.primary) === "succeeded").length,
+    attention: jobGroups.filter((group) => ["failed", "partial", "empty", "cancelled"].includes(effectiveStatus(group.primary))).length,
+  }), [jobGroups]);
 
   function addCreatorProfiles(profiles: string[]) {
     const staged = input.split(/\s+/).filter(Boolean);
@@ -841,7 +874,7 @@ export default function Dashboard() {
           ] as [QueueFilter, string][]).map(([value, label]) => <button key={value} type="button" className={queueFilter === value ? "selected" : ""} aria-pressed={queueFilter === value} onClick={() => selectQueueFilter(value)}><span>{label}</span><b>{queueCounts[value]}</b></button>)}
         </div>
 
-        {filteredJobs.length === 0 && <div className="download-empty">
+        {filteredGroups.length === 0 && <div className="download-empty">
           <span className="empty-download-icon" aria-hidden="true">↓</span>
           <strong>{jobs.length ? "No " + (queueFilter === "attention" ? "downloads need attention" : queueFilter + " downloads") : "Your downloads will appear here"}</strong>
           <p>{jobs.length ? "Choose another filter to see the rest of your queue." : "Add one or more Douyin links above to start your first batch."}</p>
@@ -849,7 +882,7 @@ export default function Dashboard() {
         </div>}
 
         <div className="download-job-list">
-          {visibleJobs.map((job) => {
+          {visibleGroups.map(({ primary: job, earlier }) => {
             const current = effectiveStatus(job);
             const sources = job.payload.request?.urls ?? [];
             const artifacts = job.result?.artifacts ?? [];
@@ -866,7 +899,7 @@ export default function Dashboard() {
             return <details key={job.id} className={"download-job " + current} open={ACTIVE_STATUSES.has(current) || undefined}>
               <summary>
                 <span className={"job-status " + current}><i aria-hidden="true" />{job.error && current === "queued" ? "Waiting to retry" : statusLabel(current)}</span>
-                <span className="download-job-summary-title"><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><small>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · {downloadCount}</small></span>
+                <span className="download-job-summary-title"><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><small>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · {downloadCount}{earlier.length > 0 ? ` · ${earlier.length + 1} runs` : ""}</small></span>
                 <time>{new Date(job.created_at).toLocaleString()}</time>
                 <span className="job-disclosure" aria-hidden="true">
                   <svg viewBox="0 0 16 16" focusable="false"><path d="m4 6 4 4 4-4" /></svg>
@@ -926,6 +959,27 @@ export default function Dashboard() {
                   </div>
                 )}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
+                {/* The same sources, run before. One compact line per run:
+                    the newest run above already tells the batch's current
+                    story, so history needs a date and a count, not another
+                    full row in the list. */}
+                {earlier.length > 0 && (
+                  <details className="download-run-history">
+                    <summary>{earlier.length} earlier {earlier.length === 1 ? "run" : "runs"} of these sources</summary>
+                    <ul>
+                      {earlier.map((run) => {
+                        const runStatus = effectiveStatus(run);
+                        return (
+                          <li key={run.id} className={runStatus}>
+                            <span className={"job-status " + runStatus}><i aria-hidden="true" />{statusLabel(runStatus)}</span>
+                            <span>{progressSummary(run.progress, runStatus, run.result?.artifacts ?? [], run.payload.request?.limit)}</span>
+                            <time>{new Date(run.created_at).toLocaleString()}</time>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                )}
                 {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}><ActionIcon name="confirm" />{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}><ActionIcon name="play" />{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}
                 {current === "empty" && !job.error && <div className="job-error"><strong>{t("downloads.noneSaved")}</strong><span>{t("downloads.reuseLinks")}</span><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
                 {artifacts.length > 0 && <div className="artifact-list">
@@ -946,7 +1000,7 @@ export default function Dashboard() {
             </details>;
           })}
         </div>
-        {visibleJobs.length < filteredJobs.length && <button type="button" className="queue-show-more" onClick={() => setVisibleJobCount((current) => current + INITIAL_JOB_COUNT)}>Show {Math.min(INITIAL_JOB_COUNT, filteredJobs.length - visibleJobs.length)} more downloads</button>}
+        {visibleGroups.length < filteredGroups.length && <button type="button" className="queue-show-more" onClick={() => setVisibleJobCount((current) => current + INITIAL_JOB_COUNT)}>Show {Math.min(INITIAL_JOB_COUNT, filteredGroups.length - visibleGroups.length)} more downloads</button>}
       </section>
       </section>
     </>}

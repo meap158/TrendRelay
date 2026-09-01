@@ -923,6 +923,13 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .download-coverage > span b { font-variant-numeric: tabular-nums; }
 .download-coverage > span.coverage-partial { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); color: color-mix(in srgb, var(--amber) 70%, var(--text)); }
 .download-coverage > span.coverage-complete { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); color: color-mix(in srgb, var(--green) 55%, var(--text)); }
+/* Earlier runs of the same sources, folded into the batch's one row: a date
+   and a count per run, behind a disclosure so history costs one line. */
+.download-run-history summary { color: var(--muted); font-size: 11px; cursor: pointer; }
+.download-run-history summary:hover { color: var(--text); }
+.download-run-history ul { display: grid; gap: 3px; margin: 6px 0 0; padding: 0; list-style: none; }
+.download-run-history li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 11px; color: var(--muted); }
+.download-run-history li > time { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
 .download-job .job-error { display: grid; gap: 5px; border: 1px solid var(--bad-line); border-radius: var(--radius-sm); padding: 11px 12px; color: var(--bad); background: var(--bad-bg); }
 .download-job .job-error strong { font-weight: 600; }
 .download-job .job-error span { max-height: 74px; overflow: auto; white-space: pre-wrap; }
