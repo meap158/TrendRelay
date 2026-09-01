@@ -916,13 +916,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .download-live-status span { color: var(--muted); }
 .job-summary { margin: 0; color: var(--muted); line-height: 1.45; }
 /* Profile coverage chips: held over declared, one compact pill per profile.
-   Partial wears the link tone because it names work the operator can still
-   do (re-run, or sign in) - the color of actions, and readable where the
-   amber it first wore was not; complete recedes to a quiet good. */
+   Prominence follows achievement: partial stays in the pill's own muted
+   neutral - its numbers already say what is missing - and complete alone
+   earns the green, so a finished profile is the one that stands out. */
 .download-coverage { display: flex; flex-wrap: wrap; gap: 4px; }
 .download-coverage > span { display: inline-flex; align-items: baseline; gap: 4px; max-inline-size: 260px; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .download-coverage > span b { font-variant-numeric: tabular-nums; }
-.download-coverage > span.coverage-partial { border-color: color-mix(in srgb, var(--link) 40%, var(--line)); color: var(--link); }
 .download-coverage > span.coverage-complete { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); color: color-mix(in srgb, var(--green) 55%, var(--text)); }
 /* The percentage rides each pill as its own segment - a hairline in the
    pill's own tone keeps counts and share readable at a glance apart. The
