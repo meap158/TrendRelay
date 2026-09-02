@@ -958,6 +958,61 @@ def _clip_of(execution: Any, clips: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: Thumbnails are the small JPEGs the Library cards use; a real one is tens of
+#: kilobytes. The cap guards against a mislabelled row handing an original to
+#: a channel where every byte is base64 inside somebody's context window.
+THUMBNAIL_BYTES_LIMIT = 2 * 1024 * 1024
+
+
+def get_asset_thumbnail(
+    session: Session, workspace_id: str, asset_id: str
+) -> tuple[bytes, str]:
+    """One asset's Library thumbnail, as bytes and their mime type.
+
+    The companion to every listing that names an `asset_id` - the ranked
+    published posts above, the Library listing, the needs-copy queue. Those
+    stay compact text on purpose; this fetches the picture for one asset at a
+    time, so an assistant studying its top three posts pays for three stills
+    and not for twenty it never looks at. For a video the still is a
+    representative frame; for a picture, a small copy.
+    """
+    from pathlib import Path
+
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
+    asset = session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.id == asset_id, MediaAsset.workspace_id == workspace_id
+        )
+    )
+    if not asset:
+        raise LookupError(f"No asset {asset_id!r} in this workspace.")
+    version = session.scalar(
+        select(MediaAssetVersion)
+        .where(
+            MediaAssetVersion.asset_id == asset_id,
+            MediaAssetVersion.version_kind == "thumbnail",
+        )
+        .order_by(MediaAssetVersion.created_at.desc())
+        .limit(1)
+    )
+    if not version:
+        raise LookupError(
+            "This asset has no thumbnail still yet - the media worker makes "
+            "one shortly after import. Ask again in a moment."
+        )
+    try:
+        path = Path(version.path).resolve(strict=True)
+    except OSError as error:
+        raise LookupError("The thumbnail file is unavailable.") from error
+    if path.stat().st_size > THUMBNAIL_BYTES_LIMIT:
+        raise ValueError(
+            "This asset's thumbnail is larger than a thumbnail should be, "
+            "and is not sent inline. View it in the Library instead."
+        )
+    return path.read_bytes(), version.mime_type or "image/jpeg"
+
+
 def _offer_names(session: Session, workspace_id: str) -> dict[str, str]:
     """Offer ids to product names, so a post says what it sold."""
 

@@ -113,7 +113,8 @@ def test_every_operation_is_classified_on_purpose() -> None:
 
 def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
     assert policy.allowed_operations() == [
-        "create_campaign_post", "create_posting_preset", "get_campaign_config",
+        "create_campaign_post", "create_posting_preset", "get_asset_thumbnail",
+        "get_campaign_config",
         "get_campaign_posting_times", "get_day_slots", "get_import_status",
         "get_post_context", "get_sop", "list_campaign_posts", "list_campaigns",
         "list_library_assets",
@@ -319,6 +320,48 @@ def test_list_campaign_posts_refuses_unknown_filters(session) -> None:
         context.list_campaign_posts(session, "ws", state="published")
     with pytest.raises(ValueError, match="media"):
         context.list_campaign_posts(session, "ws", media="gif")
+
+
+def test_get_asset_thumbnail_returns_the_still_itself(session, tmp_path) -> None:
+    # The listings stay compact text; the picture is fetched per asset. This
+    # is that fetch: the same small still the Library cards show, as bytes.
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
+    still = tmp_path / "still.jpg"
+    still.write_bytes(b"jpeg bytes")
+    session.add(MediaAsset(
+        id="asset-1", workspace_id="ws", title="Clip", media_kind="video",
+        source_type="test", original_path="/clips/c.mp4", original_sha256="sha-1",
+        mime_type="video/mp4", size_bytes=9, created_by="local-admin",
+    ))
+    session.add(MediaAssetVersion(
+        id="ver-1", workspace_id="ws", asset_id="asset-1",
+        version_kind="thumbnail", path=str(still), sha256="thumb-sha",
+        mime_type="image/jpeg", size_bytes=len(b"jpeg bytes"),
+    ))
+    session.commit()
+
+    data, mime = context.get_asset_thumbnail(session, "ws", "asset-1")
+    assert data == b"jpeg bytes"
+    assert mime == "image/jpeg"
+
+
+def test_get_asset_thumbnail_names_what_is_missing(session) -> None:
+    from trendrelay_api.media_models import MediaAsset
+
+    with pytest.raises(LookupError, match="No asset"):
+        context.get_asset_thumbnail(session, "ws", "ghost")
+
+    # An asset the worker has not made a still for yet is "not yet", said so -
+    # not an empty image and not a stack trace.
+    session.add(MediaAsset(
+        id="asset-bare", workspace_id="ws", title="Fresh", media_kind="video",
+        source_type="test", original_path="/clips/f.mp4", original_sha256="sha-f",
+        mime_type="video/mp4", size_bytes=9, created_by="local-admin",
+    ))
+    session.commit()
+    with pytest.raises(LookupError, match="no thumbnail"):
+        context.get_asset_thumbnail(session, "ws", "asset-bare")
 
 
 def test_get_post_context_carries_product_destination_and_need(session) -> None:

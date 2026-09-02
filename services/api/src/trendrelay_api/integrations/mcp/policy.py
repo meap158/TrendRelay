@@ -86,6 +86,10 @@ EXPOSURE: dict[str, Access] = {
     # What already went out, and what it earned. A read: it is the evidence
     # an assistant writes from, and it changes nothing.
     "list_published_posts": Access.READ,
+    # One asset's thumbnail still, as an image. The listings stay compact
+    # text; the picture is fetched per asset, and only the small still the
+    # Library cards already show - never the original file.
+    "get_asset_thumbnail": Access.READ,
     "list_sops": Access.READ,
     "get_sop": Access.READ,
     # --- Reads: when the workspace posts -----------------------------------

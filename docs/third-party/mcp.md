@@ -53,6 +53,13 @@ first action is `campaigns.fill-needs-copy`.
   written.
 - `get_campaign_config` - the objective, audience, markets, languages, disclosure
   line, product mode and cadence, for tone and rules.
+- `get_asset_thumbnail` - one asset's Library thumbnail, returned as an MCP
+  image content block. The listings that name an `asset_id` (the ranked
+  published posts, the Library, the needs-copy queue) stay compact text; an
+  assistant studying its top posts fetches the still per asset, so it pays for
+  the three it looks at and not for twenty it never opens. Only the small
+  still the Library cards show is sent - never the original file - and an
+  asset whose still is not made yet is told "not yet" in words.
 
 **Writes** set the copy, and only the copy:
 

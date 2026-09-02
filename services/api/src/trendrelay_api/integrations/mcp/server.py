@@ -122,7 +122,7 @@ def _guard(operation: str) -> None:
 
 def build_server(workspace_id: str) -> FastMCP:
     """A Streamable-HTTP MCP server scoped to one workspace."""
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp import FastMCP, Image
 
     from trendrelay_api.integrations.mcp import service
 
@@ -251,7 +251,8 @@ def build_server(workspace_id: str) -> FastMCP:
             "watch_seconds. Narrow with campaign_id or platform. A post "
             "nobody has read back yet says measured: false and carries no "
             "figures - that is not the same as a post that got nothing, and "
-            "it never outranks one."
+            "it never outranks one. To see a post rather than read about it, "
+            "pass its asset_id to get_asset_thumbnail."
         ),
     )
     def list_published_posts(
@@ -266,6 +267,30 @@ def build_server(workspace_id: str) -> FastMCP:
                 s, workspace_id, campaign_id, platform, sort_by, limit,
             ),
         )
+    @server.tool(
+        name="get_asset_thumbnail",
+        description=(
+            "One Library asset's thumbnail still, returned as an image. The "
+            "companion to the listings that name an asset_id - the top posts "
+            "of list_published_posts, list_library_assets, the needs-copy "
+            "queue - which stay compact text; fetch the picture per asset, "
+            "only for the ones actually being studied. For a video this is a "
+            "representative frame; for a picture, a small copy."
+        ),
+    )
+    # `-> Any` rather than `-> Image`: the module defers postponed annotations,
+    # which are evaluated against module globals where the lazily imported
+    # Image does not exist. The conversion to an image content block is done
+    # by the returned value's type, not by the annotation.
+    def get_asset_thumbnail(asset_id: str) -> Any:
+        data, mime = _call(
+            "get_asset_thumbnail",
+            lambda s: context.get_asset_thumbnail(s, workspace_id, asset_id),
+        )
+        return Image(
+            data=data, format=mime.split("/", 1)[1] if "/" in mime else "jpeg"
+        )
+
     @server.tool(
         name="list_posts_needing_copy",
         description=(
@@ -870,7 +895,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "write_post_copy", "write_disclosure", "write_bio_hint",
     ),
     "Media & posts": (
-        "list_library_assets", "upload_image", "upload_media",
+        "list_library_assets", "get_asset_thumbnail", "upload_image", "upload_media",
         "get_import_status", "create_campaign_post", "set_post_media",
     ),
     "Posting schedule": (
