@@ -5113,6 +5113,7 @@ export function AutopilotPanel({
                         }}
                         workspaceId={workspaceId}
                         apiFetch={apiFetch}
+                        hoverPreview
                       />
                     ) : (
                       <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>
@@ -6906,7 +6907,7 @@ export function AutopilotPanel({
                         </div>
                         <div className="campaign-pipeline-thumb">
                           {thumbnailAsset
-                            ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                            ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
                             : <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>}
                         </div>
                         <article>
@@ -7142,7 +7143,7 @@ export function AutopilotPanel({
                     onClick={() => selectTimelineEntry(entry)}
                     title={displayTitle(entry.title) ?? entry.caption.slice(0, 80)}>
                     {thumbnailAsset
-                      ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                      ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
                       : <span className="campaign-grid-media-empty"><ActionIcon name="play" /></span>}
                     {platform && (
                       <span className="campaign-grid-platform">

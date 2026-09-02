@@ -23,7 +23,8 @@ import {
   opaquePreviewUrl,
   useOpaqueMedia,
 } from "../../lib/media-preview";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
 import { SURFACE_FURNITURE, type RailAction } from "./preview-surfaces";
@@ -134,13 +135,23 @@ export function AssetThumbnail({
   asset,
   workspaceId,
   apiFetch,
+  hoverPreview = false,
 }: {
   asset: LibraryAsset;
   workspaceId: string;
   apiFetch: Fetcher;
+  /** Float a larger card of the same still while hovered - for surfaces whose
+      own box is too small to actually see the media. Off by default: a picker
+      row sits under the pointer constantly, and a card chasing the cursor
+      there is noise, not help. */
+  hoverPreview?: boolean;
 }) {
   const hasThumbnail = asset.versions.some((version) => version.kind === "thumbnail");
   const source = useAssetPoster(hasThumbnail ? asset.id : null, workspaceId, apiFetch);
+  const wrapRef = useRef<HTMLSpanElement>(null);
+  const [preview, setPreview] = useState<{
+    left: number; top: number; width: number; height: number;
+  } | null>(null);
 
   /* The clip's real shape, handed to CSS so a caller with room can honour it.
    *
@@ -159,10 +170,41 @@ export function AssetThumbnail({
   const [measured, setMeasured] = useState("");
   const ratio = declared || measured;
 
+  function showPreview() {
+    const wrap = wrapRef.current;
+    if (!hoverPreview || !source || !wrap) return;
+    // The still's own shape decides the card: a 9:16 clip grows tall, a
+    // landscape one wide, and neither is cropped to the other's frame.
+    const parts = (ratio || "16 / 9").split("/").map((value) => parseFloat(value));
+    const shape = parts.length === 2 && parts[0] > 0 && parts[1] > 0
+      ? parts[0] / parts[1]
+      : 16 / 9;
+    let height = Math.min(320, window.innerHeight - 24);
+    let width = height * shape;
+    const maxWidth = Math.min(300, window.innerWidth - 24);
+    if (width > maxWidth) {
+      width = maxWidth;
+      height = width / shape;
+    }
+    const rect = wrap.getBoundingClientRect();
+    const gap = 10;
+    const left = rect.right + gap + width <= window.innerWidth - 12
+      ? rect.right + gap
+      : Math.max(12, rect.left - gap - width);
+    const top = Math.min(
+      Math.max(12, rect.top + rect.height / 2 - height / 2),
+      Math.max(12, window.innerHeight - height - 12),
+    );
+    setPreview({ left, top, width, height });
+  }
+
   return (
     <span
+      ref={wrapRef}
       className="picker-thumb"
       style={ratio ? ({ "--thumb-ratio": ratio } as CSSProperties) : undefined}
+      onMouseEnter={hoverPreview ? showPreview : undefined}
+      onMouseLeave={hoverPreview ? () => setPreview(null) : undefined}
     >
       {source ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -178,6 +220,20 @@ export function AssetThumbnail({
         />
       ) : <b aria-hidden="true">▶</b>}
       {asset.duration_ms ? <i>{clipLength(asset.duration_ms)}</i> : null}
+      {preview && source && createPortal(
+        <span
+          className="picker-thumb-preview"
+          aria-hidden="true"
+          style={{
+            left: preview.left, top: preview.top,
+            width: preview.width, height: preview.height,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL */}
+          <img src={source} alt="" />
+        </span>,
+        document.body,
+      )}
     </span>
   );
 }

@@ -532,6 +532,11 @@ nav strong { color: var(--text); }
 .picker-thumb { position: relative; display: grid; place-items: center; width: 76px; height: 44px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); overflow: hidden; }
 .picker-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .picker-thumb i { position: absolute; inset-inline-end: 3px; bottom: 3px; border-radius: var(--radius-sm); padding: 0 4px; background: rgba(28, 43, 51, .78); color: var(--on-ink); font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
+/* The floating card a hovered thumbnail grows into, where the surface opts in.
+   Portalled to the body and sized by the still's own shape, so it clears the
+   row's clipping and shows the frame the 78px box cannot. */
+.picker-thumb-preview { position: fixed; z-index: 180; display: block; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 38px color-mix(in srgb, var(--text) 25%, transparent); pointer-events: none; }
+.picker-thumb-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .picker-meta { display: grid; gap: 2px; min-width: 0; }
 .picker-meta strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .picker-meta small { color: var(--muted); font-size: 11px; }
