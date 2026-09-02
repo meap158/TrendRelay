@@ -25,6 +25,9 @@ TUNNEL_ID = re.compile(r"tunnel_[0-9a-f]{32}")
 
 STATUS_FILE = service.MCP_DIR / "tunnel-status.json"
 LOG_FILE = service.MCP_DIR / "tunnel.log"
+#: Which client process this machine last launched, so the next launch can end
+#: it. See `reap_previous_client`.
+CLIENT_FILE = service.MCP_DIR / "tunnel-client.json"
 
 #: Rising, because the second failure is usually the first one again. Reset only
 #: after the client has stayed up this long: a minute is the line between a fault
@@ -520,6 +523,209 @@ def run_test() -> dict[str, Any]:
         else f"Not reachable yet - see {failed[0]['label']} below.",
         "checks": checks,
     }
+
+
+def process_image(pid: int) -> str | None:
+    """The executable name of a running process, or None if it is not running.
+
+    Identity and liveness in one answer, because a pid alone is not an
+    identity: pids are reused, and a recorded one may since have become an
+    unrelated program. Nothing is terminated without matching this against the
+    name that was recorded when it was launched.
+
+    No third-party dependency for what both platforms already answer.
+    """
+    if pid <= 0:
+        return None
+    if os.name == "nt":
+        command = ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"]
+    else:
+        command = ["ps", "-p", str(pid), "-o", "comm="]
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            command, capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    output = (result.stdout or "").strip()
+    if not output or output.upper().startswith("INFO:"):
+        return None
+    if os.name == "nt":
+        # `"tunnel-client.exe","1234","Console",...` - the first CSV field.
+        name = output.splitlines()[0].split(",")[0].strip().strip('"')
+    else:
+        name = output.splitlines()[0].strip()
+    return os.path.basename(name) or None
+
+
+def remember_client(pid: int, binary: str, tunnel_id: str) -> None:
+    """Record the client this supervisor just launched."""
+    service.MCP_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pid": pid,
+        "image": os.path.basename(binary),
+        "tunnel_id": tunnel_id,
+        "started_at": service.now(),
+    }
+    temporary = CLIENT_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(CLIENT_FILE)
+
+
+def forget_client() -> None:
+    """Drop the record, once the client it names has been dealt with."""
+    CLIENT_FILE.unlink(missing_ok=True)
+
+
+def reap_previous_client() -> str | None:
+    """End a client left behind by a supervisor that did not get to stop it.
+
+    The client is a third-party binary with no way to watch the process that
+    started it, so a supervisor force-stopped on Windows - where `finally` does
+    not run - leaves it dialling the control plane. It keeps its registration
+    against the same tunnel id, and the control plane hands it requests: half
+    the traffic then goes to an orphan forwarding to a port that died with the
+    server it belonged to, which answers `502`, while the rest reaches the live
+    client. Nothing can complete, because a session opened through one client
+    is unknown to the other.
+
+    A stale record whose pid is gone, or has been reused by something else, is
+    simply dropped. Returns what it did, for the supervisor's log.
+    """
+    if not CLIENT_FILE.is_file():
+        return None
+    try:
+        record = json.loads(CLIENT_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        forget_client()
+        return None
+    if not isinstance(record, dict):
+        forget_client()
+        return None
+    pid = record.get("pid")
+    wanted = str(record.get("image") or "").lower()
+    if not isinstance(pid, int) or not wanted:
+        forget_client()
+        return None
+    running = process_image(pid)
+    if running is None or running.lower() != wanted:
+        # Exited cleanly, or the pid now belongs to something else.
+        forget_client()
+        return None
+    try:
+        if os.name == "nt":
+            subprocess.run(  # noqa: S603 - fixed argv, no shell
+                ["taskkill", "/PID", str(pid), "/F"],
+                capture_output=True, text=True, timeout=15, check=False,
+            )
+        else:
+            import signal
+
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, subprocess.SubprocessError) as error:
+        return f"Could not stop the previous tunnel-client (pid {pid}): {error}"
+    forget_client()
+    return f"Stopped a leftover tunnel-client (pid {pid}) from an earlier run."
+
+
+def rival_pids(
+    processes: list[tuple[int, str, str]], tunnel_id: str, image: str, keep: int = 0
+) -> list[int]:
+    """Which of these processes is another client serving the same tunnel.
+
+    Split from the query that finds them so the dangerous half - deciding what
+    to end - can be tested without a process table.
+
+    Both halves of the predicate are required. The tunnel id alone is not
+    enough: it is a plain string on a command line, and anything that mentions
+    it - a shell reading a log, this supervisor's own diagnostics - would
+    match. The image alone is not enough either: a client serving a *different*
+    tunnel is somebody else's working connector, and ending it would be a
+    fault, not a fix.
+    """
+    wanted = os.path.basename(image).lower()
+    if not tunnel_id or not wanted:
+        return []
+    return [
+        pid
+        for pid, name, command in processes
+        if pid > 0
+        and pid != keep
+        and os.path.basename(name).lower() == wanted
+        and tunnel_id in command
+    ]
+
+
+def running_processes() -> list[tuple[int, str, str]]:
+    """Every process this user can see, as (pid, image, command line).
+
+    Empty when the platform will not say, which makes the sweep a no-op rather
+    than an error: it is a belt to `reap_previous_client`'s braces.
+    """
+    if os.name == "nt":
+        command = [
+            "powershell", "-NoProfile", "-NonInteractive", "-Command",
+            "Get-CimInstance Win32_Process | ForEach-Object { "
+            "$_.ProcessId.ToString() + '|' + $_.Name + '|' + "
+            "($_.CommandLine -replace '\r?\n', ' ') }",
+        ]
+    else:
+        command = ["ps", "-eo", "pid=,comm=,args="]
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            command, capture_output=True, text=True, timeout=30, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    found: list[tuple[int, str, str]] = []
+    for line in (result.stdout or "").splitlines():
+        if os.name == "nt":
+            parts = line.split("|", 2)
+            if len(parts) < 2 or not parts[0].strip().isdigit():
+                continue
+            found.append((int(parts[0]), parts[1].strip(), parts[2] if len(parts) > 2 else ""))
+        else:
+            parts = line.strip().split(None, 2)
+            if len(parts) < 2 or not parts[0].isdigit():
+                continue
+            found.append((int(parts[0]), parts[1], parts[2] if len(parts) > 2 else ""))
+    return found
+
+
+def end_process(pid: int) -> bool:
+    """Stop one process. True if the request was made without error."""
+    try:
+        if os.name == "nt":
+            subprocess.run(  # noqa: S603 - fixed argv, no shell
+                ["taskkill", "/PID", str(pid), "/F"],
+                capture_output=True, text=True, timeout=15, check=False,
+            )
+        else:
+            import signal
+
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def reap_rival_clients(tunnel_id: str, binary: str) -> list[int]:
+    """End every client already serving this tunnel, before starting ours.
+
+    `reap_previous_client` knows only the client this machine wrote down, which
+    covers the ordinary case and nothing before the record existed: an orphan
+    left by a supervisor that ran an older build, or one whose record was lost,
+    would dial on unnoticed. This asks the process table instead, so the
+    guarantee does not depend on a file.
+
+    Called before the client is launched, so nothing of ours is running yet and
+    there is nothing of ours to catch by mistake.
+    """
+    ended: list[int] = []
+    for pid in rival_pids(running_processes(), tunnel_id, binary):
+        if end_process(pid):
+            ended.append(pid)
+    return ended
 
 
 def write_status(state: str, message: str, **extra: Any) -> None:

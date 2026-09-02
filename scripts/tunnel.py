@@ -117,6 +117,23 @@ def supervise(config: dict[str, str], parent_pid: int) -> int:
         service.stop_server()
         return 0
     mcp_url = service.server_url()
+    # Before anything is dialled: a client this machine left running has kept
+    # its registration against the same tunnel id, and would take a share of
+    # the requests meant for the one about to start - forwarding them to the
+    # port that died with its own server.
+    reaped = tunnel.reap_previous_client()
+    if reaped:
+        print(f"[Tunnel] {reaped}", flush=True)
+    # And the same question asked of the process table rather than of a file,
+    # which is what catches an orphan this machine never wrote down.
+    rivals = tunnel.reap_rival_clients(config["tunnel_id"], config["binary"])
+    if rivals:
+        print(
+            "[Tunnel] Stopped "
+            f"{len(rivals)} other tunnel-client process(es) already serving this "
+            f"tunnel: {', '.join(str(pid) for pid in rivals)}.",
+            flush=True,
+        )
     log = open(tunnel.LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115 - the child's
     attempt = 0
     try:
@@ -137,6 +154,9 @@ def supervise(config: dict[str, str], parent_pid: int) -> int:
                 text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
+            # Written down before it is waited on, so a supervisor killed
+            # during the wait still leaves the next one able to find it.
+            tunnel.remember_client(child.pid, command[0], config["tunnel_id"])
             # "Running" once the client says so, not once it has been started.
             # This was written the moment the process existed, so the status
             # read "running" while the client's own log recorded that it could
@@ -158,9 +178,12 @@ def supervise(config: dict[str, str], parent_pid: int) -> int:
             while child.poll() is None:
                 if parent_pid and not process_is_alive(parent_pid):
                     child.terminate()
+                    tunnel.forget_client()
                     tunnel.write_status("stopped", "The launcher is gone; the tunnel stopped.")
                     return 0
                 time.sleep(1.0)
+            # It exited on its own, so there is nothing left to reap.
+            tunnel.forget_client()
             # The client exited. Reset the backoff only if it actually stayed up.
             if time.monotonic() - started >= tunnel.STABLE_SECONDS:
                 attempt = 0
@@ -176,6 +199,9 @@ def supervise(config: dict[str, str], parent_pid: int) -> int:
         return 0
     finally:
         log.close()
+        # Where this runs at all, the child goes with it. Where it does not -
+        # a force-stop on Windows - `reap_previous_client` is the other half.
+        tunnel.reap_previous_client()
         service.stop_server()
 
 

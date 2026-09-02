@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -610,6 +611,154 @@ def test_the_run_command_matches_the_reference_and_hides_the_key(monkeypatch) ->
         "127.0.0.1:8791", "--mcp.connection-max-ttl", "30m", "--control-plane.poll-timeout",
     ):
         assert token in command, token
+
+
+def _client_file(monkeypatch, tmp_path):
+    """Point the client record at a temporary directory, never `.data`."""
+    monkeypatch.setattr(tunnel, "CLIENT_FILE", tmp_path / "tunnel-client.json")
+    return tunnel.CLIENT_FILE
+
+
+def _sleeping_child():
+    """A real process to reap, which does nothing and exits on its own."""
+    return subprocess.Popen(  # noqa: S603 - our own interpreter, fixed argv
+        [sys.executable, "-c", "import time; time.sleep(45)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def test_a_client_left_behind_by_a_force_stopped_supervisor_is_ended(
+    monkeypatch, tmp_path
+) -> None:
+    """The 502 this exists to stop.
+
+    A supervisor force-stopped on Windows never runs `finally`, so its client
+    keeps dialling the control plane and keeps its registration against the
+    same tunnel id. The next supervisor's client registers beside it, the
+    control plane splits the traffic, and the half that reaches the orphan is
+    forwarded to the port that died with its own server.
+    """
+    _client_file(monkeypatch, tmp_path)
+    child = _sleeping_child()
+    try:
+        tunnel.remember_client(child.pid, sys.executable, "tunnel_" + "0" * 32)
+        assert tunnel.reap_previous_client().startswith("Stopped a leftover")
+        assert child.wait(timeout=20) is not None
+        # And the record goes with it, so the next start reaps nothing twice.
+        assert not tunnel.CLIENT_FILE.exists()
+    finally:
+        if child.poll() is None:
+            child.kill()
+
+
+def test_a_pid_that_now_belongs_to_something_else_is_left_alone(
+    monkeypatch, tmp_path
+) -> None:
+    """The dangerous half of reaping, and the reason the image is recorded.
+
+    Pids are reused. A record naming a live pid that is no longer the client
+    must be dropped rather than acted on - terminating whatever inherited that
+    number would be a far worse fault than the one being fixed.
+    """
+    _client_file(monkeypatch, tmp_path)
+    child = _sleeping_child()
+    try:
+        tunnel.remember_client(child.pid, "tunnel-client.exe", "tunnel_" + "0" * 32)
+        assert tunnel.reap_previous_client() is None
+        assert child.poll() is None, "an unrelated process was killed"
+        assert not tunnel.CLIENT_FILE.exists()
+    finally:
+        child.kill()
+
+
+def test_a_record_of_a_process_that_has_gone_is_simply_dropped(
+    monkeypatch, tmp_path
+) -> None:
+    _client_file(monkeypatch, tmp_path)
+    child = _sleeping_child()
+    child.kill()
+    child.wait(timeout=20)
+    tunnel.remember_client(child.pid, sys.executable, "tunnel_" + "0" * 32)
+    assert tunnel.reap_previous_client() is None
+    assert not tunnel.CLIENT_FILE.exists()
+
+
+def test_no_record_at_all_is_the_ordinary_first_start(monkeypatch, tmp_path) -> None:
+    _client_file(monkeypatch, tmp_path)
+    assert tunnel.reap_previous_client() is None
+
+
+def test_a_corrupt_record_does_not_stop_a_start(monkeypatch, tmp_path) -> None:
+    # Half-written by a supervisor that died mid-write. Nothing to reap and
+    # nothing to raise: the tunnel must still come up.
+    path = _client_file(monkeypatch, tmp_path)
+    path.write_text("{not json", encoding="utf-8")
+    assert tunnel.reap_previous_client() is None
+    assert not path.exists()
+
+
+#: A process table as `running_processes` returns one: (pid, image, command).
+_TABLE = [
+    (15100, "tunnel-client.exe", "tunnel-client.exe run --control-plane.tunnel-id tunnel_bbb"),
+    (45204, "tunnel-client.exe", "tunnel-client.exe run --control-plane.tunnel-id tunnel_aaa"),
+    (53632, "tunnel-client.exe", "tunnel-client.exe run --control-plane.tunnel-id tunnel_aaa"),
+    (1884, "bash.exe", "bash -c grep tunnel_aaa .data/mcp/tunnel.log"),
+    (50180, "python.exe", "python scripts/tunnel.py --parent-pid 4"),
+]
+
+
+def test_another_client_on_this_tunnel_is_a_rival() -> None:
+    assert tunnel.rival_pids(_TABLE, "tunnel_aaa", "tunnel-client.exe") == [45204, 53632]
+
+
+def test_a_client_serving_a_different_tunnel_is_left_alone() -> None:
+    """The safety property, and a real process on this machine.
+
+    A second connector is somebody's working tunnel. Ending it because it runs
+    the same binary would turn one broken integration into two.
+    """
+    assert 15100 not in tunnel.rival_pids(_TABLE, "tunnel_aaa", "tunnel-client.exe")
+    assert tunnel.rival_pids(_TABLE, "tunnel_bbb", "tunnel-client.exe") == [15100]
+
+
+def test_merely_naming_the_tunnel_is_not_being_the_tunnel() -> None:
+    """A tunnel id is a string, and other things carry it.
+
+    A shell reading the tunnel log has the id on its command line, and so does
+    the diagnosis that found this bug. Matching on the id alone would have
+    killed the terminal it was typed into.
+    """
+    rivals = tunnel.rival_pids(_TABLE, "tunnel_aaa", "tunnel-client.exe")
+    assert 1884 not in rivals and 50180 not in rivals
+
+
+def test_the_client_about_to_be_kept_is_never_a_rival() -> None:
+    assert tunnel.rival_pids(_TABLE, "tunnel_aaa", "tunnel-client.exe", keep=45204) == [53632]
+
+
+def test_a_full_path_is_matched_by_its_name() -> None:
+    # The binary is configurable, so what arrives here is a path.
+    assert tunnel.rival_pids(
+        _TABLE, "tunnel_aaa", "C:/Tools/tunnel-client/tunnel-client.exe"
+    ) == [45204, 53632]
+
+
+def test_nothing_is_reaped_without_both_halves_of_the_predicate() -> None:
+    assert tunnel.rival_pids(_TABLE, "", "tunnel-client.exe") == []
+    assert tunnel.rival_pids(_TABLE, "tunnel_aaa", "") == []
+
+
+def test_process_image_tells_a_live_process_from_a_gone_one() -> None:
+    # Otherwise the check above could pass by never finding anything at all.
+    child = _sleeping_child()
+    try:
+        assert (tunnel.process_image(child.pid) or "").lower().startswith("python")
+    finally:
+        child.kill()
+        child.wait(timeout=20)
+    assert tunnel.process_image(child.pid) is None
+    assert tunnel.process_image(0) is None
 
 
 def test_doctor_takes_the_server_url_in_url_form(monkeypatch) -> None:
