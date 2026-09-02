@@ -1044,3 +1044,65 @@ def test_a_campaign_browser_can_hide_what_it_already_queued() -> None:
     # Another campaign has queued nothing, so nothing is hidden from it.
     other = asyncio.run(request("GET", f"{base}/assets?not_in_campaign=camp-empty"))
     assert other.json()["total"] == 2
+
+
+def test_the_library_can_narrow_to_one_campaigns_own_media() -> None:
+    """The positive twin of the exclusion: what does campaign X post?
+
+    Same membership question as hiding a campaign's queue, asked the other way
+    around - auditing a campaign rather than filling one. The facet beside it
+    offers only campaigns whose queues hold matching assets, labelled and
+    counted, so the filter never lists a campaign that would empty the page.
+    """
+    workspace_id = create_workspace()
+    with TestingSession.begin() as session:
+        session.add(Campaign(
+            id="camp-held", workspace_id=workspace_id, name="Autumn",
+            objective="sell", audience="people", markets=["US"], languages=["en"],
+            created_by="library-owner",
+        ))
+        session.add(Campaign(
+            id="camp-idle", workspace_id=workspace_id, name="Blank",
+            objective="sell", audience="people", markets=["US"], languages=["en"],
+            created_by="library-owner",
+        ))
+        for index in ("queued", "spare"):
+            session.add(MediaAsset(
+                id=f"asset-{index}",
+                workspace_id=workspace_id,
+                title=f"Clip {index}",
+                media_kind="video",
+                source_type="test",
+                original_path=f"/clips/{index}.mp4",
+                original_sha256=f"sha-{index}",
+                mime_type="video/mp4",
+                size_bytes=10,
+                created_by="library-owner",
+            ))
+        session.add(CampaignQueueItem(
+            id="queue-1", workspace_id=workspace_id, campaign_id="camp-held",
+            asset_id="asset-queued", video_path="/clips/queued.mp4",
+            body="already here", state="approved", created_by="library-owner",
+        ))
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    held = asyncio.run(request("GET", f"{base}/assets?in_campaign=camp-held"))
+    assert held.status_code == 200
+    assert [asset["id"] for asset in held.json()["assets"]] == ["asset-queued"]
+    assert held.json()["total"] == 1
+
+    selectable = asyncio.run(
+        request("GET", f"{base}/assets/ids?in_campaign=camp-held")
+    )
+    assert selectable.json()["matched"] == 1
+    assert selectable.json()["asset_ids"] == ["asset-queued"]
+
+    # The facet names what is offerable: the holding campaign with its count,
+    # and never the one whose queue holds nothing.
+    everything = asyncio.run(request("GET", f"{base}/assets"))
+    assert everything.json()["facets"]["campaigns"] == [
+        {"value": "camp-held", "label": "Autumn", "count": 1},
+    ]
+
+    empty = asyncio.run(request("GET", f"{base}/assets?in_campaign=camp-idle"))
+    assert empty.json()["total"] == 0

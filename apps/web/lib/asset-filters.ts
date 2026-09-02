@@ -37,6 +37,13 @@ export type AssetFilterValues = {
    * back what was just hidden.
    */
   notInCampaign?: string;
+  /**
+   * Keep only what one campaign's queue holds, by campaign id.
+   *
+   * The positive twin of `notInCampaign`, for the Library's own errand:
+   * seeing what a campaign posts, rather than what it still lacks.
+   */
+  inCampaign?: string;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -46,6 +53,7 @@ export type AssetFacets = {
   media_kinds: Facet[];
   effects: Facet[];
   processing: Facet[];
+  campaigns?: Facet[];
 };
 
 export const EMPTY_FACETS: AssetFacets = {
@@ -54,6 +62,7 @@ export const EMPTY_FACETS: AssetFacets = {
   media_kinds: [],
   effects: [],
   processing: [],
+  campaigns: [],
 };
 
 /** One canonical mapping from controls to the API query. */
@@ -72,6 +81,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
     params.set("collected_within_days", String(values.downloadedWithinDays));
   }
   if (values.notInCampaign) params.set("not_in_campaign", values.notInCampaign);
+  if (values.inCampaign) params.set("in_campaign", values.inCampaign);
   return params;
 }
 
@@ -81,7 +91,7 @@ export function activeFilterCount(
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
-    "downloadedWithinDays", "notInCampaign",
+    "downloadedWithinDays", "notInCampaign", "inCampaign",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];

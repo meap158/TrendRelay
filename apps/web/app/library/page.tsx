@@ -1937,7 +1937,7 @@ function LibraryContent() {
           <AssetFilters
             values={filters}
             facets={facets}
-            fields={["channel", "platform", "effect", "processing", "downloaded"]}
+            fields={["channel", "platform", "effect", "processing", "campaign", "downloaded"]}
             onChange={setFilters}
           />
           <div className="library-collection-toolbar">

@@ -590,6 +590,12 @@ class AssetFilter(BaseModel):
     #: a total that disagrees with what is on screen, and a select-all that
     #: takes back what was just removed.
     not_in_campaign: str | None = None
+    #: Keep only what this campaign's queue holds, by campaign id.
+    #:
+    #: The positive twin of `not_in_campaign`, for the opposite errand: not
+    #: filling a campaign but auditing one - which of these files is what
+    #: campaign X posts. Same membership question, same source of truth.
+    in_campaign: str | None = None
 
 
 #: Filter values that are not the id of an effect.
@@ -739,6 +745,17 @@ def asset_conditions(
             CampaignQueueItem.asset_id == MediaAsset.id,
         ).correlate(MediaAsset).exists()
         values.append(~already)
+    if omit != "in_campaign" and filters.in_campaign:
+        # The same membership question, asked the other way around: keep only
+        # what this campaign's queue was built from.
+        from trendrelay_api.autopilot_models import CampaignQueueItem
+
+        held = select(CampaignQueueItem.id).where(
+            CampaignQueueItem.campaign_id == filters.in_campaign,
+            CampaignQueueItem.workspace_id == workspace_id,
+            CampaignQueueItem.asset_id == MediaAsset.id,
+        ).correlate(MediaAsset).exists()
+        values.append(held)
     if omit != "has_version" and filters.has_version:
         values.append(_effect_condition(filters.has_version))
     if omit != "processing" and filters.processing:
@@ -806,6 +823,7 @@ def list_asset_ids(
     ] = None,
     sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
+    in_campaign: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -819,7 +837,7 @@ def list_asset_ids(
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
-        sha256=sha256, not_in_campaign=not_in_campaign,
+        sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -862,6 +880,7 @@ def list_assets(
     ] = None,
     sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
+    in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     # Without this a caller could read the first hundred matches and no more,
@@ -878,7 +897,7 @@ def list_assets(
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
-        sha256=sha256, not_in_campaign=not_in_campaign,
+        sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:
@@ -955,8 +974,41 @@ def list_assets(
             # the same kind of question: how much of this library has it.
             "effects": _effect_facet(session, conditions(omit="has_version")),
             "processing": _processing_facet(session, conditions(omit="processing")),
+            "campaigns": _campaign_facet(
+                session, workspace_id, conditions(omit="in_campaign")
+            ),
         },
     }
+
+
+def _campaign_facet(
+    session: Session, workspace_id: str, where: list[Any]
+) -> list[dict[str, Any]]:
+    """Which campaigns hold these assets in their queues, and how many each.
+
+    Offered from what the workspace actually has, like the effects facet: a
+    campaign whose queue holds none of the matching assets is not a filter,
+    and one that does carries its real count. Distinct assets, because a
+    campaign may queue the same clip more than once over time.
+    """
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+    from trendrelay_api.models import Campaign
+
+    rows = session.execute(
+        select(Campaign.id, Campaign.name, func.count(func.distinct(MediaAsset.id)))
+        .select_from(CampaignQueueItem)
+        .join(Campaign, Campaign.id == CampaignQueueItem.campaign_id)
+        .join(MediaAsset, MediaAsset.id == CampaignQueueItem.asset_id)
+        .where(*where, CampaignQueueItem.workspace_id == workspace_id)
+        .group_by(Campaign.id, Campaign.name)
+    ).all()
+    return sorted(
+        (
+            {"value": campaign_id, "label": name, "count": count}
+            for campaign_id, name, count in rows
+        ),
+        key=lambda item: (-item["count"], item["label"].casefold()),
+    )
 
 
 def _processing_facet(session: Session, where: list[Any]) -> list[dict[str, Any]]:

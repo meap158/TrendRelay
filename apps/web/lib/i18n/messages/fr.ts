@@ -1318,6 +1318,9 @@ export const fr: Messages = {
     anyTime: "À tout moment",
     byDownloaded: "Filtrer par date de téléchargement",
     notInCampaign: "Pas déjà dans cette campagne",
+    campaign: "Campagne",
+    allCampaigns: "Toutes les campagnes",
+    byCampaign: "Filtrer par campagne",
   },
 
   clipEditor: {

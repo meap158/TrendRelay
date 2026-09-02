@@ -1298,6 +1298,9 @@ export const vi: Messages = {
     anyTime: "Bất kỳ lúc nào",
     byDownloaded: "Lọc theo thời điểm tải về",
     notInCampaign: "Chưa có trong chiến dịch này",
+    campaign: "Chiến dịch",
+    allCampaigns: "Tất cả chiến dịch",
+    byCampaign: "Lọc theo chiến dịch",
   },
 
   clipEditor: {

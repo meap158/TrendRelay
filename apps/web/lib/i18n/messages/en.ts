@@ -1301,6 +1301,9 @@ export const en = {
     anyTime: "Any time",
     byDownloaded: "Filter by when it was downloaded",
     notInCampaign: "Not already in this campaign",
+    campaign: "Campaign",
+    allCampaigns: "All campaigns",
+    byCampaign: "Filter by campaign",
   },
 
   clipEditor: {

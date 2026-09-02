@@ -1291,6 +1291,9 @@ export const ja: Messages = {
     anyTime: "すべての期間",
     byDownloaded: "ダウンロードした時期で絞り込む",
     notInCampaign: "このキャンペーンに未追加",
+    campaign: "キャンペーン",
+    allCampaigns: "すべてのキャンペーン",
+    byCampaign: "キャンペーンで絞り込む",
   },
 
   clipEditor: {

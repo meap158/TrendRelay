@@ -36,6 +36,8 @@ export {
 export type FilterField =
   | "query" | "channel" | "platform" | "mediaKind" | "effect" | "processing"
   | "length" | "downloaded"
+  /** Narrow to what one campaign's queue holds - the Library's own view. */
+  | "campaign"
   /** Hide what the open campaign already queued; needs `campaignId`. */
   | "notInCampaign";
 
@@ -241,6 +243,25 @@ export function AssetFilters({
             <option value="">{t("filters.anyLength")}</option>
             {LENGTHS.map(([seconds, text]) => (
               <option key={seconds} value={seconds}>{text}</option>
+            ))}
+          </Select>
+        </label>
+      )}
+
+      {/* Offered like the effects facet: from what the workspace actually
+          has. With no campaign holding any matching asset there is nothing
+          to narrow by, so the control is not drawn rather than drawn empty -
+          which also keeps the row a control shorter on small screens. */}
+      {shown.has("campaign") && (facets.campaigns ?? []).length > 0 && (
+        <label>{t("filters.campaign")}
+          <Select
+            aria-label={t("filters.byCampaign")}
+            value={values.inCampaign ?? ""}
+            onChange={(event) => set({ inCampaign: event.target.value || undefined })}
+          >
+            <option value="">{t("filters.allCampaigns")}</option>
+            {(facets.campaigns ?? []).map((facet) => (
+              <option key={facet.value} value={facet.value}>{label(facet, "Campaign")}</option>
             ))}
           </Select>
         </label>

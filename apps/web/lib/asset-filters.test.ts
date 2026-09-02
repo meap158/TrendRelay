@@ -88,3 +88,21 @@ test("any time is no window rather than a window of everything", () => {
   assert.equal(params.get("collected_within_days"), null);
   assert.equal(activeFilterCount({ downloadedWithinDays: undefined }), 0);
 });
+
+
+// --- campaign membership, both ways -------------------------------------------
+
+test("the two campaign filters are distinct parameters and both count", () => {
+  // One hides a campaign's queue while filling it; the other narrows to it
+  // while auditing it. Same membership, opposite errands, and mixing up the
+  // parameter names would silently invert the question.
+  const params = assetFilterParams({ inCampaign: "camp-1" });
+
+  assert.equal(params.get("in_campaign"), "camp-1");
+  assert.equal(params.get("not_in_campaign"), null);
+  assert.equal(activeFilterCount({ inCampaign: "camp-1" }), 1);
+  assert.equal(
+    assetFilterParams({ notInCampaign: "camp-1" }).get("not_in_campaign"),
+    "camp-1",
+  );
+});
