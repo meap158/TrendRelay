@@ -114,7 +114,7 @@ def test_every_operation_is_classified_on_purpose() -> None:
 
 def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
     assert policy.allowed_operations() == [
-        "create_campaign_post", "create_posting_preset", "get_asset_thumbnail",
+        "create_campaign_post", "create_posting_preset", "get_asset_thumbnails",
         "get_campaign_config",
         "get_campaign_posting_times", "get_day_slots", "get_import_status",
         "get_post_context", "get_sop", "list_campaign_posts", "list_campaigns",
@@ -323,9 +323,10 @@ def test_list_campaign_posts_refuses_unknown_filters(session) -> None:
         context.list_campaign_posts(session, "ws", media="gif")
 
 
-def test_get_asset_thumbnail_returns_the_still_itself(session, tmp_path) -> None:
-    # The listings stay compact text; the picture is fetched per asset. This
-    # is that fetch: the same small still the Library cards show, as bytes.
+def test_get_asset_thumbnails_returns_stills_and_names_misses(session, tmp_path) -> None:
+    # The listings stay compact text; stills are fetched for the assets being
+    # studied, one call for a top-three. An id with nothing to show is a note
+    # in its place - not a failure that takes down the ids beside it.
     from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 
     still = tmp_path / "still.jpg"
@@ -340,29 +341,36 @@ def test_get_asset_thumbnail_returns_the_still_itself(session, tmp_path) -> None
         version_kind="thumbnail", path=str(still), sha256="thumb-sha",
         mime_type="image/jpeg", size_bytes=len(b"jpeg bytes"),
     ))
-    session.commit()
-
-    data, mime = context.get_asset_thumbnail(session, "ws", "asset-1")
-    assert data == b"jpeg bytes"
-    assert mime == "image/jpeg"
-
-
-def test_get_asset_thumbnail_names_what_is_missing(session) -> None:
-    from trendrelay_api.media_models import MediaAsset
-
-    with pytest.raises(LookupError, match="No asset"):
-        context.get_asset_thumbnail(session, "ws", "ghost")
-
-    # An asset the worker has not made a still for yet is "not yet", said so -
-    # not an empty image and not a stack trace.
     session.add(MediaAsset(
         id="asset-bare", workspace_id="ws", title="Fresh", media_kind="video",
         source_type="test", original_path="/clips/f.mp4", original_sha256="sha-f",
         mime_type="video/mp4", size_bytes=9, created_by="local-admin",
     ))
     session.commit()
-    with pytest.raises(LookupError, match="no thumbnail"):
-        context.get_asset_thumbnail(session, "ws", "asset-bare")
+
+    entries = context.get_asset_thumbnails(
+        session, "ws", ["asset-1", "asset-bare", "ghost"]
+    )
+    assert [entry["asset_id"] for entry in entries] == [
+        "asset-1", "asset-bare", "ghost",
+    ]
+    assert entries[0]["data"] == b"jpeg bytes"
+    assert entries[0]["mime"] == "image/jpeg"
+    assert entries[0]["note"] is None
+    # Not made yet is "not yet", said so - not an empty image.
+    assert entries[1]["data"] is None
+    assert "No thumbnail still yet" in entries[1]["note"]
+    assert entries[2]["data"] is None
+    assert "No asset" in entries[2]["note"]
+
+
+def test_get_asset_thumbnails_bounds_the_batch(session) -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        context.get_asset_thumbnails(session, "ws", ["  "])
+    with pytest.raises(ValueError, match="at most 8"):
+        context.get_asset_thumbnails(
+            session, "ws", [f"asset-{index}" for index in range(9)]
+        )
 
 
 def test_get_post_context_carries_product_destination_and_need(session) -> None:

@@ -251,8 +251,9 @@ def build_server(workspace_id: str) -> FastMCP:
             "watch_seconds. Narrow with campaign_id or platform. A post "
             "nobody has read back yet says measured: false and carries no "
             "figures - that is not the same as a post that got nothing, and "
-            "it never outranks one. To see a post rather than read about it, "
-            "pass its asset_id to get_asset_thumbnail."
+            "it never outranks one. To see posts rather than read about "
+            "them, pass their asset_ids to get_asset_thumbnails - up to "
+            "eight per call."
         ),
     )
     def list_published_posts(
@@ -268,28 +269,42 @@ def build_server(workspace_id: str) -> FastMCP:
             ),
         )
     @server.tool(
-        name="get_asset_thumbnail",
+        name="get_asset_thumbnails",
         description=(
-            "One Library asset's thumbnail still, returned as an image. The "
-            "companion to the listings that name an asset_id - the top posts "
-            "of list_published_posts, list_library_assets, the needs-copy "
-            "queue - which stay compact text; fetch the picture per asset, "
-            "only for the ones actually being studied. For a video this is a "
-            "representative frame; for a picture, a small copy."
+            "Library thumbnail stills for up to eight assets, returned as "
+            "images, each preceded by a text line naming its asset so the "
+            "pictures cannot be mistaken for one another. The companion to "
+            "the listings that name an asset_id - the top posts of "
+            "list_published_posts, list_library_assets, the needs-copy queue "
+            "- which stay compact text; fetch stills only for the posts "
+            "actually being studied. An id with nothing to show is answered "
+            "in words in its place, and the rest still arrive. For a video "
+            "the still is a representative frame; for a picture, a small "
+            "copy."
         ),
     )
-    # `-> Any` rather than `-> Image`: the module defers postponed annotations,
-    # which are evaluated against module globals where the lazily imported
-    # Image does not exist. The conversion to an image content block is done
-    # by the returned value's type, not by the annotation.
-    def get_asset_thumbnail(asset_id: str) -> Any:
-        data, mime = _call(
-            "get_asset_thumbnail",
-            lambda s: context.get_asset_thumbnail(s, workspace_id, asset_id),
+    # `-> Any` rather than the content types: the module defers postponed
+    # annotations, which are evaluated against module globals where the
+    # lazily imported Image does not exist. The conversion to text and image
+    # content blocks is done by the returned values' types, in order.
+    def get_asset_thumbnails(asset_ids: list[str]) -> Any:
+        entries = _call(
+            "get_asset_thumbnails",
+            lambda s: context.get_asset_thumbnails(s, workspace_id, asset_ids),
         )
-        return Image(
-            data=data, format=mime.split("/", 1)[1] if "/" in mime else "jpeg"
-        )
+        blocks: list[Any] = []
+        for entry in entries:
+            name = entry["title"] or entry["asset_id"]
+            if entry["data"] is None:
+                blocks.append(f"{name}: {entry['note']}")
+                continue
+            blocks.append(f"{name} ({entry['asset_id']}):")
+            mime = entry["mime"]
+            blocks.append(Image(
+                data=entry["data"],
+                format=mime.split("/", 1)[1] if "/" in mime else "jpeg",
+            ))
+        return blocks
 
     @server.tool(
         name="list_posts_needing_copy",
@@ -895,7 +910,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "write_post_copy", "write_disclosure", "write_bio_hint",
     ),
     "Media & posts": (
-        "list_library_assets", "get_asset_thumbnail", "upload_image", "upload_media",
+        "list_library_assets", "get_asset_thumbnails", "upload_image", "upload_media",
         "get_import_status", "create_campaign_post", "set_post_media",
     ),
     "Posting schedule": (

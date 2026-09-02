@@ -962,55 +962,96 @@ def _clip_of(execution: Any, clips: dict[str, Any]) -> dict[str, Any]:
 #: kilobytes. The cap guards against a mislabelled row handing an original to
 #: a channel where every byte is base64 inside somebody's context window.
 THUMBNAIL_BYTES_LIMIT = 2 * 1024 * 1024
+#: Each still is an inline image in the conversation. A handful shows the
+#: posts being studied; a bigger batch is the flood the per-asset design
+#: exists to avoid, so it is refused with the number rather than served.
+MAX_THUMBNAILS_PER_CALL = 8
 
 
-def get_asset_thumbnail(
-    session: Session, workspace_id: str, asset_id: str
-) -> tuple[bytes, str]:
-    """One asset's Library thumbnail, as bytes and their mime type.
+def get_asset_thumbnails(
+    session: Session, workspace_id: str, asset_ids: list[str]
+) -> list[dict[str, Any]]:
+    """Library thumbnails for a handful of assets, misses named in words.
 
     The companion to every listing that names an `asset_id` - the ranked
-    published posts above, the Library listing, the needs-copy queue. Those
-    stay compact text on purpose; this fetches the picture for one asset at a
-    time, so an assistant studying its top three posts pays for three stills
-    and not for twenty it never looks at. For a video the still is a
-    representative frame; for a picture, a small copy.
+    published posts, the Library listing, the needs-copy queue. Those stay
+    compact text on purpose; this fetches the stills for the assets actually
+    being studied, in one call for a top-three and never more than
+    MAX_THUMBNAILS_PER_CALL. One entry per requested id, in the order asked;
+    an id with nothing to show carries a `note` saying why instead of failing
+    the ids beside it. For a video the still is a representative frame; for a
+    picture, a small copy.
     """
     from pathlib import Path
 
     from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 
-    asset = session.scalar(
-        select(MediaAsset).where(
-            MediaAsset.id == asset_id, MediaAsset.workspace_id == workspace_id
+    ids = list(dict.fromkeys(value.strip() for value in asset_ids if value.strip()))
+    if not ids:
+        raise ValueError("Name at least one asset_id.")
+    if len(ids) > MAX_THUMBNAILS_PER_CALL:
+        raise ValueError(
+            f"Ask for at most {MAX_THUMBNAILS_PER_CALL} thumbnails per call - "
+            "each is an inline image, and a bigger batch floods the "
+            "conversation this is read in."
         )
-    )
-    if not asset:
-        raise LookupError(f"No asset {asset_id!r} in this workspace.")
-    version = session.scalar(
-        select(MediaAssetVersion)
-        .where(
-            MediaAssetVersion.asset_id == asset_id,
+
+    assets = {
+        asset.id: asset
+        for asset in session.scalars(
+            select(MediaAsset).where(
+                MediaAsset.id.in_(ids), MediaAsset.workspace_id == workspace_id
+            )
+        ).all()
+    }
+    # Newest still per asset, chosen here: the version table may hold an older
+    # regenerated still beside the current one.
+    stills: dict[str, Any] = {}
+    for version in session.scalars(
+        select(MediaAssetVersion).where(
+            MediaAssetVersion.asset_id.in_(ids),
             MediaAssetVersion.version_kind == "thumbnail",
         )
-        .order_by(MediaAssetVersion.created_at.desc())
-        .limit(1)
-    )
-    if not version:
-        raise LookupError(
-            "This asset has no thumbnail still yet - the media worker makes "
-            "one shortly after import. Ask again in a moment."
-        )
-    try:
-        path = Path(version.path).resolve(strict=True)
-    except OSError as error:
-        raise LookupError("The thumbnail file is unavailable.") from error
-    if path.stat().st_size > THUMBNAIL_BYTES_LIMIT:
-        raise ValueError(
-            "This asset's thumbnail is larger than a thumbnail should be, "
-            "and is not sent inline. View it in the Library instead."
-        )
-    return path.read_bytes(), version.mime_type or "image/jpeg"
+    ).all():
+        held = stills.get(version.asset_id)
+        if held is None or version.created_at > held.created_at:
+            stills[version.asset_id] = version
+
+    entries: list[dict[str, Any]] = []
+    for asset_id in ids:
+        asset = assets.get(asset_id)
+        entry: dict[str, Any] = {
+            "asset_id": asset_id,
+            "title": (asset.title or "").strip() if asset else "",
+            "data": None,
+            "mime": "",
+            "note": None,
+        }
+        version = stills.get(asset_id)
+        if not asset:
+            entry["note"] = f"No asset {asset_id!r} in this workspace."
+        elif not version:
+            entry["note"] = (
+                "No thumbnail still yet - the media worker makes one shortly "
+                "after import. Ask again in a moment."
+            )
+        else:
+            try:
+                path = Path(version.path).resolve(strict=True)
+                oversized = path.stat().st_size > THUMBNAIL_BYTES_LIMIT
+            except OSError:
+                entry["note"] = "The thumbnail file is unavailable."
+            else:
+                if oversized:
+                    entry["note"] = (
+                        "This still is larger than a thumbnail should be and "
+                        "is not sent inline. View it in the Library instead."
+                    )
+                else:
+                    entry["data"] = path.read_bytes()
+                    entry["mime"] = version.mime_type or "image/jpeg"
+        entries.append(entry)
+    return entries
 
 
 def _offer_names(session: Session, workspace_id: str) -> dict[str, str]:
