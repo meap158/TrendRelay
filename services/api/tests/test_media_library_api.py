@@ -106,6 +106,60 @@ def fake_processed(path: Path) -> dict:
     }
 
 
+def test_an_asset_says_which_campaigns_already_hold_it() -> None:
+    """So the Library can stop offering "Add to campaign" as though it were new.
+
+    A clip queued in two campaigns, one of them twice, read exactly like one
+    that had never been used: the same button, the same words, and nothing on
+    the screen saying otherwise. The count is part of the answer because a
+    campaign draws from its queue in order and recycles, so adding a second
+    time is a real thing to want and a bad thing to do by accident.
+    """
+    workspace_id = create_workspace()
+    with TestingSession.begin() as session:
+        for campaign_id, name in (("camp-b", "Second"), ("camp-a", "First")):
+            session.add(Campaign(
+                id=campaign_id, workspace_id=workspace_id, name=name,
+                objective="sell", audience="people", markets=["US"],
+                languages=["en"], created_by="library-owner",
+            ))
+        for asset_id in ("asset-held", "asset-free"):
+            session.add(MediaAsset(
+                id=asset_id, workspace_id=workspace_id, title=asset_id,
+                media_kind="video", source_type="test",
+                original_path=f"/clips/{asset_id}.mp4",
+                original_sha256=f"sha-{asset_id}", mime_type="video/mp4",
+                size_bytes=10, created_by="library-owner",
+            ))
+        # Twice in one campaign - the recycling case - and once in another.
+        for index, campaign_id in enumerate(("camp-a", "camp-a", "camp-b")):
+            session.add(CampaignQueueItem(
+                id=f"queue-{index}", workspace_id=workspace_id,
+                campaign_id=campaign_id, asset_id="asset-held",
+                video_path="/clips/asset-held.mp4", body="queued",
+                state="approved", created_by="library-owner",
+            ))
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    listed = asyncio.run(request("GET", f"{base}/assets"))
+    by_id = {asset["id"]: asset for asset in listed.json()["assets"]}
+
+    # Named, counted, and in a settled order rather than whatever the queue
+    # rows happened to be written in.
+    assert by_id["asset-held"]["campaigns"] == [
+        {"id": "camp-a", "name": "First", "queued": 2},
+        {"id": "camp-b", "name": "Second", "queued": 1},
+    ]
+    # An unused clip says so with an empty list, not a missing key: the
+    # interface asks `campaigns.length`, and absent would read as unknown.
+    assert by_id["asset-free"]["campaigns"] == []
+
+    # The single-asset route answers the same, which is the one the detail
+    # panel reloads after an edit.
+    alone = asyncio.run(request("GET", f"{base}/assets/asset-held"))
+    assert alone.json()["asset"]["campaigns"] == by_id["asset-held"]["campaigns"]
+
+
 def test_asset_page_batches_related_record_queries(tmp_path: Path) -> None:
     """A full Library page must not issue related-row queries per asset."""
     workspace_id = create_workspace()
@@ -158,7 +212,11 @@ def test_asset_page_batches_related_record_queries(tmp_path: Path) -> None:
             event.remove(engine, "before_cursor_execute", record_statement)
 
     assert len(views) == 20
-    assert len(statements) == 3
+    # Versions, transcripts, analyses, and the campaigns each asset is queued
+    # in. Four queries for a page of twenty, and four for a page of a hundred:
+    # what this guards is that the number does not follow the page size.
+    assert len(statements) == 4
+    assert all(" IN (" in statement for statement in statements), statements
 
 
 def test_ingest_deduplicates_enriches_searches_and_plans(

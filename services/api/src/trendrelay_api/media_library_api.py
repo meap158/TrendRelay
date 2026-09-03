@@ -49,7 +49,7 @@ from trendrelay_api.media_models import (
 # The type media travels under when it must not look like media on the wire -
 # shared with the publishing previews so every served byte answers the same.
 from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
-from trendrelay_api.models import utc_now
+from trendrelay_api.models import Campaign, utc_now
 
 router = APIRouter(
     prefix="/api/workspaces/{workspace_id}/media/library",
@@ -222,10 +222,12 @@ def _asset_view(
     versions: list[MediaAssetVersion] | None = None,
     transcripts: list[MediaTranscript] | None = None,
     analysis: CreativeAnalysis | None = None,
+    campaigns: list[dict[str, Any]] | None = None,
     related_loaded: bool = False,
 ) -> dict[str, Any]:
     """Serialize one asset, accepting batched related rows for list views."""
     if not related_loaded:
+        campaigns = _campaigns_by_asset(session, [item.id]).get(item.id, [])
         versions = list(session.scalars(
             select(MediaAssetVersion)
             .where(MediaAssetVersion.asset_id == item.id)
@@ -274,6 +276,10 @@ def _asset_view(
         "hashtags": item.hashtags,
         "audio_identifier": item.audio_identifier,
         "engagement": item.engagement,
+        # Where this clip already is. The library offers "Add to campaign" on
+        # every asset, which read the same on one that had never been used and
+        # on one already queued in two campaigns.
+        "campaigns": campaigns or [],
         "original_path": item.original_path,
         "original_sha256": item.original_sha256,
         "mime_type": item.mime_type,
@@ -321,6 +327,48 @@ def _asset_view(
     }
 
 
+def _campaigns_by_asset(
+    session: Session, asset_ids: Sequence[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """Which campaigns each of these assets is queued in, and how many times.
+
+    One grouped query for a whole page rather than one per asset: the library
+    lists a hundred at a time, and the same question asked row by row is what
+    made the campaign filter take 12.8 seconds before its index existed.
+
+    Counted rather than merely listed because a campaign draws from its queue
+    in order and recycles, so the same clip can legitimately sit in one queue
+    more than once - 107 of them do here. "In this campaign" and "in this
+    campaign twice" are different answers to "should I add it again".
+
+    Every state counts. A retired row is still a row in that queue, and saying
+    a clip is not in a campaign it can be restored into would be the more
+    misleading of the two answers.
+    """
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+
+    if not asset_ids:
+        return {}
+    found: dict[str, list[dict[str, Any]]] = {}
+    rows = session.execute(
+        select(
+            CampaignQueueItem.asset_id,
+            Campaign.id,
+            Campaign.name,
+            func.count(CampaignQueueItem.id),
+        )
+        .join(Campaign, Campaign.id == CampaignQueueItem.campaign_id)
+        .where(CampaignQueueItem.asset_id.in_(asset_ids))
+        .group_by(CampaignQueueItem.asset_id, Campaign.id, Campaign.name)
+        .order_by(Campaign.name)
+    ).all()
+    for asset_id, campaign_id, name, queued in rows:
+        found.setdefault(asset_id, []).append(
+            {"id": campaign_id, "name": name, "queued": int(queued)}
+        )
+    return found
+
+
 def _asset_views(session: Session, items: list[MediaAsset]) -> list[dict[str, Any]]:
     """Serialize a page of assets with three related-row queries, not three per asset."""
     if not items:
@@ -347,6 +395,7 @@ def _asset_views(session: Session, items: list[MediaAsset]) -> list[dict[str, An
         .order_by(CreativeAnalysis.version.desc())
     ).all():
         analyses_by_asset.setdefault(analysis.asset_id, analysis)
+    campaigns_by_asset = _campaigns_by_asset(session, asset_ids)
     return [
         _asset_view(
             session,
@@ -354,6 +403,7 @@ def _asset_views(session: Session, items: list[MediaAsset]) -> list[dict[str, An
             versions=versions_by_asset.get(item.id, []),
             transcripts=transcripts_by_asset.get(item.id, []),
             analysis=analyses_by_asset.get(item.id),
+            campaigns=campaigns_by_asset.get(item.id, []),
             related_loaded=True,
         )
         for item in items

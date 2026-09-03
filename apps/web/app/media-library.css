@@ -416,6 +416,26 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-action-group { display: grid; gap: 6px; }
 .library-action-group h4 { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .library-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Where this clip already is. A line under the buttons rather than a badge on
+   one of them: it names campaigns and each name is a way to open it, which a
+   badge cannot carry. Sized as the supporting note it is, not as another
+   control competing with the two above it. */
+/* Centred, not baseline-aligned: an icon has no text baseline, so a browser
+   aligns its bottom edge to one and pads the difference above - which made a
+   17px line 37px tall. */
+/* Not a warning. `.library-actions p` (line 133) paints every paragraph in
+   this panel as an amber callout, because until now every paragraph in it was
+   one - so a plain statement of where the clip already is arrived looking like
+   something had gone wrong. Written with the tag, because a class alone loses
+   to a class-and-tag selector however far down the file it sits. */
+p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.library-in-campaigns svg { flex: none; }
+/* Undressed. `.library-actions a` (line 51) makes every link in this panel a
+   bordered button, which is right for "Prepare to publish" beside it and wrong
+   for a campaign named inside a sentence - it drew each one as a white chip
+   twice the height of the line holding it. */
+.library-in-campaigns a { border: 0; border-radius: 0; padding: 0; color: var(--link); background: none; font-weight: 600; }
+.library-in-campaigns a:hover { text-decoration: underline; }
 /* Pushed to the end of its row so a mis-aimed click lands on nothing. */
 .library-action-danger { display: inline-flex; margin-inline-start: auto; }
 /* Scoped to the row rather than to `.library-actions >`, which is where these

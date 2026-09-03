@@ -559,6 +559,20 @@ type Asset = {
   versions: Version[];
   transcripts: Transcript[];
   analysis?: Analysis | null;
+  /**
+   * The campaigns whose queue already holds this clip, with how many times.
+   *
+   * A campaign draws from its queue in order and recycles, so the same clip
+   * can sit in one queue more than once on purpose - which is why this counts
+   * rather than merely lists.
+   */
+  campaigns?: { id: string; name: string; queued: number }[];
+};
+type CampaignPickerSelection = {
+  /** Every selected id, including rows outside the 100 assets painted in the grid. */
+  assetIds: string[];
+  /** Loaded details are enough for labels and the small image-carousel option. */
+  assets: Asset[];
 };
 type Job = {
   id?: string | null;
@@ -2295,14 +2309,42 @@ function LibraryContent() {
                       <Button
                         variant="secondary"
                         disabled={!canImport}
-                        onClick={() => setCampaignPickerFor([selected])}
-                      ><ActionIcon name="campaign" />Add to campaign</Button>
+                        onClick={() => setCampaignPickerFor({
+                          assetIds: [selected.id],
+                          assets: [selected],
+                        })}
+                      ><ActionIcon name="campaign" />{selected.campaigns?.length
+                        ? t("library.addToAnotherCampaign")
+                        : t("library.addToCampaign")}</Button>
                       {/* The asset, not just its path. Publish resolves it and
                           selects it exactly as its own library picker would -
                           a path alone filled the field and left the clip
                           card, its length and its blur tag missing. */}
                       <Link href={`/publish?asset=${encodeURIComponent(selected.id)}`}><ActionIcon name="publish" />{t("library.prepareToPublish")}</Link>
                     </div>
+                    {/* Where it already is, named and linked. The button above
+                        offered "Add to campaign" on a clip queued in two of
+                        them, which is a true thing to offer and a misleading
+                        thing to say on its own: adding a second time is a
+                        deliberate act here, not the default reading. */}
+                    {!!selected.campaigns?.length && (
+                      <p className="library-in-campaigns">
+                        <ActionIcon name="campaign" />
+                        <span>
+                          {t("library.alreadyInCampaigns")}{" "}
+                          {selected.campaigns.map((campaign, index) => (
+                            <span key={campaign.id}>
+                              {index > 0 && ", "}
+                              <Link href={`/campaigns?campaign=${encodeURIComponent(campaign.id)}`}>
+                                {campaign.name}
+                              </Link>
+                              {campaign.queued > 1
+                                && ` ${t("library.queuedTimes", { count: campaign.queued })}`}
+                            </span>
+                          ))}
+                        </span>
+                      </p>
+                    )}
                   </section>
 
                   <section className="library-action-group" aria-label={t("library.fileActions")}>
