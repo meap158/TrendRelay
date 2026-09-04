@@ -31,6 +31,12 @@
 .status-toast button:hover { color: var(--text); }
 .status-toast-good { border-color: #b7d9cd; background: var(--green-dark); color: var(--green); }
 .status-toast-bad { border-color: #f1b7bb; background: #fff0f1; color: #8c1d26; }
+.inline-status { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; border-inline-start: 3px solid var(--green); padding-block: 10px; padding-inline: 14px 12px; color: var(--green); background: var(--green-dark); line-height: 1.5; }
+.inline-status > span { min-width: 0; overflow-wrap: anywhere; }
+.inline-status > button { display: grid; width: 28px; height: 28px; margin-block: -4px; padding: 0; place-items: center; border: 0; border-radius: var(--radius-sm); color: currentColor; background: transparent; cursor: pointer; opacity: .72; }
+.inline-status > button:hover { background: color-mix(in srgb, currentColor 9%, transparent); opacity: 1; }
+.inline-status > button:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; opacity: 1; }
+.inline-status-bad { border-inline-start-color: var(--red); color: var(--bad); background: var(--bad-bg); }
 @media (prefers-reduced-motion: no-preference) {
   .status-toast { animation: status-toast-in .18s ease-out; }
   @keyframes status-toast-in { from { opacity: 0; transform: translateY(6px); } }

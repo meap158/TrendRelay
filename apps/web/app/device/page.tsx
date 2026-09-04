@@ -7,6 +7,7 @@ import { Suspense, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { buttonClass } from "../ui/button";
 import { useT } from "../i18n-provider";
+import { DismissibleStatus } from "../ui/status";
 
 type Pairing = {
   user_code: string;
@@ -80,8 +81,8 @@ function DeviceApproval() {
           <button className={buttonClass({ variant: "primary" })} disabled={busy || code.trim().length !== 8} onClick={review}>{busy ? "Checking..." : "Review device"}</button>
           {pairing && <div className="pairing-review"><span>{pairing.status}</span><h2>{pairing.device_name}</h2><p>Code {pairing.user_code} expires {new Date(pairing.expires_at).toLocaleString()}.</p>{pairing.status === "pending" && <button className={buttonClass({ variant: "primary" })} disabled={busy} onClick={approve}>{t("device.approveDevice")}</button>}</div>}
         </>}
-        {message && <p className="form-message" role="status">{message}</p>}
-        {error && <p className="registry-error" role="alert">{error}</p>}
+        {message && <DismissibleStatus tone="good" onDismiss={() => setMessage(null)}>{message}</DismissibleStatus>}
+        {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
       </section>
     </main>
   );

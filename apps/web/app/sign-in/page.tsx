@@ -7,6 +7,7 @@ import { useAuth } from "../auth-provider";
 import { authConfiguration, supabaseBrowserClient } from "../../lib/supabase";
 import { buttonClass } from "../ui/button";
 import { useLocale } from "../i18n-provider";
+import { DismissibleStatus } from "../ui/status";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -122,7 +123,7 @@ export default function SignInPage() {
             <h2>{user ? "Desktop paired" : "Pair this desktop"}</h2>
             <p>{user ? `Signed in as ${user.email ?? user.id}.` : "TrendRelay will open your system browser for a ten-minute, one-time approval."}</p>
             {user ? <Link className={buttonClass({ variant: "primary" })} href="/workspaces">{t("auth.openWorkspaces")}</Link> : <button className={buttonClass({ variant: "primary" })} disabled={busy || authLoading} onClick={pair}>{busy || authLoading ? "Waiting for browser approval..." : "Pair securely in browser"}</button>}
-            {error && <p className="registry-error" role="alert">{error}</p>}
+            {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
           </div>
         ) : !config.configured ? (
           <div className="setup-card" role="status">
@@ -149,8 +150,8 @@ export default function SignInPage() {
               <button type="button" disabled={busy} onClick={sendMagicLink}>{t("auth.magicLink")}</button>
               {mode === "sign-in" && <button type="button" disabled={busy} onClick={resetPassword}>{t("auth.resetPassword")}</button>}
             </div>
-            {message && <p className="form-message" role="status">{message}</p>}
-            {error && <p className="registry-error" role="alert">{error}</p>}
+            {message && <DismissibleStatus tone="good" onDismiss={() => setMessage(null)}>{message}</DismissibleStatus>}
+            {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
           </form>
         )}
       </section>

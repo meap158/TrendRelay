@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "../../auth-provider";
 import { buttonClass } from "../../ui/button";
 import { useT } from "../../i18n-provider";
+import { DismissibleStatus } from "../../ui/status";
 
 export default function AcceptInvitationPage() {
   const t = useT();
@@ -51,8 +52,8 @@ function AcceptInvitationContent() {
         {configured && !loading && !user && <><p>{t("invitation.useExactEmail")}</p><Link className={buttonClass({ variant: "primary" })} href={`/sign-in?next=${encodeURIComponent(returnPath)}`}>{t("invitation.signInToAccept")}</Link></>}
         {configured && !loading && user && !token && <p className="registry-error" role="alert">{t("invitation.noToken")}</p>}
         {configured && !loading && user && token && !message && <button className={buttonClass({ variant: "primary" })} disabled={busy} onClick={accept}>{busy ? "Joining..." : `Accept as ${user.email ?? user.id}`}</button>}
-        {message && <p className="form-message" role="status">{message} <Link href="/workspaces">{t("auth.openWorkspaces")}</Link></p>}
-        {error && <p className="registry-error" role="alert">{error}</p>}
+        {message && <DismissibleStatus tone="good" onDismiss={() => setMessage(null)}>{message} <Link href="/workspaces">{t("auth.openWorkspaces")}</Link></DismissibleStatus>}
+        {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
       </section>
     </main>
   );

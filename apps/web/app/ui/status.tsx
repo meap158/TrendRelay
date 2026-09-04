@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useT } from "../i18n-provider";
 
@@ -28,6 +28,29 @@ export type StatusMessage = {
   tone: StatusTone;
   text: string;
 };
+
+export function DismissibleStatus({
+  tone,
+  children,
+  onDismiss,
+}: {
+  tone: StatusTone;
+  children: ReactNode;
+  onDismiss: () => void;
+}) {
+  const t = useT();
+  return (
+    <div
+      className={`inline-status inline-status-${tone}`}
+      role={tone === "bad" ? "alert" : "status"}
+    >
+      <span>{children}</span>
+      <button type="button" aria-label={t("ui.dismiss")} onClick={onDismiss}>
+        <X size={15} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
 
 /** Long enough to read a sentence, short enough not to sit in the corner. */
 const GOOD_MESSAGE_MS = 6000;

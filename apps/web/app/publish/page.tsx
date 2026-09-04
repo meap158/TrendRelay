@@ -42,6 +42,7 @@ import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
 import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
+import { DismissibleStatus } from "../ui/status";
 import {
   allRoutesSpent,
   mediaProblem,
@@ -2280,8 +2281,16 @@ export default function PublishPage() {
       </header>
 
       <div className="publish-feedback" aria-live="polite">
-        {notice && <p className="registry-message">{notice}</p>}
-        {error && <p className="registry-error" role="alert">{error}</p>}
+        {notice && (
+          <DismissibleStatus tone="good" onDismiss={() => setNotice(null)}>
+            {notice}
+          </DismissibleStatus>
+        )}
+        {error && (
+          <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>
+            {error}
+          </DismissibleStatus>
+        )}
       </div>
 
       {/* Every connected engine, not the active one. A post can go out through

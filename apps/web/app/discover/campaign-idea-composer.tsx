@@ -11,6 +11,7 @@ import {
 } from "../../lib/discovery-ideas";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { DismissibleStatus } from "../ui/status";
 
 async function json<T>(response: Response): Promise<T> {
   const body = await response.json() as T & { detail?: string };
@@ -154,7 +155,7 @@ export function CampaignIdeaComposer({
             </div>
 
             <div className="discovery-idea-fields">
-              {error && <p className="registry-error" role="alert">{error}</p>}
+              {error && <DismissibleStatus tone="bad" onDismiss={() => setError("")}>{error}</DismissibleStatus>}
               <label>Campaign name
                 <input name="name" required minLength={2} maxLength={160} defaultValue={idea.name} />
               </label>

@@ -8,6 +8,7 @@ import { useAuth } from "../../auth-provider";
 import { supabaseBrowserClient } from "../../../lib/supabase";
 import { buttonClass } from "../../ui/button";
 import { WaitingScreen } from "../../ui/waiting-screen";
+import { DismissibleStatus } from "../../ui/status";
 import { useT } from "../../i18n-provider";
 
 type Factor = {
@@ -128,8 +129,8 @@ export default function AccountSecurityPage() {
           <p className="eyebrow">{t("mfa.eyebrow")}</p>
           <h1>{challengeRequired ? "Verify your second factor." : "Protect your account with TOTP."}</h1>
           <p>{t("mfa.currentSession")} <strong>{assurance?.currentLevel ?? "checking"}</strong>. {t("mfa.sixDigitNote")}</p>
-          {error && <p className="registry-error" role="alert">{error}</p>}
-          {message && <p className="form-message" role="status">{message}</p>}
+          {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
+          {message && <DismissibleStatus tone="good" onDismiss={() => setMessage(null)}>{message}</DismissibleStatus>}
           {challengeRequired && <form className="stack-form" onSubmit={verify}><label>{t("mfa.sixDigitCode")}<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>{t("mfa.verifyAndContinue")}</button></form>}
           {!challengeRequired && !enrollment && <button className={buttonClass({ variant: "primary" })} disabled={busy || unverified.length > 0} onClick={enroll}>{t("mfa.addAuthenticator")}</button>}
           {enrollment && <div className="mfa-enrollment"><Image src={enrollment.qrCode} alt={t("mfa.qrAlt")} width={240} height={240} unoptimized /><p>{t("mfa.scanOrEnter")}</p><code>{enrollment.secret}</code><form className="stack-form" onSubmit={verify}><label>{t("mfa.sixDigitCode")}<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>{t("mfa.verifyEnrollment")}</button></form></div>}

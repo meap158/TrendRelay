@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { supabaseBrowserClient } from "../../lib/supabase";
 import { buttonClass } from "../ui/button";
 import { useT } from "../i18n-provider";
+import { DismissibleStatus } from "../ui/status";
 
 export default function UpdatePasswordPage() {
   const t = useT();
@@ -32,8 +33,8 @@ export default function UpdatePasswordPage() {
         <h1>{t("auth.chooseNewPassword")}</h1>
         <label>{t("auth.newPassword")}<input type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
         <button className={buttonClass({ variant: "primary" })}>{t("auth.updatePassword")}</button>
-        {message && <p className="form-message" role="status">{message} <Link href="/workspaces">{t("auth.openWorkspaces")}</Link></p>}
-        {error && <p className="registry-error" role="alert">{error}</p>}
+        {message && <DismissibleStatus tone="good" onDismiss={() => setMessage(null)}>{message} <Link href="/workspaces">{t("auth.openWorkspaces")}</Link></DismissibleStatus>}
+        {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
       </form>
     </main>
   );

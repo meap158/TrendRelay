@@ -20,6 +20,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
+import { DismissibleStatus } from "../ui/status";
 
 type Offer = {
   id: string;
@@ -266,8 +267,8 @@ export function OpportunityScoring({
         </Button>
       </div>
 
-      {error && <p className="registry-error" role="alert">{error}</p>}
-      {message && <p className="registry-message" role="status">{message}</p>}
+      {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
+      {message && <DismissibleStatus tone="good" onDismiss={() => setMessage(null)}>{message}</DismissibleStatus>}
 
       {open && (
         <form className="opportunity-form" onSubmit={createOpportunity}>

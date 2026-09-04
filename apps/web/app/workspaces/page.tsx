@@ -8,6 +8,7 @@ import { useT } from "../i18n-provider";
 import { Button, buttonClass } from "../ui/button";
 import { WaitingBlock } from "../ui/waiting-block";
 import { Select } from "../ui/select";
+import { DismissibleStatus } from "../ui/status";
 
 type Workspace = { id: string; name: string; slug: string; role: string; created_at: string };
 type Member = { id: string; user_id: string; email?: string; role: string };
@@ -245,7 +246,7 @@ export default function WorkspacesPage() {
     <main className="workspace-page">
       <nav><Link href="/account/security">{t("workspaces.accountSecurity")}</Link></nav>
       <div className="workspace-heading"><div><p className="eyebrow">{t("workspaces.eyebrow")}</p><h1>{t("workspaces.heading")}</h1></div><p>Signed in as {user.email ?? user.id}</p></div>
-      {error && <p className="registry-error" role="alert">{error}</p>}
+      {error && <DismissibleStatus tone="bad" onDismiss={() => setError(null)}>{error}</DismissibleStatus>}
       <section className="workspace-layout">
         <aside className="workspace-sidebar">
           <h2>{t("workspaces.yours")}</h2>
