@@ -623,6 +623,14 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .effect-step-actions { display: flex; gap: 2px; }
 .effect-unavailable { margin: 0; color: var(--bad); font-size: 11px; line-height: 1.45; }
 
+/* Starting points, sitting on the controls they fill. Quiet by default and
+   only marked when the sliders still agree with one: a preset that stayed lit
+   after the operator moved something would be describing the wrong grade. */
+.effect-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-block-end: 10px; }
+.effect-presets button { border: 1px solid var(--line-strong); border-radius: 999px; padding: 4px 10px; color: var(--text); background: var(--panel); font-size: 11px; font-weight: 600; cursor: pointer; }
+.effect-presets button:hover { border-color: var(--link); color: var(--link); }
+.effect-presets button.selected { border-color: var(--link); color: var(--on-ink); background: var(--link); }
+.effect-presets button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .effect-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .effect-param { display: grid; gap: 4px; min-width: 0; }
 .effect-param > span { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; color: var(--muted); font-size: 11px; font-weight: 600; }

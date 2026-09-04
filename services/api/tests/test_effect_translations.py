@@ -66,6 +66,15 @@ def required_keys() -> list[str]:
         # which is the exact split the shared tag exists to close.
         if effect.get("tag") and effect["tag"] != effect["label"]:
             wanted.append(f"{effect['id']}.tag")
+        # A preset's name and its one-line summary, both of which the
+        # interface shows. Emitted flat rather than as `presets.<id>` because
+        # the scope below is the effect's whole block, nested objects and all,
+        # and the leaf is unique inside it either way.
+        for preset in effect.get("presets") or []:
+            wanted += [
+                f"{effect['id']}.{preset['id']}",
+                f"{effect['id']}.{preset['id']}Summary",
+            ]
         for param in effect["params"]:
             wanted.append(f"{effect['id']}.{param['id']}")
             if param["help"]:

@@ -1526,6 +1526,11 @@ export const en = {
       saturationHelp: "0 is greyscale.",
       gamma: "Gamma",
       gammaHelp: "Lifts the midtones without touching black or white.",
+      presets: {
+        gentle_lift: "Gentle lift",
+        gentle_liftSummary:
+          "A little brighter, a little less saturated, a little more contrast.",
+      },
     },
     speed: {
       label: "Speed",
@@ -1675,6 +1680,7 @@ export const en = {
     title: "Editing",
     unavailable: "Not available on this machine",
     licenceRequired: "This needs a licence decision before it can run",
+    startingPoints: "Starting points",
     installHint: "Install the add-on to enable this",
   },
 

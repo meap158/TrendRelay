@@ -1523,6 +1523,11 @@ export const vi: Messages = {
       saturationHelp: "0 là ảnh đen trắng.",
       gamma: "Gamma",
       gammaHelp: "Nâng vùng trung gian mà không đụng tới đen và trắng.",
+      presets: {
+        gentle_lift: "Nâng nhẹ",
+        gentle_liftSummary:
+          "Sáng hơn một chút, bớt bão hòa một chút, tương phản nhỉnh hơn.",
+      },
     },
     speed: {
       label: "Tốc độ",
@@ -1672,6 +1677,7 @@ export const vi: Messages = {
     title: "Chỉnh sửa",
     unavailable: "Không khả dụng trên máy này",
     licenceRequired: "Cần quyết định về giấy phép trước khi chạy",
+    startingPoints: "Điểm khởi đầu",
     installHint: "Cài đặt tiện ích bổ sung để bật tính năng này",
   },
 

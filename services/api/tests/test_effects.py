@@ -407,3 +407,92 @@ def test_the_form_is_told_which_choices_must_be_answered() -> None:
         not param["required"]
         for param in described["colour"]["params"]
     )
+
+
+def test_every_preset_names_every_parameter_of_its_effect() -> None:
+    """A preset must say what the whole effect does, not part of it.
+
+    A partial preset lands differently depending on what was set before it: the
+    same chip gives one grade on a fresh step and another on one somebody had
+    already dragged. Then "which preset am I on" has no answer, because the
+    controls agree with it on the params it mentioned and not on the rest.
+    """
+    for effect in describe():
+        for preset in effect["presets"]:
+            assert set(preset["values"]) == {param["id"] for param in effect["params"]}, (
+                f"{effect['id']}/{preset['id']}"
+            )
+
+
+def test_every_preset_value_is_one_its_own_control_would_allow() -> None:
+    # Otherwise a preset could set something the slider beside it refuses, and
+    # the first nudge would silently change the render.
+    for effect in describe():
+        ranges = {param["id"]: param for param in effect["params"]}
+        for preset in effect["presets"]:
+            for name, value in preset["values"].items():
+                param = ranges[name]
+                if param["minimum"] is not None:
+                    assert value >= param["minimum"], f"{preset['id']}.{name}"
+                if param["maximum"] is not None:
+                    assert value <= param["maximum"], f"{preset['id']}.{name}"
+
+
+def test_every_preset_value_lands_on_its_control_step() -> None:
+    """The panel must show the number the render will use.
+
+    A range input silently rounds a value that is not on its step, so a preset
+    of 1.03 over a step of 0.05 displayed 1.05 while rendering 1.03 - a control
+    disagreeing with the file it was about to make, with nothing to say so.
+    Caught here rather than in the browser, because it is arithmetic.
+    """
+    for effect in describe():
+        for preset in effect["presets"]:
+            for param in effect["params"]:
+                step, low = param["step"], param["minimum"]
+                if not step or low is None:
+                    continue
+                offset = (preset["values"][param["id"]] - low) / step
+                assert abs(offset - round(offset)) < 1e-6, (
+                    f"{effect['id']}/{preset['id']}: {param['id']} "
+                    f"= {preset['values'][param['id']]} is not a multiple of {step}"
+                )
+
+
+def test_a_preset_survives_the_same_coercion_a_saved_recipe_does() -> None:
+    # The values travel to the browser, come back in a step, and are read like
+    # any other. A preset that only worked as a literal would fail on use.
+    for effect in describe():
+        for preset in effect["presets"]:
+            step = recipe((effect["id"], dict(preset["values"])))
+            assert step[0].values == preset["values"], effect["id"]
+
+
+def test_the_colour_preset_is_the_capcut_numbers_on_this_scale() -> None:
+    """+5 brightness, -5 saturation, +3 contrast, converted rather than copied.
+
+    CapCut's sliders run -100..+100 across the whole of what the underlying
+    `eq` filter does, so a step of five there is five hundredths here. Written
+    down as a test because the arithmetic is the only thing connecting the two,
+    and a later tidy-up that rounded these onto the sliders' step grid would be
+    changing the grade to make the control look neater.
+    """
+    colour = next(effect for effect in describe() if effect["id"] == "colour")
+    preset = next(item for item in colour["presets"] if item["id"] == "gentle_lift")
+    assert preset["values"] == {
+        "brightness": 0 + 0.05,
+        "saturation": 1 - 0.05,
+        "contrast": 1 + 0.03,
+        "gamma": 1.0,
+    }
+    # And it reaches FFmpeg as one pass over the four, not as four passes.
+    assert build_filtergraph(recipe(("colour", preset["values"])))[0] == [
+        "eq=contrast=1.03:brightness=0.05:saturation=0.95:gamma=1"
+    ]
+
+
+def test_an_effect_with_nothing_to_preset_offers_none() -> None:
+    # The field is empty for most of them, and the interface renders no row at
+    # all rather than an empty one.
+    rotate = next(effect for effect in describe() if effect["id"] == "rotate")
+    assert rotate["presets"] == []

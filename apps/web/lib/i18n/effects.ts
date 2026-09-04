@@ -126,6 +126,25 @@ export function paramHelp(
   return fromDictionary(t, `fx.${effectId}.${paramId}Help`, apiHelp);
 }
 
+/**
+ * A preset's name and what it does, translated where a locale has said so.
+ *
+ * Keyed on the preset's id rather than on its English words, for the same
+ * reason a gallery group is: keying on the wording works until somebody
+ * improves it, and then every locale reverts to English with nothing failing.
+ */
+export function presetLabel(
+  t: Translate, effectId: string, presetId: string, apiLabel: string,
+): string {
+  return fromDictionary(t, `fx.${effectId}.presets.${presetId}`, apiLabel);
+}
+
+export function presetSummary(
+  t: Translate, effectId: string, presetId: string, apiSummary: string,
+): string {
+  return fromDictionary(t, `fx.${effectId}.presets.${presetId}Summary`, apiSummary);
+}
+
 export function optionLabel(
   t: Translate, effectId: string, value: string, apiLabel: string,
 ): string {

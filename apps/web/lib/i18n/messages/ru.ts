@@ -1542,6 +1542,11 @@ export const ru: Messages = {
       saturationHelp: "0 — чёрно-белое изображение.",
       gamma: "Гамма",
       gammaHelp: "Поднимает средние тона, не трогая чёрное и белое.",
+      presets: {
+        gentle_lift: "Лёгкий подъём",
+        gentle_liftSummary:
+          "Немного светлее, чуть менее насыщенно, немного больше контраста.",
+      },
     },
     speed: {
       label: "Скорость",
@@ -1691,6 +1696,7 @@ export const ru: Messages = {
     title: "Редактирование",
     unavailable: "Недоступно на этом компьютере",
     licenceRequired: "Перед запуском нужно решение по лицензии",
+    startingPoints: "Отправные точки",
     installHint: "Установите дополнение, чтобы включить эту функцию",
   },
 

@@ -16,6 +16,8 @@ import {
   effectSummary,
   paramHelp,
   paramLabel,
+  presetLabel,
+  presetSummary,
 } from "../../lib/i18n/effects";
 
 
@@ -609,6 +611,34 @@ export function EffectEditor({
                         </small>
                       </span>
                     </button>
+                  )}
+                  {/* Starting points, above the controls they fill. Chips
+                      rather than a dropdown: there is nothing to choose
+                      between here - a preset is a shortcut to a set of numbers
+                      that stay visible and editable underneath, and hiding
+                      them in a list would make it look like a mode. */}
+                  {!!effect.presets?.length && (
+                    <div className="effect-presets" role="group" aria-label={t("effects.startingPoints")}>
+                      {effect.presets.map((preset) => {
+                        // Lit when the controls still say what it set. Compared
+                        // across every param because a preset names them all,
+                        // so "on" means the whole grade, not a lucky slider.
+                        const on = effect.params.every((param) =>
+                          (step.values?.[param.id] ?? param.default) === preset.values[param.id]);
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={on ? "selected" : ""}
+                            aria-pressed={on}
+                            title={presetSummary(t, effect.id, preset.id, preset.summary)}
+                            onClick={() => edit(steps.map((item, at) => at === index
+                              ? { ...item, values: { ...item.values, ...preset.values } }
+                              : item))}
+                          >{presetLabel(t, effect.id, preset.id, preset.label)}</button>
+                        );
+                      })}
+                    </div>
                   )}
                   {effect.params.length > 0 && (
                     <div className="effect-params">

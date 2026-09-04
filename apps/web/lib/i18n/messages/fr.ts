@@ -1543,6 +1543,11 @@ export const fr: Messages = {
       saturationHelp: "0 donne du noir et blanc.",
       gamma: "Gamma",
       gammaHelp: "Relève les tons moyens sans toucher aux noirs ni aux blancs.",
+      presets: {
+        gentle_lift: "Léger relèvement",
+        gentle_liftSummary:
+          "Un peu plus lumineux, un peu moins saturé, un peu plus de contraste.",
+      },
     },
     speed: {
       label: "Vitesse",
@@ -1692,6 +1697,7 @@ export const fr: Messages = {
     title: "Édition",
     unavailable: "Indisponible sur cette machine",
     licenceRequired: "Une décision de licence est requise avant l'exécution",
+    startingPoints: "Points de départ",
     installHint: "Installez le module complémentaire pour l'activer",
   },
 

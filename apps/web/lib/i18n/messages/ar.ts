@@ -1526,6 +1526,10 @@ export const ar: Messages = {
       saturationHelp: "القيمة ٠ تعطي صورة بالأبيض والأسود.",
       gamma: "جاما",
       gammaHelp: "يرفع الدرجات الوسطى دون المساس بالأسود أو الأبيض.",
+      presets: {
+        gentle_lift: "رفع خفيف",
+        gentle_liftSummary: "أفتح قليلاً، أقل تشبعاً قليلاً، وتباين أعلى قليلاً.",
+      },
     },
     speed: {
       label: "السرعة",
@@ -1675,6 +1679,7 @@ export const ar: Messages = {
     title: "التحرير",
     unavailable: "غير متاح على هذا الجهاز",
     licenceRequired: "يلزم قرار بشأن الترخيص قبل التشغيل",
+    startingPoints: "نقاط البداية",
     installHint: "ثبّت الإضافة لتفعيل هذه الميزة",
   },
 

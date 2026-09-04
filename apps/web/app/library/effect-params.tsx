@@ -102,6 +102,21 @@ export type EffectDefinition = {
   /** Why it cannot, when it cannot. */
   unpreviewable_reason?: string;
   params: EffectParam[];
+  /**
+   * Named starting points, offered above the controls.
+   *
+   * Each carries a value for every param this effect declares, so choosing one
+   * says exactly what the effect will do rather than "these three, and whatever
+   * the others happened to be".
+   */
+  presets?: EffectPreset[];
+};
+
+export type EffectPreset = {
+  id: string;
+  label: string;
+  summary: string;
+  values: Record<string, unknown>;
 };
 
 export type Step = { effect: string; values: Record<string, unknown> };

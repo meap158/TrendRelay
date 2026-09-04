@@ -1516,6 +1516,10 @@ export const ja: Messages = {
       saturationHelp: "0 でモノクロになります。",
       gamma: "ガンマ",
       gammaHelp: "黒と白はそのままに、中間調だけを持ち上げます。",
+      presets: {
+        gentle_lift: "軽く持ち上げ",
+        gentle_liftSummary: "少し明るく、少し彩度を下げ、少しコントラストを上げます。",
+      },
     },
     speed: {
       label: "速度",
@@ -1665,6 +1669,7 @@ export const ja: Messages = {
     title: "編集",
     unavailable: "この環境では利用できません",
     licenceRequired: "実行前にライセンスの確認が必要です",
+    startingPoints: "出発点",
     installHint: "アドオンをインストールすると利用できます",
   },
 

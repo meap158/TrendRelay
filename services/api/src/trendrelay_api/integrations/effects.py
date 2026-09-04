@@ -113,6 +113,24 @@ class EffectParam:
 
 
 @dataclass(frozen=True)
+class EffectPreset:
+    """A named set of values for one effect, as a starting point rather than a lock.
+
+    Choosing one fills the controls and leaves them editable, which is the
+    whole difference between a preset and a mode: the numbers stay visible and
+    the next drag is still the operator's.
+    """
+
+    id: str
+    label: str
+    summary: str
+    #: Every param this effect declares. Partial presets were tempting and are
+    #: a trap: "the ones I did not mention keep whatever was there" makes the
+    #: same preset land differently depending on what was set before it.
+    values: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class Effect:
     id: str
     label: str
@@ -125,6 +143,9 @@ class Effect:
     #: are already short enough and leave this empty to reuse the label.
     tag: str = ""
     params: tuple[EffectParam, ...] = ()
+    #: Starting points offered above the controls. Empty for most effects: a
+    #: single slider has nothing to preset that its default does not already say.
+    presets: tuple[EffectPreset, ...] = ()
     media_kinds: frozenset[str] = frozenset({"video"})
     #: Stream effects only: the FFmpeg fragments this step contributes.
     video_filters: Callable[[dict[str, Any]], list[str]] | None = None
@@ -421,25 +442,56 @@ COLOUR = Effect(
     summary="Contrast, brightness, saturation and gamma in one pass.",
     stage="stream",
     params=(
+        # A hundredth on all four. The step is what the control can show, and
+        # a twentieth cannot show a subtle grade: asked for +3% contrast, the
+        # slider rounded it to +5% and displayed a number the render would not
+        # use. Colour work at this end of the scale lives in hundredths.
         EffectParam(
             id="contrast", label="Contrast", kind="number", default=1.0,
-            minimum=0.0, maximum=3.0, step=0.05,
+            minimum=0.0, maximum=3.0, step=0.01,
             help="1.0 leaves it alone.",
         ),
         EffectParam(
             id="brightness", label="Brightness", kind="number", default=0.0,
-            minimum=-1.0, maximum=1.0, step=0.02,
+            minimum=-1.0, maximum=1.0, step=0.01,
             help="0 leaves it alone. This adds light rather than scaling it.",
         ),
         EffectParam(
             id="saturation", label="Saturation", kind="number", default=1.0,
-            minimum=0.0, maximum=3.0, step=0.05,
+            minimum=0.0, maximum=3.0, step=0.01,
             help="0 is greyscale.",
         ),
         EffectParam(
             id="gamma", label="Gamma", kind="number", default=1.0,
-            minimum=0.1, maximum=3.0, step=0.05,
+            minimum=0.1, maximum=3.0, step=0.01,
             help="Lifts the midtones without touching black or white.",
+        ),
+    ),
+    presets=(
+        EffectPreset(
+            id="gentle_lift",
+            label="Gentle lift",
+            summary="A little brighter, a little less saturated, a little more contrast.",
+            # Asked for in CapCut's numbers - brightness +5, saturation -5,
+            # contrast +3 - which are not these numbers. That slider runs
+            # -100..+100 across the whole of what the underlying `eq` filter
+            # can do, so a step of five there is five hundredths here:
+            #
+            #   brightness  additive, -1..1     +5/100  ->  0 + 0.05
+            #   saturation  multiplier, 0..3    -5/100  ->  1 - 0.05
+            #   contrast    multiplier, 0..3    +3/100  ->  1 + 0.03
+            #
+            # Every one of these lands on its slider's step, which is not a
+            # coincidence: the steps were widened to hundredths because these
+            # did not. A range input silently rounds an off-step value, so the
+            # panel showed 1.05 and 0.06 over a render of 1.03 and 0.05 - the
+            # control disagreeing with the file it was about to make.
+            values={
+                "contrast": 1.03,
+                "brightness": 0.05,
+                "saturation": 0.95,
+                "gamma": 1.0,
+            },
         ),
     ),
     video_filters=_colour_filters,
@@ -933,6 +985,15 @@ def describe() -> list[dict[str, Any]]:
                 # explains the gap where it does not.
                 "previewable": effect.preview is not None,
                 "unpreviewable_reason": effect.unpreviewable_reason,
+                "presets": [
+                    {
+                        "id": preset.id,
+                        "label": preset.label,
+                        "summary": preset.summary,
+                        "values": dict(preset.values),
+                    }
+                    for preset in effect.presets
+                ],
                 "params": [
                     {
                         "id": param.id,

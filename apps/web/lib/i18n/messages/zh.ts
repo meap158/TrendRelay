@@ -1498,6 +1498,10 @@ export const zh: Messages = {
       saturationHelp: "0 即为黑白。",
       gamma: "伽马",
       gammaHelp: "提升中间调，不影响纯黑与纯白。",
+      presets: {
+        gentle_lift: "轻微提亮",
+        gentle_liftSummary: "稍微提亮、略降饱和度、微增对比度。",
+      },
     },
     speed: {
       label: "速度",
@@ -1647,6 +1651,7 @@ export const zh: Messages = {
     title: "编辑",
     unavailable: "当前设备不可用",
     licenceRequired: "运行前需要先确认许可条款",
+    startingPoints: "预设起点",
     installHint: "安装扩展组件后即可使用",
   },
 
