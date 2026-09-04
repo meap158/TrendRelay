@@ -399,3 +399,33 @@ def test_a_desk_reads_only_its_own_newsrooms() -> None:
     )
 
     assert seen == ["https://example.test/tech.xml"]
+
+
+def test_the_live_board_is_cached_and_injected_setups_never_are(monkeypatch) -> None:
+    """Only the pure live call caches; a test's own opener always runs live.
+
+    Every call in this file injects an opener or a clock and must keep
+    answering from its own setup - which is also why this test can exercise
+    the cache only by stubbing the live path underneath the pure call.
+    """
+    from trendrelay_api.integrations import news_feeds
+
+    monkeypatch.setattr(news_feeds, "_news_cache", {})
+    monkeypatch.setattr(news_feeds, "_news_refreshing", set())
+    calls = {"count": 0}
+
+    def fake_live(**kwargs: Any) -> dict[str, Any]:
+        calls["count"] += 1
+        return {"covered": [], "breaking": [], "complete": True, "notes": []}
+
+    monkeypatch.setattr(news_feeds, "_collect_news_live", fake_live)
+
+    first = news_feeds.collect_news()
+    second = news_feeds.collect_news()
+    assert second is first
+    assert calls["count"] == 1
+
+    # An injected clock is a different question and is answered live each time.
+    news_feeds.collect_news(now=NOW)
+    news_feeds.collect_news(now=NOW)
+    assert calls["count"] == 3

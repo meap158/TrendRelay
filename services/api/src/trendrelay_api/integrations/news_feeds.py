@@ -34,6 +34,8 @@ post with six thousand likes, and nothing here puts them in one ranking.
 from __future__ import annotations
 
 import re
+import threading
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -607,7 +609,69 @@ def _row(story: Story, shelf: str) -> dict[str, Any]:
     }
 
 
+#: How long one board stays fresh. News moves faster than trends, so this is
+#: a third of the trend collection's TTL; past it the previous board answers
+#: at once and one background thread re-reads the feeds. Reading nine
+#: syndication feeds live took a second or two, paid on every Discover open
+#: and every desk switch.
+NEWS_TTL_SECONDS = 300
+_news_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_news_refreshing: set[str] = set()
+_news_lock = threading.Lock()
+
+
 def collect_news(
+    *,
+    desk: str = "all",
+    limit: int = 6,
+    country: str | None = None,
+    feeds: tuple[tuple[str, str, str, str], ...] = DEFAULT_FEEDS,
+    opener: Any = urlopen,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """The board, from cache when the same question was asked recently.
+
+    Cached only on the pure live call: a caller injecting an opener, a clock
+    or a feed roster - which is every test - is asking about that exact
+    setup, and is answered live. A stale board is served immediately while a
+    single background refresh replaces it.
+    """
+    if opener is not urlopen or now is not None or feeds is not DEFAULT_FEEDS:
+        return _collect_news_live(
+            desk=desk, limit=limit, country=country,
+            feeds=feeds, opener=opener, now=now,
+        )
+    key = f"{desk}:{limit}:{country or ''}"
+    moment = time.time()
+    with _news_lock:
+        cached = _news_cache.get(key)
+    if cached and moment - cached[0] < NEWS_TTL_SECONDS:
+        return cached[1]
+    if cached:
+        with _news_lock:
+            already = key in _news_refreshing
+            _news_refreshing.add(key)
+        if not already:
+            def refresh() -> None:
+                try:
+                    fresh = _collect_news_live(desk=desk, limit=limit, country=country)
+                    with _news_lock:
+                        _news_cache[key] = (time.time(), fresh)
+                finally:
+                    with _news_lock:
+                        _news_refreshing.discard(key)
+
+            threading.Thread(
+                target=refresh, name="news-board-refresh", daemon=True
+            ).start()
+        return cached[1]
+    fresh = _collect_news_live(desk=desk, limit=limit, country=country)
+    with _news_lock:
+        _news_cache[key] = (moment, fresh)
+    return fresh
+
+
+def _collect_news_live(
     *,
     desk: str = "all",
     limit: int = 6,
