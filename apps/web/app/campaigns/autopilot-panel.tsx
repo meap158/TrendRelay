@@ -4155,6 +4155,7 @@ export function AutopilotPanel({
           frozen record. */}
       {exceptions.length > 0 && (
         <Card
+          id="campaign-approvals"
           eyebrow="Approval"
           title="Needs your approval"
           aside={<Badge tone="warn">{exceptions.length} held</Badge>}

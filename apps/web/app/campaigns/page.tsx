@@ -33,6 +33,7 @@ import {
   readTabSnapshot,
   refreshTabSnapshot,
 } from "../../lib/tab-snapshots";
+import { CampaignViewNav } from "./campaign-view-nav";
 
 // The autopilot panel is the largest view in the app and renders only for the
 // selected campaign, below the list. Load it as its own chunk so the campaign
@@ -729,6 +730,7 @@ export default function CampaignsPage() {
               bare word where the others carry a sentence. */}
           <p className="lede">Run a campaign end to end — what it posts, where it goes, and how hard it runs.</p>
         </div>
+        <CampaignViewNav />
       </header>
 
       <section className="campaign-layout">

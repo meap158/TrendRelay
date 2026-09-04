@@ -21,6 +21,7 @@ TrendRelay is a local-first Windows workspace for collecting reference media fro
 - **Deploy campaigns from one workspace** by filtering and selecting Library clips, applying effects, assigning social accounts, writing captions, attaching imported affiliate offers, setting posting times, previewing, and launching without leaving Campaigns.
 - **Hand approved plans to Publish** with media, copy, disclosure, affiliate placement, and schedule restored together.
 - **Follow campaign performance** into Attribution with plan, tracking-link, click, and commission context.
+- **Manage every campaign together** from Campaigns → Campaign overview: compare provider-backed output, views, engagement, queue health, warnings, and pending approvals, with compact metric charts, without opening each campaign.
 - **Keep downloads private** in the local `.data/` directory, which is excluded from Git.
 
 ## From link to Library

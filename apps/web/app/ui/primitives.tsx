@@ -41,6 +41,7 @@ export function Badge({
  * apart between pages, which is what happened when each card wrote its own.
  */
 export function Card({
+  id,
   title,
   eyebrow,
   aside,
@@ -49,6 +50,8 @@ export function Card({
   tone,
   className,
 }: {
+  /** Optional anchor target for deep links into a long workspace. */
+  id?: string;
   title?: ReactNode;
   eyebrow?: ReactNode;
   aside?: ReactNode;
@@ -67,7 +70,7 @@ export function Card({
     </header>
   );
   return (
-    <article className={`ui-card${tone && tone !== "default" ? ` ui-card-${tone}` : ""}${className ? ` ${className}` : ""}`}>
+    <article id={id} className={`ui-card${tone && tone !== "default" ? ` ui-card-${tone}` : ""}${className ? ` ${className}` : ""}`}>
       {toolbar ? (
         <div className="ui-card-head-region">
           {heading}
