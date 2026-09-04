@@ -414,3 +414,98 @@ def test_searching_a_topic_is_a_look_any_member_can_take(monkeypatch) -> None:
     )
     assert response.status_code == 200
     assert response.json()["term"] == "camping"
+
+
+def _listed_job() -> dict:
+    return {
+        "id": "download_0123456789abcdef",
+        "status": "succeeded",
+        "created_at": "2026-09-01T00:00:00+00:00",
+        "payload": {"request": {"urls": ["https://v.douyin.com/x/"]}},
+        "result": {
+            "artifacts": [{"path": "S:/a.mp4", "name": "a.mp4", "size_bytes": 5}],
+            "summary": "Fetched 1 media file(s)",
+            "library_jobs": [{"id": f"import_{index}"} for index in range(300)],
+        },
+        "progress": {"files_downloaded": 1},
+    }
+
+
+def test_downloads_listing_answers_304_when_nothing_changed(monkeypatch) -> None:
+    """The routine poll is an empty answer, not megabytes re-read every tick.
+
+    Every open tab polls this listing for the notification bell. The rows it
+    is built from are fingerprinted, so an unchanged workspace is told 304
+    against its ETag and the disk is not rescanned; the listing itself also
+    drops `library_jobs`, hundreds of ingest rows per batch that only the
+    server reads - `library_progress` is their summary.
+    """
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    calls = {"count": 0}
+
+    def listed(_workspace_id):
+        calls["count"] += 1
+        return [_listed_job()]
+
+    monkeypatch.setattr(media_api, "list_download_jobs", listed)
+
+    first = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace['id']}/media/downloads")
+    )
+    assert first.status_code == 200
+    etag = first.headers["etag"]
+    job = first.json()["jobs"][0]
+    assert "library_jobs" not in job["result"]
+    assert job["result"]["artifacts"] == [
+        {"path": "S:/a.mp4", "name": "a.mp4", "size_bytes": 5}
+    ]
+
+    unchanged = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace['id']}/media/downloads",
+            headers={"If-None-Match": etag},
+        )
+    )
+    assert unchanged.status_code == 304
+    assert unchanged.content == b""
+    # The empty answer is genuinely cheap: the listing was never rebuilt.
+    assert calls["count"] == 1
+
+
+def test_downloads_listing_stays_live_while_a_job_runs(monkeypatch) -> None:
+    """Live progress comes from the disk, so a running job forbids the 304.
+
+    A fingerprint built from rows cannot see files landing in a folder, and
+    freezing a running download's counters behind an ETag would show a stuck
+    progress bar over a working download.
+    """
+    from trendrelay_api.models import DurableJob
+
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    with TestingSession.begin() as session:
+        session.add(DurableJob(
+            id="download_aaaaaaaaaaaaaaaa", workspace_key=workspace["id"],
+            kind="douyin_download", status="running",
+        ))
+    monkeypatch.setattr(media_api, "list_download_jobs", lambda _id: [_listed_job()])
+
+    response = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace['id']}/media/downloads")
+    )
+    assert response.status_code == 200
+    assert "etag" not in response.headers
+
+    # Even a stale tag from quieter times is answered in full.
+    conditional = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace['id']}/media/downloads",
+            headers={"If-None-Match": 'W/"downloads-1-x-1"'},
+        )
+    )
+    assert conditional.status_code == 200

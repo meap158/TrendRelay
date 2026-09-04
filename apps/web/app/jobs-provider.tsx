@@ -131,6 +131,18 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const refreshInFlight = useRef<Promise<void> | null>(null);
   const hasActiveJobs = useRef(false);
   const activeWorkspaceId = workspaceId || null;
+  /**
+   * The downloads listing, kept against its ETag.
+   *
+   * That endpoint's answer is the heaviest thing this provider polls - every
+   * batch's artifact list - and it rarely changes. The server says when it
+   * has not (304), and this cache is what makes that answer usable: same
+   * rows, no megabytes re-parsed on every tick. Keyed by workspace so a
+   * switch never serves another workspace's rows.
+   */
+  const downloadsCache = useRef<{
+    workspaceId: string; etag: string; jobs: BaseJob[];
+  } | null>(null);
 
   const effectJob = useCallback((job: any): BaseJob => ({
     id: job.id,
@@ -253,20 +265,34 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       fetchPromises.push(fetchResearch);
 
       if (activeWorkspaceId) {
-        const fetchMedia = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/downloads`)
-          .then(res => res.json())
-          .then(data => (data.jobs || []).map((j: any) => ({
-            id: j.id,
-            category: "fetch" as JobCategory,
-            status: j.status,
-            created_at: j.created_at,
-            title: `Fetch: ${j.payload?.request?.urls?.[0] ?? j.id}`,
-            error: j.error,
-            // The batch downloader is the root screen, and a finished fetch is
-            // read there next to the queue it came from.
-            href: "/",
-            raw: j,
-          })))
+        const cached = downloadsCache.current?.workspaceId === activeWorkspaceId
+          ? downloadsCache.current
+          : null;
+        const fetchMedia = apiFetch(
+          `/api/workspaces/${activeWorkspaceId}/media/downloads`,
+          cached ? { headers: { "If-None-Match": cached.etag } } : undefined,
+        )
+          .then(async (res) => {
+            if (res.status === 304 && cached) return cached.jobs;
+            const data = await res.json();
+            const mapped = (data.jobs || []).map((j: any) => ({
+              id: j.id,
+              category: "fetch" as JobCategory,
+              status: j.status,
+              created_at: j.created_at,
+              title: `Fetch: ${j.payload?.request?.urls?.[0] ?? j.id}`,
+              error: j.error,
+              // The batch downloader is the root screen, and a finished fetch
+              // is read there next to the queue it came from.
+              href: "/",
+              raw: j,
+            }));
+            const etag = res.headers.get("etag");
+            downloadsCache.current = etag
+              ? { workspaceId: activeWorkspaceId, etag, jobs: mapped }
+              : null;
+            return mapped;
+          })
           .catch(() => []);
         fetchPromises.push(fetchMedia);
 

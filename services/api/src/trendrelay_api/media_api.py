@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -189,12 +190,81 @@ def connect_douyin(
     return {"connection": connection}
 
 
+#: How long a downloads ETag stays honest, in seconds. Job rows are in the
+#: fingerprint, so any queued, finished or edited job refreshes at once; what
+#: the fingerprint cannot see is the disk itself - files deleted by hand
+#: between jobs - so the tag expires on a clock and the listing rescans the
+#: folders at most every half minute instead of on every poll.
+DOWNLOADS_ETAG_SECONDS = 30
+
+
+def _downloads_etag(session: Session, workspace_id: str) -> str | None:
+    """A cheap fingerprint of everything the listing is built from, or None.
+
+    One aggregate over the workspace's durable jobs - downloads and the
+    library ingests their progress bars read - plus a time bucket. None while
+    any job is running: live progress comes from the disk, not from rows, and
+    a fingerprint that froze a running download's counters would be a lie.
+    Running only, not queued - nothing lands on disk while a job waits, a
+    stale queued row can sit for days, and the moment it starts its own row
+    changes and breaks the tag anyway.
+    """
+    from sqlalchemy import case, func, select
+
+    from trendrelay_api.models import DurableJob
+
+    running, total, latest = session.execute(
+        select(
+            func.sum(case((DurableJob.status == "running", 1), else_=0)),
+            func.count(DurableJob.id),
+            func.max(DurableJob.updated_at),
+        ).where(DurableJob.workspace_key == workspace_id)
+    ).one()
+    if running:
+        return None
+    bucket = int(time.time() // DOWNLOADS_ETAG_SECONDS)
+    return f'W/"downloads-{total}-{latest}-{bucket}"'
+
+
+def _listed_download_view(job: dict[str, Any]) -> dict[str, Any]:
+    """The job as the listing serves it.
+
+    Identical to the stored record except `library_jobs`: hundreds of ingest
+    rows per batch that only the server reads - `library_progress` is their
+    summary, computed before this - and that made a routine poll a quarter
+    megabyte heavier for nothing. The single-job read keeps the full record.
+    """
+    result = job.get("result")
+    if not result or "library_jobs" not in result:
+        return job
+    trimmed = dict(result)
+    del trimmed["library_jobs"]
+    return {**job, "result": trimmed}
+
+
 @router.get("/downloads")
 def downloads(
-    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
-) -> dict[str, Any]:
+    workspace_id: str,
+    request: Request,
+    response: Response,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> Any:
+    """The downloads listing, answered with 304 when nothing changed.
+
+    Every open tab polls this for the notification bell, and the payload
+    carries every batch's artifact list, so the routine answer used to be
+    megabytes of JSON and a disk scan per poll. The fingerprint makes the
+    routine answer empty; the full build runs when something actually
+    happened, or when the tag's half-minute honesty window lapses.
+    """
     membership(session, workspace_id, user.id)
-    return {"jobs": list_download_jobs(workspace_id)}
+    etag = _downloads_etag(session, workspace_id)
+    if etag and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    if etag:
+        response.headers["ETag"] = etag
+    return {"jobs": [_listed_download_view(job) for job in list_download_jobs(workspace_id)]}
 
 
 @router.post("/downloads/clear")
