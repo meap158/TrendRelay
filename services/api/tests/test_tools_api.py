@@ -240,3 +240,42 @@ def test_secret_reveal_is_local_machine_only() -> None:
 
     response = asyncio.run(remote_request())
     assert response.status_code == 403
+
+
+def test_git_head_is_read_from_the_checkout_without_a_subprocess(tmp_path) -> None:
+    """Every form HEAD takes on disk, answered by file reads.
+
+    The listing used to spawn `git rev-parse` per catalogued checkout, which
+    is a row of process launches every time the Tools tab opens. The file
+    forms are stable plumbing: a detached hash (what the pinned tools use), a
+    ref stored loose, a ref packed, and the unreadable cases answered None
+    exactly as a failed rev-parse was.
+    """
+    from trendrelay_api.tool_registry import _git_head_revision
+
+    detached = tmp_path / "detached"
+    (detached / ".git").mkdir(parents=True)
+    (detached / ".git" / "HEAD").write_text("a" * 40 + "\n", encoding="utf-8")
+    assert _git_head_revision(detached) == "a" * 40
+
+    loose = tmp_path / "loose"
+    (loose / ".git" / "refs" / "heads").mkdir(parents=True)
+    (loose / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (loose / ".git" / "refs" / "heads" / "main").write_text("b" * 40 + "\n", encoding="utf-8")
+    assert _git_head_revision(loose) == "b" * 40
+
+    packed = tmp_path / "packed"
+    (packed / ".git").mkdir(parents=True)
+    (packed / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (packed / ".git" / "packed-refs").write_text(
+        "# pack-refs with: peeled fully-peeled sorted\n"
+        + "c" * 40 + " refs/heads/main\n",
+        encoding="utf-8",
+    )
+    assert _git_head_revision(packed) == "c" * 40
+
+    dangling = tmp_path / "dangling"
+    (dangling / ".git").mkdir(parents=True)
+    (dangling / ".git" / "HEAD").write_text("ref: refs/heads/gone\n", encoding="utf-8")
+    assert _git_head_revision(dangling) is None
+    assert _git_head_revision(tmp_path / "not-a-checkout") is None

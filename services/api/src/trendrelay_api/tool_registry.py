@@ -132,6 +132,35 @@ def _api_distribution_version(distribution: str) -> str | None:
         return None
 
 
+def _git_head_revision(source: Path) -> str | None:
+    """The commit a checkout is at, read from `.git` without a subprocess.
+
+    `git rev-parse HEAD` answers the same question, but as one process spawn
+    per tool per listing - and the Tools tab lists every tool on open, so the
+    catalogue's checkouts made that page wait on a row of git processes.
+    HEAD is either the hash itself (the detached checkouts the pinned tools
+    use) or a ref, found loose or in packed-refs. Anything unreadable is
+    None, exactly as a failed rev-parse was.
+    """
+    git_dir = source / ".git"
+    try:
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref: "):
+            return head or None
+        ref = head[5:].strip()
+        loose = git_dir / ref
+        if loose.is_file():
+            return loose.read_text(encoding="utf-8").strip() or None
+        packed = git_dir / "packed-refs"
+        if packed.is_file():
+            for line in packed.read_text(encoding="utf-8").splitlines():
+                if line.endswith(f" {ref}"):
+                    return line.split(" ", 1)[0]
+    except OSError:
+        return None
+    return None
+
+
 def _installed_revision(tool: dict[str, Any]) -> str | None:
     # A first-party capability that ships in the API's own environment: its
     # "revision" is the version of the package it needs, read from that
@@ -148,16 +177,7 @@ def _installed_revision(tool: dict[str, Any]) -> str | None:
     source = _project_path(tool["source_path"])
     if not (source / ".git").is_dir():
         return None
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=source,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
+    return _git_head_revision(source)
 
 
 def documentation_for(tool_id: str) -> dict[str, str]:
