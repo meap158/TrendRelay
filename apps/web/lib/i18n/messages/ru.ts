@@ -4,6 +4,16 @@ import type { Messages } from "./en";
  *  the standard register for Russian interfaces. Plurals use the one/few/many
  *  categories Intl.PluralRules selects. */
 export const ru: Messages = {
+  campaignPipeline: {
+    published: "Опубликовано",
+    scheduled: "В расписании",
+    planned: "В плане",
+    publishedHint: "Публикации, подтверждённые сервисом за {period}. Каждый аккаунт учитывается отдельно.",
+    scheduledHint: "Подтверждённые будущие отправки и прогноз кампании на семь дней. Прогноз зависит от очереди, согласований и расписания аккаунта.",
+    next: "Следующая публикация: {at}.",
+    plannedHint: "Одобренные записи очереди, включая уже использованные и ожидающие текста или медиа. Это не зарезервированные слоты публикации.",
+    queueTotal: "Всего в очереди: {total}.",
+  },
   app: {
     name: "TrendRelay",
     tagline: "Находите тренды. Изучайте то, что важно.",

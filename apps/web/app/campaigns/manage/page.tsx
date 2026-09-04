@@ -9,12 +9,14 @@ import type {
 } from "react";
 
 import { useAuth } from "../../auth-provider";
+import { useLocale } from "../../i18n-provider";
 import { CampaignViewNav } from "../campaign-view-nav";
 import { useWorkspace } from "../../workspace-provider";
 import { ActionIcon } from "../../ui/action-icons";
 import { Badge } from "../../ui/primitives";
 import { Button, buttonClass } from "../../ui/button";
 import { Select } from "../../ui/select";
+import { Tooltip } from "../../ui/tooltip";
 import { StatusToasts, useStatus } from "../../ui/status";
 import { WaitingBlock } from "../../ui/waiting-block";
 import { WaitingScreen } from "../../ui/waiting-screen";
@@ -274,7 +276,34 @@ function CampaignComparisonChart({
   );
 }
 
-function PipelineComparison({ rows }: { rows: CampaignRow[] }) {
+function PipelineComparison({ rows, snapshot }: { rows: CampaignRow[]; snapshot: ManagementSnapshot | null }) {
+  const { t, locale } = useLocale();
+  const numbers = new Intl.NumberFormat(locale);
+  const dates = new Intl.DateTimeFormat(locale, {
+    month: "short", day: "numeric", year: "numeric", timeZone: snapshot?.timezone,
+  });
+  const period = snapshot
+    ? `${dates.format(new Date(snapshot.starts_at))} – ${dates.format(new Date(snapshot.ends_at))}`
+    : "";
+  const hint = (campaign: CampaignRow, kind: "published" | "scheduled" | "planned", value: number) => {
+    const lines = [campaign.name, `${numbers.format(value)} · ${t(`campaignPipeline.${kind}`)}`];
+    if (kind === "published") {
+      lines.push(t("campaignPipeline.publishedHint", { period }));
+    } else if (kind === "scheduled") {
+      lines.push(t("campaignPipeline.scheduledHint"));
+      if (campaign.next_scheduled_at) {
+        const at = new Intl.DateTimeFormat(locale, {
+          month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+          timeZone: snapshot?.timezone, timeZoneName: "short",
+        }).format(new Date(campaign.next_scheduled_at));
+        lines.push(t("campaignPipeline.next", { at }));
+      }
+    } else {
+      lines.push(t("campaignPipeline.plannedHint"));
+      lines.push(t("campaignPipeline.queueTotal", { total: numbers.format(campaign.queue_total) }));
+    }
+    return lines.join("\n");
+  };
   const series = [...rows]
     .sort((left, right) => (
       right.performance.published + right.scheduled + right.queue_ready
@@ -294,9 +323,9 @@ function PipelineComparison({ rows }: { rows: CampaignRow[] }) {
       </header>
       <div className={styles.pipelineColumns} aria-hidden="true">
         <span>Campaign</span>
-        <span><i data-kind="published" />Published</span>
-        <span><i data-kind="scheduled" />Scheduled</span>
-        <span><i data-kind="planned" />Planned</span>
+        <span><i data-kind="published" />{t("campaignPipeline.published")}</span>
+        <span><i data-kind="scheduled" />{t("campaignPipeline.scheduled")}</span>
+        <span><i data-kind="planned" />{t("campaignPipeline.planned")}</span>
       </div>
       {series.length ? <ol>
         {series.map((campaign) => (
@@ -307,12 +336,15 @@ function PipelineComparison({ rows }: { rows: CampaignRow[] }) {
               ["scheduled", campaign.scheduled],
               ["planned", campaign.queue_ready],
             ] as const).map(([kind, value]) => (
-              <span key={kind} data-kind={kind} role="img"
-                aria-label={`${campaign.name}: ${value} ${kind}. ${campaign.performance.published} published, ${campaign.scheduled} scheduled, ${campaign.queue_ready} planned.`}
-                title={`${campaign.name}: ${campaign.performance.published} published · ${campaign.scheduled} scheduled · ${campaign.queue_ready} planned`}>
-                <i style={{ inlineSize: `${(value / maxima[kind]) * 100}%` }} />
-                <b>{value}</b>
-              </span>
+              <Tooltip key={kind} content={hint(campaign, kind, value)}>
+                <button type="button" className={styles.pipelineValue} data-kind={kind}
+                  aria-label={`${campaign.name}: ${numbers.format(value)} ${t(`campaignPipeline.${kind}`)}`}>
+                  <span className={styles.pipelineTrack} aria-hidden="true">
+                    <i style={{ inlineSize: `${(value / maxima[kind]) * 100}%` }} />
+                  </span>
+                  <b>{numbers.format(value)}</b>
+                </button>
+              </Tooltip>
             ))}
           </li>
         ))}
@@ -453,7 +485,7 @@ export default function CampaignManagementPage() {
             </header>
             <div className={styles.comparisonBody}>
               <CampaignComparisonChart rows={visibleCampaigns} metric={comparison} />
-              <PipelineComparison rows={visibleCampaigns} />
+              <PipelineComparison rows={visibleCampaigns} snapshot={snapshot} />
             </div>
           </section>
 

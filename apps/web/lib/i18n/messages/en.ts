@@ -9,6 +9,16 @@
  */
 
 export const en = {
+  campaignPipeline: {
+    published: "Published",
+    scheduled: "Scheduled",
+    planned: "Planned",
+    publishedHint: "Provider-confirmed publications from {period}. Counts each account separately.",
+    scheduledHint: "Upcoming committed posts plus the next seven days of campaign forecasts. Forecasts may change with the queue, approvals, or account schedule.",
+    next: "Next posting time: {at}.",
+    plannedHint: "Approved queue entries. Includes previously used posts and entries still needing copy or media; these are not reserved posting times.",
+    queueTotal: "Total queue: {total} entries.",
+  },
   app: {
     name: "TrendRelay",
     tagline: "Discover what is trending. Research what matters.",

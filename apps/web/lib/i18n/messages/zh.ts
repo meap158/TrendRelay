@@ -3,6 +3,16 @@ import type { Messages } from "./en";
 /** Simplified Chinese. Short verb-object labels, which is what Chinese product
  *  interfaces use — "发现" not "去发现", "保存" not "进行保存". */
 export const zh: Messages = {
+  campaignPipeline: {
+    published: "已发布",
+    scheduled: "已排期",
+    planned: "计划中",
+    publishedHint: "{period} 期间由服务商确认发布的帖子。每个账号单独计数。",
+    scheduledHint: "已确定的待发布帖子及未来七天的活动预测。预测可能随队列、审批或账号排期而变化。",
+    next: "下次发布时间：{at}。",
+    plannedHint: "队列中已批准的条目，包括已用过的帖子及仍缺少文案或媒体的条目；这不是已预留的发布时间。",
+    queueTotal: "队列总计：{total} 个条目。",
+  },
   app: {
     name: "TrendRelay",
     tagline: "发现趋势，研究真正重要的内容。",

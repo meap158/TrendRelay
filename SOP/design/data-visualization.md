@@ -55,6 +55,11 @@ room extends the same rules to comparison charts.
 - Keep the tooltip inside the chart bounds and large enough to read without
   covering the full plot. It must not intercept pointer events.
 - Secondary bars must expose an exact, descriptive tooltip and accessible name.
+- Explain each bar's counting rule and time window in its tooltip; distinguish
+  confirmed publications, future forecasts, and queue entries. Use the shared
+  tooltip on a focusable control so keyboard and touch can inspect it too.
+- Keep numeric labels in a reserved column beside colored bars. Text must retain
+  at least 4.5:1 contrast at every fill length, including a full bar and zero.
 
 ## 5. Support keyboard and touch
 

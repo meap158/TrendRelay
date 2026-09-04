@@ -5,6 +5,16 @@ import type { Messages } from "./en";
  *  "احفظ". Arabic has six plural categories; the dictionary supplies the ones
  *  these counts actually reach and Intl.PluralRules picks between them. */
 export const ar: Messages = {
+  campaignPipeline: {
+    published: "منشور",
+    scheduled: "مجدول",
+    planned: "مخطط",
+    publishedHint: "منشورات أكد مزود الخدمة نشرها خلال {period}. يُحسب كل حساب على حدة.",
+    scheduledHint: "المنشورات القادمة المؤكدة مع توقعات الحملة للأيام السبعة المقبلة. قد تتغير التوقعات وفق قائمة الانتظار والموافقات وجدول الحساب.",
+    next: "موعد النشر التالي: {at}.",
+    plannedHint: "عناصر قائمة الانتظار المعتمدة، بما فيها المنشورات المستخدمة سابقًا والعناصر التي ينقصها نص أو وسائط. ليست مواعيد نشر محجوزة.",
+    queueTotal: "إجمالي قائمة الانتظار: {total} عنصرًا.",
+  },
   app: {
     name: "TrendRelay",
     tagline: "اكتشف الرائج. وابحث فيما يهم.",

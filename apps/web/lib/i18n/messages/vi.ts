@@ -3,6 +3,16 @@ import type { Messages } from "./en";
 /** Vietnamese. Verbs for actions, nouns for places — the register a Vietnamese
  *  product interface actually uses, not a gloss of the English. */
 export const vi: Messages = {
+  campaignPipeline: {
+    published: "Đã đăng",
+    scheduled: "Đã lên lịch",
+    planned: "Dự kiến",
+    publishedHint: "Bài đăng được nhà cung cấp xác nhận trong {period}. Tính riêng từng tài khoản.",
+    scheduledHint: "Bài sắp đăng đã được chốt cùng dự báo chiến dịch cho bảy ngày tới. Dự báo có thể đổi theo hàng đợi, phê duyệt hoặc lịch tài khoản.",
+    next: "Giờ đăng tiếp theo: {at}.",
+    plannedHint: "Mục đã duyệt trong hàng đợi. Gồm bài đã dùng và mục còn thiếu nội dung hoặc media; đây không phải các giờ đăng đã giữ chỗ.",
+    queueTotal: "Tổng hàng đợi: {total} mục.",
+  },
   app: {
     name: "TrendRelay",
     tagline: "Khám phá xu hướng. Nghiên cứu điều đáng giá.",

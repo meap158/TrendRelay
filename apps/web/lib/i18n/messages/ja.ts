@@ -3,6 +3,16 @@ import type { Messages } from "./en";
 /** Japanese. Noun-style labels for navigation and する-verbs for actions, which
  *  is how Japanese product interfaces read; polite but not honorific-heavy. */
 export const ja: Messages = {
+  campaignPipeline: {
+    published: "公開済み",
+    scheduled: "予約済み",
+    planned: "計画中",
+    publishedHint: "{period} に配信サービスが公開を確認した投稿。アカウントごとに集計します。",
+    scheduledHint: "確定済みの今後の投稿と、今後7日間のキャンペーン予測。予測はキュー、承認、アカウントの投稿時間により変わります。",
+    next: "次の投稿日時：{at}。",
+    plannedHint: "承認済みのキュー項目。使用済みの投稿や本文・メディアが未完成の項目も含みます。予約済みの投稿枠ではありません。",
+    queueTotal: "キュー全体：{total}件。",
+  },
   app: {
     name: "TrendRelay",
     tagline: "トレンドを見つけ、価値ある情報を調べる。",

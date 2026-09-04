@@ -3,6 +3,16 @@ import type { Messages } from "./en";
 /** French. Infinitives for actions and nouns for sections, as French product
  *  interfaces do — "Enregistrer", not "Sauvez". */
 export const fr: Messages = {
+  campaignPipeline: {
+    published: "Publiés",
+    scheduled: "Programmés",
+    planned: "Prévus",
+    publishedHint: "Publications confirmées par le fournisseur du {period}. Chaque compte est compté séparément.",
+    scheduledHint: "Publications engagées à venir et prévisions des sept prochains jours. Les prévisions peuvent évoluer selon la file, les validations ou le calendrier du compte.",
+    next: "Prochaine publication : {at}.",
+    plannedHint: "Entrées approuvées de la file, y compris celles déjà utilisées ou en attente de texte ou de média. Il ne s’agit pas de créneaux réservés.",
+    queueTotal: "File totale : {total} entrées.",
+  },
   app: {
     name: "TrendRelay",
     tagline: "Repérez les tendances. Analysez l'essentiel.",
