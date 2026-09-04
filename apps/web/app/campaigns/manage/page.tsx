@@ -526,7 +526,7 @@ export default function CampaignManagementPage() {
                       <span className={styles.figure} data-label="Queue"><strong>{campaign.queue_ready} ready</strong><small>{campaign.queue_total} total</small></span>
                       <span className={styles.attention} data-label="Attention">
                         {campaign.pending_approvals > 0 && <Link href={`/campaigns?campaign=${encodeURIComponent(campaign.id)}#campaign-approvals`}><Badge tone="warn">{campaign.pending_approvals} approval{campaign.pending_approvals === 1 ? "" : "s"}</Badge></Link>}
-                        {campaign.delivery_warnings > 0 && <Button variant="quiet" size="sm"
+                        {campaign.delivery_warnings > 0 && <Button variant="link" size="sm"
                           aria-label={t("campaignWarnings.open", { campaign: campaign.name, count: campaign.delivery_warnings })}
                           onClick={(event) => { warningTrigger.current = event.currentTarget; setWarningCampaign(campaign); }}><Badge tone="bad">{campaign.delivery_warnings} warning{campaign.delivery_warnings === 1 ? "" : "s"}</Badge></Button>}
                         {campaign.pending_approvals === 0 && campaign.delivery_warnings === 0 && <small>Clear</small>}
