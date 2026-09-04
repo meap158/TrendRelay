@@ -39,49 +39,52 @@
 .rightRail { position: sticky; top: calc(var(--topbar-height, 54px) + 10px); display: grid; gap: 10px; min-inline-size: 0; }
 .comparison { margin-block-end: 10px; }
 .comparison .sectionHead label { inline-size: 132px; }
-.comparisonBody { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, .8fr); }
-.comparisonBody > * + * { border-inline-start: 1px solid var(--line); }
+.comparisonBody { display: block; }
 
-.comparisonChart { padding: 10px 12px 12px; }
-.plot { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; block-size: 178px; }
-.yLabels { display: flex; align-items: flex-end; justify-content: space-between; flex-direction: column; padding-block: 3px 13px; color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; }
-.canvas { position: relative; min-inline-size: 0; }
-.canvas svg { display: block; inline-size: 100%; block-size: 100%; overflow: visible; }
+.comparisonChart { padding: 18px 20px 16px; }
+.plot { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; block-size: 250px; }
+.yLabels { display: flex; align-items: flex-end; justify-content: space-between; flex-direction: column; padding-block: 3px 20px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.canvas { position: relative; min-inline-size: 0; overflow: hidden; }
+.canvas svg { display: block; inline-size: 100%; block-size: 100%; overflow: hidden; }
 .gridLine { stroke: var(--line); stroke-width: .35; vector-effect: non-scaling-stroke; }
 .seriesLine { fill: none; stroke: var(--series-color); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.55; vector-effect: non-scaling-stroke; }
 .guide { stroke: var(--muted); stroke-dasharray: 2 2; stroke-width: .6; vector-effect: non-scaling-stroke; }
-.activePoint { fill: var(--panel); stroke: var(--series-color); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.activeDot { position: absolute; z-index: 2; inset-block-start: clamp(4px, var(--point-y), calc(100% - 4px)); inset-inline-start: clamp(4px, var(--point-x), calc(100% - 4px)); box-sizing: border-box; inline-size: 8px; block-size: 8px; transform: translate(-50%, -50%); border: 2px solid var(--panel); border-radius: 50%; background: var(--series-color); box-shadow: 0 1px 2px rgb(0 0 0 / 20%); pointer-events: none; }
 .hitArea { fill: transparent; outline: none; cursor: crosshair; }
 .hitArea:focus { stroke: var(--link); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.xLabels { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 8px; }
-.chartTooltip { position: absolute; z-index: 2; inset-block-start: 7px; inset-inline-start: var(--tooltip-x); display: grid; gap: 3px; min-inline-size: 150px; max-inline-size: min(210px, 82%); transform: translateX(-50%); border: 1px solid var(--line-strong); border-radius: var(--radius-md); padding: 7px 8px; background: var(--panel); box-shadow: var(--shadow-lg); pointer-events: none; }
-.chartTooltip > strong { margin-block-end: 2px; font-size: 10px; }
-.chartTooltip span { display: grid; grid-template-columns: 7px minmax(70px, .7fr) minmax(0, 1.3fr); gap: 5px; align-items: center; min-inline-size: 0; color: var(--muted); font-size: 9px; }
-.chartTooltip i, .legend i { display: block; inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--series-color); }
+.xLabels { display: flex; justify-content: space-between; margin-inline-start: 54px; color: var(--muted); font-size: 11px; }
+.chartTooltip { position: absolute; z-index: 2; inset-block-start: 10px; inset-inline-start: var(--tooltip-x); display: grid; gap: 5px; inline-size: min(360px, 88%); transform: translateX(-50%); border: 1px solid var(--line-strong); border-radius: var(--radius-md); padding: 10px 12px; background: var(--panel); box-shadow: var(--shadow-lg); pointer-events: none; }
+.chartTooltip > strong { margin-block-end: 3px; font-size: 12px; }
+.chartTooltip span { display: grid; grid-template-columns: 9px minmax(90px, .7fr) minmax(0, 1.3fr); gap: 7px; align-items: center; min-inline-size: 0; color: var(--muted); font-size: 11px; }
+.chartTooltip i, .legend i { display: block; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--series-color); }
 .chartTooltip em { overflow: hidden; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.chartTooltip b { color: var(--text); font-size: 8px; font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
-.legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; margin: 10px 0 0; padding: 9px 0 0; border-block-start: 1px solid var(--line); list-style: none; }
-.legend li { display: grid; grid-template-columns: 7px minmax(0, 1fr) auto; gap: 5px; align-items: center; min-inline-size: 0; font-size: 9px; }
+.chartTooltip b { color: var(--text); font-size: 10px; font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; margin: 14px 0 0; padding: 14px 0 0; border-block-start: 1px solid var(--line); list-style: none; }
+.legend li { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 7px; align-items: center; min-inline-size: 0; font-size: 11px; }
 .legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legend strong { font-variant-numeric: tabular-nums; }
-.legend small { grid-column: 2 / -1; color: var(--muted); font-size: 8px; }
-.chartNote { display: block; margin-block-start: 8px; color: var(--muted); font-size: 9px; }
+.legend small { grid-column: 2 / -1; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.chartNote { display: block; margin-block-start: 10px; color: var(--muted); font-size: 10px; }
 
-.pipelineChart { min-inline-size: 0; padding: 12px; }
-.pipelineChart header { display: grid; gap: 7px; }
+.pipelineChart { min-inline-size: 0; padding: 16px 20px 18px; border-block-start: 1px solid var(--line); background: var(--panel-raised); }
+.pipelineChart header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .pipelineChart h3, .pipelineChart p { margin: 0; }
-.pipelineChart h3 { font-size: 13px; }
-.pipelineChart header > span { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--muted); font-size: 8px; }
-.pipelineChart header > span i { inline-size: 6px; block-size: 6px; border-radius: 50%; }
+.pipelineChart h3 { font-size: 15px; }
+.pipelineChart header > p { max-inline-size: 360px; color: var(--muted); font-size: 11px; text-align: end; }
+.pipelineColumns, .pipelineChart li { display: grid; grid-template-columns: minmax(160px, 1.2fr) repeat(3, minmax(120px, 1fr)); gap: 12px; align-items: center; }
+.pipelineColumns { margin-block-start: 14px; padding: 0 10px 7px; border-block-end: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pipelineColumns span { display: flex; align-items: center; gap: 6px; }
+.pipelineColumns i { inline-size: 7px; block-size: 7px; border-radius: 50%; }
 .pipelineChart i[data-kind="published"], .pipelineChart span[data-kind="published"] i { background: var(--link); }
 .pipelineChart i[data-kind="scheduled"], .pipelineChart span[data-kind="scheduled"] i { background: var(--green); }
 .pipelineChart i[data-kind="planned"], .pipelineChart span[data-kind="planned"] i { background: var(--amber); }
-.pipelineChart ol { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
-.pipelineChart li { display: grid; grid-template-columns: minmax(78px, .8fr) repeat(3, minmax(32px, 1fr)); gap: 5px; align-items: center; }
-.pipelineChart li > strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.pipelineChart li > span { position: relative; display: block; block-size: 11px; overflow: hidden; border-radius: 999px; background: var(--panel-raised); }
+.pipelineChart ol { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.pipelineChart li { min-block-size: 36px; padding: 6px 10px; border-block-end: 1px solid var(--line); }
+.pipelineChart li:last-child { border-block-end: 0; }
+.pipelineChart li > strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.pipelineChart li > span { position: relative; display: block; block-size: 18px; overflow: hidden; border-radius: 999px; background: var(--panel); }
 .pipelineChart li > span i { display: block; min-inline-size: 2px; block-size: 100%; border-radius: inherit; }
-.pipelineChart li > span b { position: absolute; inset: 50% 3px auto auto; transform: translateY(-50%); color: var(--text); font-size: 7px; font-variant-numeric: tabular-nums; line-height: 1; }
+.pipelineChart li > span b { position: absolute; inset: 50% 7px auto auto; transform: translateY(-50%); color: var(--text); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1; }
 
 .sectionHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-block-end: 1px solid var(--line); }
 .sectionHead > div:first-child { display: flex; align-items: baseline; gap: 8px; min-inline-size: 0; }
@@ -135,7 +138,6 @@
   .metrics article:nth-child(n + 4) { border-block-start: 1px solid var(--line); }
   .layout { grid-template-columns: minmax(0, 1fr); }
   .rightRail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .comparisonBody { grid-template-columns: minmax(0, 1.45fr) minmax(260px, .8fr); }
   .approvalList { max-block-size: 420px; }
 }
 
@@ -154,6 +156,9 @@
   .metrics article:last-child { grid-column: 1 / -1; border-inline-end: 0; }
   .sectionHead { align-items: stretch; flex-direction: column; }
   .sectionHead > div:first-child { justify-content: space-between; }
+  .comparison .sectionHead { align-items: center; flex-direction: row; }
+  .comparison .sectionHead > div:first-child { display: grid; gap: 2px; justify-content: initial; }
+  .comparison .sectionHead label { inline-size: 116px; }
   .filters { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .filters label:first-child, .filters label:last-child { inline-size: auto; }
   .columnHead { display: none; }
@@ -161,11 +166,21 @@
   .identity { grid-column: 1 / -1; }
   .figure::before, .attention::before { content: attr(data-label); display: block; flex-basis: 100%; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .rightRail { grid-template-columns: minmax(0, 1fr); }
-  .comparisonBody { grid-template-columns: minmax(0, 1fr); }
-  .comparisonBody > * + * { border-block-start: 1px solid var(--line); border-inline-start: 0; }
-  .comparisonChart { padding-inline: 9px; }
-  .plot { block-size: 156px; }
-  .legend { grid-template-columns: minmax(0, 1fr); }
+  .comparisonChart { padding: 14px 12px; }
+  .plot { grid-template-columns: 34px minmax(0, 1fr); gap: 6px; block-size: 190px; }
+  .yLabels { padding-block-end: 16px; font-size: 10px; }
+  .xLabels { margin-inline-start: 40px; font-size: 10px; }
+  .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; }
+  .chartTooltip { inline-size: min(300px, 94%); padding: 8px 9px; }
+  .chartTooltip span { grid-template-columns: 8px minmax(70px, .7fr) minmax(0, 1.3fr); gap: 5px; font-size: 10px; }
+  .chartTooltip b { font-size: 9px; }
+  .pipelineChart { padding: 14px 12px; }
+  .pipelineChart header { align-items: start; flex-direction: column; gap: 4px; }
+  .pipelineChart header > p { max-inline-size: none; font-size: 10px; text-align: start; }
+  .pipelineColumns, .pipelineChart li { grid-template-columns: minmax(90px, 1.15fr) repeat(3, minmax(50px, 1fr)); gap: 6px; }
+  .pipelineColumns { padding-inline: 6px; font-size: 10px; letter-spacing: 0; }
+  .pipelineChart li { padding-inline: 6px; }
+  .pipelineChart li > strong { font-size: 11px; }
 }
 
 @media (max-width: 440px) {
@@ -173,4 +188,7 @@
   .toolbar button { flex: 0 0 auto; }
   .metrics strong { font-size: 18px; }
   .campaignList a { grid-template-columns: 1fr 1fr; }
+  .legend { grid-template-columns: minmax(0, 1fr); }
+  .pipelineColumns span { gap: 3px; }
+  .pipelineColumns i { display: none; }
 }

@@ -216,12 +216,6 @@ function CampaignComparisonChart({
               <line className={styles.guide} x1={(activeIndex / Math.max(1, days.length - 1)) * 100}
                 x2={(activeIndex / Math.max(1, days.length - 1)) * 100} y1={plotTop} y2={plotBottom} />
             ) : null}
-            {activeIndex !== null ? series.map((campaign, index) => {
-              const point = coordinates(campaign)[activeIndex];
-              return point ? <circle key={campaign.id} className={styles.activePoint}
-                style={{ "--series-color": SERIES_COLORS[index] } as CSSProperties}
-                cx={point.x} cy={point.y} r="1.15" /> : null;
-            }) : null}
             <rect className={styles.hitArea} x="0" y="0" width="100" height="60"
               tabIndex={0} role="slider" aria-label="Inspect campaign comparison by date"
               aria-valuemin={0} aria-valuemax={Math.max(0, days.length - 1)}
@@ -239,6 +233,15 @@ function CampaignComparisonChart({
               onFocus={() => setActiveIndex((current) => current ?? days.length - 1)}
               onBlur={() => setActiveIndex(null)} onKeyDown={moveByKeyboard} />
           </svg>
+          {activeIndex !== null ? series.map((campaign, index) => {
+            const point = coordinates(campaign)[activeIndex];
+            return point ? <span key={campaign.id} className={styles.activeDot} aria-hidden="true"
+              style={{
+                "--series-color": SERIES_COLORS[index],
+                "--point-x": `${point.x}%`,
+                "--point-y": `${(point.y / 60) * 100}%`,
+              } as CSSProperties} /> : null;
+          }) : null}
           {activeIndex !== null && days[activeIndex] ? (
             <div className={styles.chartTooltip} role="status"
               style={{ "--tooltip-x": `${Math.min(80, Math.max(20, (activeIndex / Math.max(1, days.length - 1)) * 100))}%` } as CSSProperties}>
@@ -278,15 +281,23 @@ function PipelineComparison({ rows }: { rows: CampaignRow[] }) {
       - left.performance.published - left.scheduled - left.queue_ready
     ))
     .slice(0, SERIES_COLORS.length);
-  const maximum = Math.max(1, ...series.flatMap((campaign) => [
-    campaign.performance.published, campaign.scheduled, campaign.queue_ready,
-  ]));
+  const maxima = {
+    published: Math.max(1, ...series.map((campaign) => campaign.performance.published)),
+    scheduled: Math.max(1, ...series.map((campaign) => campaign.scheduled)),
+    planned: Math.max(1, ...series.map((campaign) => campaign.queue_ready)),
+  };
   return (
     <section className={styles.pipelineChart} aria-labelledby="pipeline-comparison-heading">
       <header>
         <div><p className="section-kicker">Pipeline now</p><h3 id="pipeline-comparison-heading">Output and workload</h3></div>
-        <span><i data-kind="published" />Published <i data-kind="scheduled" />Scheduled <i data-kind="planned" />Planned</span>
+        <p>Each column uses its own scale so smaller workloads remain readable.</p>
       </header>
+      <div className={styles.pipelineColumns} aria-hidden="true">
+        <span>Campaign</span>
+        <span><i data-kind="published" />Published</span>
+        <span><i data-kind="scheduled" />Scheduled</span>
+        <span><i data-kind="planned" />Planned</span>
+      </div>
       {series.length ? <ol>
         {series.map((campaign) => (
           <li key={campaign.id}>
@@ -299,7 +310,7 @@ function PipelineComparison({ rows }: { rows: CampaignRow[] }) {
               <span key={kind} data-kind={kind} role="img"
                 aria-label={`${campaign.name}: ${value} ${kind}. ${campaign.performance.published} published, ${campaign.scheduled} scheduled, ${campaign.queue_ready} planned.`}
                 title={`${campaign.name}: ${campaign.performance.published} published · ${campaign.scheduled} scheduled · ${campaign.queue_ready} planned`}>
-                <i style={{ inlineSize: `${(value / maximum) * 100}%` }} />
+                <i style={{ inlineSize: `${(value / maxima[kind]) * 100}%` }} />
                 <b>{value}</b>
               </span>
             ))}
