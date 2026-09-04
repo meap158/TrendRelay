@@ -9,7 +9,18 @@ import httpx
 import pytest
 
 from trendrelay_api import main
+from trendrelay_api.integrations import trend_sources
 from trendrelay_api.main import app
+
+
+@pytest.fixture(autouse=True)
+def fresh_collect_cache():
+    """Each test installs its own providers, so none may inherit a cache."""
+    trend_sources._collect_cache.clear()
+    trend_sources._collect_refreshing.clear()
+    yield
+    trend_sources._collect_cache.clear()
+    trend_sources._collect_refreshing.clear()
 
 
 async def request(path: str, *, host: str = "127.0.0.1") -> httpx.Response:

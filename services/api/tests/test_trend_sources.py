@@ -6,12 +6,23 @@ from typing import Any
 
 import pytest
 
+from trendrelay_api.integrations import trend_sources
 from trendrelay_api.integrations.trend_consolidation import rank
 from trendrelay_api.integrations.trend_sources import (
     collect,
     sightings_from_douyin,
     sightings_from_tiktok,
 )
+
+
+@pytest.fixture(autouse=True)
+def fresh_collect_cache():
+    """Each test injects its own stub providers, so none may inherit a cache."""
+    trend_sources._collect_cache.clear()
+    trend_sources._collect_refreshing.clear()
+    yield
+    trend_sources._collect_cache.clear()
+    trend_sources._collect_refreshing.clear()
 
 
 def tiktok_page(*, region: str = "US", period: int = 7, names: list[str] | None = None,
@@ -220,3 +231,58 @@ def test_the_same_caveat_from_one_window_is_not_repeated() -> None:
     result = collect(region="US", windows=(7,), tiktok_reader=tiktok, douyin_reader=_unused)
 
     assert sum("Truncated." in note for note in result["notes"]) == 1
+
+
+# --- the collection cache -----------------------------------------------------
+
+
+def test_a_recent_collection_answers_without_asking_the_providers() -> None:
+    """Collection is the slow half of the feed, so a repeat question is free."""
+    calls = {"count": 0}
+
+    def tiktok(**kwargs: Any) -> dict[str, Any]:
+        calls["count"] += 1
+        return tiktok_page(period=kwargs["period"], names=["#x"])
+
+    first = collect(region="US", windows=(7,), tiktok_reader=tiktok, douyin_reader=_unused)
+    second = collect(region="US", windows=(7,), tiktok_reader=tiktok, douyin_reader=_unused)
+
+    assert second is first
+    assert calls["count"] == 1
+    # A different question is its own entry, not a stale answer to this one.
+    collect(region="VN", windows=(7,), tiktok_reader=tiktok, douyin_reader=_unused)
+    assert calls["count"] == 2
+
+
+def test_a_stale_collection_is_served_at_once_and_refreshed_behind(monkeypatch) -> None:
+    """Past the TTL nobody waits: the old list answers, one refresh replaces it."""
+
+    class ImmediateThread:
+        def __init__(self, *, target, name=None, daemon=None) -> None:
+            self._target = target
+
+        def start(self) -> None:
+            self._target()
+
+    monkeypatch.setattr(trend_sources.threading, "Thread", ImmediateThread)
+
+    def old_tiktok(**kwargs: Any) -> dict[str, Any]:
+        return tiktok_page(period=kwargs["period"], names=["#old"])
+
+    def new_tiktok(**kwargs: Any) -> dict[str, Any]:
+        return tiktok_page(period=kwargs["period"], names=["#new"])
+
+    first = collect(region="US", windows=(7,), tiktok_reader=old_tiktok, douyin_reader=_unused)
+    key = "US:7:20"
+    with trend_sources._collect_lock:
+        stamped, held = trend_sources._collect_cache[key]
+        trend_sources._collect_cache[key] = (
+            stamped - trend_sources.COLLECT_TTL_SECONDS - 1, held,
+        )
+
+    stale = collect(region="US", windows=(7,), tiktok_reader=new_tiktok, douyin_reader=_unused)
+    assert stale is first  # the caller was answered from what was already there
+
+    refreshed = collect(region="US", windows=(7,), tiktok_reader=new_tiktok, douyin_reader=_unused)
+    assert [s.term for s in refreshed["sightings"]] == ["#new"]
+    assert not trend_sources._collect_refreshing

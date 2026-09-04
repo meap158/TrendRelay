@@ -28,6 +28,8 @@ reporting which channels exist on this machine, and it holds no trend data.
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -125,7 +127,79 @@ def _first_metric(metrics: dict[str, Any]) -> tuple[str, float | None]:
     return "", None
 
 
+#: How long one region's collection stays fresh - the TikTok discovery
+#: cache's own figure, for the same kind of data. Collection is the slow half
+#: of the consolidated feed: live reads across every source and window, tens
+#: of seconds once the providers' own caches have lapsed, and the Discover
+#: tab reads it on open. Past the TTL the previous collection answers at once
+#: and one background thread rebuilds it; a trend list minutes old is still
+#: the trend list, and nobody should watch a spinner for it.
+COLLECT_TTL_SECONDS = 900
+_collect_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_collect_refreshing: set[str] = set()
+_collect_lock = threading.Lock()
+
+
 def collect(
+    *,
+    region: str,
+    windows: tuple[int, ...] = WINDOWS,
+    limit: int = 20,
+    tiktok_reader: TikTokReader,
+    douyin_reader: DouyinReader,
+    trends_reader: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """The collection, from cache when the question was asked recently.
+
+    Keyed by the question alone - region, windows, limit - never by the
+    readers: the live callers all pass the same live providers, and a test
+    injecting stubs clears the cache instead. A stale entry is served
+    immediately while a single background refresh replaces it; only a
+    question nobody has asked before pays the live collection in-line.
+    """
+    key = f"{region.upper()}:{','.join(map(str, windows))}:{limit}"
+    now = time.time()
+    with _collect_lock:
+        cached = _collect_cache.get(key)
+    if cached and now - cached[0] < COLLECT_TTL_SECONDS:
+        return cached[1]
+    if cached:
+        with _collect_lock:
+            already = key in _collect_refreshing
+            _collect_refreshing.add(key)
+        if not already:
+            def refresh() -> None:
+                try:
+                    # A failed provider reports itself inside the result
+                    # (`complete`, `notes`), so the snapshot is replaced
+                    # either way; only an exception keeps the old one, and
+                    # the next stale read tries again.
+                    fresh = _collect_live(
+                        region=region, windows=windows, limit=limit,
+                        tiktok_reader=tiktok_reader, douyin_reader=douyin_reader,
+                        trends_reader=trends_reader,
+                    )
+                    with _collect_lock:
+                        _collect_cache[key] = (time.time(), fresh)
+                finally:
+                    with _collect_lock:
+                        _collect_refreshing.discard(key)
+
+            threading.Thread(
+                target=refresh, name="trend-collect-refresh", daemon=True
+            ).start()
+        return cached[1]
+    fresh = _collect_live(
+        region=region, windows=windows, limit=limit,
+        tiktok_reader=tiktok_reader, douyin_reader=douyin_reader,
+        trends_reader=trends_reader,
+    )
+    with _collect_lock:
+        _collect_cache[key] = (now, fresh)
+    return fresh
+
+
+def _collect_live(
     *,
     region: str,
     windows: tuple[int, ...] = WINDOWS,
