@@ -1704,6 +1704,7 @@ export function AutopilotPanel({
   fail,
   onCampaignChanged,
   onHeldCountChanged,
+  onInitialLoadSettled,
 }: {
   workspaceId: string;
   campaignId: string;
@@ -1714,6 +1715,7 @@ export function AutopilotPanel({
   fail: (message: string) => void;
   onCampaignChanged: () => Promise<void>;
   onHeldCountChanged: (campaignId: string, count: number) => void;
+  onInitialLoadSettled: (campaignId: string) => void;
   /** Hand-planned posts, rendered inside the posting timeline so what will
       post and what has posted is one story in one place. */
 }) {
@@ -2326,6 +2328,13 @@ export function AutopilotPanel({
         .catch(() => setOffers([]));
     });
   }, [refresh, apiFetch, workspaceId, fail]);
+
+  // The parent preserves the outgoing campaign's height during this first
+  // read. Release it only after either the real panel or its terminal failure
+  // state has committed, otherwise the sticky campaign rail visibly bounces.
+  useEffect(() => {
+    if (autopilot || firstLoadFailed) onInitialLoadSettled(campaignId);
+  }, [autopilot, campaignId, firstLoadFailed, onInitialLoadSettled]);
 
   // The inbox is the panel's front door now - approving held posts is the
   // operator's recurring job - so it loads with the page rather than behind

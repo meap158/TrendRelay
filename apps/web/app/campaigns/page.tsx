@@ -272,6 +272,13 @@ export default function CampaignsPage() {
   // This tells "still loading" apart from "loaded, and there are none".
   const [loadedCampaignWorkspaceId, setLoadedCampaignWorkspaceId] = useState("");
   const [campaignId, setCampaignId] = useState("");
+  // Hold the outgoing workspace's measured height while the newly selected
+  // campaign loads. Without this, the keyed Autopilot panel briefly shrinks to
+  // its waiting block; that shortens the sticky sidebar's containing grid and
+  // makes the whole rail jump up, then down again when the data arrives.
+  const campaignWorkspaceRef = useRef<HTMLDivElement>(null);
+  const pendingCampaignTransition = useRef("");
+  const [campaignTransitionHeight, setCampaignTransitionHeight] = useState<number | null>(null);
   // Archived work stays out of the operating list until somebody explicitly
   // asks for it. "Current" includes drafts and active campaigns: both still
   // need attention, while an archive is historical by definition.
@@ -465,6 +472,28 @@ export default function CampaignsPage() {
     resetNewCampaign();
   }
 
+  function selectCampaign(nextCampaignId: string) {
+    if (nextCampaignId === campaignId) return;
+    const currentHeight = campaignWorkspaceRef.current?.getBoundingClientRect().height ?? 0;
+    pendingCampaignTransition.current = nextCampaignId;
+    setCampaignTransitionHeight(currentHeight > 0 ? Math.ceil(currentHeight) : null);
+    setCampaignId(nextCampaignId);
+  }
+
+  const finishCampaignTransition = useCallback((settledCampaignId: string) => {
+    // Autopilot reports ready from an effect after its full view has committed.
+    // One more frame lets the browser lay that view out before releasing the
+    // old minimum, so there is never a one-frame collapse between the two.
+    window.requestAnimationFrame(() => {
+      // A very quick second click can settle the first request after the next
+      // transition has started. Only the campaign now being awaited may
+      // release the height held for it.
+      if (pendingCampaignTransition.current !== settledCampaignId) return;
+      pendingCampaignTransition.current = "";
+      setCampaignTransitionHeight(null);
+    });
+  }, []);
+
   /** Back to what a fresh dialog shows, so an abandoned draft is not the
       starting point of the next campaign. */
   function resetNewCampaign() {
@@ -540,7 +569,7 @@ export default function CampaignsPage() {
       );
       formElement.reset();
       await refresh(workspaceId);
-      setCampaignId(body.campaign.id);
+      selectCampaign(body.campaign.id);
       setNewCampaignOpen(false);
       resetNewCampaign();
       succeed("Campaign created. Add approved media to its campaign queue.");
@@ -667,7 +696,7 @@ export default function CampaignsPage() {
       next === "all" || (next === "archived") === (item.status === "archived"),
     );
     if (!visible.some((item) => item.id === campaignId)) {
-      setCampaignId(visible[0]?.id ?? "");
+      selectCampaign(visible[0]?.id ?? "");
     }
   }
 
@@ -733,7 +762,7 @@ export default function CampaignsPage() {
               <button
                 className={campaign.id === campaignId ? "selected" : ""}
                 key={campaign.id}
-                onClick={() => setCampaignId(campaign.id)}
+                onClick={() => selectCampaign(campaign.id)}
                 type="button"
               >
                 <strong>
@@ -774,7 +803,14 @@ export default function CampaignsPage() {
           )}
         </aside>
 
-        <div className="campaign-workspace">
+        <div
+          className="campaign-workspace"
+          ref={campaignWorkspaceRef}
+          aria-busy={campaignTransitionHeight !== null}
+          style={campaignTransitionHeight === null
+            ? undefined
+            : { minBlockSize: `${campaignTransitionHeight}px` }}
+        >
           {!campaignsReady ? (
             <WaitingBlock message={t("common.loading")} />
           ) : selectedCampaign ? (
@@ -824,6 +860,7 @@ export default function CampaignsPage() {
                 fail={fail}
                 onCampaignChanged={() => refresh(workspaceId)}
                 onHeldCountChanged={syncCampaignHeldCount}
+                onInitialLoadSettled={finishCampaignTransition}
               />
 
               {/* All that survives of the manual workflow: a way to reach the
