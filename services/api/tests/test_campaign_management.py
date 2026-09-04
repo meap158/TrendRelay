@@ -18,6 +18,7 @@ from trendrelay_api.autopilot_models import (
     CampaignQueueItem,
 )
 from trendrelay_api.database import get_session
+from trendrelay_api.integrations import posting_slots
 from trendrelay_api.main import app
 from trendrelay_api.models import Base
 from trendrelay_api.publication_models import PublicationExecution
@@ -157,3 +158,45 @@ def test_management_rejects_an_unknown_timezone(workspace) -> None:
     )
     assert response.status_code == 422
     assert response.json()["detail"] == "Unknown analytics timezone."
+
+
+def test_management_schedule_matches_the_campaign_outlook(workspace) -> None:
+    """The control room and Campaign Overview must count the same future."""
+    campaign = create_campaign(workspace, "NightClubzz")
+    posting_slots.replace_slots(
+        workspace, [{"time": "12:00"}], factory=TestingSession
+    )
+    with TestingSession.begin() as session:
+        autopilot = session.scalar(
+            select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign)
+        )
+        assert autopilot is not None
+        autopilot.enabled = True
+        session.add(CampaignDestination(
+            id="destination-outlook", workspace_id=workspace, campaign_id=campaign,
+            provider="zernio", integration_id="page-outlook", platform="facebook",
+            label="NightClubzz", enabled=True,
+        ))
+        session.add(CampaignQueueItem(
+            id="queue-outlook", workspace_id=workspace, campaign_id=campaign,
+            body="A complete copy-only post", text_only=True, state="approved",
+            created_by="owner-user",
+        ))
+
+    preview = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign}/autopilot/preview"
+    )
+    response = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/management",
+        params={"range": "7d", "timezone": "UTC"},
+    )
+
+    assert preview.status_code == 200, preview.text
+    assert response.status_code == 200, response.text
+    expected = len(preview.json()["posts"]) + sum(
+        item["status"] in {"queued", "running"}
+        for item in preview.json()["deployed"]
+    )
+    row = next(item for item in response.json()["campaigns"] if item["id"] == campaign)
+    assert expected > 0
+    assert row["scheduled"] == expected

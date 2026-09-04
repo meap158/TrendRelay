@@ -643,6 +643,50 @@ def plan_campaign(
             day = (execution.destination_id, when.date())
             pending_per_day[day] = pending_per_day.get(day, 0) + 1
 
+    # Read the other campaigns' load and rest history once for this outlook.
+    # These two questions used to issue a database query for every eligible
+    # item at every posting time. A seven-day preview over a useful queue could
+    # therefore make thousands of identical reads and take long enough to look
+    # stuck. Keeping the latest matching execution and per-day counts in maps
+    # preserves the scheduler's rules while making their cost independent of
+    # the number of candidate posts.
+    account_keys = {
+        (destination.provider, destination.integration_id)
+        for destination in destinations
+    }
+    other_execution_rows = []
+    if account_keys:
+        history_start = now - timedelta(days=autopilot.min_recycle_days)
+        other_execution_rows = list(session.scalars(
+            select(PublicationExecution).where(
+                PublicationExecution.workspace_id == autopilot.workspace_id,
+                PublicationExecution.campaign_id != autopilot.campaign_id,
+                PublicationExecution.provider.in_({key[0] for key in account_keys}),
+                PublicationExecution.integration_id.in_({key[1] for key in account_keys}),
+                PublicationExecution.state.in_(
+                    sorted(HOLDING_STATES | {"published", "measured"})
+                ),
+                PublicationExecution.scheduled_at.is_not(None),
+                PublicationExecution.scheduled_at >= history_start,
+            )
+        ).all())
+    elsewhere_per_day: dict[tuple[str, str, date], int] = {}
+    latest_asset_elsewhere: dict[tuple[str, str, str], datetime] = {}
+    for execution in other_execution_rows:
+        account_key = (execution.provider, execution.integration_id)
+        if account_key not in account_keys:
+            continue
+        when = _as_utc(execution.scheduled_at)
+        if when is None:
+            continue
+        daily_key = (*account_key, when.date())
+        elsewhere_per_day[daily_key] = elsewhere_per_day.get(daily_key, 0) + 1
+        if execution.asset_id:
+            asset_key = (*account_key, execution.asset_id)
+            previous = latest_asset_elsewhere.get(asset_key)
+            if previous is None or when > previous:
+                latest_asset_elsewhere[asset_key] = when
+
     # The campaign-wide weekly ceiling, where one is set. Counted from every
     # execution that is committed or confirmed - failed and cancelled ones gave
     # their slot back and are not spend.
@@ -750,7 +794,9 @@ def plan_campaign(
             # put on the same account today. Without the second term the cap is per
             # account *per campaign*, which is neither what it says nor what stops
             # an account being posted to twice as often as intended.
-            elsewhere = _account_load_elsewhere(session, autopilot, destination, moment)
+            elsewhere = elsewhere_per_day.get(
+                (destination.provider, destination.integration_id, moment.date()), 0
+            )
             if (
                 _posted_today(queue, destination, moment)
                 + pending_per_day.get(day_key, 0)
@@ -813,9 +859,15 @@ def plan_campaign(
             eligible = [
                 item
                 for item in eligible
-                if _rested_elsewhere(
-                    session, autopilot, destination, item.asset_id, moment,
-                    autopilot.min_recycle_days,
+                if not item.asset_id
+                or (
+                    (last_elsewhere := latest_asset_elsewhere.get((
+                        destination.provider,
+                        destination.integration_id,
+                        item.asset_id,
+                    ))) is None
+                    or moment - last_elsewhere
+                    >= timedelta(days=autopilot.min_recycle_days)
                 )
             ]
             if not eligible:

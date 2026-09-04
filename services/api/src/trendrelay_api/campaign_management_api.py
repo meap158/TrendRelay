@@ -22,7 +22,9 @@ from trendrelay_api.autopilot_models import (
     CampaignOffer,
     CampaignQueueItem,
 )
+from trendrelay_api.campaign_autopilot_api import OUTLOOK_HORIZON, offer_link_url
 from trendrelay_api.campaign_measurement import latest_metrics
+from trendrelay_api.campaign_scheduler import plan_campaign
 from trendrelay_api.foundation import AuthenticatedUser, DatabaseSession, membership
 from trendrelay_api.models import Campaign
 from trendrelay_api.publication_models import PublicationExecution
@@ -33,7 +35,13 @@ router = APIRouter(
 )
 
 RANGE_DAYS = {"today": 1, "7d": 7, "14d": 14, "28d": 28, "90d": 90}
-UPCOMING_STATES = {"preparing", "ready", "reserved", "queued", "provider_accepted"}
+# Committed work is only one half of the Schedule number. The campaign detail
+# page also includes the posts its seven-day planner can place after those
+# reservations. Keeping the states separate makes it possible to add that
+# forecast without double-counting slots the planner already knows are held.
+COMMITTED_UPCOMING_STATES = {
+    "preparing", "ready", "reserved", "queued", "provider_accepted",
+}
 WARNING_STATES = {"failed", "uncertain"}
 
 
@@ -201,7 +209,7 @@ def campaign_management(
             # Active work has no useful date bound; settled history does. This
             # keeps a 28-day dashboard from loading years of execution rows.
             or_(
-                PublicationExecution.state.in_(("proposed", *UPCOMING_STATES)),
+                PublicationExecution.state.in_(("proposed", *COMMITTED_UPCOMING_STATES)),
                 and_(
                     PublicationExecution.state.in_(("published", "measured")),
                     PublicationExecution.published_at.is_not(None),
@@ -232,8 +240,8 @@ def campaign_management(
             current_published[campaign_id].append(execution)
         if execution.state == "proposed":
             open_counts[campaign_id]["approvals"] = open_counts[campaign_id].get("approvals", 0) + 1
-        if execution.state in UPCOMING_STATES:
-            open_counts[campaign_id]["scheduled"] = open_counts[campaign_id].get("scheduled", 0) + 1
+        if execution.state in COMMITTED_UPCOMING_STATES:
+            open_counts[campaign_id]["committed"] = open_counts[campaign_id].get("committed", 0) + 1
             scheduled_at = _aware_utc(execution.scheduled_at)
             if scheduled_at is not None and scheduled_at >= end:
                 previous = next_scheduled.get(campaign_id)
@@ -255,6 +263,31 @@ def campaign_management(
         queued = queue_counts.get(campaign.id, {})
         autopilot = autopilots.get(campaign.id)
         attention = open_counts[campaign.id]
+        # Use the exact same planner and seven-day horizon as Campaign
+        # Overview. Counting only durable executions made the control room say
+        # "0 scheduled" while the campaign beside it showed a full outlook.
+        # The planner excludes held execution slots itself, so adding the
+        # committed rows below counts each upcoming outing exactly once.
+        forecast = []
+        if autopilot is not None:
+            forecast, _note = plan_campaign(
+                session,
+                autopilot,
+                now=end,
+                link_for=lambda _destination_id, offer_id: offer_link_url(
+                    session, offer_id
+                ),
+                allow_inactive=True,
+                horizon=OUTLOOK_HORIZON,
+            )
+        scheduled = attention.get("committed", 0) + len(forecast)
+        for post in forecast:
+            scheduled_at = _aware_utc(post.at)
+            if scheduled_at is None or scheduled_at < end:
+                continue
+            previous = next_scheduled.get(campaign.id)
+            if previous is None or scheduled_at < previous:
+                next_scheduled[campaign.id] = scheduled_at
         rows.append({
             "id": campaign.id,
             "name": campaign.name,
@@ -268,7 +301,7 @@ def campaign_management(
             "tagged_products": int(product_counts.get(campaign.id, 0)),
             "queue_total": sum(queued.values()),
             "queue_ready": int(queued.get("approved", 0)),
-            "scheduled": attention.get("scheduled", 0),
+            "scheduled": scheduled,
             "next_scheduled_at": next_scheduled.get(campaign.id),
             "pending_approvals": attention.get("approvals", 0),
             "delivery_warnings": attention.get("warnings", 0),
