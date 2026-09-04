@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -17,6 +17,7 @@ import { Badge } from "../../ui/primitives";
 import { Button, buttonClass } from "../../ui/button";
 import { Select } from "../../ui/select";
 import { Tooltip } from "../../ui/tooltip";
+import { CampaignWarningsDialog } from "./warnings-dialog";
 import { StatusToasts, useStatus } from "../../ui/status";
 import { WaitingBlock } from "../../ui/waiting-block";
 import { WaitingScreen } from "../../ui/waiting-screen";
@@ -358,6 +359,7 @@ function comparisonLabel(metric: ComparisonMetric) {
 }
 
 export default function CampaignManagementPage() {
+  const { t } = useLocale();
   const { apiFetch, loading, user } = useAuth();
   const { workspaceId } = useWorkspace();
   const { messages, fail, dismiss } = useStatus();
@@ -378,6 +380,8 @@ export default function CampaignManagementPage() {
     oneOf("views", "engagement", "published"),
   );
   const [snapshot, setSnapshot] = useState<ManagementSnapshot | null>(null);
+  const [warningCampaign, setWarningCampaign] = useState<CampaignRow | null>(null);
+  const warningTrigger = useRef<HTMLButtonElement | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const snapshotKey = `campaign-management:${workspaceId}:${range}:${timezone}`;
@@ -511,9 +515,9 @@ export default function CampaignManagementPage() {
               <ol className={styles.campaignList}>
                 {visibleCampaigns.map((campaign) => (
                   <li key={campaign.id}>
-                    <Link href={`/campaigns?campaign=${encodeURIComponent(campaign.id)}`}>
+                    <div className={styles.campaignRow}>
                       <span className={styles.identity}>
-                        <span><strong>{campaign.name}</strong><Badge tone={campaign.status === "active" ? "good" : "neutral"}>{campaign.status}</Badge></span>
+                        <span><Link href={`/campaigns?campaign=${encodeURIComponent(campaign.id)}`}><strong>{campaign.name}</strong></Link><Badge tone={campaign.status === "active" ? "good" : "neutral"}>{campaign.status}</Badge></span>
                         <small>{campaign.objective}</small>
                         <em>{campaign.destinations} account{campaign.destinations === 1 ? "" : "s"} · {campaign.tagged_products} products</em>
                       </span>
@@ -521,14 +525,21 @@ export default function CampaignManagementPage() {
                       <span className={styles.figure} data-label="Audience response"><strong>{compactNumber.format(campaign.performance.views)} views</strong><small>{compactNumber.format(campaign.performance.engagement)} engagements{campaign.performance.engagement_rate == null ? "" : ` · ${campaign.performance.engagement_rate}%`}</small></span>
                       <span className={styles.figure} data-label="Queue"><strong>{campaign.queue_ready} ready</strong><small>{campaign.queue_total} total</small></span>
                       <span className={styles.attention} data-label="Attention">
-                        {campaign.pending_approvals > 0 && <Badge tone="warn">{campaign.pending_approvals} approval{campaign.pending_approvals === 1 ? "" : "s"}</Badge>}
-                        {campaign.delivery_warnings > 0 && <Badge tone="bad">{campaign.delivery_warnings} warning{campaign.delivery_warnings === 1 ? "" : "s"}</Badge>}
+                        {campaign.pending_approvals > 0 && <Link href={`/campaigns?campaign=${encodeURIComponent(campaign.id)}#campaign-approvals`}><Badge tone="warn">{campaign.pending_approvals} approval{campaign.pending_approvals === 1 ? "" : "s"}</Badge></Link>}
+                        {campaign.delivery_warnings > 0 && <Button variant="quiet" size="sm"
+                          aria-label={t("campaignWarnings.open", { campaign: campaign.name, count: campaign.delivery_warnings })}
+                          onClick={(event) => { warningTrigger.current = event.currentTarget; setWarningCampaign(campaign); }}><Badge tone="bad">{campaign.delivery_warnings} warning{campaign.delivery_warnings === 1 ? "" : "s"}</Badge></Button>}
                         {campaign.pending_approvals === 0 && campaign.delivery_warnings === 0 && <small>Clear</small>}
                       </span>
-                    </Link>
+                    </div>
                   </li>
                 ))}
               </ol>
+              {warningCampaign && snapshot && <CampaignWarningsDialog
+                key={`${workspaceId}:${warningCampaign.id}:${snapshot.starts_at}:${snapshot.ends_at}`}
+                campaign={warningCampaign} workspaceId={workspaceId} startsAt={snapshot.starts_at}
+                endsAt={snapshot.ends_at} timezone={snapshot.timezone} apiFetch={apiFetch}
+                onClose={() => { setWarningCampaign(null); requestAnimationFrame(() => warningTrigger.current?.focus({ preventScroll: true })); }} />}
               {visibleCampaigns.length === 0 && <div className={styles.empty}><strong>No campaigns in this view</strong><small>Change the status filter or create a campaign in Workspace.</small></div>}
             </section>
 

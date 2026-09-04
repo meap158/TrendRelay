@@ -3,6 +3,25 @@ import type { Messages } from "./en";
 /** Japanese. Noun-style labels for navigation and する-verbs for actions, which
  *  is how Japanese product interfaces read; polite but not honorific-heavy. */
 export const ja: Messages = {
+  campaignWarnings: {
+    title: "配信の警告 · {campaign}",
+    range: "更新期間：{start} ～ {end}",
+    loading: "警告を読み込み中…",
+    loadError: "警告を読み込めませんでした。",
+    count: "対象の配信試行：{count}件",
+    retry: "再試行",
+    previous: "前へ",
+    next: "次へ",
+    untitled: "無題の投稿",
+    failed: "失敗",
+    uncertain: "未確定",
+    noReason: "失敗の理由は記録されていません。",
+    uncertainHint: "再試行する前に配信サービスを確認してください。すでに公開されている可能性があります。",
+    details: "投稿の詳細",
+    reference: "試行：{id}",
+    empty: "この期間に残っている警告はありません。",
+    open: "{campaign}の配信の警告{count}件を表示",
+  },
   campaignPipeline: {
     published: "公開済み",
     scheduled: "予約済み",

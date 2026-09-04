@@ -3,6 +3,25 @@ import type { Messages } from "./en";
 /** Simplified Chinese. Short verb-object labels, which is what Chinese product
  *  interfaces use — "发现" not "去发现", "保存" not "进行保存". */
 export const zh: Messages = {
+  campaignWarnings: {
+    title: "发布警告 · {campaign}",
+    range: "更新时间：{start} 至 {end}",
+    loading: "正在加载警告…",
+    loadError: "无法加载警告。",
+    count: "受影响的发布尝试：{count}",
+    retry: "重试",
+    previous: "上一页",
+    next: "下一页",
+    untitled: "无标题帖子",
+    failed: "失败",
+    uncertain: "不确定",
+    noReason: "未记录失败原因。",
+    uncertainHint: "重试前请检查发布服务：此帖子可能已发布。",
+    details: "帖子详情",
+    reference: "尝试：{id}",
+    empty: "此时间范围内没有剩余警告。",
+    open: "查看 {campaign} 的 {count} 条发布警告",
+  },
   campaignPipeline: {
     published: "已发布",
     scheduled: "已排期",

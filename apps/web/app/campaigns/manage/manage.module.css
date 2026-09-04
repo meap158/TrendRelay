@@ -100,7 +100,7 @@
 .filters label:first-child { inline-size: 104px; }
 .filters label:last-child { inline-size: 142px; }
 
-.columnHead, .campaignList a {
+.columnHead, .campaignRow {
   display: grid;
   grid-template-columns: minmax(190px, 1.6fr) minmax(104px, .75fr) minmax(150px, 1fr) minmax(86px, .62fr) minmax(112px, .75fr);
   gap: 12px;
@@ -111,8 +111,20 @@
 .campaignList, .approvalList { margin: 0; padding: 0; list-style: none; }
 .campaignList li { border-block-end: 1px solid var(--line); }
 .campaignList li:last-child { border-block-end: 0; }
-.campaignList a { padding: 9px 12px; color: var(--text); text-decoration: none; }
-.campaignList a:hover { background: var(--panel-raised); }
+.campaignRow { padding: 9px 12px; }
+.campaignRow a { color: var(--text); text-decoration: none; }
+.campaignRow a:hover { color: var(--link); text-decoration: underline; }
+.campaignRow .attention button { padding: 4px; }
+.warningToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; min-block-size: 36px; }
+.warningList { list-style: none; margin: 0; padding: 0; }
+.warningList li { padding-block: 12px; border-block-end: 1px solid var(--line); overflow-wrap: anywhere; }
+.warningList header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.warningList header strong { min-inline-size: 0; font-size: 13px; }
+.warningList small { color: var(--muted); }
+.warningList p { margin-block: 8px; }
+.warningList summary { cursor: pointer; color: var(--link); }
+.warningError { border-inline-start: 3px solid var(--red); padding: 8px; background: var(--panel-raised); }
+.warningCopy { white-space: pre-wrap; }
 .identity { display: grid; gap: 3px; min-inline-size: 0; }
 .identity > span { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
 .identity strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
@@ -167,7 +179,7 @@
   .filters { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .filters label:first-child, .filters label:last-child { inline-size: auto; }
   .columnHead { display: none; }
-  .campaignList a { grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .campaignRow { grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   .identity { grid-column: 1 / -1; }
   .figure::before, .attention::before { content: attr(data-label); display: block; flex-basis: 100%; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .rightRail { grid-template-columns: minmax(0, 1fr); }

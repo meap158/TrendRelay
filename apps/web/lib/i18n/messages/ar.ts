@@ -5,6 +5,25 @@ import type { Messages } from "./en";
  *  "احفظ". Arabic has six plural categories; the dictionary supplies the ones
  *  these counts actually reach and Intl.PluralRules picks between them. */
 export const ar: Messages = {
+  campaignWarnings: {
+    title: "تحذيرات النشر · {campaign}",
+    range: "تم التحديث بين {start} و{end}",
+    loading: "جارٍ تحميل التحذيرات…",
+    loadError: "تعذر تحميل التحذيرات.",
+    count: "محاولات النشر المتأثرة: {count}",
+    retry: "إعادة المحاولة",
+    previous: "السابق",
+    next: "التالي",
+    untitled: "منشور بلا عنوان",
+    failed: "فشل",
+    uncertain: "غير مؤكد",
+    noReason: "لم يُسجّل سبب للفشل.",
+    uncertainHint: "تحقق من مزود الخدمة قبل إعادة المحاولة: ربما نُشر هذا المنشور بالفعل.",
+    details: "تفاصيل المنشور",
+    reference: "المحاولة: {id}",
+    empty: "لا توجد تحذيرات متبقية في هذه الفترة.",
+    open: "عرض تحذيرات النشر للحملة {campaign}: {count}",
+  },
   campaignPipeline: {
     published: "منشور",
     scheduled: "مجدول",

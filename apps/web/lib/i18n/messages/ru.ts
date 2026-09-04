@@ -4,6 +4,25 @@ import type { Messages } from "./en";
  *  the standard register for Russian interfaces. Plurals use the one/few/many
  *  categories Intl.PluralRules selects. */
 export const ru: Messages = {
+  campaignWarnings: {
+    title: "Предупреждения о публикации · {campaign}",
+    range: "Изменены с {start} по {end}",
+    loading: "Загрузка предупреждений…",
+    loadError: "Не удалось загрузить предупреждения.",
+    count: "Попыток доставки: {count}",
+    retry: "Повторить",
+    previous: "Назад",
+    next: "Далее",
+    untitled: "Без названия",
+    failed: "Ошибка",
+    uncertain: "Неизвестно",
+    noReason: "Причина ошибки не записана.",
+    uncertainHint: "Перед повтором проверьте сервис: публикация уже могла выйти.",
+    details: "Подробности публикации",
+    reference: "Попытка: {id}",
+    empty: "За этот период предупреждений не осталось.",
+    open: "Показать предупреждения для {campaign}: {count}",
+  },
   campaignPipeline: {
     published: "Опубликовано",
     scheduled: "В расписании",

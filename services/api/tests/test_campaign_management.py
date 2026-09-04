@@ -76,6 +76,44 @@ def create_campaign(workspace_id: str, name: str) -> str:
     return response.json()["campaign"]["id"]
 
 
+def test_warning_drilldown_matches_count_and_paginates_before_loading(workspace):
+    campaign = create_campaign(workspace, "Warnings")
+    other = create_campaign(workspace, "Other")
+    now = datetime.now(UTC)
+    with TestingSession.begin() as session:
+        for index, (state, owner, changed) in enumerate([
+            ("failed", campaign, now - timedelta(hours=1)),
+            ("uncertain", campaign, now - timedelta(hours=2)),
+            ("published", campaign, now - timedelta(minutes=1)),
+            ("failed", campaign, now - timedelta(days=40)),
+            ("failed", other, now - timedelta(hours=1)),
+        ]):
+            session.add(PublicationExecution(
+                id=f"warning-{index}", workspace_id=workspace, campaign_id=owner,
+                state=state, delivery="schedule", platform="facebook", provider="zernio",
+                integration_id="page-1", destination_label="Page", title=f"Post {index}",
+                caption="Frozen copy", media_path="", error="Provider refused this post",
+                updated_at=changed, created_at=changed, created_by="owner-user",
+            ))
+    snapshot = request("GET", f"/api/workspaces/{workspace}/campaigns/management").json()
+    row = next(row for row in snapshot["campaigns"] if row["id"] == campaign)
+    assert row["delivery_warnings"] == 2
+    url = f"/api/workspaces/{workspace}/campaigns/{campaign}/management/warnings"
+    params = {"starts_at": snapshot["starts_at"], "ends_at": snapshot["ends_at"], "limit": 1}
+    first = request("GET", url, params=params)
+    assert first.status_code == 200, first.text
+    assert first.json()["total"] == row["delivery_warnings"]
+    assert [item["id"] for item in first.json()["warnings"]] == ["warning-0"]
+    second = request("GET", url, params={**params, "offset": 1}).json()
+    assert [item["id"] for item in second["warnings"]] == ["warning-1"]
+    assert second["warnings"][0]["caption"] == "Frozen copy"
+    assert request("GET", url, params={**params, "limit": 101}).status_code == 422
+    assert request("GET", url, params={**params, "offset": -1}).status_code == 422
+    assert request("GET", url, params={**params, "ends_at": params["starts_at"]}).status_code == 422
+    app.dependency_overrides[current_user] = lambda: CurrentUser(id="not-a-member")
+    assert request("GET", url, params=params).status_code == 404
+
+
 def test_management_compares_campaigns_and_returns_bounded_approvals(workspace) -> None:
     first = create_campaign(workspace, "NightClubzz")
     second = create_campaign(workspace, "Petal Poetry")

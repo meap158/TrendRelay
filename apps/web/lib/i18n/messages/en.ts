@@ -9,6 +9,25 @@
  */
 
 export const en = {
+  campaignWarnings: {
+    title: "Delivery warnings · {campaign}",
+    range: "Changed between {start} and {end}",
+    loading: "Loading warnings…",
+    loadError: "Could not load warnings.",
+    count: "Delivery attempts: {count}",
+    retry: "Retry",
+    previous: "Previous",
+    next: "Next",
+    untitled: "Untitled post",
+    failed: "Failed",
+    uncertain: "Uncertain",
+    noReason: "No failure reason was recorded.",
+    uncertainHint: "Check the provider before retrying: this post may already be published.",
+    details: "Post details",
+    reference: "Attempt: {id}",
+    empty: "No remaining warnings in this date range.",
+    open: "View {count} delivery warnings for {campaign}",
+  },
   campaignPipeline: {
     published: "Published",
     scheduled: "Scheduled",

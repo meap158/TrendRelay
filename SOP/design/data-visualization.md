@@ -55,6 +55,10 @@ room extends the same rules to comparison charts.
 - Keep the tooltip inside the chart bounds and large enough to read without
   covering the full plot. It must not intercept pointer events.
 - Secondary bars must expose an exact, descriptive tooltip and accessible name.
+- Warning-count drilldowns must preserve the campaign and snapshot date bounds,
+  filter before pagination, and show the affected delivery attempts with their
+  reasons. A compact dismissible panel can preserve the reader's scroll position;
+  a generic campaign link is not a warning drilldown. Reading must never retry.
 - Explain each bar's counting rule and time window in its tooltip; distinguish
   confirmed publications, future forecasts, and queue entries. Use the shared
   tooltip on a focusable control so keyboard and touch can inspect it too.

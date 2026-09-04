@@ -3,6 +3,25 @@ import type { Messages } from "./en";
 /** French. Infinitives for actions and nouns for sections, as French product
  *  interfaces do — "Enregistrer", not "Sauvez". */
 export const fr: Messages = {
+  campaignWarnings: {
+    title: "Alertes de publication · {campaign}",
+    range: "Modifiées entre {start} et {end}",
+    loading: "Chargement des alertes…",
+    loadError: "Impossible de charger les alertes.",
+    count: "Tentatives concernées : {count}",
+    retry: "Réessayer",
+    previous: "Précédent",
+    next: "Suivant",
+    untitled: "Publication sans titre",
+    failed: "Échec",
+    uncertain: "Incertain",
+    noReason: "Aucun motif enregistré.",
+    uncertainHint: "Vérifiez le fournisseur avant de réessayer : cette publication est peut-être déjà en ligne.",
+    details: "Détails de la publication",
+    reference: "Tentative : {id}",
+    empty: "Aucune alerte restante sur cette période.",
+    open: "Voir {count} alertes de publication pour {campaign}",
+  },
   campaignPipeline: {
     published: "Publiés",
     scheduled: "Programmés",

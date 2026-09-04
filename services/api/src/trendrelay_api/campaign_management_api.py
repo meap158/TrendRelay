@@ -51,6 +51,55 @@ def _aware_utc(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+@router.get("/{campaign_id}/management/warnings")
+def campaign_warnings(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    starts_at: datetime,
+    ends_at: datetime,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """Drill into exactly the warning population counted by management.
+
+    Use the snapshot's bounds, not a newly calculated rolling range. Filter
+    before pagination so older failures aren't hidden by recent good posts.
+    This read never retries an uncertain delivery or runs the scheduler.
+    """
+    membership(session, workspace_id, user.id)
+    campaign = session.get(Campaign, campaign_id)
+    if campaign is None or campaign.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    start, end = _aware_utc(starts_at), _aware_utc(ends_at)
+    if start >= end or end - start > timedelta(days=91):
+        raise HTTPException(status_code=422, detail="Invalid warning date range.")
+    conditions = (
+        PublicationExecution.workspace_id == workspace_id,
+        PublicationExecution.campaign_id == campaign_id,
+        PublicationExecution.state.in_(WARNING_STATES),
+        PublicationExecution.updated_at >= start,
+        PublicationExecution.updated_at <= end,
+    )
+    total = session.scalar(select(func.count(PublicationExecution.id)).where(*conditions)) or 0
+    rows = session.scalars(
+        select(PublicationExecution).where(*conditions)
+        .order_by(PublicationExecution.updated_at.desc(), PublicationExecution.id.asc())
+        .offset(offset).limit(limit)
+    ).all()
+    return {
+        "total": total, "limit": limit, "offset": offset,
+        "warnings": [{
+            "id": row.id, "state": row.state, "title": row.title,
+            "caption": row.caption, "first_comment": row.first_comment,
+            "destination_label": row.destination_label, "platform": row.platform,
+            "provider": row.provider, "error": row.error,
+            "updated_at": row.updated_at, "scheduled_at": row.scheduled_at,
+        } for row in rows],
+    }
+
+
 def _range_bounds(period: str, timezone: str) -> tuple[datetime, datetime, ZoneInfo]:
     try:
         zone = ZoneInfo(timezone)

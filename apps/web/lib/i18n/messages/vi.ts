@@ -3,6 +3,25 @@ import type { Messages } from "./en";
 /** Vietnamese. Verbs for actions, nouns for places — the register a Vietnamese
  *  product interface actually uses, not a gloss of the English. */
 export const vi: Messages = {
+  campaignWarnings: {
+    title: "Cảnh báo đăng bài · {campaign}",
+    range: "Cập nhật từ {start} đến {end}",
+    loading: "Đang tải cảnh báo…",
+    loadError: "Không tải được cảnh báo.",
+    count: "Lần đăng bị ảnh hưởng: {count}",
+    retry: "Thử lại",
+    previous: "Trước",
+    next: "Tiếp",
+    untitled: "Bài viết chưa có tiêu đề",
+    failed: "Thất bại",
+    uncertain: "Chưa xác định",
+    noReason: "Không có lý do lỗi được ghi nhận.",
+    uncertainHint: "Kiểm tra nhà cung cấp trước khi thử lại: bài viết có thể đã được đăng.",
+    details: "Chi tiết bài viết",
+    reference: "Lần đăng: {id}",
+    empty: "Không còn cảnh báo trong khoảng thời gian này.",
+    open: "Xem {count} cảnh báo đăng bài của {campaign}",
+  },
   campaignPipeline: {
     published: "Đã đăng",
     scheduled: "Đã lên lịch",
