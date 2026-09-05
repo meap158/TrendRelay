@@ -47,18 +47,25 @@
  * a grid of fixed columns and a row of pill buttons respectively, which is how
  * the same filter came to look like two different features. */
 .asset-filters { display: flex; flex-wrap: wrap; gap: 7px; align-items: end; margin-top: 12px; }
-/* Sized to their content and not grown.
+/* Narrow enough that they fit, growable enough that they fill, capped so a
+   stray one cannot take a row to itself.
 
-   These hold short fixed lists - "Any time", "Up to 15s" - so there is nothing
-   for extra width to show. Growing them was fine while they shared a line and
-   absurd the moment one wrapped alone onto the next: with `flex-grow: 1` and no
-   neighbour to share with, the Downloaded filter took the whole row at 823px to
-   hold the word "Any". The search below is what absorbs the slack, which is
-   what it is for - a title is longer than a facet name. */
-.asset-filters label { display: grid; gap: 4px; min-width: 0; flex: 0 1 150px; color: var(--muted); font-size: 10px; font-weight: 600; }
+   All three parts are load-bearing, and the middle one used to be missing. At
+   a basis of 150 the Library's six filters measured 838 of the 875 they had:
+   thirty-seven short of a seventh, and thirty-seven of slack nobody could use,
+   so Downloaded wrapped alone and the block cost 101px to show 47px of
+   controls. At 128 they fit on one line with room to spare, and grow to close
+   what is left.
+
+   The cap is what makes growing safe. Without it, one filter alone on a
+   wrapped row stretched to the full width to hold the word "Any" - which is
+   why growing was turned off here in the first place, and why turning it back
+   on without a ceiling would put that back. The search is exempt: absorbing
+   the slack is exactly its job, since a title is longer than a facet name. */
+.asset-filters label { display: grid; gap: 4px; min-width: 0; flex: 1 1 128px; max-inline-size: 240px; color: var(--muted); font-size: 10px; font-weight: 600; }
 /* The searchable one earns a little more room: a creator name is longer than
    "All regions", and the trigger shows the whole choice rather than clipping. */
-.asset-filters .asset-filter-wide { flex: 0 1 210px; }
+.asset-filters .asset-filter-wide { flex: 1.4 1 170px; }
 /* The one two-state filter, so it is a box and its label rather than a stacked
    caption over a control. Sized to the words and aligned on the same baseline
    as the selects, so it joins the row instead of standing above it. */
@@ -84,7 +91,7 @@
    specific selector, so this lost every time and the search sat at the same
    width as a dropdown holding the word "Any" - the row it was meant to absorb
    the slack of. */
-.asset-filters .asset-filter-search { flex: 3 1 220px; }
+.asset-filters .asset-filter-search { flex: 3 1 220px; max-inline-size: none; }
 /* Scoped to the row's own field. Unscoped, this also caught the search box
    inside a SearchSelect popover - it sits within the label, and at one class
    plus a type plus an attribute it outranks the popover's own rule. Fighting
