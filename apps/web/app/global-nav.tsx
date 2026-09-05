@@ -292,6 +292,12 @@ function batchProgress(group: NotificationGroup): {
     (job) => ["queued", "running", "in_progress"].includes(job.status),
   ).length;
   const running = live > 0;
+  // Failed once, back in the queue for another try. Distinct from `retrying`
+  // (stalled mid-run): these are healthy queue entries whose only problem is
+  // their place in the line.
+  const queuedRetry = group.jobs.filter(
+    (job) => job.status === "queued" && Number(job.raw?.attempt_count ?? 0) > 0,
+  ).length;
   // Fewer jobs than the batch set out to make. Said rather than hidden: the
   // difference is work that was asked for and never started.
   const short = !running && settled < total;
@@ -310,6 +316,13 @@ function batchProgress(group: NotificationGroup): {
     // else is running either.
     retrying ? (working ? `${retrying} to retry` : `${retrying} paused`) : "",
     spent ? `${spent} giving up` : "",
+    // An item that failed and is waiting for its second try. Its retry joins
+    // the back of the queue, so with none of this batch in flight it is
+    // waiting for whatever else is rendering - say so, or the card reads as
+    // stuck with no reason given.
+    queuedRetry
+      ? `${queuedRetry} retrying after an error${working ? "" : " · waiting for other renders to finish"}`
+      : "",
   ].filter(Boolean).join(" · ");
   return {
     total, settled, failed, stalled, retrying, spent, working, running, short, label,
@@ -360,6 +373,7 @@ export function GlobalNav() {
   const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
   const [readStateReady, setReadStateReady] = useState(false);
   const [cancellingJobId, setCancellingJobId] = useState("");
+  const [prioritisingJobId, setPrioritisingJobId] = useState("");
   const [cancelError, setCancelError] = useState("");
   const notificationShellRef = useRef<HTMLDivElement>(null);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
@@ -459,6 +473,43 @@ export function GlobalNav() {
       await refreshJobs();
     } finally {
       setCancellingJobId("");
+    }
+  }
+
+  /**
+   * Bring a waiting batch's remaining items to the front of the queue.
+   *
+   * The situation this answers: a batch's one failed item re-enters the
+   * queue at the back on retry, behind hours of another batch's work, and
+   * the card reads "waiting" with nothing to do about it but watch. Nothing
+   * running is interrupted; the passed jobs lose one place, not their work.
+   */
+  async function runBatchNext(group: NotificationGroup) {
+    const waiting = group.jobs.filter((job) => job.status === "queued");
+    const workspaceId = group.latest.raw?.workspace_id;
+    if (!waiting.length || !workspaceId) return;
+    setPrioritisingJobId(group.latest.id);
+    setCancelError("");
+    const failures: string[] = [];
+    try {
+      for (const job of waiting) {
+        try {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/media/library/effects/jobs/${job.id}/run-next`,
+            { method: "POST" },
+          );
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            failures.push(body.detail ?? `${job.id} could not be moved up.`);
+          }
+        } catch {
+          failures.push(`${job.id} could not be moved up.`);
+        }
+      }
+      if (failures.length) setCancelError(failures[0]);
+      await refreshJobs();
+    } finally {
+      setPrioritisingJobId("");
     }
   }
 
@@ -921,6 +972,22 @@ export function GlobalNav() {
                               whenever the latest of its jobs had already
                               succeeded - and no way to stop it is the correct
                               answer only when there is nothing left running. */}
+                          {/* The way out of waiting behind another batch's
+                              queue: offered exactly when this batch has
+                              items in line and none of its own in flight -
+                              which is the card that otherwise reads as
+                              stuck with nothing to be done. */}
+                          {job.category === "edit" && batch && batch.running
+                            && batch.working === 0
+                            && group.jobs.some((item) => item.status === "queued") && (
+                            <Button
+                              variant="quiet"
+                              size="sm"
+                              busy={prioritisingJobId === job.id}
+                              title="Move this batch's waiting items to the front of the render queue. Nothing running is interrupted."
+                              onClick={() => void runBatchNext(group)}
+                            >Run next</Button>
+                          )}
                           {job.category === "edit" && (batch
                             ? batch.running
                             : ["queued", "running"].includes(job.status)) && (

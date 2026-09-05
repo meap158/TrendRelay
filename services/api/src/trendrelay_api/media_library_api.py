@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 from contextlib import suppress
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from secrets import token_hex
 from typing import Annotated, Any, Literal
@@ -3114,6 +3114,67 @@ def cancel_effect_render_job(
     )
     session.commit()
     return {"job": cancelled}
+
+
+@router.post("/effects/jobs/{job_id}/run-next")
+def run_effect_render_job_next(
+    workspace_id: str,
+    job_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Move one waiting render to the front of the queue.
+
+    A failed item's retry re-enters the queue at the back, so the last
+    straggler of a nearly-finished batch can sit behind hours of another
+    batch's work - with a card that says "waiting" and nothing anybody can do
+    about it but watch. This is the something: the job's turn is brought
+    forward. Nothing running is interrupted, and the jobs it passes lose one
+    place, not their work.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.effect_render import JOB_SESSION_FACTORY, get_render_job
+    from trendrelay_api.models import DurableJob
+
+    try:
+        job = get_render_job(job_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Effect job not found.") from error
+    if job["workspace_id"] != workspace_id or job["kind"] != "media_effect_render":
+        raise HTTPException(status_code=404, detail="Effect job not found.")
+    with JOB_SESSION_FACTORY.begin() as job_session:
+        item = job_session.get(DurableJob, job_id)
+        if not item or item.status != "queued":
+            raise HTTPException(
+                status_code=409,
+                detail="Only a waiting render can be moved up in the queue.",
+            )
+        earliest = job_session.scalar(
+            select(func.min(DurableJob.available_at)).where(
+                DurableJob.kind == item.kind, DurableJob.status == "queued"
+            )
+        )
+        moment = utc_now()
+        # SQLite hands stored moments back naive; utc_now is aware. Stamp
+        # before comparing, or the comparison itself raises.
+        if earliest is not None and earliest.tzinfo is None:
+            earliest = earliest.replace(tzinfo=UTC)
+        floor = min(earliest, moment) if earliest is not None else moment
+        item.available_at = floor - timedelta(seconds=1)
+        item.updated_at = moment
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.effect_render_prioritised",
+        "durable_job",
+        job_id,
+        {"asset_id": job.get("payload", {}).get("asset_id")},
+    )
+    session.commit()
+    return {"job": get_render_job(job_id)}
 
 
 @router.post("/effects/jobs/{job_id}/preview")

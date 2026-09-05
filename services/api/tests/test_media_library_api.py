@@ -1164,3 +1164,53 @@ def test_the_library_can_narrow_to_one_campaigns_own_media() -> None:
 
     empty = asyncio.run(request("GET", f"{base}/assets?in_campaign=camp-idle"))
     assert empty.json()["total"] == 0
+
+
+def test_a_waiting_render_can_be_moved_to_the_front_of_the_queue(monkeypatch) -> None:
+    """The answer to a batch's last item starving behind another batch.
+
+    A failed item's retry re-enters the queue at the back, so one straggler
+    of a nearly-finished batch can wait behind hours of newer work with a
+    card that says "waiting" and nothing to do about it. Run-next moves its
+    turn ahead of every other waiting render; a finished job is refused with
+    the reason rather than silently reordered.
+    """
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.models import DurableJob
+
+    workspace_id = create_workspace()
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    early = datetime.now(UTC) - timedelta(hours=4)
+    with TestingSession.begin() as session:
+        for index in range(3):
+            session.add(DurableJob(
+                id=f"edit_ahead-{index}", workspace_key=workspace_id,
+                kind="media_effect_render", status="queued",
+                available_at=early + timedelta(seconds=index),
+            ))
+        session.add(DurableJob(
+            id="edit_straggler", workspace_key=workspace_id,
+            kind="media_effect_render", status="queued", attempt_count=1,
+            last_error="[Errno 22] Invalid argument",
+            available_at=early + timedelta(hours=1),
+        ))
+        session.add(DurableJob(
+            id="edit_done", workspace_key=workspace_id,
+            kind="media_effect_render", status="succeeded",
+        ))
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    moved = asyncio.run(request("POST", f"{base}/effects/jobs/edit_straggler/run-next"))
+    assert moved.status_code == 200
+
+    with TestingSession() as session:
+        straggler_at = session.get(DurableJob, "edit_straggler").available_at
+        earliest_other = min(
+            session.get(DurableJob, f"edit_ahead-{index}").available_at
+            for index in range(3)
+        )
+    assert straggler_at < earliest_other
+
+    finished = asyncio.run(request("POST", f"{base}/effects/jobs/edit_done/run-next"))
+    assert finished.status_code == 409
+    assert "waiting render" in finished.json()["detail"]
