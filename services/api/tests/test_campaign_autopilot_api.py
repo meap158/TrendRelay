@@ -813,9 +813,12 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
     post = response.json()["posts"][0]
     assert post["title"] == "Coffee demo"
     assert post["asset_id"] == "asset-preview"
+    # `provider_label` beside `provider`: the timeline shows the login in
+    # words, and the id it used to show does not change when the connection is
+    # renamed - because the id never was the name.
     assert post["destination"] == {
         "label": "Coffee channel", "platform": "youtube",
-        "provider": "buffer", "post_type": None,
+        "provider": "buffer", "provider_label": "Buffer", "post_type": None,
     }
     # The rate travels with the name. A row that lists which products are
     # attached without saying what any of them pays cannot answer the question
@@ -829,6 +832,62 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
             "currency": "USD",
         }
     ]
+
+
+def test_a_destination_is_named_by_its_login_not_by_its_stored_id() -> None:
+    """What the timeline prints under each account, and where it came from.
+
+    An engine's first connection is stored under the engine's own id, so
+    `provider` and the name agreed and nothing looked wrong. A second one is
+    stored as `zernio-2`, `zernio-4`, and the timeline printed that - so
+    renaming the connection in Publish changed the name everywhere except
+    here, because here it was never showing the name.
+    """
+    from trendrelay_api import publishing_connections
+    from trendrelay_api.campaign_autopilot_api import provider_label
+    from trendrelay_api.integrations.publishing import PROVIDERS
+
+    first = publishing_connections.Connection(
+        id="zernio", provider="zernio", label="Zernio", is_default=True,
+    )
+    named = publishing_connections.Connection(
+        id="zernio-4", provider="zernio", label="someone@example.com",
+        is_default=False,
+    )
+
+    def rows(_providers):
+        return [first, named]
+
+    original = publishing_connections.connections
+    publishing_connections.connections = rows
+    try:
+        # The engine's own login needs no qualifier - there is only one.
+        assert provider_label("zernio") == "Zernio"
+        # A second one is named after whoever it signs in as.
+        assert provider_label("zernio-4") == "Zernio · someone@example.com"
+        # And the name is read now rather than frozen: this is the rename.
+        publishing_connections.connections = lambda _p: [
+            first,
+            publishing_connections.Connection(
+                id="zernio-4", provider="zernio", label="Renamed", is_default=False,
+            ),
+        ]
+        assert provider_label("zernio-4") == "Zernio · Renamed"
+    finally:
+        publishing_connections.connections = original
+
+    assert PROVIDERS["zernio"].label == "Zernio"
+
+
+def test_a_destination_whose_login_has_gone_still_says_something() -> None:
+    # A connection can be removed while a delivered post still points at it.
+    # Falling back to the stored id is worse than nothing only if it pretends
+    # to be a name; as a last resort it is at least what was recorded.
+    from trendrelay_api.campaign_autopilot_api import provider_label
+
+    assert provider_label("zernio-does-not-exist") == "zernio-does-not-exist"
+    assert provider_label(None) == ""
+    assert provider_label("") == ""
 
 
 def test_preview_reconnects_committed_publish_jobs_to_the_timeline(workspace) -> None:

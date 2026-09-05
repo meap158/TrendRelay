@@ -367,6 +367,27 @@ def _campaign_preset_id(session: Session, campaign_id: str) -> str | None:
     )
 
 
+def provider_label(provider: str | None) -> str:
+    """The login a destination posts through, in words rather than as its id.
+
+    "Zernio" for an engine's first connection, "Zernio · Client B" for one
+    somebody added and named. The stored id - `zernio`, then `zernio-4` once
+    there are several - names the connection without saying whose account it
+    is, and renaming the connection in Publish does not change it, because it
+    never was the name.
+
+    Written here rather than inline because three payloads answer this same
+    question and two of them were not answering it at all.
+    """
+    if not provider:
+        return ""
+    connection = publishing_connections.find(PROVIDERS, provider)
+    engine = PROVIDERS.get(connection.provider) if connection else None
+    if not engine:
+        return provider
+    return engine.label if connection.is_default else f"{engine.label} · {connection.label}"
+
+
 def _destination_view(
     session: Session,
     item: CampaignDestination,
@@ -408,11 +429,7 @@ def _destination_view(
     return {
         "id": item.id,
         "provider": item.provider,
-        "provider_label": (
-            engine.label if connection and connection.is_default and engine
-            else f"{engine.label} · {connection.label}" if connection and engine
-            else item.provider
-        ),
+        "provider_label": provider_label(item.provider),
         # probe=False: the tab must not stall on a per-destination provider login.
         # The account handle appears once the Publish tab has warmed the cache.
         "connection_account": cached_identity(item.provider, probe=False) if connection else {},
@@ -2452,6 +2469,9 @@ def preview_autopilot(
                 "label": destination.label,
                 "platform": destination.platform,
                 "provider": destination.provider,
+                # The row under the account name. Without this the timeline
+                # printed the connection id beside every planned post.
+                "provider_label": provider_label(destination.provider),
                 "post_type": destination.post_type,
             } if destination else None),
             "reason": post.reason,
@@ -2540,11 +2560,15 @@ def preview_autopilot(
                 "label": destination.label,
                 "platform": destination.platform,
                 "provider": destination.provider,
+                "provider_label": provider_label(destination.provider),
                 "post_type": destination.post_type,
             } if destination else {
                 "label": target.get("integration_id", "Former destination"),
                 "platform": target.get("platform"),
                 "provider": target.get("provider"),
+                # A destination that has since been removed still posted
+                # through a login, and that login may still exist.
+                "provider_label": provider_label(target.get("provider")),
                 "post_type": target.get("post_type"),
             }),
             "last_error": job.last_error,

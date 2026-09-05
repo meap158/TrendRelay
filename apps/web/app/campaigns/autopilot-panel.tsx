@@ -663,6 +663,8 @@ type PreviewPost = {
     label: string;
     platform: PublishingPlatform;
     provider: string;
+    /** The login in words - "Zernio", or "Zernio · Client B" - not its id. */
+    provider_label?: string;
     post_type: string | null;
   } | null;
   placement: string;
@@ -6933,8 +6935,16 @@ export function AutopilotPanel({
                                   {destination?.label ?? entry.destination_id ?? "Former account"}
                                 </a>
                               ) : (destination?.label ?? entry.destination_id ?? "Former account")}</strong>
+                              {/* The login in words. This printed
+                                  `destination.provider` - the stored id, which
+                                  is "zernio" and then "zernio-4" once there are
+                                  several - so renaming the connection in
+                                  Publish changed nothing here, because the id
+                                  never was the name. */}
                               <small>{platform ? platformLabels[platform] : "Social account"}
-                                {destination?.provider ? ` · ${destination.provider}` : ""}</small>
+                                {destination?.provider_label ?? destination?.provider
+                                  ? ` · ${destination.provider_label || destination.provider}`
+                                  : ""}</small>
                             </span>
                             {/* Whether it has gone out, in one badge. This was
                                 the difference between the two lists. */}

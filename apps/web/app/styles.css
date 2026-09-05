@@ -1547,7 +1547,11 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-pipeline-destination > span { display: grid; min-width: 0; margin-inline-end: auto; }
 .campaign-pipeline-destination > span strong, .campaign-pipeline-destination > span small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-pipeline-destination > span strong { font-size: 11px; }
-.campaign-pipeline-destination > span small { color: var(--muted); font-size: 10px; text-transform: capitalize; }
+/* No capitalising. That was here to dress up the stored connection id this
+   line used to print - `zernio-4` reading as "Zernio-4" - and the line now
+   carries the login's own name, which is the operator's to case. It was
+   turning genzyn1909@gmail.com into Genzyn1909@Gmail.Com. */
+.campaign-pipeline-destination > span small { color: var(--muted); font-size: 10px; }
 .campaign-affiliate-route { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-affiliate-route.attached { border-color: color-mix(in srgb, var(--link) 26%, var(--line)); background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
 .campaign-affiliate-route > span { display: grid; gap: 2px; min-width: 0; margin-inline-end: auto; }
