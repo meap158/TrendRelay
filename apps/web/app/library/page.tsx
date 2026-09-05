@@ -803,6 +803,10 @@ function MediaPreview({
   onPlaybackChange,
   onPreviousVideo,
   onNextVideo,
+  zoomed,
+  onZoomChange,
+  onPreviousImage,
+  onNextImage,
 }: {
   asset: Asset;
   workspaceId: string;
@@ -815,6 +819,18 @@ function MediaPreview({
   onPlaybackChange: (playing: boolean) => void;
   onPreviousVideo: () => void;
   onNextVideo: () => void;
+  /**
+   * The full-size picture view, owned by the parent.
+   *
+   * This component remounts per asset, so state held here dies on every
+   * navigation - parent ownership is what lets the lightbox stay open while
+   * the picture under it changes.
+   */
+  zoomed: boolean;
+  onZoomChange: (open: boolean) => void;
+  /** Step to the nearest picture, skipping media the lightbox cannot show. */
+  onPreviousImage?: () => void;
+  onNextImage?: () => void;
 }) {
   const t = useT();
   const [source, setSource] = useState("");
@@ -843,16 +859,14 @@ function MediaPreview({
   // transport surface used here: play, pause and paused.
   const videoRef = useRef<HTMLMediaElement>(null);
   const navigatingRef = useRef(false);
-  /**
-   * Whether the picture is open at full size.
-   *
-   * Lives here rather than above because the lightbox shows the bytes this
-   * component fetched. That also means browsing away closes it, which is the
-   * behaviour wanted: the keys are the dialog's while it is open - see the
-   * guard in the keyboard handler - so nothing can change underneath it.
-   */
-  const [zoomed, setZoomed] = useState(false);
   const rendered = renderedCut(asset.versions);
+
+  // A safety net, not a path the arrows can take: the image steps only land
+  // on pictures. Selecting a video from the list under an open lightbox is
+  // the one way here, and a full-size view of nothing helps nobody.
+  useEffect(() => {
+    if (zoomed && asset.media_kind !== "image") onZoomChange(false);
+  }, [zoomed, asset.media_kind, onZoomChange]);
 
   // Audio and video both have a transport; an image has nothing to play.
   const playable = asset.media_kind === "video" || asset.media_kind === "audio";
@@ -960,10 +974,20 @@ function MediaPreview({
     function navigateWithKeyboard(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      // The lightbox is a modal, and Escape is its way out. Browsing under an
-      // open one would swap the picture being looked at for a different one,
-      // or for a video this view cannot show at all.
-      if (zoomed) return;
+      // The lightbox is a modal, and Escape is its way out - but the arrows
+      // are its way around: they page through pictures, skipping media a
+      // full-size view cannot show, exactly like the previewer underneath.
+      if (zoomed) {
+        if (event.key === "ArrowLeft" && onPreviousImage) {
+          event.preventDefault();
+          onPreviousImage();
+        }
+        if (event.key === "ArrowRight" && onNextImage) {
+          event.preventDefault();
+          onNextImage();
+        }
+        return;
+      }
       if (event.key === "ArrowLeft" && hasPreviousVideo) {
         event.preventDefault();
         navigateVideo(onPreviousVideo);
@@ -1005,7 +1029,7 @@ function MediaPreview({
               className="library-preview-zoom"
               aria-label={t("library.viewFullSize")}
               title={t("library.viewFullSize")}
-              onClick={() => setZoomed(true)}
+              onClick={() => onZoomChange(true)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="library-preview-image" src={source} alt={asset.title} />
@@ -1072,12 +1096,17 @@ function MediaPreview({
           >{t("library.cutOriginal")}</button>
         </div>
       )}
-      {asset.media_kind === "image" && source && (
+      {/* Mounted while zoomed even before the bytes arrive: stepping to the
+          next picture remounts this component, and letting the dialog drop
+          out for that instant flashed the whole page between images. */}
+      {asset.media_kind === "image" && (source || zoomed) && (
         <Lightbox
           open={zoomed}
           src={source}
           alt={asset.title}
-          onClose={() => setZoomed(false)}
+          onClose={() => onZoomChange(false)}
+          onPrevious={onPreviousImage}
+          onNext={onNextImage}
         />
       )}
       <nav className="library-preview-navigation" aria-label={t("library.browsePreviews")}>
@@ -1208,6 +1237,16 @@ function LibraryContent() {
     "trendrelay.library.view", "gallery", isViewMode,
   );
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
+  /**
+   * Whether the full-size picture view is open.
+   *
+   * Held here rather than in the preview because the preview remounts per
+   * asset - state kept there dies on every navigation, which is exactly why
+   * the lightbox used to close the moment you browsed. Up here it survives
+   * the swap, so the full-size view pages through pictures like the
+   * previewer under it.
+   */
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [busy, setBusy] = useState("");
   // Errors are reported over the page: in flow they shifted everything below
   // them whenever an action finished. The bulk-action outcome below is not a
@@ -2122,20 +2161,37 @@ function LibraryContent() {
             <WaitingBlock className="library-detail-wait" message={t("common.loading")} />
           ) : selected ? (
             <>
-              <MediaPreview
-                key={selected.id}
-                asset={selected}
-                workspaceId={workspaceId}
-                apiFetch={apiFetch}
-                previewPosition={selectedIndex + 1}
-                previewTotal={assets.length}
-                hasPreviousVideo={selectedIndex > 0}
-                hasNextVideo={selectedIndex >= 0 && selectedIndex < assets.length - 1}
-                autoStart={continueVideoPlayback}
-                onPlaybackChange={setContinueVideoPlayback}
-                onPreviousVideo={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selected.id)}
-                onNextVideo={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selected.id)}
-              />
+              {(() => {
+                // The full-size view pages through pictures only: it cannot
+                // show a video, so its arrows step to the nearest image in
+                // the same list order instead of landing somewhere blank.
+                // With the Images filter on, that is every neighbour.
+                const previousImage = assets.slice(0, Math.max(selectedIndex, 0))
+                  .map((entry, index) => ({ entry, index }))
+                  .filter(({ entry }) => entry.media_kind === "image")
+                  .at(-1);
+                const nextImage = assets.slice(selectedIndex + 1)
+                  .map((entry, index) => ({ entry, index: selectedIndex + 1 + index }))
+                  .find(({ entry }) => entry.media_kind === "image");
+                return <MediaPreview
+                  key={selected.id}
+                  asset={selected}
+                  workspaceId={workspaceId}
+                  apiFetch={apiFetch}
+                  previewPosition={selectedIndex + 1}
+                  previewTotal={assets.length}
+                  hasPreviousVideo={selectedIndex > 0}
+                  hasNextVideo={selectedIndex >= 0 && selectedIndex < assets.length - 1}
+                  autoStart={continueVideoPlayback}
+                  onPlaybackChange={setContinueVideoPlayback}
+                  onPreviousVideo={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selected.id)}
+                  onNextVideo={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selected.id)}
+                  zoomed={lightboxOpen}
+                  onZoomChange={setLightboxOpen}
+                  onPreviousImage={previousImage ? () => setSelectedId(previousImage.entry.id) : undefined}
+                  onNextImage={nextImage ? () => setSelectedId(nextImage.entry.id) : undefined}
+                />;
+              })()}
               <article className="library-summary">
                 <div>
                   <p className="section-kicker library-source-meta">

@@ -1,7 +1,7 @@
 "use client";
 
 import * as RadixDialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { useT } from "../i18n-provider";
 
@@ -29,6 +29,8 @@ export function Lightbox({
   src,
   alt,
   onClose,
+  onPrevious,
+  onNext,
 }: {
   open: boolean;
   /** The image itself. An object URL, the same bytes the preview is showing. */
@@ -41,6 +43,17 @@ export function Lightbox({
    */
   alt: string;
   onClose: () => void;
+  /**
+   * Step to the neighbouring picture without leaving the view.
+   *
+   * Optional because a lightbox over a single image has no neighbours; a
+   * chevron is drawn only for a direction that exists, so the edges of a set
+   * simply offer one arrow. The chevrons are the one exception this view
+   * makes to "no chrome": a wall of pictures viewed one at a time is browsed,
+   * and closing-scrolling-reopening is not browsing.
+   */
+  onPrevious?: () => void;
+  onNext?: () => void;
 }) {
   const t = useT();
   return (
@@ -49,8 +62,29 @@ export function Lightbox({
         <RadixDialog.Overlay className="ui-lightbox-overlay" />
         <RadixDialog.Content className="ui-lightbox" onClick={onClose}>
           <RadixDialog.Title className="sr-only">{alt}</RadixDialog.Title>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={alt} onClick={(event) => event.stopPropagation()} />
+          {/* No src while the next picture's bytes are still arriving - the
+              dark stage holds steady and the image joins it, rather than a
+              broken-image glyph or the dialog flashing out and in. */}
+          {src && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={src} alt={alt} onClick={(event) => event.stopPropagation()} />
+          )}
+          {onPrevious && (
+            <button
+              type="button"
+              className="ui-lightbox-step ui-lightbox-previous"
+              aria-label={t("common.previous")}
+              onClick={(event) => { event.stopPropagation(); onPrevious(); }}
+            ><ChevronLeft size={22} aria-hidden="true" /></button>
+          )}
+          {onNext && (
+            <button
+              type="button"
+              className="ui-lightbox-step ui-lightbox-next"
+              aria-label={t("common.next")}
+              onClick={(event) => { event.stopPropagation(); onNext(); }}
+            ><ChevronRight size={22} aria-hidden="true" /></button>
+          )}
           <RadixDialog.Close asChild>
             <button type="button" className="ui-lightbox-close" aria-label={t("common.close")}>
               <X size={18} aria-hidden="true" />
