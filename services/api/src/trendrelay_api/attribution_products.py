@@ -114,6 +114,26 @@ def _economics_payload(report: Any) -> dict[str, Any]:
     }
 
 
+def _listing_summary(listing: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The row-sized reading of a stored listing, or None when never fetched."""
+    if not listing:
+        return None
+    return {
+        "discount_percent": listing.get("discount_percent"),
+        "shop_location": listing.get("shop_location"),
+        "categories": listing.get("categories") or [],
+        "image_count": len(listing.get("images") or []),
+        "variation_count": sum(
+            len(entry.get("options") or [])
+            for entry in listing.get("tier_variations") or []
+        ),
+        "voucher_count": len(listing.get("vouchers") or []),
+        "has_video": bool(listing.get("has_video")),
+        "listed_at": listing.get("listed_at"),
+        "withheld_signed_out": listing.get("withheld_signed_out") or [],
+    }
+
+
 def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
     """Every product in the workspace, with its links, clicks, earnings and costs."""
     products = session.scalars(
@@ -208,6 +228,16 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
             "identifier": product.identifier,
             "product_url": product.product_url,
             "image_url": product.image_url,
+            # What the product's own page said, compactly: the table shows a
+            # few of these on the row, and the full record - description,
+            # every image, variations, vouchers - is one click away on the
+            # product's own listing endpoint. Serving all five hundred full
+            # records here would be megabytes nobody scrolled to.
+            "listing": _listing_summary(product.listing),
+            "listing_fetched_at": (
+                product.listing_fetched_at.isoformat()
+                if product.listing_fetched_at else None
+            ),
             # The batch this came from and when, so the table can filter by
             # source file and import date. Null for rows imported before these
             # were recorded, or pasted with no file name.

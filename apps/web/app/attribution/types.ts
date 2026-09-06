@@ -31,6 +31,22 @@ export type EarningsBucket = {
   order_value_cents: number;
 };
 
+/** What the product's own listing page said, row-sized. The full record -
+    description, every image, variations, vouchers - is on the product's
+    listing endpoint. Null until the page has been read once. */
+export type ListingSummary = {
+  discount_percent: number | null;
+  shop_location: string | null;
+  categories: string[];
+  image_count: number;
+  variation_count: number;
+  voucher_count: number;
+  has_video: boolean;
+  listed_at: string | null;
+  /** Figures Shopee only shows signed-in readers; named, never guessed. */
+  withheld_signed_out: string[];
+};
+
 export type ProductRow = {
   id: string;
   name: string;
@@ -40,6 +56,9 @@ export type ProductRow = {
   identifier: string | null;
   product_url: string | null;
   image_url: string | null;
+  /** Optional so older fixtures and callers without the read stay valid. */
+  listing?: ListingSummary | null;
+  listing_fetched_at?: string | null;
   creators: string[];
   offers: ProductOffer[];
   links: ProductLink[];

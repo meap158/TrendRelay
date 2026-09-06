@@ -24,18 +24,24 @@ should not undo a correction.
 
 from __future__ import annotations
 
+import time
 from secrets import token_urlsafe
 from typing import Any
 
 from sqlalchemy import select
 
 from trendrelay_api.database import SessionFactory
-from trendrelay_api.integrations import shopee_session
+from trendrelay_api.integrations import shopee_listing, shopee_session
 from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
 from trendrelay_api.models import utc_now
 from trendrelay_api.opportunity_models import Product
 
 JOB_KIND = "shopee_enrich"
+
+#: Breathing room between anonymous page reads. The worker drains these jobs
+#: back to back, and five hundred products read politely over half an hour is
+#: the same answer as five hundred read rudely in five minutes.
+LISTING_DELAY_SECONDS = 2.5
 
 #: Long, because the work is one browser page load and Shopee is not quick.
 #: Short of this the lease expires under a job that is still working and the
@@ -51,10 +57,12 @@ MAX_PER_IMPORT = 100
 def needs_enrichment(product: Product) -> bool:
     """Whether there is anything to go and look for.
 
-    Only an image and only from a product URL. Everything else the page could
-    say, the export already said better.
+    A missing picture, or a listing never read: the product page knows the
+    description, pictures, variations, categories, attributes, discount and
+    vouchers the export cannot carry, and a product that has never been asked
+    about is worth one polite page read.
     """
-    return bool(product.product_url) and not product.image_url
+    return bool(product.product_url) and (not product.image_url or not product.listing)
 
 
 def enqueue(
@@ -63,13 +71,21 @@ def enqueue(
     *,
     factory: Any = SessionFactory,
     limit: int = MAX_PER_IMPORT,
+    force: bool = False,
 ) -> list[str]:
-    """Queue a page read for each product still missing its picture."""
+    """Queue a page read for each product still missing something.
+
+    `force` re-reads products whose listing is already stored: a listing is a
+    snapshot, and the deliberate refresh is the one caller allowed to say the
+    old one no longer serves.
+    """
     queued: list[str] = []
     for product in products:
         if len(queued) >= limit:
             break
-        if not needs_enrichment(product):
+        if not force and not needs_enrichment(product):
+            continue
+        if force and not product.product_url:
             continue
         job_id = f"shopee-enrich-{token_urlsafe(8)}"
         create_job_record(
@@ -145,6 +161,27 @@ def progress(workspace_id: str, *, limit: int = 200, factory: Any = SessionFacto
     }
 
 
+def _read_product_page(url: str) -> dict[str, Any]:
+    """The public listing first, the connected browser only as a fallback.
+
+    The anonymous page read costs a second and answers with the whole
+    listing; the browser bridge costs the better part of a minute and a live
+    session, and answers with an image and a name. So the bridge is kept for
+    exactly the page that comes back challenged - and when the cheap read
+    works, a short pause keeps a batch of five hundred polite.
+    """
+    try:
+        listing = shopee_listing.fetch_listing(url)
+    except shopee_listing.ListingUnavailable:
+        return shopee_session.fetch_product(url)
+    time.sleep(LISTING_DELAY_SECONDS)
+    return {
+        "listing": listing,
+        "image_url": next(iter(listing.get("images") or []), None),
+        "name": listing.get("title"),
+    }
+
+
 def run_enrich_job(
     job_id: str,
     worker_id: str = "shopee-enrich-worker",
@@ -158,7 +195,7 @@ def run_enrich_job(
     except (FileNotFoundError, PermissionError):
         return
     payload = record["payload"]
-    reader = fetch or shopee_session.fetch_product
+    reader = fetch or _read_product_page
     try:
         found = reader(payload["url"])
         applied = apply_details(payload["workspace_id"], payload["product_id"], found, factory)
@@ -188,6 +225,15 @@ def apply_details(
             # Deleted while queued. Not a failure: there is simply nothing to
             # fill in any more.
             return {"filled": [], "product_id": product_id, "missing": True}
+
+        listing = found.get("listing")
+        if isinstance(listing, dict) and listing:
+            # The one field here that replaces rather than fills: the listing
+            # is the page's own account of the product, ours to refresh whole,
+            # and half of last month's snapshot is not a correction to keep.
+            product.listing = listing
+            product.listing_fetched_at = utc_now()
+            filled.append("listing")
 
         image = (found.get("image_url") or "").strip()
         # Only over https, and only what the product page itself pointed at.

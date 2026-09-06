@@ -35,6 +35,13 @@ class Product(Base):
     marketplace: Mapped[str] = mapped_column(String(80), index=True)
     product_url: Mapped[str | None] = mapped_column(String(2000))
     image_url: Mapped[str | None] = mapped_column(String(2000))
+    #: What the product's own listing page says about it - description,
+    #: pictures, variations, categories, attributes, discount, vouchers -
+    #: distilled by `integrations.shopee_listing`. The export prices the
+    #: product; this is everything else, refreshed whole on each read, with
+    #: the fetch moment beside it so staleness is a fact and not a guess.
+    listing: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    listing_fetched_at: Mapped[datetime | None] = mapped_column()
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)

@@ -114,6 +114,13 @@
 .product-offers li > div, .product-links li > div { display: grid; gap: 2px; flex: 1 1 160px; min-width: 0; }
 .product-offers small, .product-links small { color: var(--muted); font-size: 11px; }
 .product-links code { font-family: ui-monospace, monospace; font-size: 12px; }
+/* What the product's own page said, as a row of quiet facts. Chips rather
+   than sentences: a discount, a category trail and a voucher count are read
+   at a glance or not at all inside a table. */
+.product-listing { display: grid; gap: 6px; }
+.product-listing-facts { display: flex; flex-wrap: wrap; gap: 4px; }
+.product-listing-facts > span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); font-size: 10px; white-space: nowrap; max-inline-size: 320px; overflow: hidden; text-overflow: ellipsis; }
+.product-listing-note { color: var(--muted); font-size: 10px; line-height: 1.4; }
 
 @media (max-width: 700px) {
 }

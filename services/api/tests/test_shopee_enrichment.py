@@ -57,21 +57,36 @@ def read(factory, product_id: str) -> Product:
 # --- what gets queued ---------------------------------------------------------
 
 
-def test_only_products_missing_a_picture_are_queued(factory) -> None:
+def test_only_products_still_missing_something_are_queued(factory) -> None:
+    # No picture yet: queued. A picture but no listing yet: queued too - the
+    # page knows the description, variations and vouchers the export cannot
+    # carry. Both picture and listing: nothing left to go and look for.
     wanting = Product(
         workspace_id="w", catalog_key="a", name="A", marketplace="shopee",
         product_url="https://shopee.vn/product/1/2", created_by="u",
     )
-    having = Product(
+    pictured = Product(
         workspace_id="w", catalog_key="b", name="B", marketplace="shopee",
         product_url="https://shopee.vn/product/3/4",
         image_url="https://cdn.example/already.jpg", created_by="u",
     )
+    settled = Product(
+        workspace_id="w", catalog_key="c", name="C", marketplace="shopee",
+        product_url="https://shopee.vn/product/5/6",
+        image_url="https://cdn.example/settled.jpg",
+        listing={"title": "C", "source": "shopee-product-page"}, created_by="u",
+    )
 
-    queued = enrichment.enqueue("w", [wanting, having], factory=factory)
+    queued = enrichment.enqueue("w", [wanting, pictured, settled], factory=factory)
 
-    assert len(queued) == 1
+    assert len(queued) == 2
     assert get_job_record(queued[0], factory=factory)["payload"]["url"].endswith("/1/2")
+    assert get_job_record(queued[1], factory=factory)["payload"]["url"].endswith("/3/4")
+
+    # And the deliberate refresh re-reads even a settled product: a listing
+    # is a snapshot, and discounts move.
+    forced = enrichment.enqueue("w", [settled], factory=factory, force=True)
+    assert len(forced) == 1
 
 
 def test_a_product_with_no_page_to_read_is_not_queued(factory) -> None:
@@ -111,6 +126,59 @@ def test_the_picture_from_the_page_is_stored(factory) -> None:
 
     assert "image_url" in applied["filled"]
     assert read(factory, product_id).image_url.endswith("/abc")
+
+
+def test_the_whole_listing_is_stored_and_refreshed_whole(factory) -> None:
+    # The one field that replaces rather than fills: the listing is the
+    # page's own account of the product, and half of last month's snapshot
+    # is not a correction worth keeping.
+    product_id = add_product(factory)
+    first = {"listing": {"title": "A", "discount_percent": 20}, "image_url": PAGE["image_url"]}
+    second = {"listing": {"title": "A", "discount_percent": 35}}
+
+    applied = enrichment.apply_details("workspace-1", product_id, first, factory)
+    assert "listing" in applied["filled"]
+    assert read(factory, product_id).listing["discount_percent"] == 20
+    assert read(factory, product_id).listing_fetched_at is not None
+
+    enrichment.apply_details("workspace-1", product_id, second, factory)
+    assert read(factory, product_id).listing["discount_percent"] == 35
+    # And the picture chosen from the first read stands, as ever.
+    assert read(factory, product_id).image_url.endswith("/abc")
+
+
+def test_the_public_page_is_read_before_the_browser_bridge(monkeypatch) -> None:
+    """The anonymous read answers in a second; the bridge is the fallback.
+
+    Only a page that comes back challenged reaches the connected browser,
+    and the polite pause between anonymous reads stays out of tests.
+    """
+    from trendrelay_api.integrations import shopee_listing
+
+    monkeypatch.setattr(enrichment.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        enrichment.shopee_listing, "fetch_listing",
+        lambda url: {"title": "From page", "images": ["https://down-vn.img.susercontent.com/file/x"]},
+    )
+    bridge_calls: list[str] = []
+    monkeypatch.setattr(
+        enrichment.shopee_session, "fetch_product",
+        lambda url: bridge_calls.append(url) or {"image_url": "https://cdn/bridge.jpg"},
+    )
+
+    found = enrichment._read_product_page("https://shopee.vn/product/1/2")
+    assert found["listing"]["title"] == "From page"
+    assert found["image_url"].endswith("/file/x")
+    assert found["name"] == "From page"
+    assert bridge_calls == []
+
+    def challenged(url):
+        raise shopee_listing.ListingUnavailable("shell")
+
+    monkeypatch.setattr(enrichment.shopee_listing, "fetch_listing", challenged)
+    fallback = enrichment._read_product_page("https://shopee.vn/product/1/2")
+    assert bridge_calls == ["https://shopee.vn/product/1/2"]
+    assert fallback["image_url"] == "https://cdn/bridge.jpg"
 
 
 def test_the_placeholder_name_a_pasted_link_left_is_replaced(factory) -> None:

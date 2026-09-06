@@ -469,7 +469,18 @@ export function ProductTable({
                       <span className="product-named">
                         <span>{product.name}</span>
                         <small>
-                          {[product.brand, product.marketplace].filter(Boolean).join(" · ")}
+                          {[
+                            product.brand,
+                            product.marketplace,
+                            // What the product's own page added, at a glance:
+                            // the live discount and how many forms it sells in.
+                            product.listing?.discount_percent
+                              ? `−${product.listing.discount_percent}%`
+                              : null,
+                            product.listing && product.listing.variation_count > 1
+                              ? `${product.listing.variation_count} variations`
+                              : null,
+                          ].filter(Boolean).join(" · ")}
                           {product.product_form && ` (${product.product_form})`}
                         </small>
                       </span>
@@ -588,6 +599,35 @@ export function ProductTable({
                             ))}
                           </ul>
                         ) : <p className="product-no-data">{t("attribution.noOffers")}</p>}
+                        {/* What the product's own page said, when it has been
+                            read. Facts as chips, and the figures Shopee shows
+                            only signed-in readers named as absent rather than
+                            rendered as zeroes pretending to be answers. */}
+                        {product.listing && (
+                          <div className="product-listing">
+                            <div className="product-detail-head">
+                              <h4>What the listing says</h4>
+                              {product.listing_fetched_at && (
+                                <small>read {new Date(product.listing_fetched_at).toLocaleString()}</small>
+                              )}
+                            </div>
+                            <div className="product-listing-facts">
+                              {product.listing.discount_percent ? <span>−{product.listing.discount_percent}% off</span> : null}
+                              {product.listing.categories.length > 0 && <span>{product.listing.categories.join(" › ")}</span>}
+                              {product.listing.shop_location && <span>Ships from {product.listing.shop_location}</span>}
+                              {product.listing.variation_count > 1 && <span>{product.listing.variation_count} variations</span>}
+                              {product.listing.voucher_count > 0 && <span>{product.listing.voucher_count} shop {product.listing.voucher_count === 1 ? "voucher" : "vouchers"}</span>}
+                              {product.listing.image_count > 0 && <span>{product.listing.image_count} pictures</span>}
+                              {product.listing.has_video && <span>Has video</span>}
+                              {product.listing.listed_at && <span>Listed {new Date(product.listing.listed_at).toLocaleDateString()}</span>}
+                            </div>
+                            {product.listing.withheld_signed_out.length > 0 && (
+                              <small className="product-listing-note">
+                                Shopee shows {product.listing.withheld_signed_out.join(", ")} only to signed-in visitors; the price here comes from your export.
+                              </small>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>

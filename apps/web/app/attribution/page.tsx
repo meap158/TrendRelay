@@ -105,6 +105,7 @@ export default function AttributionPage() {
   // Opened deliberately, closed when done: bringing rows in is something you do
   // to the table, not another screen to read.
   const [panel, setPanel] = useState<"" | "add">("");
+  const [fetchingListings, setFetchingListings] = useState(false);
   // Whether Shopee can be read directly. Asked here rather than inside the
   // import form so the two Shopee panels agree about it.
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -239,6 +240,26 @@ export default function AttributionPage() {
     succeed(t("attribution.shopee.affiliateLinkCopied"));
   }, [succeed, t]);
 
+  const fetchListings = useCallback(async () => {
+    if (!workspaceId) return;
+    setFetchingListings(true);
+    try {
+      const answer = await json<{ queued: number; with_url: number }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/attribution/shopee/enrichment/refresh`, {
+          method: "POST",
+          body: JSON.stringify({ confirm_external_action: true }),
+        }),
+      );
+      succeed(answer.queued
+        ? `${answer.queued} listing${answer.queued === 1 ? "" : "s"} queued. The worker reads the pages in the background - check back in a few minutes.`
+        : "Every product's listing has already been read. Import more products, or refresh later for moved prices.");
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "Listings could not be queued.");
+    } finally {
+      setFetchingListings(false);
+    }
+  }, [apiFetch, workspaceId, succeed, fail]);
+
 
   if (loading) return <WaitingScreen className="attribution-page" message={t("attribution.opening")} />;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
@@ -293,6 +314,19 @@ export default function AttributionPage() {
               className={buttonClass({ variant: "secondary" })}
               onClick={() => setPanel("add")}
             ><ActionIcon name="add" /> {t("attribution.addProducts")}</button>
+          )}
+          {/* The export prices a product; its page knows the rest. One click
+              queues a polite page read per product still missing its listing
+              - description, pictures, variations, vouchers - and the worker
+              drains them a couple of seconds apart in the background. */}
+          {canImport && products.some((product) => product.product_url) && (
+            <button
+              type="button"
+              className={buttonClass({ variant: "secondary" })}
+              disabled={fetchingListings}
+              title="Read each product's Shopee page for its description, pictures, variations, discount and vouchers. Products already read are skipped."
+              onClick={() => void fetchListings()}
+            ><ActionIcon name="refresh" /> {fetchingListings ? "Queuing…" : "Fetch listing details"}</button>
           )}
 
         </div>

@@ -41,7 +41,7 @@ from trendrelay_api.integrations import shopee_session
 from trendrelay_api.media_models import CreativeAnalysis, MediaAsset
 from trendrelay_api.models import Campaign, PublicationPlan, utc_now
 from trendrelay_api.money import minor_unit_digits
-from trendrelay_api.opportunity_models import ProductOffer
+from trendrelay_api.opportunity_models import Product, ProductOffer
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 router = APIRouter(tags=["attribution"])
@@ -1700,6 +1700,86 @@ def read_shopee_enrichment(
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     return shopee_enrichment.progress(workspace_id)
+
+
+@workspace_router.get("/products/{product_id}/listing")
+def read_product_listing(
+    workspace_id: str,
+    product_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """One product's full stored listing - the row summary's long form."""
+    membership(session, workspace_id, user.id)
+    product = session.scalar(
+        select(Product).where(
+            Product.id == product_id, Product.workspace_id == workspace_id
+        )
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    return {
+        "product_id": product.id,
+        "name": product.name,
+        "product_url": product.product_url,
+        "listing": product.listing,
+        "listing_fetched_at": (
+            product.listing_fetched_at.isoformat()
+            if product.listing_fetched_at else None
+        ),
+    }
+
+
+@workspace_router.post("/shopee/enrichment/refresh")
+def refresh_shopee_listings(
+    workspace_id: str,
+    body: dict[str, Any],
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue a listing read for the products that have never had one.
+
+    The export prices a product; its page knows the rest. Each queued job is
+    one polite anonymous page read, drained by the worker a couple of seconds
+    apart, so a full catalogue refresh is half an hour of background work and
+    zero clicks after this one. Pass refetch: true to re-read products whose
+    listing is already stored - a listing is a snapshot, and discounts and
+    vouchers move.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor"})
+    if not body.get("confirm_external_action"):
+        raise HTTPException(
+            status_code=400,
+            detail="Reading listing pages from Shopee requires explicit confirmation.",
+        )
+    refetch = bool(body.get("refetch"))
+    products = list(session.scalars(
+        select(Product).where(
+            Product.workspace_id == workspace_id,
+            Product.product_url.is_not(None),
+            Product.product_url != "",
+        )
+    ).all())
+    wanted = [
+        product for product in products
+        if refetch or shopee_enrichment.needs_enrichment(product)
+    ]
+    queued = shopee_enrichment.enqueue(
+        workspace_id, wanted, limit=len(wanted), force=refetch,
+    )
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "attribution.shopee_listings_refresh",
+        "product",
+        workspace_id,
+        {"queued": len(queued), "refetch": refetch},
+    )
+    session.commit()
+    return {"queued": len(queued), "with_url": len(products)}
 
 
 @workspace_router.post("/shopee/session/probe")
