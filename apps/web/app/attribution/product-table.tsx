@@ -10,7 +10,7 @@
  * worth copying ended up.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
 import { Card } from "../ui/primitives";
@@ -27,6 +27,7 @@ import {
   type ProductSort,
   type ProductSortKey,
 } from "./sort";
+import { ListingPanel, type FullListing } from "./listing-panel";
 import type { ProductRow } from "./types";
 
 function offerPrice(product: ProductRow): string {
@@ -103,6 +104,7 @@ export function ProductTable({
   onTagOffers,
   onFetchListings,
   listingBusy,
+  onReadListing,
 }: {
   products: ProductRow[];
   onCopyAffiliateLink: (url: string) => void;
@@ -112,6 +114,13 @@ export function ProductTable({
   onFetchListings?: (productIds: string[]) => Promise<void> | void;
   /** Products a listing read is still working through, for the row to say so. */
   listingBusy?: Set<string>;
+  /**
+   * One product's full stored listing - gallery, description, variations.
+   * The rows carry only a summary; the panel asks for the whole record the
+   * first time its row opens, and the answer is a read of our own store,
+   * never a request to Shopee.
+   */
+  onReadListing?: (productId: string) => Promise<FullListing | null>;
   /** Campaigns a product can be promoted by. */
   campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
   /** Which campaigns already promote each offer, keyed by offer id. */
@@ -204,6 +213,34 @@ export function ProductTable({
     with: products.filter((product) => product.listing).length,
     without: products.filter((product) => !product.listing).length,
   }), [products]);
+
+  /**
+   * Full listings for the rows that are open, asked for once each.
+   *
+   * Keyed by fetch moment as well as id, so a listing re-read on the server
+   * is asked for again the next time its row opens rather than served from
+   * a cache that outlived it.
+   */
+  const [fullListings, setFullListings] = useState<Record<string, FullListing | null>>({});
+  const fullListingAsked = useRef(new Set<string>());
+  const listingCacheKey = (product: ProductRow) =>
+    `${product.id}:${product.listing_fetched_at ?? ""}`;
+  useEffect(() => {
+    if (!onReadListing) return;
+    for (const productId of expanded) {
+      const product = products.find((entry) => entry.id === productId);
+      if (!product?.listing) continue;
+      const key = listingCacheKey(product);
+      if (fullListingAsked.current.has(key)) continue;
+      fullListingAsked.current.add(key);
+      void Promise.resolve(onReadListing(productId))
+        .then((full) => setFullListings((current) => ({ ...current, [key]: full })))
+        .catch(() => {
+          // Unknown beats wrong: the next open retries.
+          fullListingAsked.current.delete(key);
+        });
+    }
+  }, [expanded, products, onReadListing]);
 
   function changeSort(column: ProductSortKey) {
     setSort((current) => current.key === column
@@ -661,35 +698,32 @@ export function ProductTable({
                             ))}
                           </ul>
                         ) : <p className="product-no-data">{t("attribution.noOffers")}</p>}
-                        {/* What the product's own page said, when it has been
-                            read. Facts as chips, and the figures Shopee shows
-                            only signed-in readers named as absent rather than
-                            rendered as zeroes pretending to be answers. */}
-                        {product.listing && (
-                          <div className="product-listing">
-                            <div className="product-detail-head">
-                              <h4>What the listing says</h4>
-                              {product.listing_fetched_at && (
-                                <small>read {new Date(product.listing_fetched_at).toLocaleString()}</small>
-                              )}
-                            </div>
-                            <div className="product-listing-facts">
-                              {product.listing.discount_percent ? <span>−{product.listing.discount_percent}% off</span> : null}
-                              {product.listing.categories.length > 0 && <span>{product.listing.categories.join(" › ")}</span>}
-                              {product.listing.shop_location && <span>Ships from {product.listing.shop_location}</span>}
-                              {product.listing.variation_count > 1 && <span>{product.listing.variation_count} variations</span>}
-                              {product.listing.voucher_count > 0 && <span>{product.listing.voucher_count} shop {product.listing.voucher_count === 1 ? "voucher" : "vouchers"}</span>}
-                              {product.listing.image_count > 0 && <span>{product.listing.image_count} pictures</span>}
-                              {product.listing.has_video && <span>Has video</span>}
-                              {product.listing.listed_at && <span>Listed {new Date(product.listing.listed_at).toLocaleDateString()}</span>}
-                            </div>
-                            {product.listing.withheld_signed_out.length > 0 && (
-                              <small className="product-listing-note">
-                                Shopee shows {product.listing.withheld_signed_out.join(", ")} only to signed-in visitors; the price here comes from your export.
-                              </small>
-                            )}
-                          </div>
-                        )}
+                        {/* What the product's own page said, laid out the way
+                            the page lays it out: gallery beside the buying
+                            facts, details and description underneath. The
+                            full record loads from our own store the first
+                            time the row opens. */}
+                        {product.listing && (() => {
+                          const full = fullListings[listingCacheKey(product)];
+                          if (full) {
+                            return (
+                              <div className="product-listing">
+                                <div className="product-detail-head">
+                                  <h4>What the listing says</h4>
+                                  {product.listing_fetched_at && (
+                                    <small>read {new Date(product.listing_fetched_at).toLocaleString()}</small>
+                                  )}
+                                </div>
+                                <ListingPanel product={product} listing={full} />
+                              </div>
+                            );
+                          }
+                          return (
+                            <small className="product-listing-note">
+                              {onReadListing ? "Opening the stored listing…" : null}
+                            </small>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

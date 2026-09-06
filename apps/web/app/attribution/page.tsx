@@ -26,6 +26,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
+import type { FullListing } from "./listing-panel";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
 import { buttonClass } from "../ui/button";
@@ -261,6 +262,13 @@ export default function AttributionPage() {
     listingBusyBefore.current = listingBusy.size;
   }, [listingBusy.size, refresh]);
 
+  const readListing = useCallback(async (productId: string) => {
+    const body = await json<{ listing: FullListing | null }>(
+      await apiFetch(`/api/workspaces/${workspaceId}/attribution/products/${productId}/listing`),
+    );
+    return body.listing;
+  }, [apiFetch, workspaceId]);
+
   const fetchListings = useCallback(async (productIds?: string[]) => {
     if (!workspaceId) return;
     setFetchingListings(true);
@@ -395,6 +403,7 @@ export default function AttributionPage() {
           onTagOffers={tagOffers}
           onFetchListings={canImport ? fetchListings : undefined}
           listingBusy={listingBusy}
+          onReadListing={readListing}
         />
       </section>
       </>}
