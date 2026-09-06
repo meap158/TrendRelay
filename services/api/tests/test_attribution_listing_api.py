@@ -129,6 +129,50 @@ def test_a_named_selection_is_read_fresh_and_only_it(monkeypatch) -> None:
     assert plain not in calls[0]["ids"]
 
 
+IMPORT_CSV = (
+    "Item Id,Item Name,Price,Sales,Shop Name,Commission Rate,"
+    "Commission,Product Link,Offer Link\n"
+    "6092444835,A pyjama set,\"89,0k\",10k+,AMAKA.VN,10%,"
+    "₫8.900,https://shopee.vn/product/36706472/6092444835,"
+    "https://s.shopee.vn/19ioLXYrR\n"
+)
+
+
+def test_an_import_queues_listing_reads_by_default(monkeypatch) -> None:
+    """The other half of the import, without a second step.
+
+    The export knows a product's name and price; its page knows the rest.
+    Every import source queues the same reads unless the toggle says not to -
+    and the response counts them, so the screen can say they are coming.
+    """
+    workspace_id = make_workspace()
+    calls: list[list[str]] = []
+
+    def fake_enqueue(ws, products, **_kwargs):
+        calls.append([product.name for product in products])
+        return [f"job-{index}" for index in range(len(products))]
+
+    monkeypatch.setattr(attribution_api.shopee_enrichment, "enqueue", fake_enqueue)
+    base = f"/api/workspaces/{workspace_id}/attribution/shopee/import"
+
+    imported = request("POST", base, json={
+        "csv_text": IMPORT_CSV, "confirm_external_action": True,
+    })
+    assert imported.status_code == 201, imported.text
+    assert imported.json()["listing_jobs"] == 1
+    assert calls == [["A pyjama set"]]
+
+    # The toggle off is the deliberate choice, and it queues nothing.
+    calls.clear()
+    silent = request("POST", base, json={
+        "csv_text": IMPORT_CSV, "confirm_external_action": True,
+        "fetch_listings": False,
+    })
+    assert silent.status_code == 201
+    assert silent.json()["listing_jobs"] == 0
+    assert calls == []
+
+
 def test_one_products_full_listing_reads_back(monkeypatch) -> None:
     workspace_id = make_workspace()
     product_id = add_product(

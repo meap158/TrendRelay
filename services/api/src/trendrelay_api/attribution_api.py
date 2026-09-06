@@ -1106,6 +1106,13 @@ class ShopeeImport(ShopeeImportSource):
     #: The workbook or export this batch was read from, recorded on each product
     #: so the catalogue can be filtered to one import. A paste has none.
     filename: str | None = Field(default=None, max_length=260)
+    #: Read each imported product's listing page too, on by default: the
+    #: export knows a product's name and price, its page knows everything
+    #: else, and an import that stopped at half the answer made everyone
+    #: press Fetch listing details as a second step. Every source - export
+    #: file, pasted rows, pasted links - queues the same reads, and products
+    #: already carrying a listing are skipped, so a re-import stays cheap.
+    fetch_listings: bool = True
 
 
 class ShopeeOfferPageOpen(BaseModel):
@@ -1313,10 +1320,28 @@ def import_shopee_offers(
     # The import and its audit are one transaction. Jobs read through another
     # session, so only queue them after both facts are durable.
     session.commit()
+    listing_jobs: list[str] = []
+    if body.fetch_listings:
+        touched = {
+            str(link["product_id"])
+            for link in outcome.affiliate_links
+            if link.get("product_id")
+        }
+        if touched:
+            targets = list(session.scalars(
+                select(Product).where(
+                    Product.workspace_id == workspace_id,
+                    Product.id.in_(sorted(touched)),
+                )
+            ).all())
+            listing_jobs = shopee_enrichment.enqueue(workspace_id, targets)
     return {
         "created": outcome.created,
         "already_present": outcome.already_present,
         "affiliate_links": outcome.affiliate_links,
+        # How many listing reads this import queued, so the screen can say
+        # the pictures and descriptions are on their way.
+        "listing_jobs": len(listing_jobs),
         # Which campaigns may now promote what was imported, per campaign, so
         # the screen can say "100 imported, 100 tagged to Launch" rather than
         # leaving the second half to be found elsewhere.

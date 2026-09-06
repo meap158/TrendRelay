@@ -168,6 +168,11 @@
 .listing-description-clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
 .listing-description-toggle { border: 0; padding: 2px 0; background: none; color: var(--link); font-size: 11px; cursor: pointer; }
 .listing-description-toggle:hover { text-decoration: underline; }
+/* The import's own listing toggle: a checkbox with its words and its cost on
+   one quiet line each, sitting between the campaign choice and the button. */
+.shopee-import-listings { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: center; margin-block: 10px; font-size: 12px; color: var(--text); cursor: pointer; }
+.shopee-import-listings input { margin: 0; cursor: pointer; }
+.shopee-import-listings small { grid-column: 2; color: var(--muted); font-size: 10px; line-height: 1.4; }
 @media (max-width: 700px) {
   .listing-pdp { grid-template-columns: 1fr; }
 }

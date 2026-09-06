@@ -53,6 +53,10 @@ export function ShopeeImport({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState<"" | "open" | "preview" | "import">("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  /** On by default: the export knows name and price, the page knows the
+      rest, and stopping at half the answer made Fetch listing details a
+      second step everyone had to remember. */
+  const [fetchListings, setFetchListings] = useState(true);
   /**
    * Campaigns these products will be allowed to promote.
    *
@@ -152,6 +156,7 @@ export function ShopeeImport({
             ...source,
             confirm_external_action: true,
             campaign_ids: [...importFor],
+            fetch_listings: fetchListings,
             // The file this batch came from, so the catalogue can be filtered
             // back to it. A pasted export or links have no name to record.
             filename: workbookName || null,
@@ -164,10 +169,13 @@ export function ShopeeImport({
       const tagged = Object.values(
         (payload.tagged_to_campaigns ?? {}) as Record<string, { tagged: number }>,
       ).reduce((total, item) => total + (item?.tagged ?? 0), 0);
-      succeed(tagged
+      const listingNote = payload.listing_jobs
+        ? ` ${payload.listing_jobs} listing${payload.listing_jobs === 1 ? "" : "s"} queued - pictures and descriptions arrive in the background.`
+        : "";
+      succeed((tagged
         ? `${t("attribution.shopee.importedCount", { count: payload.created })} `
           + `${tagged} tagged to ${importFor.size} campaign${importFor.size === 1 ? "" : "s"}.`
-        : t("attribution.shopee.importedCount", { count: payload.created }));
+        : t("attribution.shopee.importedCount", { count: payload.created })) + listingNote);
       setXlsxBase64("");
       setCsvText("");
       setWorkbookName("");
@@ -298,6 +306,19 @@ export function ShopeeImport({
             : "Tick none and the products are filed untagged - no campaign will be able to use them until you tag them."}</small>
         </fieldset>
       )}
+      {/* The other half of the import, offered where the import is: the
+          export knows a product's name and price, its Shopee page knows the
+          pictures, description, variations and vouchers. On by default -
+          skipping it is the deliberate choice. */}
+      <label className="shopee-import-listings">
+        <input
+          type="checkbox"
+          checked={fetchListings}
+          onChange={(event) => setFetchListings(event.target.checked)}
+        />
+        <span>Fetch listing details after import</span>
+        <small>Reads each product&apos;s Shopee page in the background for its pictures, description, variations and vouchers. Products already read are skipped.</small>
+      </label>
       <form onSubmit={submit}>
         <button
           className="ui-button ui-button-primary ui-button-md"

@@ -151,6 +151,7 @@ def import_rows(
             outcome.already_present += 1
             outcome.affiliate_links.append({
                 "offer_id": existing.id,
+                "product_id": product.id,
                 "url": existing.affiliate_url,
                 "product": product.name,
             })
@@ -178,6 +179,7 @@ def import_rows(
         outcome.created += 1
         outcome.affiliate_links.append({
             "offer_id": offer.id,
+            "product_id": product.id,
             "url": offer.affiliate_url,
             "product": product.name,
         })
