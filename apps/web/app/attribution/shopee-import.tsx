@@ -19,7 +19,9 @@ type Preview = {
 type Outcome = {
   created: number;
   already_present: number;
-  affiliate_links: { offer_id: string; url: string; product: string }[];
+  affiliate_links: {
+    offer_id: string; product_id: string; url: string; product: string;
+  }[];
   problems: string[];
 };
 

@@ -53,8 +53,12 @@ def test_an_export_row_becomes_a_product_and_offer_with_shopees_link(session) ->
     assert product.name == "Giấy ăn rút Topgia"
     assert product.marketplace == "shopee"
     assert offer.affiliate_url == "https://s.shopee.vn/70JJHPqb6V"
+    # The product too, not only the offer: the import queues a listing read
+    # per product now, and the caller has to be able to say which link belongs
+    # to which of them without a second lookup.
     assert outcome.affiliate_links == [{
         "offer_id": offer.id,
+        "product_id": product.id,
         "url": "https://s.shopee.vn/70JJHPqb6V",
         "product": "Giấy ăn rút Topgia",
     }]
