@@ -319,7 +319,12 @@ export function JobsProvider({ children }: { children: ReactNode }) {
           .then(res => res.json())
           .then(data => (data.jobs || []).map((j: any) => {
             const name = j.payload?.product_name;
-            const batchTotal = Number(j.payload?.batch?.total ?? 0);
+            // A job without a marker still joins a card: several hundred
+            // individually-titled rows is the failure mode this category
+            // exists to avoid, whatever queued them. Total 0 lets the card
+            // count its own rows.
+            const batch = j.payload?.batch ?? { id: "listing-unmarked", total: 0 };
+            const batchTotal = Number(batch.total ?? 0);
             const active = ["queued", "running"].includes(j.status);
             // A batch is titled for the batch - its card counts what is left
             // on its own line - while a single read carries the product's
@@ -337,7 +342,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
               title: batchTotal > 1 ? `Shopee listings · ${batchTotal} products` : single,
               error: j.error,
               href: "/attribution",
-              raw: j,
+              raw: { ...j, payload: { ...(j.payload ?? {}), batch } },
             };
           }))
           .catch(() => []);

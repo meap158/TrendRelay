@@ -102,6 +102,7 @@ export function ProductTable({
   campaignsByOffer = {},
   onTagOffers,
   onFetchListings,
+  listingBusy,
 }: {
   products: ProductRow[];
   onCopyAffiliateLink: (url: string) => void;
@@ -109,6 +110,8 @@ export function ProductTable({
   onCopySelected?: (productIds: string[]) => void;
   /** Read these products' Shopee pages for their listings, fresh. */
   onFetchListings?: (productIds: string[]) => Promise<void> | void;
+  /** Products a listing read is still working through, for the row to say so. */
+  listingBusy?: Set<string>;
   /** Campaigns a product can be promoted by. */
   campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
   /** Which campaigns already promote each offer, keyed by offer id. */
@@ -499,6 +502,12 @@ export function ProductTable({
                               : null,
                           ].filter(Boolean).join(" · ")}
                           {product.product_form && ` (${product.product_form})`}
+                          {/* Beside the marketplace tag, the way an asset
+                              wears its effects render: quiet, and gone the
+                              moment the read lands. */}
+                          {listingBusy?.has(product.id) && (
+                            <span className="product-listing-loading"> · reading listing…</span>
+                          )}
                         </small>
                       </span>
                       <span

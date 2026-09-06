@@ -21,9 +21,10 @@
  */
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
@@ -240,6 +241,26 @@ export default function AttributionPage() {
     succeed(t("attribution.shopee.affiliateLinkCopied"));
   }, [succeed, t]);
 
+  /**
+   * Which products a listing read is still working through, off the same
+   * poll the bell draws from - so the row can say it is loading, the way an
+   * asset shows its effects render.
+   */
+  const { jobs: workspaceJobs } = useJobs();
+  const listingBusy = useMemo(() => new Set<string>(
+    workspaceJobs
+      .filter((job) => job.category === "listing" && ["queued", "running"].includes(job.status))
+      .map((job) => job.raw?.payload?.product_id as string | undefined)
+      .filter((id): id is string => Boolean(id)),
+  ), [workspaceJobs]);
+  // When the last read lands, the table is re-read once, so the new facts
+  // appear without anyone pressing refresh.
+  const listingBusyBefore = useRef(0);
+  useEffect(() => {
+    if (listingBusyBefore.current > 0 && listingBusy.size === 0) void refresh();
+    listingBusyBefore.current = listingBusy.size;
+  }, [listingBusy.size, refresh]);
+
   const fetchListings = useCallback(async (productIds?: string[]) => {
     if (!workspaceId) return;
     setFetchingListings(true);
@@ -373,6 +394,7 @@ export default function AttributionPage() {
           campaignsByOffer={tagChoices.by_offer}
           onTagOffers={tagOffers}
           onFetchListings={canImport ? fetchListings : undefined}
+          listingBusy={listingBusy}
         />
       </section>
       </>}

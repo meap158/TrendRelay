@@ -121,6 +121,14 @@
 .product-listing-facts { display: flex; flex-wrap: wrap; gap: 4px; }
 .product-listing-facts > span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); font-size: 10px; white-space: nowrap; max-inline-size: 320px; overflow: hidden; text-overflow: ellipsis; }
 .product-listing-note { color: var(--muted); font-size: 10px; line-height: 1.4; }
+/* The row's own sign that its page is being read right now: the link tone
+   for work underway, breathing rather than spinning - a table of these
+   should murmur, not strobe. */
+.product-listing-loading { color: var(--link); font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) {
+  .product-listing-loading { animation: product-listing-pulse 1.6s ease-in-out infinite; }
+  @keyframes product-listing-pulse { 50% { opacity: 0.45; } }
+}
 
 @media (max-width: 700px) {
 }
