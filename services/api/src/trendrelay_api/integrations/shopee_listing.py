@@ -151,9 +151,13 @@ def distill(
         "shop_id": shop_id,
         "item_id": item_id,
         "title": (item.get("title") or "")[:500] or None,
-        "description": (item.get("description") or "")[:6000] or None,
+        # The whole description and every picture: the point of reading the
+        # page is to hold what it says, and a listing's own description and
+        # gallery are the two fields somebody writes posts from. The bounds
+        # left are sanity rails, far above anything a real listing carries.
+        "description": (item.get("description") or "")[:40000] or None,
         "images": [
-            url for url in (_image_url(value) for value in (item.get("images") or [])[:12]) if url
+            url for url in (_image_url(value) for value in (item.get("images") or [])[:60]) if url
         ],
         "brand": item.get("brand") or None,
         "discount_percent": item.get("show_discount") or None,
@@ -171,6 +175,15 @@ def distill(
             {
                 "name": str(entry.get("name") or "")[:120],
                 "options": [str(option)[:120] for option in (entry.get("options") or [])[:30]],
+                # Each option's own thumbnail, when the tier carries them -
+                # a colour variation is a picture before it is a word.
+                "images": [
+                    url
+                    for url in (
+                        _image_url(value) for value in (entry.get("images") or [])[:30]
+                    )
+                    if url
+                ],
             }
             for entry in (item.get("tier_variations") or [])[:5]
         ],

@@ -137,6 +137,8 @@ export function ProductTable({
   const [filterFile, setFilterFile] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  /** Whether a product's listing has been read: this table's own kind axis. */
+  const [listingFilter, setListingFilter] = useState<"all" | "with" | "without">("all");
   /** The table's own width, so a spanning row cannot fall out of step with it. */
   const columnCount = onTagOffers ? 9 : 8;
   const [tagging, setTagging] = useState(false);
@@ -186,11 +188,22 @@ export function ProductTable({
     // that drifts.
     const filtered = products.filter((product) => productMatches(product, {
       query, campaign: filterCampaign, file: filterFile, from: filterFrom, to: filterTo,
-    }, campaignsByOffer));
+    }, campaignsByOffer))
+      // Layered under the shared rules rather than inside them: whether a
+      // listing has been read is this table's own axis, the way the Library
+      // splits videos from images.
+      .filter((product) => listingFilter === "all"
+        || (listingFilter === "with" ? Boolean(product.listing) : !product.listing));
     return sortProducts(filtered, sort);
   }, [
-    products, query, sort, filterCampaign, filterFile, filterFrom, filterTo, campaignsByOffer,
+    products, query, sort, filterCampaign, filterFile, filterFrom, filterTo,
+    campaignsByOffer, listingFilter,
   ]);
+  const listingCounts = useMemo(() => ({
+    all: products.length,
+    with: products.filter((product) => product.listing).length,
+    without: products.filter((product) => !product.listing).length,
+  }), [products]);
 
   function changeSort(column: ProductSortKey) {
     setSort((current) => current.key === column
@@ -251,7 +264,8 @@ export function ProductTable({
       title={t("attribution.productCount", {
         // Reflect any narrowing - the text search or any of the filters - so a
         // filtered-down list reports what it is showing, not the whole catalogue.
-        count: (query.trim() || filterCampaign || filterFile || filterFrom || filterTo)
+        count: (query.trim() || filterCampaign || filterFile || filterFrom || filterTo
+          || listingFilter !== "all")
           ? shown.length
           : products.length,
       })}
@@ -268,6 +282,27 @@ export function ProductTable({
           placeholder={t("attribution.searchProducts")}
           aria-label={t("attribution.searchProducts")}
         />
+        {/* The listing axis, worn the way the Library wears its kinds: every
+            product, the ones whose page has been read, and the ones still to
+            read - each with its count, so "how much is enriched" is the
+            filter bar itself. Drawn once any product has a page to read. */}
+        {(listingCounts.with > 0 || products.some((product) => product.product_url)) && (
+          <div className="product-listing-filter" role="group" aria-label="Filter by listing">
+            {([
+              ["all", "All", listingCounts.all],
+              ["with", "With listing", listingCounts.with],
+              ["without", "No listing", listingCounts.without],
+            ] as const).map(([value, label, count]) => (
+              <button
+                key={value}
+                type="button"
+                className={listingFilter === value ? "selected" : ""}
+                aria-pressed={listingFilter === value}
+                onClick={() => setListingFilter(value)}
+              ><span>{label}</span><b>{count}</b></button>
+            ))}
+          </div>
+        )}
         {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates) && (
           <div className="product-filters">
             {campaigns.length > 0 && (
@@ -447,7 +482,6 @@ export function ProductTable({
             {shown.map((product) => {
               const open = expanded.has(product.id);
               const detailId = `product-detail-${product.id}`;
-              const isShopee = product.marketplace.toLowerCase() === "shopee";
               const directOffers = product.offers.filter(
                 (offer) => offer.network.toLowerCase() === "shopee",
               );
@@ -475,14 +509,16 @@ export function ProductTable({
                       aria-controls={detailId}
                       onClick={() => toggle(product.id)}
                     >
-                      {/* Shopee exports contain no image URL. Do not reserve a
-                          blank thumbnail for data the file cannot provide. */}
+                      {/* A picture when the listing gave one; the product's
+                          own initial when not - every row wears the same
+                          silhouette, and a wall of mixed rows stays a wall
+                          of rows rather than a ragged edge. */}
                       {product.image_url
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img className="product-thumb" src={product.image_url} alt="" loading="lazy" />
-                        : !isShopee
-                          ? <span className="product-thumb product-thumb-empty" aria-hidden="true" />
-                          : null}
+                        : <span className="product-thumb product-thumb-initial" aria-hidden="true">
+                            {(product.name.trim()[0] ?? "?").toUpperCase()}
+                          </span>}
                       {/* Name over subtitle, beside the picture rather than
                           after it - the three are a row of two things, not a
                           row of three. */}

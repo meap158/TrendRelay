@@ -263,6 +263,16 @@
    in does not jump as images arrive. */
 .product-thumb { inline-size: 32px; block-size: 32px; flex: none; border-radius: var(--radius-sm); object-fit: cover; background: var(--panel-raised); }
 .product-thumb-empty { display: inline-block; box-shadow: inset 0 0 0 1px var(--line); }
+/* The stand-in for a picture not yet fetched: the product's own initial on
+   the same 32px silhouette, so a mixed table keeps one left edge. */
+.product-thumb-initial { display: grid; place-items: center; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); font-size: 13px; font-weight: 650; }
+/* The listing axis, dressed like the Library's kind tabs and the Downloads
+   queue filters: quiet buttons, counts beside the words. */
+.product-listing-filter { display: flex; flex: none; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px; }
+.product-listing-filter button { display: inline-flex; gap: 5px; align-items: baseline; border: 0; border-radius: calc(var(--radius-sm) - 2px); padding: 4px 9px; color: var(--muted); background: none; font-size: 11px; cursor: pointer; }
+.product-listing-filter button b { font-variant-numeric: tabular-nums; font-weight: 650; }
+.product-listing-filter button:hover { color: var(--text); }
+.product-listing-filter button.selected { color: var(--text); background: var(--panel-raised); box-shadow: inset 0 0 0 1px var(--line); }
 /* The row's disclosure button, named for this table and reset here.
  *
  * Both this sheet and a catalog one used to declare `.catalog-work-toggle`, and

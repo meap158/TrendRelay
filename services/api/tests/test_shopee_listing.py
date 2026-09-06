@@ -100,7 +100,7 @@ def test_the_embedded_state_becomes_one_bounded_listing() -> None:
     ]
     assert listing["categories"] == ["Nhà cửa & Đời sống"]
     assert listing["tier_variations"] == [
-        {"name": "Phân loại", "options": ["10 bịch", "20 gói"]}
+        {"name": "Phân loại", "options": ["10 bịch", "20 gói"], "images": []}
     ]
     assert listing["models"] == ["10 bịch", "20 gói"]
     assert listing["vouchers"][0]["code"] == "TOPGTGH"
@@ -108,6 +108,40 @@ def test_the_embedded_state_becomes_one_bounded_listing() -> None:
     assert listing["listed_at"].startswith("2026-05-21")
     # What the signed-out page withholds is named, not stored as answers.
     assert listing["withheld_signed_out"] == ["price", "stock", "sold", "rating"]
+
+
+def test_the_whole_gallery_and_description_are_kept() -> None:
+    """Every picture and the full text: these are what posts get written from.
+
+    The old caps - twelve images, six thousand characters - were tuned for a
+    row summary and quietly threw away exactly what the read exists to hold.
+    Variation thumbnails ride along too: a colour is a picture first.
+    """
+    state = {
+        "item": {
+            "items": {
+                "2": {
+                    "title": "Đầm hoa",
+                    "description": "x" * 9000,
+                    "images": [f"hash-{index}" for index in range(20)],
+                    "tier_variations": [{
+                        "name": "Màu", "options": ["Đỏ", "Xanh"],
+                        "images": ["tier-a", "tier-b"],
+                    }],
+                    "item_rating": {},
+                }
+            }
+        }
+    }
+    listing = shopee_listing.fetch_listing(
+        "https://shopee.vn/product/1/2", opener=opener_for(page_for(state)),
+    )
+    assert len(listing["images"]) == 20
+    assert len(listing["description"]) == 9000
+    assert listing["tier_variations"][0]["images"] == [
+        "https://down-vn.img.susercontent.com/file/tier-a",
+        "https://down-vn.img.susercontent.com/file/tier-b",
+    ]
 
 
 def test_a_challenged_shell_is_refused_rather_than_stored() -> None:
