@@ -6,6 +6,7 @@ import argparse
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -116,6 +117,28 @@ def process_available() -> int:
         for job_id in abandon_expired_jobs(kind):
             print(f"Abandoned {kind} job {job_id}: its worker never came back.", flush=True)
 
+    # Listing reads run beside the pass, not at their turn in it. Each is a
+    # couple of seconds of polite HTTP - yet in a serial pass a hundred media
+    # ingests ahead of them kept four hundred "waiting" with nothing wrong.
+    # The lease makes a cross-thread claim safe (a job claimed here is not
+    # claimed again by anything else), two workers keep the batch moving
+    # while each job's own politeness pause still spaces the requests, and
+    # the join at the end keeps the pass's return honest.
+    enrich_ids = recoverable_job_ids("shopee_enrich")
+    enrich_lane = threading.Thread(
+        target=lambda: run_job_batch(
+            enrich_ids,
+            run_enrich_job,
+            label="Shopee listing",
+            workers=2,
+            refill=lambda: recoverable_job_ids("shopee_enrich"),
+        ),
+        name="shopee-listing-lane",
+        daemon=True,
+    )
+    if enrich_ids:
+        enrich_lane.start()
+
     download_ids = recoverable_job_ids("douyin_download")
     research_ids = recoverable_job_ids("trend_research")
     publishing_ids = recoverable_job_ids("social_publish")
@@ -123,7 +146,6 @@ def process_available() -> int:
     media_ids = recoverable_job_ids("media_ingest")
     blur_ids = recoverable_job_ids("media_face_blur")
     effect_ids = recoverable_job_ids(EFFECT_JOB_KIND)
-    enrich_ids = recoverable_job_ids("shopee_enrich")
     caption_ids = recoverable_job_ids(CAPTION_JOB_KIND)
     media_ai_setup_ids = recoverable_job_ids(MEDIA_AI_SETUP_KIND)
     enrichment_ids = recoverable_job_ids(ENRICHMENT_JOB_KIND)
@@ -136,8 +158,15 @@ def process_available() -> int:
         run_publish_job(job_id)
     for job_id in render_ids:
         run_render_job(job_id)
-    for job_id in media_ids:
-        run_ingest_job(job_id)
+    # Ingests are hash-and-copy, which is what the adaptive pool was sized
+    # for - a hundred of them one at a time is hours of a queue that
+    # parallelises fine, and everything scheduled after them waited it out.
+    run_job_batch(
+        media_ids,
+        run_ingest_job,
+        label="Library ingest",
+        refill=lambda: recoverable_job_ids("media_ingest"),
+    )
     for job_id in blur_ids:
         run_blur_job(job_id)
     # Renders are the long queue - an effect over a selection is hundreds of
@@ -149,8 +178,6 @@ def process_available() -> int:
         label="Effect render",
         refill=lambda: recoverable_job_ids(EFFECT_JOB_KIND),
     )
-    for job_id in enrich_ids:
-        run_enrich_job(job_id)
     run_job_batch(caption_ids, run_caption_job, label="Caption render")
     # ElevenLabs plans enforce their own concurrency limits. Two requests keep
     # ordinary plans moving without turning a large selection into a burst of
@@ -169,6 +196,10 @@ def process_available() -> int:
             run_media_ai_setup_job(job_id)
         except Exception as error:
             print(f"Media analysis setup {job_id} failed: {error}", flush=True)
+    # The listing lane finishes on its own clock; waiting here keeps the
+    # pass's count honest and the loop's idle sleep meaningful.
+    if enrich_lane.is_alive():
+        enrich_lane.join()
     return (
         len(download_ids)
         + len(research_ids)
