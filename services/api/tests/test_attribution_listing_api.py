@@ -104,6 +104,31 @@ def test_refresh_requires_consent_then_queues_the_unread(monkeypatch) -> None:
     assert calls[-1]["force"] is True
 
 
+def test_a_named_selection_is_read_fresh_and_only_it(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    plain = add_product(workspace_id)
+    settled = add_product(
+        workspace_id, listing={"title": "done"}, url="https://shopee.vn/product/3/4"
+    )
+    base = f"/api/workspaces/{workspace_id}/attribution/shopee/enrichment/refresh"
+    calls: list[dict] = []
+
+    def fake_enqueue(ws, products, *, limit, force):
+        calls.append({"ids": sorted(p.id for p in products), "force": force})
+        return [f"job-{index}" for index in range(len(products))]
+
+    monkeypatch.setattr(attribution_api.shopee_enrichment, "enqueue", fake_enqueue)
+    answer = request("POST", base, json={
+        "confirm_external_action": True,
+        # The settled one included on purpose: choosing it IS the request to
+        # re-read it, without also sweeping the rest of the catalogue.
+        "product_ids": [settled],
+    })
+    assert answer.json()["queued"] == 1
+    assert calls == [{"ids": [settled], "force": True}]
+    assert plain not in calls[0]["ids"]
+
+
 def test_one_products_full_listing_reads_back(monkeypatch) -> None:
     workspace_id = make_workspace()
     product_id = add_product(

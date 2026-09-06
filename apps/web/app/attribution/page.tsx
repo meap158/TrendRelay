@@ -240,19 +240,26 @@ export default function AttributionPage() {
     succeed(t("attribution.shopee.affiliateLinkCopied"));
   }, [succeed, t]);
 
-  const fetchListings = useCallback(async () => {
+  const fetchListings = useCallback(async (productIds?: string[]) => {
     if (!workspaceId) return;
     setFetchingListings(true);
     try {
       const answer = await json<{ queued: number; with_url: number }>(
         await apiFetch(`/api/workspaces/${workspaceId}/attribution/shopee/enrichment/refresh`, {
           method: "POST",
-          body: JSON.stringify({ confirm_external_action: true }),
+          body: JSON.stringify({
+            confirm_external_action: true,
+            // Named products are read fresh, snapshot or not; without names
+            // the whole catalogue's unread products queue.
+            ...(productIds?.length ? { product_ids: productIds } : {}),
+          }),
         }),
       );
       succeed(answer.queued
-        ? `${answer.queued} listing${answer.queued === 1 ? "" : "s"} queued. The worker reads the pages in the background - check back in a few minutes.`
-        : "Every product's listing has already been read. Import more products, or refresh later for moved prices.");
+        ? `${answer.queued} listing${answer.queued === 1 ? "" : "s"} queued. Progress is in the bell; the pages are read in the background.`
+        : productIds?.length
+          ? "None of the selected products carries a Shopee page link."
+          : "Every product's listing has already been read. Import more products, or refresh later for moved prices.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Listings could not be queued.");
     } finally {
@@ -365,6 +372,7 @@ export default function AttributionPage() {
           campaigns={tagChoices.campaigns}
           campaignsByOffer={tagChoices.by_offer}
           onTagOffers={tagOffers}
+          onFetchListings={canImport ? fetchListings : undefined}
         />
       </section>
       </>}

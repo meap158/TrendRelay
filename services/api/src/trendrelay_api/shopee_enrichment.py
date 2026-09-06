@@ -79,14 +79,23 @@ def enqueue(
     snapshot, and the deliberate refresh is the one caller allowed to say the
     old one no longer serves.
     """
-    queued: list[str] = []
+    wanted: list[Product] = []
     for product in products:
-        if len(queued) >= limit:
+        if len(wanted) >= limit:
             break
         if not force and not needs_enrichment(product):
             continue
         if force and not product.product_url:
             continue
+        wanted.append(product)
+    # One batch marker across the run, sized before anything is queued: the
+    # notification bell folds jobs sharing it into one card with a live
+    # "n of total done", and a total counted as jobs land would move under
+    # the card it is drawn on. A run of one carries it too - the bell shows
+    # a single job as its own row, full product name and all.
+    batch = {"id": f"shopee-listing-{token_urlsafe(6)}", "total": len(wanted)}
+    queued: list[str] = []
+    for product in wanted:
         job_id = f"shopee-enrich-{token_urlsafe(8)}"
         create_job_record(
             job_id,
@@ -95,7 +104,11 @@ def enqueue(
             {
                 "workspace_id": workspace_id,
                 "product_id": product.id,
+                # Carried on the job so a notification can name the product
+                # without a join at every poll.
+                "product_name": product.name,
                 "url": product.product_url,
+                "batch": batch,
             },
             # Once more, not three times. A page that did not answer is usually
             # a page that will not answer, and a session that has expired will
@@ -105,6 +118,35 @@ def enqueue(
         )
         queued.append(job_id)
     return queued
+
+
+def recent_jobs(
+    workspace_id: str, *, limit: int = 250, factory: Any = SessionFactory
+) -> list[dict[str, Any]]:
+    """The rows the notification bell draws, compact on purpose.
+
+    Each job carries the product's name and its batch marker, which is all a
+    notification needs: a run of one shows the product in full, a run of many
+    folds into one card counting how many are left. Results and full payloads
+    stay behind - the bell is polled every few seconds from every tab.
+    """
+    from trendrelay_api.jobs import list_job_records
+
+    rows = []
+    for job in list_job_records(workspace_id, JOB_KIND, limit, factory=factory):
+        payload = job.get("payload") or {}
+        rows.append({
+            "id": job.get("id"),
+            "status": job.get("status"),
+            "created_at": job.get("created_at"),
+            "error": job.get("error"),
+            "payload": {
+                "batch": payload.get("batch"),
+                "product_id": payload.get("product_id"),
+                "product_name": payload.get("product_name"),
+            },
+        })
+    return rows
 
 
 def progress(workspace_id: str, *, limit: int = 200, factory: Any = SessionFactory) -> dict:

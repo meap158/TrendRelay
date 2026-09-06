@@ -89,6 +89,34 @@ def test_only_products_still_missing_something_are_queued(factory) -> None:
     assert len(forced) == 1
 
 
+def test_a_run_shares_one_batch_marker_sized_before_anything_queues(factory) -> None:
+    """The bell folds jobs sharing a batch into one how-many-left card."""
+    products = [
+        Product(
+            workspace_id="w", catalog_key=f"k{index}", name=f"Product {index}",
+            marketplace="shopee", product_url=f"https://shopee.vn/product/1/{index}",
+            created_by="u",
+        )
+        for index in range(3)
+    ]
+
+    queued = enrichment.enqueue("w", products, factory=factory)
+
+    payloads = [get_job_record(job_id, factory=factory)["payload"] for job_id in queued]
+    batches = {payload["batch"]["id"] for payload in payloads}
+    assert len(batches) == 1
+    assert all(payload["batch"]["total"] == 3 for payload in payloads)
+    # The name rides the job so a notification can say which product without
+    # a join at every poll.
+    assert payloads[0]["product_name"] == "Product 0"
+
+    rows = enrichment.recent_jobs("w", factory=factory)
+    assert len(rows) == 3
+    assert rows[0]["payload"]["batch"]["total"] == 3
+    assert rows[0]["payload"]["product_name"].startswith("Product ")
+    assert "url" not in rows[0]["payload"]
+
+
 def test_a_product_with_no_page_to_read_is_not_queued(factory) -> None:
     # A pasted link that could not be resolved has nowhere to send a browser.
     orphan = Product(

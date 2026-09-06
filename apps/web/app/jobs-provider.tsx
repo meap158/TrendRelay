@@ -11,7 +11,7 @@ import { useWorkspace } from "./workspace-provider";
 type Translate = (path: string, values?: Record<string, string | number>) => string;
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur"
-  | "edit" | "captions" | "transcription" | "voice" | "processing";
+  | "edit" | "captions" | "transcription" | "voice" | "processing" | "listing";
 
 /**
  * What an editing-suite render is called while it runs, and once it is done.
@@ -311,6 +311,37 @@ export function JobsProvider({ children }: { children: ReactNode }) {
           })))
           .catch(() => []);
         fetchPromises.push(fetchLibrary);
+        // Shopee listing reads. Each job carries its product's full name and
+        // a batch marker, so a run of one shows the product itself and a run
+        // of many folds into one card counting how many are left - the same
+        // reading an effects batch gets.
+        const fetchListings = apiFetch(`/api/workspaces/${activeWorkspaceId}/attribution/shopee/enrichment/jobs`)
+          .then(res => res.json())
+          .then(data => (data.jobs || []).map((j: any) => {
+            const name = j.payload?.product_name;
+            const batchTotal = Number(j.payload?.batch?.total ?? 0);
+            const active = ["queued", "running"].includes(j.status);
+            // A batch is titled for the batch - its card counts what is left
+            // on its own line - while a single read carries the product's
+            // full name, which is the whole notification.
+            const single = j.status === "failed"
+              ? `Listing could not be read: ${name ?? j.id}`
+              : active
+                ? `Reading listing: ${name ?? j.id}`
+                : `Listing read: ${name ?? j.id}`;
+            return {
+              id: j.id,
+              category: "listing" as JobCategory,
+              status: j.status,
+              created_at: j.created_at,
+              title: batchTotal > 1 ? `Shopee listings · ${batchTotal} products` : single,
+              error: j.error,
+              href: "/attribution",
+              raw: j,
+            };
+          }))
+          .catch(() => []);
+        fetchPromises.push(fetchListings);
         // Face blurring: a long render whose outcome belongs in notifications
         // rather than pinned to the asset that started it.
         const fetchBlur = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/face-blur/status`)

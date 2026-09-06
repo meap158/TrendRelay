@@ -101,11 +101,14 @@ export function ProductTable({
   campaigns = [],
   campaignsByOffer = {},
   onTagOffers,
+  onFetchListings,
 }: {
   products: ProductRow[];
   onCopyAffiliateLink: (url: string) => void;
   /** Asked to copy the affiliate link of every one of these products, at once. */
   onCopySelected?: (productIds: string[]) => void;
+  /** Read these products' Shopee pages for their listings, fresh. */
+  onFetchListings?: (productIds: string[]) => Promise<void> | void;
   /** Campaigns a product can be promoted by. */
   campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
   /** Which campaigns already promote each offer, keyed by offer id. */
@@ -341,6 +344,20 @@ export function ProductTable({
           >
             <ActionIcon name="copy" /> {t("attribution.copyLinks")}
           </Button>
+          {/* A selection reads exactly these products' pages, snapshot or
+              not - choosing them was the statement that fresh listings are
+              wanted. The header button remains the whole-catalogue sweep. */}
+          {onFetchListings && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={picked.size === 0}
+              title="Read these products' Shopee pages for description, pictures, variations, discount and vouchers."
+              onClick={() => void onFetchListings([...picked])}
+            >
+              <ActionIcon name="refresh" /> Fetch listings
+            </Button>
+          )}
           {/* Tagging a selection to a campaign, where the selection already
               is. A hundred products imported for one campaign is one decision,
               and making it a hundred times is how a catalogue ends up full of

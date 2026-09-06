@@ -1754,19 +1754,26 @@ def refresh_shopee_listings(
             detail="Reading listing pages from Shopee requires explicit confirmation.",
         )
     refetch = bool(body.get("refetch"))
-    products = list(session.scalars(
-        select(Product).where(
-            Product.workspace_id == workspace_id,
-            Product.product_url.is_not(None),
-            Product.product_url != "",
-        )
-    ).all())
+    # A named selection reads exactly those products, snapshot or not:
+    # choosing them was already the statement that their listings are wanted
+    # fresh. Without names, the whole catalogue's unread products queue.
+    chosen = {
+        str(value) for value in (body.get("product_ids") or []) if value
+    }
+    query = select(Product).where(
+        Product.workspace_id == workspace_id,
+        Product.product_url.is_not(None),
+        Product.product_url != "",
+    )
+    if chosen:
+        query = query.where(Product.id.in_(sorted(chosen)))
+    products = list(session.scalars(query).all())
     wanted = [
         product for product in products
-        if refetch or shopee_enrichment.needs_enrichment(product)
+        if chosen or refetch or shopee_enrichment.needs_enrichment(product)
     ]
     queued = shopee_enrichment.enqueue(
-        workspace_id, wanted, limit=len(wanted), force=refetch,
+        workspace_id, wanted, limit=len(wanted), force=refetch or bool(chosen),
     )
     audit(
         session,
@@ -1776,10 +1783,21 @@ def refresh_shopee_listings(
         "attribution.shopee_listings_refresh",
         "product",
         workspace_id,
-        {"queued": len(queued), "refetch": refetch},
+        {"queued": len(queued), "refetch": refetch, "selected": len(chosen)},
     )
     session.commit()
     return {"queued": len(queued), "with_url": len(products)}
+
+
+@workspace_router.get("/shopee/enrichment/jobs")
+def read_shopee_enrichment_jobs(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The listing reads as notification rows: compact, named, batched."""
+    membership(session, workspace_id, user.id)
+    return {"jobs": shopee_enrichment.recent_jobs(workspace_id)}
 
 
 @workspace_router.post("/shopee/session/probe")
