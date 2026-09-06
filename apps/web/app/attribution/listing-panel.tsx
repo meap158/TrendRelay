@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { money } from "./format";
 import type { ProductRow } from "./types";
 
 /**
@@ -63,8 +64,11 @@ export function ListingPanel({
   const hero = Math.min(heroIndex, Math.max(images.length - 1, 0));
 
   const offer = product.offers[0];
+  // The exact formatter the row's Price column uses, so the two can never
+  // disagree - a hand-rolled divide-by-100 here showed ₫3.150 under a row
+  // saying ₫315,000, because đồng has no minor unit to divide away.
   const price = offer?.price_cents != null
-    ? `₫${Math.round(offer.price_cents / 100).toLocaleString("vi-VN")}`
+    ? money(offer.price_cents, offer.currency)
     : null;
   const attributes = listing.attributes ?? [];
   const vouchers = listing.vouchers ?? [];
