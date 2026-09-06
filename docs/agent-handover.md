@@ -261,6 +261,28 @@ account endpoints do. The field mapping is therefore never reached and fixing it
 would change nothing. The `.xlsx` export is the only path that works. This is
 recorded in ADR 0020.
 
+### Shopee listing reading (2026-09-06) - this one works
+A different question from the offer list above, with the opposite answer:
+given a product URL the export already names, its public page answers an
+anonymous GET and embeds the whole product state (gallery, description,
+variations with thumbnails, attributes, discount, vouchers, location).
+Price/stock/sold/rating are withheld signed-out and recorded as withheld -
+the export prices the product. Reader: `integrations/shopee_listing.py`;
+jobs: `shopee_enrichment.py` (`shopee_enrich` kind, batch-marked for the
+bell); storage: `products.listing` + `listing_fetched_at`; probe record and
+details in `docs/third-party/shopee-listing.md`. The Attribution table
+filters by with/without listing and renders a Shopee-like panel per row from
+the product's own listing endpoint.
+
+### Worker lanes (2026-09-06)
+`process_available` ran one kind at a time in a fixed order, so any long
+queue starved everything after it (99 media ingests once held 415 two-second
+listing reads at "waiting"). Listing reads now run in their own thread lane
+beside the pass (pooled x2, self-refilling, joined at pass end), and media
+ingests moved from a serial loop onto `run_job_batch` with a refill. Leases
+make cross-thread claims safe. If another queue starves the same way, a lane
+is the established answer.
+
 ### Smaller, known
 - The Library's own video player still offers a download; that is intentional
   there, unlike the campaign timeline's.
