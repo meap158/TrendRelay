@@ -95,6 +95,20 @@ function SortableHeader({
   );
 }
 
+/**
+ * How many may be chosen at once.
+ *
+ * Shopee's own offer page caps a selection at a hundred and says so while you
+ * pick - "0 / 100" - rather than refusing the hundred and first without
+ * explanation. Matched here so a batch built in one place fits in the other,
+ * and because a cap nobody can see is one they hit by surprise.
+ *
+ * At module scope because it is a fixed number rather than anything this
+ * component works out, and the arrival that seeds a selection has to read it
+ * before the render that used to declare it.
+ */
+const SELECTION_LIMIT = 100;
+
 export function ProductTable({
   products,
   onCopyAffiliateLink,
@@ -105,6 +119,8 @@ export function ProductTable({
   onFetchListings,
   listingBusy,
   onReadListing,
+  arrivedWith = null,
+  onClearArrival,
 }: {
   products: ProductRow[];
   onCopyAffiliateLink: (url: string) => void;
@@ -132,6 +148,17 @@ export function ProductTable({
    * the selection, and the two meet here.
    */
   onTagOffers?: (offerIds: string[], campaignId: string, tag: boolean) => Promise<void>;
+  /**
+   * Products a notification was opened on: shown by themselves, and chosen.
+   *
+   * A listing read makes no Library entry, so its notification used to open
+   * this page with nothing chosen and nothing to say why it was here. Arriving
+   * scoped is what the Library link has always done for assets - the rows are
+   * the ones that finished, ready for the action that usually follows.
+   */
+  arrivedWith?: { productIds: string[]; notice: string } | null;
+  /** Drop the scope, and let the page take it out of the address bar. */
+  onClearArrival?: () => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -148,6 +175,39 @@ export function ProductTable({
   const [filterTo, setFilterTo] = useState("");
   /** Whether a product's listing has been read: this table's own kind axis. */
   const [listingFilter, setListingFilter] = useState<"all" | "with" | "without">("all");
+  /**
+   * The products a notification arrived on, while that arrival still stands.
+   *
+   * Held here rather than read from the address bar on every render so that
+   * clearing it is a decision this table makes once - the page then takes the
+   * parameters out of the URL, and a reload does not put the scope back.
+   */
+  const [scope, setScope] = useState<Set<string> | null>(null);
+  const scopeKey = (arrivedWith?.productIds ?? []).join(",");
+  const seededScope = useRef("");
+  useEffect(() => {
+    if (!scopeKey || seededScope.current === scopeKey) return;
+    seededScope.current = scopeKey;
+    const wanted = new Set(scopeKey.split(","));
+    setScope(wanted);
+    // Chosen on arrival, up to the same cap a hand-made selection has: the
+    // action somebody came here to take is the one that works on a selection.
+    setPicked(new Set([...wanted].slice(0, SELECTION_LIMIT)));
+    // A scope of its own is the whole point, so nothing else may narrow it
+    // further and leave the rows that finished off screen.
+    setQuery("");
+    setFilterCampaign("");
+    setFilterFile("");
+    setFilterFrom("");
+    setFilterTo("");
+    setListingFilter("all");
+  }, [scopeKey]);
+
+  function clearScope() {
+    setScope(null);
+    setPicked(new Set());
+    onClearArrival?.();
+  }
   /** The table's own width, so a spanning row cannot fall out of step with it. */
   const columnCount = onTagOffers ? 9 : 8;
   const [tagging, setTagging] = useState(false);
@@ -192,6 +252,10 @@ export function ProductTable({
   );
 
   const shown = useMemo(() => {
+    // Arriving from a notification is a scope, not a filter: these products
+    // and no others, whatever the controls above say. Applied first so the
+    // count beside them describes what is actually on screen.
+    if (scope) return sortProducts(products.filter((product) => scope.has(product.id)), sort);
     // The same tested rules the offer picker filters with, at product grain -
     // this table carried its own inline copy, and the inline copy is the one
     // that drifts.
@@ -206,7 +270,7 @@ export function ProductTable({
     return sortProducts(filtered, sort);
   }, [
     products, query, sort, filterCampaign, filterFile, filterFrom, filterTo,
-    campaignsByOffer, listingFilter,
+    campaignsByOffer, listingFilter, scope,
   ]);
   const listingCounts = useMemo(() => ({
     all: products.length,
@@ -248,15 +312,6 @@ export function ProductTable({
       : { key: column, direction: column === "product" ? "asc" : "desc" });
   }
 
-  /**
-   * How many may be chosen at once.
-   *
-   * Shopee's own offer page caps a selection at a hundred and says so while
-   * you pick - "0 / 100" - rather than refusing the hundred and first without
-   * explanation. Matched here so a batch built in one place fits in the other,
-   * and because a cap nobody can see is one they hit by surprise.
-   */
-  const SELECTION_LIMIT = 100;
   const atLimit = picked.size >= SELECTION_LIMIT;
   const selectableShown = shown.slice(0, SELECTION_LIMIT);
   const shownSelectedCount = selectableShown.reduce(
@@ -410,6 +465,18 @@ export function ProductTable({
             <strong>{picked.size}</strong>
             <span>/ {SELECTION_LIMIT} {t("attribution.selected")}</span>
           </span>
+          {/* Why this table is showing a handful of rows out of hundreds, on
+              the row that already carries the count, with the way back on the
+              same line. Without it a scoped table reads as a catalogue that
+              has lost most of its products. */}
+          {scope && (
+            <span className="product-bulk-scope">
+              <span>{arrivedWith?.notice || t("attribution.fromNotification")}</span>
+              <Button variant="quiet" size="sm" onClick={clearScope}>
+                {t("attribution.showAllProducts")}
+              </Button>
+            </span>
+          )}
           {/* Resolved by the page, which holds the public URLs. */}
           <Button
             variant="secondary"

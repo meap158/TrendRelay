@@ -990,6 +990,8 @@ export const ar: Messages = {
     importedAfter: "مُستورَد في هذا التاريخ أو بعده",
     importedBefore: "مُستورَد في هذا التاريخ أو قبله",
     clearFilters: "مسح عوامل التصفية",
+    fromNotification: "فُتح من إشعار",
+    showAllProducts: "عرض كل المنتجات",
     notAdditive:
       "عمولة المنتج وحقوق ملكية الكتاب هما التحويلات نفسها، تُحتسب مرة واحدة وتُجمَّع بطريقتين. لا تجمعهما أبدًا.",
     trackingLinksHelp:

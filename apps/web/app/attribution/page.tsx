@@ -21,7 +21,8 @@
  */
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
@@ -89,7 +90,7 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 
-export default function AttributionPage() {
+function AttributionContent() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
   const { workspaces, workspaceId, loading: workspaceLoading } = useWorkspace();
@@ -104,6 +105,34 @@ export default function AttributionPage() {
     by_offer: Record<string, string[]>;
   }>({ campaigns: [], by_offer: {} });
   const [campaignFocus, setCampaignFocus] = useState("");
+  /**
+   * The products a notification opened this page on.
+   *
+   * Derived from the address bar rather than copied into state on mount: the
+   * copy would need an effect to make it, and an arrival is a property of the
+   * URL, not an event. Dismissal is the state, because the two have to be told
+   * apart - the parameters are stripped when the scope is dropped, and until
+   * that lands a re-read would put the scope straight back.
+   */
+  const searchParams = useSearchParams();
+  const [arrivalCleared, setArrivalCleared] = useState(false);
+  const arrivedWith = useMemo(() => {
+    if (arrivalCleared) return null;
+    const ids = [...new Set(
+      (searchParams.get("products") ?? "").split(",").map((id) => id.trim()).filter(Boolean),
+    )];
+    if (!ids.length) return null;
+    return { productIds: ids, notice: (searchParams.get("notice") ?? "").slice(0, 140) };
+  }, [searchParams, arrivalCleared]);
+  /** Drop the scope from the address bar, so a reload is the plain catalogue. */
+  const clearArrival = useCallback(() => {
+    setArrivalCleared(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("products");
+    url.searchParams.delete("from");
+    url.searchParams.delete("notice");
+    window.history.replaceState({}, "", url);
+  }, []);
   // Opened deliberately, closed when done: bringing rows in is something you do
   // to the table, not another screen to read.
   const [panel, setPanel] = useState<"" | "add">("");
@@ -396,6 +425,8 @@ export default function AttributionPage() {
       <section className="attribution-view">
         <ProductTable
           products={products}
+          arrivedWith={arrivedWith}
+          onClearArrival={clearArrival}
           onCopyAffiliateLink={copyAffiliateLink}
           onCopySelected={copySelectedLinks}
           campaigns={tagChoices.campaigns}
@@ -430,5 +461,25 @@ export default function AttributionPage() {
 
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
+  );
+}
+
+/**
+ * Wrapped because the content reads the address bar.
+ *
+ * `useSearchParams` opts a route into client rendering, and Next requires the
+ * boundary to say so rather than failing the build. The same shape the Library
+ * uses, which reads its own notification parameters the same way.
+ */
+export default function AttributionPage() {
+  const t = useT();
+  return (
+    <Suspense
+      fallback={
+        <WaitingScreen className="attribution-page" message={t("attribution.opening")} />
+      }
+    >
+      <AttributionContent />
+    </Suspense>
   );
 }

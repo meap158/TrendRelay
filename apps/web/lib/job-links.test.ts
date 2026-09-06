@@ -6,6 +6,7 @@ import {
   downloadFileLibraryHref,
   downloadLibraryHref,
   notificationHref,
+  productsHref,
 } from "./job-links.ts";
 
 test("a finished job links to the asset it produced", () => {
@@ -106,5 +107,64 @@ test("a downloaded file with no name of its own still says where it came from", 
     new URLSearchParams(downloadFileLibraryHref("b".repeat(64), "  ").split("?")[1])
       .get("notice"),
     "Downloaded file",
+  );
+});
+
+// --- listing reads, which fill in a product instead of making an asset -------
+
+test("a listing read opens Attribution on the product it read", () => {
+  assert.equal(
+    productsHref([{ payload: { product_id: "product_1" } }], { title: "Listing read: A pyjama set" }),
+    "/attribution?products=product_1&from=notifications&notice=Listing+read%3A+A+pyjama+set",
+  );
+});
+
+test("a batch of listing reads opens every product it covered", () => {
+  // The whole point of the grouped row: inheriting the newest job's link
+  // would open one product out of a hundred and look like the rest were lost.
+  const href = productsHref([
+    { payload: { product_id: "product_1" } },
+    { productId: "product_2" },
+    { payload: { product_id: "product_1" } },
+  ]);
+  assert.equal(
+    new URLSearchParams(href!.split("?")[1]).get("products"),
+    "product_1,product_2",
+    "each product once, in the order the jobs arrived",
+  );
+});
+
+test("a listing read with no product yet links nowhere", () => {
+  // Rather than to a page that would open with nothing chosen, which reads as
+  // a click that did not register.
+  assert.equal(productsHref([{ payload: {} }]), undefined);
+  assert.equal(productsHref([]), undefined);
+});
+
+test("the notification link falls through to products when nothing made an asset", () => {
+  assert.equal(
+    notificationHref([{ payload: { product_id: "product_9" } }], { title: "Shopee listings · 12 products" }),
+    "/attribution?products=product_9&from=notifications&notice=Shopee+listings",
+  );
+});
+
+test("a job that made an asset still opens the Library, not Attribution", () => {
+  // A listing read carries no asset, but anything that carries both belongs
+  // to the thing it produced.
+  const href = notificationHref([
+    { payload: { asset_id: "asset_1", product_id: "product_1" } },
+  ]) ?? "";
+  assert.ok(href.startsWith("/library?"), href);
+});
+
+test("a batch title loses its count on the way to Attribution", () => {
+  // Both destinations show a live count beside the title, so carrying the
+  // suffix through would say it twice.
+  assert.equal(
+    new URLSearchParams(
+      productsHref([{ productId: "product_1" }], { title: "Shopee listings · 100 items" })!
+        .split("?")[1],
+    ).get("notice"),
+    "Shopee listings",
   );
 });

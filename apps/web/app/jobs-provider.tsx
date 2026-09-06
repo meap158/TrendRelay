@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, Re
 import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
 import { effectLabel } from "../lib/i18n/effects";
-import { assetHref } from "../lib/job-links";
+import { assetHref, productsHref } from "../lib/job-links";
 import { useT } from "./i18n-provider";
 import { useWorkspace } from "./workspace-provider";
 
@@ -104,6 +104,15 @@ export type BaseJob = {
   stalled?: boolean;
   /** Library asset this work belongs to, independent of the feature that queued it. */
   assetId?: string | null;
+  /**
+   * Attribution product this work belongs to, for jobs that make no asset.
+   *
+   * A listing read fills in a product rather than producing a Library entry,
+   * so it has an `assetId` of nothing and its notification opened Attribution
+   * with nothing chosen. Carried here for the same reason `assetId` is: the
+   * row that opens it should not have to know which feature queued it.
+   */
+  productId?: string | null;
   /** Compact text for the progress layer drawn over that asset's thumbnail. */
   activityLabel?: string;
   activityDetail?: string;
@@ -341,7 +350,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
               created_at: j.created_at,
               title: batchTotal > 1 ? `Shopee listings · ${batchTotal} products` : single,
               error: j.error,
-              href: "/attribution",
+              productId: j.payload?.product_id ?? null,
+              // The products it read, chosen on arrival - the same promise a
+              // Library job's link makes about its assets. Falls back to the
+              // bare page for a job queued before ids were carried.
+              href: productsHref([{ productId: j.payload?.product_id ?? null }]) ?? "/attribution",
               raw: { ...j, payload: { ...(j.payload ?? {}), batch } },
             };
           }))

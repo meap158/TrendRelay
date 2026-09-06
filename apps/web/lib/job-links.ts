@@ -10,10 +10,11 @@
 
 /** The job shape these read, kept loose because five endpoints supply it. */
 export type JobRecord = {
-  result?: { asset_id?: string; source_path?: string } | null;
-  payload?: { asset_id?: string; source_path?: string } | null;
+  result?: { asset_id?: string; source_path?: string; product_id?: string } | null;
+  payload?: { asset_id?: string; source_path?: string; product_id?: string } | null;
   asset_id?: string;
   assetId?: string | null;
+  productId?: string | null;
 };
 
 function assetId(job: JobRecord | null | undefined): string | undefined {
@@ -23,6 +24,56 @@ function assetId(job: JobRecord | null | undefined): string | undefined {
     ?? job?.asset_id
     ?? job?.assetId
   ) || undefined;
+}
+
+function productId(job: JobRecord | null | undefined): string | undefined {
+  return (job?.productId ?? job?.payload?.product_id ?? job?.result?.product_id) || undefined;
+}
+
+/**
+ * The batch count a drawer title already carries, taken back off.
+ *
+ * Both destinations show a live count of their own beside the title, so
+ * carrying "· 100 items" through would say it twice and spend the space the
+ * compact context row exists to save.
+ *
+ * Both nouns, because the drawer names a batch after what is in it: an
+ * effects run counts items and a listing run counts products. Matching only
+ * the first let "Shopee listings · 12 products" through to sit beside
+ * Attribution's own count of the same twelve.
+ */
+function contextNotice(title: string | undefined): string {
+  return (title ?? "")
+    .trim()
+    .replace(/\s*·\s*\d+\s+(?:items?|products?)\s*$/i, "")
+    .slice(0, 140);
+}
+
+/**
+ * Open the Attribution rows a listing read worked on.
+ *
+ * A listing read fills in a product it was given rather than producing a
+ * Library entry, so `assetHref` finds nothing for it and its notification
+ * opened Attribution with nothing chosen - the click looked like it had not
+ * registered. These are the products, selected, which is the promise the
+ * Library link already makes about assets.
+ *
+ * Ids rather than the batch marker: a batch is how the drawer folds the rows
+ * together, and a notification can be opened after a product has been read
+ * again by something else. What was in this notification is what opens.
+ */
+export function productsHref(
+  jobs: JobRecord[],
+  context: { title?: string } = {},
+): string | undefined {
+  const ids = [...new Set(jobs.map(productId).filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return undefined;
+  const params = new URLSearchParams();
+  params.set("products", ids.join(","));
+  params.set("from", "notifications");
+  const notice = contextNotice(context.title);
+  if (notice) params.set("notice", notice);
+  return `/attribution?${params}`;
 }
 
 /**
@@ -56,7 +107,10 @@ export function notificationHref(
 ): string | undefined {
   const ids = [...new Set(jobs.map(assetId).filter((id): id is string => Boolean(id)))];
   const fallback = ids.length === 0 && jobs.length === 1 ? assetHref(jobs[0]) : undefined;
-  if (ids.length === 0 && !fallback) return undefined;
+  // Nothing here made a Library entry, so the products are what this row is
+  // about. Checked after assets rather than before because a job carrying
+  // both belongs to the thing it produced.
+  if (ids.length === 0 && !fallback) return productsHref(jobs, context);
   const [path, query = ""] = (fallback ?? "/library").split("?");
   const params = new URLSearchParams(query);
   if (ids.length === 1) {
@@ -66,13 +120,7 @@ export function notificationHref(
     params.set("assets", ids.join(","));
   }
   params.set("from", "notifications");
-  // Batch titles already include their count in the drawer. Library has a live
-  // count beside the title, so carrying that suffix would say "100 items"
-  // twice and consume the space this compact context row is meant to save.
-  const title = context.title
-    ?.trim()
-    .replace(/\s*·\s*\d+\s+items?\s*$/i, "")
-    .slice(0, 140);
+  const title = contextNotice(context.title);
   if (title) params.set("notice", title);
   return `${path}?${params}`;
 }

@@ -988,6 +988,8 @@ export const ja: Messages = {
     importedAfter: "この日付以降にインポート",
     importedBefore: "この日付以前にインポート",
     clearFilters: "絞り込みを解除",
+    fromNotification: "通知から開きました",
+    showAllProducts: "すべての商品を表示",
     notAdditive:
       "商品の報酬と書籍の印税は、同じコンバージョンを二通りに集計したものです。合計しないでください。",
     trackingLinksHelp:

@@ -988,6 +988,8 @@ export const vi: Messages = {
     importedAfter: "Nhập vào ngày hoặc sau",
     importedBefore: "Nhập vào ngày hoặc trước",
     clearFilters: "Xóa bộ lọc",
+    fromNotification: "Mở từ một thông báo",
+    showAllProducts: "Hiện tất cả sản phẩm",
     notAdditive:
       "Hoa hồng của sản phẩm và tiền bản quyền của cuốn sách là cùng một lượt chuyển đổi, chỉ đếm một lần theo hai cách nhóm. Đừng bao giờ cộng chúng lại.",
     trackingLinksHelp:

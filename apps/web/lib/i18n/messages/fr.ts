@@ -1000,6 +1000,8 @@ export const fr: Messages = {
     importedAfter: "Importé le ou après le",
     importedBefore: "Importé le ou avant le",
     clearFilters: "Effacer les filtres",
+    fromNotification: "Ouvert depuis une notification",
+    showAllProducts: "Afficher tous les produits",
     notAdditive:
       "La commission d’un produit et les droits d’auteur de son livre sont les mêmes conversions, comptées une fois et regroupées de deux façons. Ne les additionnez jamais.",
     trackingLinksHelp:

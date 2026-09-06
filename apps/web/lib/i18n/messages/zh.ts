@@ -975,6 +975,8 @@ export const zh: Messages = {
     importedAfter: "导入时间不早于",
     importedBefore: "导入时间不晚于",
     clearFilters: "清除筛选",
+    fromNotification: "从通知打开",
+    showAllProducts: "显示全部商品",
     notAdditive:
       "商品佣金与图书版税是同一批转化，只计一次，只是分组方式不同。切勿相加。",
     trackingLinksHelp:

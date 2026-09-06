@@ -264,6 +264,16 @@
 .product-bulk-count { display: inline-flex; align-items: baseline; gap: 3px; min-inline-size: 92px; color: var(--muted); white-space: nowrap; }
 .product-bulk-count strong { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
 .product-bulk[data-active] .product-bulk-count strong { color: var(--link); }
+/* Why the table is showing a handful of rows out of hundreds, on the row that
+   already carries the count rather than a banner of its own. The label may be
+   a long notification title, so it is the part that gives way; the button
+   keeps its size, because it is the way back. */
+.product-bulk-scope { display: inline-flex; align-items: center; gap: 4px; min-inline-size: 0; color: var(--muted); }
+/* A floor, because flex was shrinking a fifteen-character title to "Shopee …"
+   on a row with plenty of space left - the label is the only item here that
+   can give, so it gave everything. Beyond the floor it still ellipses. */
+.product-bulk-scope > span { min-inline-size: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-bulk-scope .ui-button { flex: none; }
 .product-choose { inline-size: 34px; text-align: center; }
 .product-table tr[data-chosen] { background: var(--panel-raised); }
 /* A product row is one compact reading unit. Catalog's shared table defaults

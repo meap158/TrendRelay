@@ -1000,6 +1000,8 @@ export const ru: Messages = {
     importedAfter: "Импортировано не ранее",
     importedBefore: "Импортировано не позднее",
     clearFilters: "Сбросить фильтры",
+    fromNotification: "Открыто из уведомления",
+    showAllProducts: "Показать все товары",
     notAdditive:
       "Комиссия по товару и роялти по книге — это одни и те же конверсии, посчитанные один раз и сгруппированные двумя способами. Никогда не складывайте их.",
     trackingLinksHelp:
