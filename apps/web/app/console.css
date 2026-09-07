@@ -895,6 +895,18 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .download-job-topline, .download-job-title { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .download-job-topline time { color: var(--muted); font-size: 10px; }
 .download-job-title > div { display: grid; gap: 4px; min-width: 0; }
+/* The same three pairs `.filter-chip` uses, because a count that stands for a
+   pile of rows should wear what those rows wear - green for what finished, red
+   for what needs somebody, and the progress bar's own blue for what is moving.
+   Written as tones on the badge rather than on the button: the filter itself is
+   chrome and stays quiet until it is the selected one.
+
+   No tone at zero, which the markup decides. A red nought is a warning about
+   nothing, and four permanently lit badges are a decoration rather than a
+   signal. */
+.queue-filters b[data-tone="running"] { color: var(--link); background: var(--link-bg); }
+.queue-filters b[data-tone="succeeded"] { color: var(--green); background: var(--green-dark); }
+.queue-filters b[data-tone="failed"] { color: var(--bad); background: var(--bad-bg); }
 .download-job-title strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .download-job-title span { color: var(--muted); font-size: 10px; }
 .download-job-title .ui-button { flex: 0 0 auto; }

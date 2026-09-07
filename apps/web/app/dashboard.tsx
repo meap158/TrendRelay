@@ -875,11 +875,27 @@ export default function Dashboard() {
         </div>
         <div className="queue-filters" role="group" aria-label={t("downloads.filter")}>
           {([
-            ["all", "All"],
-            ["active", "Active"],
-            ["completed", "Completed"],
-            ["attention", "Needs attention"],
-          ] as [QueueFilter, string][]).map(([value, label]) => <button key={value} type="button" className={queueFilter === value ? "selected" : ""} aria-pressed={queueFilter === value} onClick={() => selectQueueFilter(value)}><span>{label}</span><b>{queueCounts[value]}</b></button>)}
+            ["all", "All", ""],
+            ["active", "Active", "running"],
+            ["completed", "Completed", "succeeded"],
+            ["attention", "Needs attention", "failed"],
+          ] as [QueueFilter, string, string][]).map(([value, label, tone]) => <button
+            key={value}
+            type="button"
+            className={queueFilter === value ? "selected" : ""}
+            aria-pressed={queueFilter === value}
+            onClick={() => selectQueueFilter(value)}
+          ><span>{label}</span>{/* The count wears the colour its own rows wear:
+              green for what finished, red for what needs somebody, and the
+              blue of the progress bar for what is moving. Only while there is
+              something to count - a red nought is a warning about nothing, and
+              a row of permanently lit colours stops meaning anything at all.
+              The words carry the state on their own; the colour is a second
+              way of saying it, never the only one. */}
+            <b data-tone={tone && queueCounts[value] > 0 ? tone : undefined}>
+              {queueCounts[value]}
+            </b>
+          </button>)}
         </div>
 
         {filteredGroups.length === 0 && <div className="download-empty">
