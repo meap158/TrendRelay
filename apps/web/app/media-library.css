@@ -1166,3 +1166,29 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
     top: auto;
   }
 }
+
+/* --- AutoCut dialog: pictures into a beat-synced video ---------------------- */
+.autocut-dialog { display: grid; gap: 16px; min-inline-size: min(560px, 78vw); }
+/* The template chooser: a column of clearly different rhythms, the auto-match
+   pre-selected and marked, so the choice reads as a suggestion to accept or
+   change - not a blank field to fill. */
+.autocut-templates { display: grid; gap: 8px; max-block-size: 300px; overflow-y: auto; }
+.autocut-template { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); text-align: start; cursor: pointer; }
+.autocut-template:hover { border-color: var(--link); }
+.autocut-template.selected { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); background: var(--panel-raised); }
+.autocut-template strong { display: flex; gap: 8px; align-items: baseline; color: var(--text); font-size: 13px; }
+.autocut-best { border-radius: 999px; padding: 0 7px; background: var(--green-dark); color: var(--green); font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; }
+.autocut-template small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.autocut-template-meta { color: var(--muted); font-size: 10px; }
+.autocut-template-meta em { color: var(--warn); font-style: normal; }
+.autocut-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.autocut-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.autocut-controls input[type="range"] { inline-size: 100%; }
+.autocut-music-row { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 12px; font-weight: 400; }
+.autocut-music-row small { color: var(--muted); }
+/* The plan preview: shots, length, and whether it is really on the beat -
+   said plainly, so a "beat-synced" claim only appears when it is true. */
+.autocut-preview { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 12px; }
+.autocut-synced { color: var(--green); font-weight: 600; }
+.autocut-unsynced { color: var(--muted); }
+.autocut-actions { display: flex; justify-content: flex-end; gap: 8px; }
