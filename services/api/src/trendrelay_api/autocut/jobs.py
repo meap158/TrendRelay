@@ -20,7 +20,7 @@ from sqlalchemy import select
 from trendrelay_api.autocut import templates
 from trendrelay_api.autocut.beat_analysis import BeatGrid, analyze_beats
 from trendrelay_api.autocut.planner import CutPlan, Shot, plan_cuts
-from trendrelay_api.autocut.renderer import RenderRequest, render
+from trendrelay_api.autocut.renderer import FRAME_H, FRAME_W, RenderRequest, render
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
 from trendrelay_api.models import utc_now
@@ -35,6 +35,11 @@ from trendrelay_api.tool_registry import PROJECT_ROOT  # noqa: E402
 
 AUDIO_ROOT = PROJECT_ROOT / ".data" / "autocut" / "audio"
 OUTPUT_ROOT = PROJECT_ROOT / ".data" / "autocut" / "renders"
+PREVIEW_ROOT = PROJECT_ROOT / ".data" / "autocut" / "previews"
+#: Preview at half the frame - fast to encode, big enough to judge the cut
+#: and the motion. The plan and timing are the full render's; only pixels differ.
+PREVIEW_W = 540
+PREVIEW_H = 960
 
 
 def _ffmpeg() -> Path:
@@ -131,15 +136,21 @@ def enqueue_render(
     music: str | None = None,
     speed: float = 1.0,
     title: str | None = None,
+    preview: bool = False,
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
-    """Plan the render now, queue it to draw in the background."""
+    """Plan the render now, queue it to draw in the background.
+
+    A preview renders the same plan at half the frame and is never filed in
+    the Library - it exists to be watched once in the dialog before the real
+    render is committed.
+    """
     plan, _grid, template, audio = build_plan(
         template_id, asset_ids, music=music, speed=speed,
     )
     if not plan.shots:
         raise ValueError("Choose at least one picture to cut into a video.")
-    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{utc_now()}"
+    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{preview}:{utc_now()}"
     job_id = "autocut_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(
         job_id,
@@ -153,6 +164,7 @@ def enqueue_render(
             "asset_ids": asset_ids,
             "music": music or template.music,
             "speed": speed,
+            "preview": preview,
             "title": title or f"AutoCut - {template.name}",
             "plan": _plan_json(plan),
             "audio_path": str(audio) if audio else None,
@@ -160,7 +172,7 @@ def enqueue_render(
         max_attempts=2,
         factory=factory,
     )
-    return {"id": job_id, "status": "queued", "plan": _plan_json(plan)}
+    return {"id": job_id, "status": "queued", "preview": preview, "plan": _plan_json(plan)}
 
 
 def run_render_job(
@@ -181,6 +193,7 @@ def run_render_job(
 
         plan = _plan_from_json(payload["plan"])
         workspace_id = payload["workspace_id"]
+        is_preview = bool(payload.get("preview"))
         with factory() as session:
             rows = session.scalars(
                 select(MediaAsset).where(
@@ -190,15 +203,29 @@ def run_render_job(
             ).all()
             image_paths = {row.id: Path(row.original_path) for row in rows}
 
-        OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-        destination = OUTPUT_ROOT / f"{job_id}.mp4"
+        root = PREVIEW_ROOT if is_preview else OUTPUT_ROOT
+        root.mkdir(parents=True, exist_ok=True)
+        destination = root / f"{job_id}.mp4"
         audio_value = payload.get("audio_path")
         render(_ffmpeg(), RenderRequest(
             plan=plan,
             image_paths=image_paths,
             audio_path=Path(audio_value) if audio_value else None,
             destination=destination,
+            width=PREVIEW_W if is_preview else FRAME_W,
+            height=PREVIEW_H if is_preview else FRAME_H,
+            preview=is_preview,
         ))
+
+        if is_preview:
+            # A preview is watched from its own endpoint and never filed - it
+            # is a rehearsal of the render, not the render.
+            complete_job(
+                job_id, worker_id,
+                {"output_path": str(destination), "preview": True},
+                factory=factory,
+            )
+            return
 
         ingest = create_ingest_job(
             workspace_id=workspace_id,

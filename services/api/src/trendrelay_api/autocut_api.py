@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,7 +24,9 @@ from trendrelay_api.autocut import jobs as autocut_jobs
 from trendrelay_api.autocut import templates as autocut_templates
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, membership, require_role
+from trendrelay_api.jobs import get_job_record
 from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/autocut", tags=["autocut"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
@@ -130,15 +135,10 @@ class RenderRequestBody(PlanRequest):
     confirm: bool = False
 
 
-@router.post("/render", status_code=202)
-def start_render(
-    workspace_id: str,
-    body: RenderRequestBody,
-    request: Request,
-    user: AuthenticatedUser,
-    session: DatabaseSession,
+def _queue(
+    session: Session, request: Request, workspace_id: str, user: CurrentUser,
+    body: PlanRequest, *, preview: bool, title: str | None = None,
 ) -> dict[str, Any]:
-    """Queue the render. Draws in the background, lands in the Library."""
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     images = _known_images(session, workspace_id, body.asset_ids)
     if not images:
@@ -151,14 +151,106 @@ def start_render(
             asset_ids=images,
             music=body.music,
             speed=body.speed,
-            title=body.title,
+            title=title,
+            preview=preview,
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     audit(
         session, request, workspace_id, user.id,
-        "autocut.render_queued", "durable_job", queued["id"],
-        {"template": template_id, "pictures": len(images)},
+        "autocut.preview_queued" if preview else "autocut.render_queued",
+        "durable_job", queued["id"],
+        {"template": template_id, "pictures": len(images), "preview": preview},
     )
     session.commit()
     return queued
+
+
+@router.post("/render", status_code=202)
+def start_render(
+    workspace_id: str,
+    body: RenderRequestBody,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue the full render. Draws in the background, lands in the Library."""
+    return _queue(session, request, workspace_id, user, body, preview=False, title=body.title)
+
+
+@router.post("/preview", status_code=202)
+def start_preview(
+    workspace_id: str,
+    body: PlanRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue a fast, half-size render of the same plan, to watch and adjust.
+
+    The rehearsal before the real render: same cuts, same music, same timing
+    - just quicker to make and never filed in the Library.
+    """
+    return _queue(session, request, workspace_id, user, body, preview=True)
+
+
+@router.get("/jobs/{job_id}")
+def render_status(
+    workspace_id: str,
+    job_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Where a queued render or preview has got to, for the dialog to poll."""
+    membership(session, workspace_id, user.id)
+    try:
+        record = get_job_record(job_id, session=session)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="AutoCut job not found.") from error
+    if record.get("workspace_id") != workspace_id or record.get("kind") != autocut_jobs.JOB_KIND:
+        raise HTTPException(status_code=404, detail="AutoCut job not found.")
+    result = record.get("result") or {}
+    return {
+        "id": job_id,
+        "status": record.get("status"),
+        "preview": bool((record.get("payload") or {}).get("preview")),
+        "error": record.get("error"),
+        # The Library asset, once a full render has been ingested.
+        "asset_id": result.get("asset_id"),
+        "ready": record.get("status") == "succeeded" and bool(result.get("output_path")),
+    }
+
+
+@router.get("/preview/{job_id}/video")
+def stream_preview(
+    workspace_id: str,
+    job_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> FileResponse:
+    """The finished preview clip, retyped opaque like every other served byte.
+
+    Only a preview is served here - a full render is watched in the Library
+    through its asset, and serving its file from a second place would be a
+    download route around the Library's own controls.
+    """
+    membership(session, workspace_id, user.id)
+    try:
+        record = get_job_record(job_id, session=session)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="AutoCut job not found.") from error
+    payload = record.get("payload") or {}
+    result = record.get("result") or {}
+    if (
+        record.get("workspace_id") != workspace_id
+        or record.get("kind") != autocut_jobs.JOB_KIND
+        or not payload.get("preview")
+    ):
+        raise HTTPException(status_code=404, detail="AutoCut preview not found.")
+    output = result.get("output_path")
+    if not output or not Path(output).is_file():
+        raise HTTPException(status_code=409, detail="This preview is not ready yet.")
+    return FileResponse(
+        Path(output), media_type=OPAQUE_MEDIA_TYPE,
+        filename=f"{job_id}.mp4", content_disposition_type="inline",
+    )

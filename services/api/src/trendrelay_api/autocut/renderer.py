@@ -46,6 +46,11 @@ class RenderRequest:
     destination: Path
     width: int = FRAME_W
     height: int = FRAME_H
+    #: A preview trades pixels for speed: half the frame and the fastest
+    #: preset, so the operator sees the actual arrangement in a few seconds
+    #: rather than waiting out a full-quality encode to decide whether to keep
+    #: it. The plan and the timing are identical - only the resolution differs.
+    preview: bool = False
 
 
 def _cover_and_move(shot: Shot, index: int, width: int, height: int) -> str:
@@ -163,7 +168,13 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
     after += ["-r", str(FPS), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
 
     completed, _profile = encode_h264(
-        ffmpeg, before, after, request.destination, timeout=1800,
+        ffmpeg, before, after, request.destination,
+        # A preview is watched once and discarded, so speed beats quality:
+        # the fastest preset and a looser quantiser cut the encode to a few
+        # seconds. A full render keeps the shared defaults.
+        preset="ultrafast" if request.preview else "veryfast",
+        quality=30 if request.preview else 20,
+        timeout=1800,
     )
     if completed.returncode != 0 or not request.destination.is_file():
         stderr = (completed.stderr or b"")

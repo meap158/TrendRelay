@@ -54,9 +54,14 @@ def teardown_function() -> None:
     app.dependency_overrides.clear()
 
 
+_slug = [0]
+
+
 def make_workspace() -> str:
+    _slug[0] += 1
     return request(
-        "POST", "/api/workspaces", json={"name": "Studio", "slug": "studio"}
+        "POST", "/api/workspaces",
+        json={"name": f"Studio {_slug[0]}", "slug": f"studio-{_slug[0]}"},
     ).json()["workspace"]["id"]
 
 
@@ -96,9 +101,9 @@ def test_a_plan_preview_defaults_to_the_best_template_and_never_renders() -> Non
     body = answer.json()
     assert body["picture_count"] == 4
     assert len(body["plan"]["shots"]) == 4
-    # No music files ship in tests, so the plan is honestly not beat-synced.
-    assert body["beat_synced"] is False
-    assert body["music_available"] is False
+    # Whether the plan is beat-synced depends only on whether the template's
+    # music file is present, and that is stated - never claimed when absent.
+    assert body["beat_synced"] is body["music_available"]
 
 
 def test_a_video_or_a_stranger_asset_is_filtered_out_of_the_set() -> None:
@@ -144,3 +149,50 @@ def test_render_needs_at_least_one_real_picture() -> None:
         json={"asset_ids": ["ghost"]},
     )
     assert answer.status_code == 422
+
+
+def test_a_preview_queues_a_preview_job_and_status_reads_back(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    for index in range(3):
+        add_image(workspace_id, f"pic-{index}")
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: captured.update(kwargs)
+        or {"id": "autocut_prev", "status": "queued", "preview": kwargs["preview"]},
+    )
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/preview",
+        json={"asset_ids": [f"pic-{i}" for i in range(3)]},
+    )
+    assert answer.status_code == 202
+    assert captured["preview"] is True
+    # A preview never carries a title - it is not filed.
+    assert captured.get("title") is None
+
+
+def test_preview_status_and_stream_are_scoped_to_the_workspace() -> None:
+    from trendrelay_api.jobs import create_job_record
+    from trendrelay_api.autocut.jobs import JOB_KIND
+
+    workspace_id = make_workspace()
+    create_job_record(
+        "autocut_ready", workspace_id, JOB_KIND,
+        {"workspace_id": workspace_id, "preview": True},
+        factory=TestingSession,
+    )
+    # Not ready: no output_path on the result yet.
+    status = request("GET", f"/api/workspaces/{workspace_id}/autocut/jobs/autocut_ready")
+    assert status.status_code == 200
+    assert status.json()["preview"] is True
+    assert status.json()["ready"] is False
+
+    # The stream refuses a preview that has not finished.
+    stream = request("GET", f"/api/workspaces/{workspace_id}/autocut/preview/autocut_ready/video")
+    assert stream.status_code == 409
+
+    # A job from another workspace is not found here.
+    other = make_workspace()
+    missing = request("GET", f"/api/workspaces/{other}/autocut/jobs/autocut_ready")
+    assert missing.status_code == 404

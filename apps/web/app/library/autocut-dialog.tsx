@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -66,8 +66,21 @@ export function AutoCutDialog({
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [planning, setPlanning] = useState(false);
   const [rendering, setRendering] = useState(false);
+  const [previewState, setPreviewState] = useState<"idle" | "building" | "ready" | "error">("idle");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Once the operator has asked for a preview, it stays live: changing the
+  // template, music or speed redraws it for the new settings rather than
+  // leaving a stale clip or a blank panel.
+  const previewLive = useRef(false);
 
   const base = `/api/workspaces/${workspaceId}/autocut`;
+
+  // Cleanup without reading state inside the effect: the ref mirrors the URL,
+  // so unmount revokes whatever blob is current without a dependency that
+  // would re-run and revoke a live one.
+  const previewUrlRef = useRef<string | null>(null);
+  useEffect(() => { previewUrlRef.current = previewUrl; }, [previewUrl]);
+  useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current); }, []);
 
   // The catalogue, ranked for this many pictures, with the best pre-selected -
   // the auto-match the operator can override.
@@ -112,6 +125,51 @@ export function AutoCutDialog({
     [templates, templateId],
   );
 
+  const buildPreview = useCallback(async () => {
+    if (!templateId) return;
+    previewLive.current = true;
+    setPreviewState("building");
+    try {
+      const res = await apiFetch(`${base}/preview`, {
+        method: "POST",
+        body: JSON.stringify({ asset_ids: assetIds, template_id: templateId, music, speed }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.detail ?? "Could not start the preview.");
+      const jobId = body.id as string;
+      // Poll until the worker finishes drawing the half-size clip, then fetch
+      // its bytes opaquely and play them from a blob - the same private-media
+      // path every other preview here uses, never a plain download URL.
+      const deadline = Date.now() + 90_000;
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (Date.now() > deadline) throw new Error("The preview took too long. Try again, or render it.");
+        const status = await apiFetch(`${base}/jobs/${jobId}`).then((r) => r.json());
+        if (status.status === "failed") throw new Error(status.error ?? "The preview could not be drawn.");
+        if (status.ready) break;
+      }
+      const clip = await apiFetch(`${base}/preview/${jobId}/video`);
+      if (!clip.ok) throw new Error("The preview clip could not be loaded.");
+      const url = URL.createObjectURL(await clip.blob());
+      // Swap the blob only when the new one is ready, so the old clip stays
+      // on screen while the redraw runs - no flash of empty panel.
+      setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
+      setPreviewState("ready");
+    } catch (reason) {
+      setPreviewState("error");
+      onError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [templateId, assetIds, music, speed, apiFetch, base, onError]);
+
+  // The live-adjust loop: while a preview is engaged, any settings change
+  // (which recreates buildPreview) redraws it - debounced so dragging the
+  // speed slider does not fire a render per step.
+  useEffect(() => {
+    if (!previewLive.current) return;
+    const timer = setTimeout(() => void buildPreview(), 500);
+    return () => clearTimeout(timer);
+  }, [buildPreview]);
+
   const render = useCallback(async () => {
     if (!templateId) return;
     setRendering(true);
@@ -132,7 +190,11 @@ export function AutoCutDialog({
   }, [templateId, assetIds, music, speed, apiFetch, base, onQueued, onError, onClose]);
 
   return (
-    <Dialog open={open} title={`AutoCut ${assetIds.length} pictures into a video`} onClose={onClose}>
+    <Dialog
+      open={open}
+      title={`AutoCut ${assetIds.length} pictures into a video`}
+      onClose={() => { previewLive.current = false; onClose(); }}
+    >
       <div className="autocut-dialog">
         <div className="autocut-templates" role="radiogroup" aria-label="Template">
           {templates.map((template) => (
@@ -190,8 +252,29 @@ export function AutoCutDialog({
           )}
         </div>
 
+        {/* The result, watched before it is committed. A half-size render of
+            the exact plan - so what plays is what a full render draws, only
+            fewer pixels - refreshed whenever a setting changes. */}
+        {(previewState !== "idle" || previewUrl) && (
+          <div className="autocut-video">
+            {previewState === "building" && <span className="autocut-video-building">Drawing the preview…</span>}
+            {previewUrl && (
+              <video src={previewUrl} controls autoPlay loop playsInline muted={false} />
+            )}
+            {previewState === "building" && previewUrl && (
+              <span className="autocut-video-updating">Updating…</span>
+            )}
+          </div>
+        )}
+
         <div className="autocut-actions">
           <Button variant="quiet" onClick={onClose} disabled={rendering}>Cancel</Button>
+          <Button
+            variant="secondary"
+            busy={previewState === "building"}
+            disabled={rendering || planning || !plan || plan.plan.shots.length === 0 || previewState === "building"}
+            onClick={() => void buildPreview()}
+          ><ActionIcon name="play" />{previewState === "ready" ? "Preview again" : "Preview"}</Button>
           <Button
             variant="primary"
             busy={rendering}
