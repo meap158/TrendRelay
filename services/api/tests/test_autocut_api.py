@@ -106,18 +106,33 @@ def test_a_plan_preview_defaults_to_the_best_template_and_never_renders() -> Non
     assert body["beat_synced"] is body["music_available"]
 
 
-def test_a_video_or_a_stranger_asset_is_filtered_out_of_the_set() -> None:
+def test_videos_and_images_are_both_kept_in_the_order_asked() -> None:
     workspace_id = make_workspace()
     add_image(workspace_id, "photo-1")
-    add_image(workspace_id, "clip-1", kind="video")  # not a picture
+    add_image(workspace_id, "clip-1", kind="video")
+    add_image(workspace_id, "photo-2")
 
     answer = request(
         "POST", f"/api/workspaces/{workspace_id}/autocut/plan",
-        json={"asset_ids": ["photo-1", "clip-1", "ghost"]},
+        json={"asset_ids": ["clip-1", "photo-1", "ghost", "photo-2"]},
     )
     assert answer.status_code == 200
-    # Only the real image survives; the video and the unknown id are dropped.
-    assert answer.json()["picture_count"] == 1
+    body = answer.json()
+    # Video and images both survive, the stray id is dropped, and the order
+    # the operator arranged is kept.
+    assert body["asset_ids"] == ["clip-1", "photo-1", "photo-2"]
+    kinds = {shot["asset_id"]: shot["media_kind"] for shot in body["plan"]["shots"]}
+    assert kinds == {"clip-1": "video", "photo-1": "image", "photo-2": "image"}
+
+
+def test_an_audio_asset_is_not_a_visual() -> None:
+    workspace_id = make_workspace()
+    add_image(workspace_id, "song", kind="audio")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/plan",
+        json={"asset_ids": ["song"]},
+    )
+    assert answer.status_code == 422
 
 
 def test_render_queues_a_job_and_audits_it(monkeypatch) -> None:

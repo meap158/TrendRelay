@@ -79,22 +79,26 @@ class PlanRequest(BaseModel):
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
 
 
-def _known_images(session: Session, workspace_id: str, asset_ids: list[str]) -> list[str]:
-    """The asset ids that are this workspace's own images, in the order asked.
+def _known_visuals(
+    session: Session, workspace_id: str, asset_ids: list[str]
+) -> tuple[list[str], dict[str, str]]:
+    """This workspace's images and videos among the ids, in the order asked.
 
-    Filtered rather than trusted: an AutoCut cannot cut a video or a clip that
-    belongs to another workspace, and saying which survived is clearer than
-    failing the whole set for one bad id.
+    Returns the surviving ids (order preserved - the operator arranged them)
+    and their kinds. Audio is left out: AutoCut cuts visuals to a template's
+    music, and a sound file has nothing to show. Filtered rather than trusted,
+    so one stray id does not fail the whole set.
     """
-    rows = session.scalars(
-        select(MediaAsset.id).where(
+    rows = session.execute(
+        select(MediaAsset.id, MediaAsset.media_kind).where(
             MediaAsset.workspace_id == workspace_id,
             MediaAsset.id.in_(asset_ids),
-            MediaAsset.media_kind == "image",
+            MediaAsset.media_kind.in_(("image", "video")),
         )
     ).all()
-    allowed = set(rows)
-    return [asset_id for asset_id in asset_ids if asset_id in allowed]
+    kinds = {asset_id: kind for asset_id, kind in rows}
+    ordered = [asset_id for asset_id in asset_ids if asset_id in kinds]
+    return ordered, kinds
 
 
 @router.post("/plan")
@@ -110,23 +114,26 @@ def preview_plan(
     only pictures and get a sensible plan back; naming one overrides it.
     """
     membership(session, workspace_id, user.id)
-    images = _known_images(session, workspace_id, body.asset_ids)
-    if not images:
-        raise HTTPException(status_code=422, detail="None of those are this workspace's images.")
-    template_id = body.template_id or autocut_templates.best_template(len(images)).id
+    visuals, kinds = _known_visuals(session, workspace_id, body.asset_ids)
+    if not visuals:
+        raise HTTPException(status_code=422, detail="None of those are this workspace's photos or videos.")
+    template_id = body.template_id or autocut_templates.best_template(len(visuals)).id
     try:
         plan, grid, template, audio = autocut_jobs.build_plan(
-            template_id, images, music=body.music, speed=body.speed,
+            template_id, visuals, music=body.music, speed=body.speed, kinds=kinds,
         )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return {
-        "template": _template_view(template, autocut_templates.match_score(template, len(images))),
+        "template": _template_view(template, autocut_templates.match_score(template, len(visuals))),
         "plan": autocut_jobs._plan_json(plan),
         "bpm": grid.bpm,
         "beat_synced": plan.beat_synced,
         "music_available": audio is not None,
-        "picture_count": len(images),
+        "picture_count": len(visuals),
+        # Which of the arranged clips survived the filter and in what order,
+        # so the timeline can reconcile if a stray id was dropped.
+        "asset_ids": visuals,
     }
 
 
@@ -140,19 +147,20 @@ def _queue(
     body: PlanRequest, *, preview: bool, title: str | None = None,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
-    images = _known_images(session, workspace_id, body.asset_ids)
-    if not images:
-        raise HTTPException(status_code=422, detail="None of those are this workspace's images.")
-    template_id = body.template_id or autocut_templates.best_template(len(images)).id
+    visuals, kinds = _known_visuals(session, workspace_id, body.asset_ids)
+    if not visuals:
+        raise HTTPException(status_code=422, detail="None of those are this workspace's photos or videos.")
+    template_id = body.template_id or autocut_templates.best_template(len(visuals)).id
     try:
         queued = autocut_jobs.enqueue_render(
             workspace_id, user.id,
             template_id=template_id,
-            asset_ids=images,
+            asset_ids=visuals,
             music=body.music,
             speed=body.speed,
             title=title,
             preview=preview,
+            kinds=kinds,
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -160,7 +168,7 @@ def _queue(
         session, request, workspace_id, user.id,
         "autocut.preview_queued" if preview else "autocut.render_queued",
         "durable_job", queued["id"],
-        {"template": template_id, "pictures": len(images), "preview": preview},
+        {"template": template_id, "clips": len(visuals), "preview": preview},
     )
     session.commit()
     return queued

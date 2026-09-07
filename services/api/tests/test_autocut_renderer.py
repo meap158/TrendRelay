@@ -38,6 +38,24 @@ def test_each_picture_becomes_one_moving_covered_clip() -> None:
     assert "[vout]" in graph  # the encoder's map target
 
 
+def test_a_video_shot_trims_and_a_still_zoompans() -> None:
+    # A mixed plan: the still gets its Ken Burns zoompan, the video is
+    # cover-scaled and trimmed to its beat-slot with no zoompan.
+    grid = BeatGrid(bpm=120.0, beats=tuple(round(i * 0.5, 4) for i in range(20)), duration=10.0)
+    plan = plan_cuts(
+        get_template("rapid-one"), grid, ["still", "clip"],
+        kinds={"clip": "video"},
+    )
+    graph = build_filtergraph(RenderRequest(
+        plan=plan,
+        image_paths={"still": Path("/still.png"), "clip": Path("/clip.mp4")},
+        audio_path=None, destination=Path("/out.mp4"),
+    ))
+    assert "zoompan=" in graph  # the still
+    assert graph.count("zoompan=") == 1  # only the still, not the video
+    assert "trim=duration=" in graph  # the video is trimmed to its slot
+
+
 def test_a_hard_cut_template_concats_and_a_fade_template_xfades() -> None:
     # rapid-one and steady-two hard-cut (the references do at those cadences);
     # breathe is the confirmed dissolve.

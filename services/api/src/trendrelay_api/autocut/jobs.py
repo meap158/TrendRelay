@@ -65,6 +65,7 @@ def build_plan(
     *,
     music: str | None = None,
     speed: float = 1.0,
+    kinds: dict[str, str] | None = None,
 ) -> tuple[CutPlan, BeatGrid, templates.Template, Path | None]:
     """Everything decided before a frame is drawn, computed once.
 
@@ -76,7 +77,7 @@ def build_plan(
     track = music or template.music
     audio = resolve_audio(track)
     grid = analyze_beats(_ffmpeg(), audio) if audio else BeatGrid(bpm=0.0, beats=(), duration=0.0)
-    plan = plan_cuts(template, grid, asset_ids, speed=speed)
+    plan = plan_cuts(template, grid, asset_ids, speed=speed, kinds=kinds)
     return plan, grid, template, audio
 
 
@@ -93,6 +94,7 @@ def _plan_json(plan: CutPlan) -> dict[str, Any]:
                 "end": shot.end,
                 "transition": shot.transition,
                 "transition_seconds": shot.transition_seconds,
+                "media_kind": shot.media_kind,
                 "motion": {
                     "zoom": shot.motion.zoom,
                     "pan_x": shot.motion.pan_x,
@@ -115,6 +117,7 @@ def _plan_from_json(data: dict[str, Any]) -> CutPlan:
             transition=shot["transition"],
             transition_seconds=shot["transition_seconds"],
             motion=Motion(**shot["motion"]),
+            media_kind=shot.get("media_kind", "image"),
         )
         for shot in data["shots"]
     )
@@ -137,6 +140,7 @@ def enqueue_render(
     speed: float = 1.0,
     title: str | None = None,
     preview: bool = False,
+    kinds: dict[str, str] | None = None,
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
     """Plan the render now, queue it to draw in the background.
@@ -146,10 +150,10 @@ def enqueue_render(
     render is committed.
     """
     plan, _grid, template, audio = build_plan(
-        template_id, asset_ids, music=music, speed=speed,
+        template_id, asset_ids, music=music, speed=speed, kinds=kinds,
     )
     if not plan.shots:
-        raise ValueError("Choose at least one picture to cut into a video.")
+        raise ValueError("Choose at least one photo or video to cut together.")
     nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{preview}:{utc_now()}"
     job_id = "autocut_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(

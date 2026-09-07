@@ -61,6 +61,19 @@ def _cover_and_move(shot: Shot, index: int, width: int, height: int) -> str:
     A pan is a slow drift of the crop centre; both are small on purpose - a
     still should breathe, not lurch.
     """
+    cover = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height}"
+    )
+    if shot.media_kind == "video":
+        # A video carries its own motion, so no zoompan: cover the frame,
+        # normalise the frame rate so xfade/concat align, and trim to the
+        # slot (the input is looped ahead of this, so a short clip still
+        # fills its beats rather than leaving a gap).
+        return (
+            f"[{index}:v]{cover},fps={FPS},trim=duration={shot.duration:.4f},"
+            f"setpts=PTS-STARTPTS,setsar=1,format=yuv420p[v{index}]"
+        )
     frames = max(1, round(shot.duration * FPS))
     motion: Motion = shot.motion
     # Oversize first so zoompan has pixels to push into, then cover-crop.
@@ -145,12 +158,18 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
     for shot in shots:
         path = request.image_paths.get(shot.asset_id)
         if path is None or not path.is_file():
-            raise RuntimeError(f"Missing picture for shot {shot.asset_id!r}.")
-        # A single frame in: zoompan itself produces the shot's whole length
-        # from it (`d` frames at `fps`). Looping the still into many frames
-        # AND letting zoompan expand each one multiplied the two - a
-        # four-second shot rendered as twenty-eight.
-        inputs += ["-i", str(path)]
+            raise RuntimeError(f"Missing file for shot {shot.asset_id!r}.")
+        if shot.media_kind == "video":
+            # Loop the source so a clip shorter than its beat-slot still fills
+            # it, then let the filter trim to the exact duration. Its own audio
+            # is dropped later - the template's track is the sound.
+            inputs += ["-stream_loop", "-1", "-t", f"{shot.duration:.4f}", "-i", str(path)]
+        else:
+            # A single frame in: zoompan itself produces the shot's whole
+            # length from it. Looping the still into many frames AND letting
+            # zoompan expand each one multiplied the two - a four-second shot
+            # rendered as twenty-eight.
+            inputs += ["-i", str(path)]
 
     graph = build_filtergraph(request)
     before = [str(ffmpeg), "-hide_banner", "-nostdin", "-y", *inputs]

@@ -28,7 +28,7 @@ MIN_SHOT_SECONDS = 0.25
 
 @dataclass(frozen=True)
 class Shot:
-    """One picture's time on screen, and how the cut into it is made."""
+    """One clip's time on screen, and how the cut into it is made."""
 
     asset_id: str
     start: float
@@ -36,6 +36,10 @@ class Shot:
     transition: str
     transition_seconds: float
     motion: Motion
+    #: "image" or "video". A still is pushed by the template's motion; a video
+    #: plays its own frames, so the renderer trims it to the slot and skips the
+    #: Ken Burns move. Defaults to image so older plans and tests stay valid.
+    media_kind: str = "image"
 
     @property
     def duration(self) -> float:
@@ -83,12 +87,17 @@ def plan_cuts(
     asset_ids: list[str],
     *,
     speed: float = 1.0,
+    kinds: dict[str, str] | None = None,
 ) -> CutPlan:
-    """Build the shot list for these pictures under this template and track.
+    """Build the shot list for these clips under this template and track.
 
     `speed` scales every hold: 1.0 is the template as designed, above it
     faster, below slower - the operator's dial over the template's cadence
     without leaving the beat, since a doubled hold is still on a beat.
+
+    `kinds` maps asset id to "image" or "video"; anything unlisted is an
+    image. The cadence is the same for both - a video is cut to the beat just
+    like a still - so mixing them changes only how each slot is drawn.
     """
     count = len(asset_ids)
     if count == 0:
@@ -145,11 +154,12 @@ def plan_cuts(
             asset_id=asset_id,
             start=round(start, 4),
             end=round(end, 4),
-            # The first picture is not transitioned into - there is nothing
+            # The first clip is not transitioned into - there is nothing
             # before it - so it always hard-cuts up from black.
             transition="cut" if index == 0 else template.transition,
             transition_seconds=0.0 if index == 0 else round(transition_seconds, 4),
             motion=template.motion,
+            media_kind=(kinds or {}).get(asset_id, "image"),
         ))
     return CutPlan(
         shots=tuple(shots),
