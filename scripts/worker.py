@@ -37,6 +37,8 @@ from trendrelay_api.media_ai import run_enrichment_job  # noqa: E402
 from trendrelay_api.media_ai import run_setup_job as run_media_ai_setup_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.shopee_enrichment import run_enrich_job  # noqa: E402
+from trendrelay_api.autocut.jobs import JOB_KIND as AUTOCUT_JOB_KIND  # noqa: E402
+from trendrelay_api.autocut.jobs import run_render_job as run_autocut_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
 from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND  # noqa: E402
 from trendrelay_api.caption_jobs import run_caption_job  # noqa: E402
@@ -86,6 +88,7 @@ JOB_KINDS = (
     MEDIA_AI_SETUP_KIND,
     ENRICHMENT_JOB_KIND,
     VOICE_JOB_KIND,
+    AUTOCUT_JOB_KIND,
 )
 
 
@@ -150,6 +153,7 @@ def process_available() -> int:
     media_ai_setup_ids = recoverable_job_ids(MEDIA_AI_SETUP_KIND)
     enrichment_ids = recoverable_job_ids(ENRICHMENT_JOB_KIND)
     voice_ids = recoverable_job_ids(VOICE_JOB_KIND)
+    autocut_ids = recoverable_job_ids(AUTOCUT_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -179,6 +183,12 @@ def process_available() -> int:
         refill=lambda: recoverable_job_ids(EFFECT_JOB_KIND),
     )
     run_job_batch(caption_ids, run_caption_job, label="Caption render")
+    # One image montage is one ffmpeg graph, tens of seconds of CPU; a small
+    # pool keeps two operators' renders from waiting on each other.
+    run_job_batch(
+        autocut_ids, run_autocut_job, label="AutoCut render", workers=2,
+        refill=lambda: recoverable_job_ids(AUTOCUT_JOB_KIND),
+    )
     # ElevenLabs plans enforce their own concurrency limits. Two requests keep
     # ordinary plans moving without turning a large selection into a burst of
     # paid requests; deterministic job IDs still prevent duplicate billing.
@@ -213,6 +223,7 @@ def process_available() -> int:
         + len(media_ai_setup_ids)
         + len(enrichment_ids)
         + len(voice_ids)
+        + len(autocut_ids)
     )
 
 

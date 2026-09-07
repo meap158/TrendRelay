@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from trendrelay_api import __version__
 from trendrelay_api.attribution_api import router as attribution_router
+from trendrelay_api.autocut_api import router as autocut_router
 from trendrelay_api.auth import LOCAL_ADMIN_EMAIL, LOCAL_ADMIN_ID, local_auth_allowed
 from trendrelay_api.campaign_autopilot_api import router as campaign_autopilot_router
 from trendrelay_api.campaign_management_api import router as campaign_management_router
@@ -96,6 +97,7 @@ app = FastAPI(
 )
 app.include_router(foundation_router)
 app.include_router(attribution_router)
+app.include_router(autocut_router)
 app.include_router(campaigns_router)
 app.include_router(signals_router)
 app.include_router(campaign_management_router)
