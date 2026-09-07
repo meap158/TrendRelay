@@ -316,6 +316,7 @@ def create_ingest_job(
     audio_identifier: str | None = None,
     engagement: dict[str, Any] | None = None,
     source_sha256: str | None = None,
+    batch: dict[str, Any] | None = None,
     factory=None,
 ) -> dict[str, Any]:
     factory = factory or JOB_SESSION_FACTORY
@@ -424,6 +425,13 @@ def create_ingest_job(
         "engagement": engagement or {},
         "created_at": _now(),
     }
+    if batch and batch.get("id"):
+        # The marker the notification bell folds on: every ingest of one
+        # download run shares it, so a run is one card counting itself down
+        # rather than a drawer full of file names. Total 0 on purpose - the
+        # run streams ingests in as sources finish, so the card counts its
+        # own rows instead of promising a figure nobody knows yet.
+        payload["batch"] = {"id": str(batch["id"]), "total": int(batch.get("total") or 0)}
     return create_job_record(
         job_id,
         workspace_id,
