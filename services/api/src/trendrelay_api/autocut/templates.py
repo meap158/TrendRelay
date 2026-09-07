@@ -92,11 +92,14 @@ TEMPLATES: tuple[Template, ...] = (
     Template(
         id="steady-two",
         name="Steady",
-        description="Two beats a picture, a soft push on each - the workhorse "
-        "cadence most of the references use.",
+        description="Two beats a picture with a soft push, cut clean on the "
+        "beat - the workhorse cadence most of the references use.",
         pattern=BeatPattern(holds=(4,), loop=(2,)),
-        transition="crossfade",
-        transition_beats=0.25,
+        # Hard cut, from the evidence: every reference at this ~94 BPM cadence
+        # cuts clean rather than dissolving. The push comes from the motion,
+        # not from a blend across the cut.
+        transition="cut",
+        transition_beats=0.0,
         motion=Motion(zoom=0.06),
         music="steady-two.m4a",
         designed_bpm=94.0,

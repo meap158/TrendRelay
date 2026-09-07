@@ -30,7 +30,7 @@ def request_for(plan) -> RenderRequest:
 
 
 def test_each_picture_becomes_one_moving_covered_clip() -> None:
-    graph = build_filtergraph(request_for(a_plan("steady-two", 3)))
+    graph = build_filtergraph(request_for(a_plan("breathe", 3)))
     # One zoompan per shot, each producing a fixed frame count (d=), not
     # expanding a looped input - the bug that quadrupled the duration.
     assert graph.count("zoompan=") == 3
@@ -39,10 +39,12 @@ def test_each_picture_becomes_one_moving_covered_clip() -> None:
 
 
 def test_a_hard_cut_template_concats_and_a_fade_template_xfades() -> None:
-    cut = build_filtergraph(request_for(a_plan("rapid-one", 3)))  # transition=cut
+    # rapid-one and steady-two hard-cut (the references do at those cadences);
+    # breathe is the confirmed dissolve.
+    cut = build_filtergraph(request_for(a_plan("steady-two", 3)))
     assert "concat=n=2" in cut and "xfade" not in cut
 
-    fade = build_filtergraph(request_for(a_plan("steady-two", 3)))  # crossfade
+    fade = build_filtergraph(request_for(a_plan("breathe", 3)))  # crossfade
     assert "xfade=transition=fade" in fade
 
 
