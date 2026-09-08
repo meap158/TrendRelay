@@ -905,16 +905,24 @@ export function StorytellingDialog({
                 })}
               </div>
               {/* Everything else the Library narrows by, through the one shared
-                  control (ADR 0025). It was four fields of the eight, which
-                  made the same library answer a smaller question here than on
-                  the page it was picked from - and "the clip with the reviewed
-                  transcript, from this channel, under fifteen seconds" is
-                  exactly how somebody finds a shot for a sentence. */}
+                  control (ADR 0025). It was four fields, which made the same
+                  library answer a smaller question here than on the page the
+                  pictures were picked from - and "the clip from this channel
+                  with a reading on it, under fifteen seconds" is exactly how
+                  somebody finds a shot for a sentence.
+
+                  Six, not seven. The fields are 128px at their narrowest, so a
+                  seventh wraps to a row of its own with a thousand pixels of
+                  nothing beside it. The one dropped is `effect`: a rendered
+                  blur or overlay says nothing about whether a clip suits a
+                  sentence, while `processing` says whether it has been read at
+                  all - and a clip with no reading is one the matcher can only
+                  guess about. */}
               <AssetFilters
                 values={library.filters}
                 facets={library.facets}
                 fields={[
-                  "query", "effect", "channel", "platform", "processing",
+                  "query", "channel", "platform", "processing",
                   "length", "downloaded",
                 ]}
                 cleared={{}}
