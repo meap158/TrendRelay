@@ -86,6 +86,9 @@ def test_templates_rank_for_the_picture_count() -> None:
     # Best first, every one carries its match and its music.
     assert body["templates"][0]["match"] == 1.0
     assert all("music" in t for t in body["templates"])
+    # And its steady cadence, so the chooser can animate the real rhythm.
+    assert body["templates"][0]["cadence"] == [1]  # rapid-one: one beat a cut
+    assert all(t["cadence"] and all(isinstance(b, int) for b in t["cadence"]) for t in body["templates"])
 
 
 def test_a_plan_preview_defaults_to_the_best_template_and_never_renders() -> None:

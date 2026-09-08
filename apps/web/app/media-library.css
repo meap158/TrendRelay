@@ -1255,3 +1255,15 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-library-tile span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .autocut-library-tile.is-chosen { opacity: 0.55; cursor: default; }
 .autocut-in-use { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; border-radius: 4px; padding: 1px 5px; background: color-mix(in srgb, var(--ink) 72%, transparent); color: var(--on-ink); font-size: 9px; font-style: normal; }
+/* The rhythm hint: cadence cells sized by beats, a playhead sweeping across at
+   the template's tempo. Paused until the template is chosen or hovered so the
+   list stays still, and stopped outright for a reduced-motion preference. */
+.autocut-rhythm { position: relative; display: block; block-size: 8px; margin-block: 2px; border-radius: 3px; overflow: hidden; container-type: inline-size; }
+.autocut-rhythm-track { display: flex; gap: 1px; block-size: 100%; }
+.autocut-rhythm-cell { display: block; block-size: 100%; border-radius: 2px; background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.autocut-template.selected .autocut-rhythm-cell { background: color-mix(in srgb, var(--link) 32%, transparent); }
+.autocut-rhythm-head { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: 2px; background: var(--muted); animation: autocut-sweep linear infinite; animation-play-state: paused; }
+.autocut-template.selected .autocut-rhythm-head { background: var(--link); }
+.autocut-template.selected .autocut-rhythm-head, .autocut-template:hover .autocut-rhythm-head { animation-play-state: running; }
+@keyframes autocut-sweep { from { transform: translateX(0); } to { transform: translateX(calc(100cqw - 2px)); } }
+@media (prefers-reduced-motion: reduce) { .autocut-rhythm-head { animation: none; } }

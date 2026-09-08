@@ -48,6 +48,9 @@ def _template_view(template: autocut_templates.Template, score: float | None = N
         "designed_bpm": template.designed_bpm,
         "ideal_pictures": list(template.ideal_pictures),
         "music_available": autocut_jobs.resolve_audio(template.music) is not None,
+        # The steady cadence in beats-per-cut, so the chooser can animate this
+        # template's actual rhythm rather than approximate one from the tempo.
+        "cadence": list(template.pattern.loop),
     }
     if score is not None:
         view["match"] = round(score, 3)

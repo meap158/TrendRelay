@@ -55,7 +55,36 @@ type TemplateView = {
   ideal_pictures: [number, number];
   music_available: boolean;
   match?: number;
+  /** The steady cadence in beats-per-cut, for the rhythm hint. */
+  cadence: number[];
 };
+
+/**
+ * A small strip that shows a template's rhythm without rendering it.
+ *
+ * The chooser used to describe each cadence in words - "two beats a picture",
+ * "one-beat doubles on the drops" - which a reader has to translate into a
+ * feel. This plays it instead: one segment per beat-cut in the steady cadence,
+ * sized to its length, with a playhead sweeping across at the template's own
+ * tempo, so it crosses a cut boundary exactly when a cut would land. The sweep
+ * is paused in CSS until the template is chosen or hovered - and by a reduced-
+ * motion preference always - so the list stays calm and cheap.
+ */
+function RhythmHint({ cadence, bpm }: { cadence: number[]; bpm: number }) {
+  const beats = cadence.length ? cadence : [2];
+  // One full pass through the cadence, at the real beat period.
+  const seconds = (beats.reduce((sum, b) => sum + b, 0) * 60) / (bpm > 0 ? bpm : 100);
+  return (
+    <span className="autocut-rhythm" aria-hidden="true">
+      <span className="autocut-rhythm-track">
+        {beats.map((b, index) => (
+          <span key={index} className="autocut-rhythm-cell" style={{ flexGrow: b }} />
+        ))}
+      </span>
+      <span className="autocut-rhythm-head" style={{ animationDuration: `${seconds.toFixed(2)}s` }} />
+    </span>
+  );
+}
 
 type PlanShot = { asset_id: string; start: number; end: number };
 type PlanView = {
@@ -379,6 +408,7 @@ export function AutoCutDialog({
                   {template.match === 1 && <em className="autocut-best">best fit</em>}
                 </strong>
                 <small>{template.description}</small>
+                <RhythmHint cadence={template.cadence} bpm={template.designed_bpm} />
                 <span className="autocut-template-meta">
                   {template.transition} · {template.designed_bpm} BPM
                   {!template.music_available && <em title="No music file for this template yet"> · silent</em>}
