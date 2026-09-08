@@ -35,9 +35,10 @@ type TemplateView = {
   match?: number;
 };
 
+type PlanShot = { asset_id: string; start: number; end: number };
 type PlanView = {
   template: TemplateView;
-  plan: { duration: number; bpm: number; beat_synced: boolean; shots: { asset_id: string }[] };
+  plan: { duration: number; bpm: number; beat_synced: boolean; shots: PlanShot[] };
   bpm: number;
   beat_synced: boolean;
   music_available: boolean;
@@ -85,6 +86,7 @@ export function AutoCutDialog({
   const [previewState, setPreviewState] = useState<"idle" | "building" | "ready" | "error">("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const base = `/api/workspaces/${workspaceId}/autocut`;
   const assetById = useMemo(
@@ -219,9 +221,27 @@ export function AutoCutDialog({
     });
   }, []);
 
+  // Drop a clip from the sequence without leaving the modal - the other half
+  // of arranging by hand. Kept from emptying the timeline: one clip is the
+  // floor a render still has something to draw from.
+  const removeClip = useCallback((assetId: string) => {
+    setOrder((current) => (current.length > 1 ? current.filter((id) => id !== assetId) : current));
+  }, []);
+
+  // Each clip's time on screen, from the plan, so the timeline reads like an
+  // editor track - a hold in seconds under every thumbnail.
+  const shotDurations = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const shot of plan?.plan.shots ?? []) {
+      map.set(shot.asset_id, Math.max(0, shot.end - shot.start));
+    }
+    return map;
+  }, [plan]);
+
   return (
     <Dialog
       open={open}
+      size="wide"
       title={`AutoCut ${order.length} into a video`}
       onClose={onClose}
     >
@@ -269,29 +289,47 @@ export function AutoCutDialog({
             </label>
           </div>
 
-          {/* The timeline: the chosen clips in order, dragged to rearrange.
-              A number and a video/photo marker per clip, so the sequence
-              reads at a glance the way a track does in an editor. */}
+          {/* The timeline: the chosen clips in order, dragged to rearrange
+              and dropped to remove. A number, a hold in seconds, and a
+              video marker per clip, so the sequence reads like an editor
+              track - and a line marks where a dragged clip will land. */}
           <div className="autocut-timeline" aria-label="Clip order">
             {order.map((assetId, index) => {
               const asset = assetById.get(assetId);
               if (!asset) return null;
+              const hold = shotDurations.get(assetId);
               return (
                 <div
                   key={assetId}
-                  className={`autocut-clip${dragIndex === index ? " dragging" : ""}`}
+                  className={[
+                    "autocut-clip",
+                    dragIndex === index ? "dragging" : "",
+                    dropIndex === index && dragIndex !== index ? "drop-target" : "",
+                  ].filter(Boolean).join(" ")}
                   draggable
                   onDragStart={() => setDragIndex(index)}
-                  onDragEnd={() => setDragIndex(null)}
-                  onDragOver={(event) => { event.preventDefault(); }}
+                  onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
+                  onDragOver={(event) => { event.preventDefault(); setDropIndex(index); }}
                   onDrop={(event) => {
                     event.preventDefault();
                     if (dragIndex !== null) moveClip(dragIndex, index);
                     setDragIndex(null);
+                    setDropIndex(null);
                   }}
                   title={asset.title}
                 >
                   <span className="autocut-clip-index">{index + 1}</span>
+                  {order.length > 1 && (
+                    <button
+                      type="button"
+                      className="autocut-clip-remove"
+                      aria-label={`Remove ${asset.title}`}
+                      title="Remove from this video"
+                      // Draggable ancestors swallow a plain click on some
+                      // browsers; pointer-down fires it reliably.
+                      onPointerDown={(event) => { event.stopPropagation(); removeClip(assetId); }}
+                    >×</button>
+                  )}
                   <AssetThumbnail
                     asset={{
                       id: asset.id,
@@ -311,6 +349,7 @@ export function AutoCutDialog({
                   {asset.media_kind === "video" && (
                     <span className="autocut-clip-kind" aria-label="Video">▶</span>
                   )}
+                  {hold !== undefined && <span className="autocut-clip-hold">{hold.toFixed(1)}s</span>}
                 </div>
               );
             })}
