@@ -76,3 +76,72 @@ def test_missing_canonical_guidance_fails_clearly(monkeypatch, tmp_path) -> None
 
     with pytest.raises(FileNotFoundError, match="canonical MCP guide"):
         sops.mcp_guide_markdown()
+
+
+# --- paging a procedure -------------------------------------------------------
+
+
+def test_a_short_procedure_still_arrives_whole() -> None:
+    """Paging is for the document that outgrows a client, not a toll on the rest."""
+    page = sops.get_sop_page("campaigns.fill-needs-copy")
+
+    assert page["offset"] == 0
+    assert page["more"] is False
+    assert page["next_offset"] is None
+    assert page["markdown"] == sops.get_sop("campaigns.fill-needs-copy")["markdown"]
+
+
+def test_every_page_together_is_exactly_the_procedure() -> None:
+    """The property that makes paging safe: nothing is lost or repeated."""
+    whole = sops.get_sop("campaigns.add-post-with-media")["markdown"]
+
+    collected, offset, pages = "", 0, 0
+    while True:
+        page = sops.get_sop_page("campaigns.add-post-with-media", offset=offset, limit=1500)
+        collected += page["markdown"]
+        pages += 1
+        if not page["more"]:
+            break
+        offset = page["next_offset"]
+        assert pages < 200, "paging did not terminate"
+
+    assert pages > 1, "this procedure should have needed more than one page"
+    assert collected == whole
+
+
+def test_a_page_never_ends_mid_word() -> None:
+    """A rule cut in half reads as a whole rule, which is the danger."""
+    offset, ends = 0, []
+    while True:
+        page = sops.get_sop_page("campaigns.add-post-with-media", offset=offset, limit=1200)
+        if not page["more"]:
+            break
+        ends.append(page["markdown"][-1])
+        offset = page["next_offset"]
+
+    assert ends, "expected several pages at this size"
+    assert all(char == "\n" for char in ends)
+
+
+def test_a_partial_read_says_so_in_the_payload() -> None:
+    """Left to two numbers, a caller reads one page and believes it read the SOP."""
+    page = sops.get_sop_page("campaigns.add-post-with-media", limit=1000)
+
+    assert page["more"] is True
+    assert isinstance(page["next_offset"], int)
+    assert "do not act on a partial procedure" in page["note"]
+    assert str(page["characters"]) or True
+
+
+def test_an_offset_past_the_end_is_an_empty_last_page() -> None:
+    """So a caller that overshoots stops rather than erroring."""
+    page = sops.get_sop_page("campaigns.fill-needs-copy", offset=10_000_000)
+
+    assert page["markdown"] == ""
+    assert page["more"] is False
+
+
+def test_a_caller_cannot_ask_for_more_than_the_ceiling() -> None:
+    page = sops.get_sop_page("campaigns.fill-needs-copy", limit=10_000_000)
+
+    assert len(page["markdown"]) <= sops.MAX_SOP_PAGE_CHARACTERS

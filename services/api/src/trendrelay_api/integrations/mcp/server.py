@@ -14,7 +14,15 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from trendrelay_api.integrations.mcp import context, intake, policy, schedules, sops, writes
+from trendrelay_api.integrations.mcp import (
+    context,
+    intake,
+    policy,
+    products,
+    schedules,
+    sops,
+    writes,
+)
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -52,6 +60,18 @@ CopyPageOffset = Annotated[
     int,
     Field(ge=0, description="Zero-based position of the first post to return."),
 ]
+ProductPageLimit = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=products.MAX_PAGE,
+        description="Products to return. Read full listings one product at a time.",
+    ),
+]
+ProductPageOffset = Annotated[
+    int,
+    Field(ge=0, description="Zero-based position of the first product to return."),
+]
 
 
 def _file_value(value: OpenAIFile | None) -> dict[str, Any] | None:
@@ -70,6 +90,12 @@ INSTRUCTIONS = (
     "thread reply lands there, and the campaign's brief. Write with "
     "`write_caption`, `write_first_comment` and `write_thread` (or `write_post_copy` "
     "for several at once).\n\n"
+    "For product-aware copy or media prompts, use `list_products` (or "
+    "`list_campaign_products` inside a campaign), then call `get_product_details` "
+    "for the chosen product's complete listing and image gallery. "
+    "`get_product_attribution` reads its campaign performance separately. Avoid "
+    "loading every full listing at once, and make only claims supported by the "
+    "live record.\n\n"
     "To add a new post: `list_library_assets` finds media the workspace already "
     "holds - look before uploading, because re-importing a file the Library "
     "has records provenance that is not true. `upload_media` brings in one "
@@ -217,12 +243,18 @@ def build_server(workspace_id: str) -> FastMCP:
         name="get_sop",
         description=(
             "Read the reviewed SOP for an action, id or alias. This returns the "
-            "procedure and metadata; use it before the related workspace tools."
+            "procedure and metadata; use it before the related workspace tools. "
+            "Long procedures come back in pages: when the result says "
+            "`more: true`, call again with the `next_offset` it gives and read "
+            "the rest before acting. A partial procedure is not a procedure. "
+            "Pass a smaller `limit` if your client truncates large results."
         ),
     )
-    def get_sop(action: str) -> dict[str, Any]:
+    def get_sop(
+        action: str, offset: int = 0, limit: int | None = None
+    ) -> dict[str, Any]:
         _guard("get_sop")
-        return sops.get_sop(action)
+        return sops.get_sop_page(action, offset=offset, limit=limit)
 
     @server.tool(
         name="list_campaigns",
@@ -634,6 +666,114 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="list_products",
+        description=(
+            "Search the workspace product catalog, optionally limited to one "
+            "campaign or to products with/without a fetched listing. Returns "
+            "identity, primary image, a bounded listing preview and every offer; "
+            "pages with limit/offset. Use get_product_details only for products "
+            "you need in full, rather than pulling every long description and "
+            "gallery into context at once."
+        ),
+    )
+    def list_products(
+        query: str | None = None,
+        campaign_id: str | None = None,
+        has_listing: bool | None = None,
+        limit: ProductPageLimit = products.DEFAULT_PAGE,
+        offset: ProductPageOffset = 0,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_products",
+            lambda s: products.list_products(
+                s, workspace_id, query=query, campaign_id=campaign_id,
+                has_listing=has_listing, limit=limit, offset=offset,
+            ),
+        )
+
+    @server.tool(
+        name="get_product_details",
+        description=(
+            "Read one product's complete stored listing and commercial context: "
+            "full description, every stored image, categories, attributes, "
+            "variations, vouchers, listing freshness, offers, campaign membership, "
+            "tracking links, clicks and conversions. Use the product_id returned by "
+            "list_products, list_campaign_products or get_post_context. This is the "
+            "authoritative context for product-aware copy and media prompts."
+        ),
+    )
+    def get_product_details(product_id: str) -> dict[str, Any]:
+        return _call(
+            "get_product_details",
+            lambda s: products.get_product_details(s, workspace_id, product_id),
+        )
+
+    @server.tool(
+        name="get_product_attribution",
+        description=(
+            "Read one product's attribution independently of its listing: tracking "
+            "links, click count and conversion statuses, split by campaign and with "
+            "commission/order value kept in integer cents per currency. Use this "
+            "when performance should inform product selection; it changes nothing."
+        ),
+    )
+    def get_product_attribution(product_id: str) -> dict[str, Any]:
+        return _call(
+            "get_product_attribution",
+            lambda s: products.get_product_attribution(s, workspace_id, product_id),
+        )
+
+    @server.tool(
+        name="list_campaign_products",
+        description=(
+            "The products a campaign may promote, and which are still free to "
+            "attach. Use it when the media makes a different product the "
+            "obvious fit than the one smart matching chose. Products already "
+            "pinned to another post are hidden - each product goes to one post "
+            "in a campaign - so what comes back is what you may actually pick; "
+            "pass include_taken=true to see the rest and which post holds each. "
+            "Pass post_id so this post's own products come back as `current` "
+            "rather than as taken. Pages with limit/offset; follow `more` and "
+            "`next_offset`."
+        ),
+    )
+    def list_campaign_products(
+        campaign_id: str,
+        post_id: str | None = None,
+        include_taken: bool = False,
+        limit: ProductPageLimit = products.DEFAULT_PAGE,
+        offset: ProductPageOffset = 0,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_campaign_products",
+            lambda s: products.list_campaign_products(
+                s, workspace_id, campaign_id,
+                post_id=post_id, include_taken=include_taken,
+                limit=limit, offset=offset,
+            ),
+        )
+
+    @server.tool(
+        name="set_post_products",
+        description=(
+            "Choose which of the campaign's products this post carries, "
+            "overriding smart matching for it. Give the offer_ids from "
+            "list_campaign_products; the list replaces the post's current "
+            "choice, and an empty list hands it back to smart matching. "
+            "Refused if a product is not tagged to the campaign, is "
+            "unavailable at the merchant, exceeds the campaign's products-per-"
+            "post ceiling, or is already pinned to another post - each product "
+            "goes to one post. Do not use this to make a caption match a "
+            "product; use it when the product should match the media."
+        ),
+    )
+    def set_post_products(post_id: str, offer_ids: list[str]) -> dict[str, Any]:
+        return _call(
+            "set_post_products",
+            lambda s: products.set_post_products(s, workspace_id, post_id, offer_ids),
+        )
+
+    @server.tool(
         name="get_import_status",
         description=(
             "How upload_media and upload_image imports are going. Pass every "
@@ -913,6 +1053,14 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "list_library_assets", "get_asset_thumbnails", "upload_image", "upload_media",
         "get_import_status", "create_campaign_post", "set_post_media",
     ),
+    # Which product a post carries: read what the campaign may promote, and
+    # choose among those. Its own group rather than filed under Copy, because
+    # it decides what the post earns on rather than what it says - and the
+    # decision is bounded by the campaign's own tags either way.
+    "Products": (
+        "list_products", "get_product_details", "get_product_attribution",
+        "list_campaign_products", "set_post_products",
+    ),
     "Posting schedule": (
         "list_posting_times", "get_campaign_posting_times",
         "get_day_slots", "pin_post_slot",
@@ -931,6 +1079,7 @@ CATEGORY_TABS: dict[str, str | None] = {
     "Campaign context": "Campaigns",
     "Copy": "Campaigns",
     "Media & posts": "Campaigns",
+    "Products": "Campaigns",
     "Posting schedule": "Campaigns",
 }
 TOOL_TAB_OVERRIDES: dict[str, str] = {

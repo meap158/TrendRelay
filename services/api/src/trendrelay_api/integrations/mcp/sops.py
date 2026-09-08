@@ -117,6 +117,76 @@ def _selectors(entry: dict[str, Any]) -> set[str]:
     return {_selector(value) for value in values}
 
 
+#: How much of a procedure one fetch returns by default.
+#:
+#: Chosen so every SOP written so far comes back whole in a single call: paging
+#: is here for the document that outgrows a client's tool-result budget, not as
+#: a toll on the ones that fit. A procedure read in half is worse than one not
+#: read at all, because the half that arrived looks complete.
+SOP_PAGE_CHARACTERS = 20_000
+
+#: The most one call will return, whatever a caller asks for.
+MAX_SOP_PAGE_CHARACTERS = 60_000
+
+
+def _page_end(text: str, budget: int) -> int:
+    """Where a page should stop so it stops somewhere a reader would.
+
+    Preferring a section heading, then a paragraph, then a line - and never
+    mid-word. A page that ends halfway through a rule is a page whose last
+    instruction is a fragment, and a fragment of a rule reads as a whole one.
+
+    The index returned is where the *next* page begins, so concatenating every
+    page reproduces the document exactly.
+    """
+    if len(text) <= budget:
+        return len(text)
+    window = text[:budget]
+    # Well past halfway, or the break is worse than the budget it saved.
+    floor = budget // 2
+    for marker in ("\n## ", "\n\n", "\n"):
+        cut = window.rfind(marker)
+        if cut > floor:
+            return cut + 1
+    return budget
+
+
+def get_sop_page(
+    action: str, offset: int = 0, limit: int | None = None
+) -> dict[str, Any]:
+    """One procedure, in pages a caller can always finish.
+
+    The same `offset`/`more`/`next_offset` contract the queue tools use, so a
+    caller that can page one can page the other. The paging fields are present
+    even when everything fits, so the contract is visible from a single-page
+    read rather than discovered on the first document long enough to need it.
+    """
+    entry = dict(get_sop(action))
+    markdown = entry["markdown"]
+    total = len(markdown)
+    budget = min(limit or SOP_PAGE_CHARACTERS, MAX_SOP_PAGE_CHARACTERS)
+    if budget < 1:
+        raise ValueError("A page must be at least one character.")
+    start = max(0, min(offset, total))
+    end = start + _page_end(markdown[start:], budget)
+
+    entry["markdown"] = markdown[start:end]
+    entry["offset"] = start
+    entry["characters"] = total
+    entry["more"] = end < total
+    entry["next_offset"] = end if end < total else None
+    if entry["more"]:
+        # Said in the payload rather than left to the caller to infer from two
+        # numbers, because the failure this guards against is a caller that
+        # reads one page and believes it read the procedure.
+        entry["note"] = (
+            f"This is characters {start:,}-{end:,} of {total:,}. "
+            f"Call get_sop again with offset={end} for the rest; "
+            "do not act on a partial procedure."
+        )
+    return entry
+
+
 def catalogue_markdown() -> str:
     """A human- and model-readable index for MCP resource clients."""
     entries = list_sops()

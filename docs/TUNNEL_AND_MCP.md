@@ -28,6 +28,7 @@ never approves or publishes them; that stays a person's decision, in the app.
 | Copy writes | `integrations/mcp/writes.py` | The one kind of write — a post's copy — through the interface's own edit helper. |
 | SOP catalog | `integrations/mcp/sops.py`, `SOP/` | Canonical MCP guide/control tower and validated action procedures exposed as instructions, tools, and resources. |
 | MCP server | `integrations/mcp/server.py` | Serves the allowed tools over Streamable HTTP on `127.0.0.1`. |
+| Product context | `integrations/mcp/products.py` | Paginated catalog search, full listing snapshots, campaign/post product context, and currency-safe attribution reads. |
 | Server supervision | `integrations/mcp/service.py` | Starts/stops the server subprocess, an atomic status file, a status reader. |
 | Tunnel config & health | `integrations/mcp/tunnel.py` | The tunnel's settings, command line and `doctor` check, in one place. |
 | Server entry point | `scripts/mcp_server.py` | Resolves the workspace, builds the server, runs it. |
@@ -81,6 +82,14 @@ assistant writes is validated and stored exactly as one a person types. Full
 surface parity with the GUI is the longer goal; the first surface is copy, and it
 is built from shared handlers, so widening it is classifying new operations, not
 reconciling two maps.
+
+Product context follows the same bounded-read pattern. `list_products` and
+`list_campaign_products` return ids, images, offers, and a prompt-sized listing
+preview with pagination. `get_product_details` is the explicit long-form read:
+it returns the stored description and gallery, listing metadata, campaign
+membership, offers, links, and attribution. `get_product_attribution` is the
+small performance-only read. All three are workspace-scoped and read-only; they
+do not fetch a provider, alter a listing, or approve a post.
 
 Parity does **not** mean equal authority. An operation being reachable from the
 window in front of the operator is not an argument for it being reachable by a

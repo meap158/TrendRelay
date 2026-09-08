@@ -119,6 +119,22 @@ EXPOSURE: dict[str, Access] = {
     # happens, for one post rather than for the campaign. It approves nothing
     # and sends nothing - a draft it locks still waits for a person.
     "pin_post_slot": Access.WORKSPACE_WRITE,
+    # The catalog and its stored listing snapshots are workspace context. The
+    # full record is a separate read so listing a large catalog stays bounded;
+    # attribution is read-only evidence already visible on the Attribution tab.
+    "list_products": Access.READ,
+    "get_product_details": Access.READ,
+    "get_product_attribution": Access.READ,
+    # Reading what a campaign may promote is the same permission as reading its
+    # posts: a tagged product is already the operator's decision, and this only
+    # says which of them are still free.
+    "list_campaign_products": Access.READ,
+    # Choosing among them is a write, and a narrow one: it swaps which of the
+    # campaign's own tagged products a post carries. It cannot reach a product
+    # the campaign was never given, cannot exceed its per-post ceiling, and
+    # cannot take one another post already holds - so the widest thing it can
+    # do is make a different, already-permitted product the one that earns.
+    "set_post_products": Access.WORKSPACE_WRITE,
     # --- Workspace writes: media in, and a post proposed -------------------
     # An upload adds a file to the Library through the same ingest as an
     # operator's import - immutable, deduplicated, audited - and publishes

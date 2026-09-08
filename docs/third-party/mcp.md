@@ -53,6 +53,18 @@ first action is `campaigns.fill-needs-copy`.
   written.
 - `get_campaign_config` - the objective, audience, markets, languages, disclosure
   line, product mode and cadence, for tone and rules.
+- `list_products` - paginated workspace catalog search, optionally scoped to a
+  campaign or listing availability, with product ids, images, compact listing
+  context, and commercial offers.
+- `get_product_details` - one product's complete stored listing (full
+  description and gallery, attributes, variants and vouchers), offers,
+  campaigns, and attribution. Keeping the long record behind one id avoids
+  flooding an agent's context with an entire catalog.
+- `get_product_attribution` - tracking links, clicks, and conversion status and
+  money by campaign and currency for one product.
+- `list_campaign_products` - products the campaign may promote, including the
+  same product ids and listing previews, plus claim/availability state for
+  `set_post_products`.
 - `get_asset_thumbnails` - Library thumbnails for up to eight assets, returned
   as MCP image content blocks, each preceded by a text line naming its asset.
   The listings that name an `asset_id` (the ranked published posts, the

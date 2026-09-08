@@ -117,12 +117,15 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "create_campaign_post", "create_posting_preset", "get_asset_thumbnails",
         "get_campaign_config",
         "get_campaign_posting_times", "get_day_slots", "get_import_status",
-        "get_post_context", "get_sop", "list_campaign_posts", "list_campaigns",
+        "get_post_context", "get_product_attribution", "get_product_details",
+        "get_sop", "list_campaign_posts",
+        "list_campaign_products", "list_campaigns",
         "list_library_assets",
         "list_posting_times",
-        "list_posts_needing_copy", "list_published_posts", "list_sops",
+        "list_posts_needing_copy", "list_products", "list_published_posts", "list_sops",
         "pin_post_slot", "set_campaign_posting_times",
-        "set_page_posting_times", "set_post_media", "set_workspace_posting_times",
+        "set_page_posting_times", "set_post_media", "set_post_products",
+        "set_workspace_posting_times",
         "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
         "write_post_copy", "write_thread",
@@ -164,13 +167,37 @@ def test_the_needs_copy_tool_exposes_bounded_pagination_arguments() -> None:
     assert properties["offset"]["minimum"] == 0
 
 
+def test_the_product_list_exposes_bounded_pagination_arguments() -> None:
+    built = server.build_server("ws")
+    tools = {tool.name: tool for tool in asyncio.run(built.list_tools())}
+    for name in ("list_products", "list_campaign_products"):
+        properties = tools[name].inputSchema["properties"]
+        assert properties["limit"]["default"] == 50
+        assert properties["limit"]["minimum"] == 1
+        assert properties["limit"]["maximum"] == 250
+        assert properties["offset"]["default"] == 0
+        assert properties["offset"]["minimum"] == 0
+
+
 def test_the_campaign_sops_are_discovered_by_action() -> None:
     catalogue = sops.list_sops()
-    assert [entry["action"] for entry in catalogue] == [
+    # The campaign ones, not the whole catalogue. `list_sops` walks every
+    # folder under SOP/, so pinning the full list here made adding an unrelated
+    # procedure - a design one, say - fail a test about campaigns.
+    assert [
+        entry["action"]
+        for entry in catalogue
+        if entry["action"].startswith("campaigns.")
+    ] == [
         "campaigns.add-post-with-media",
+        "campaigns.editorial-quality",
         "campaigns.fill-needs-copy",
     ]
+    # Whatever else is registered still has to be a catalogue row rather than a
+    # whole document: the listing is read into a prompt, and the markdown is
+    # fetched per procedure.
     assert all("markdown" not in entry for entry in catalogue)
+    assert all(entry["action"] and entry["title"] for entry in catalogue)
 
     procedure = sops.get_sop("write_campaign_copy")
     assert procedure["id"] == "campaigns.fill-needs-copy"
@@ -376,6 +403,8 @@ def test_get_asset_thumbnails_bounds_the_batch(session) -> None:
 def test_get_post_context_carries_product_destination_and_need(session) -> None:
     ctx = context.get_post_context(session, "ws", "q1")
     assert ctx["products"][0]["commission"] == "40.0% +345.60 VND"
+    assert ctx["products"][0]["product_id"] == "prod1"
+    assert "get_product_details" in ctx["products"][0]["details_tool"]
     threads = next(d for d in ctx["destinations"] if d["platform"] == "threads")
     assert threads["follow_up_deliverable"] is True
     assert ctx["needs"]["caption"] is True

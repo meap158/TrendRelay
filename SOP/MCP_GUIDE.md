@@ -16,6 +16,7 @@ write operation looks convenient.
 | Find a post already created (recover a draft's id, attach media later) | (no SOP yet) | `list_campaign_posts` |
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
 | Lock posts to concrete slots, or spread a batch of drafts across days | (no SOP yet) | `get_day_slots` |
+| Research products, listings, images, or attribution | (no SOP yet) | `list_products` |
 
 For an action not listed here, call `list_sops`. Match its canonical action or
 an alias. If no reviewed SOP exists, follow current explicit user direction and
@@ -62,6 +63,18 @@ locked or past - and `pin_post_slot` claims a named slot or, given only a day,
 the most fitting free one. Locks work on drafts, each lock reserves its slot
 against the next call, and so a batch of drafts spreads across the coming days
 one pin at a time without a collision. A lock schedules; it never approves.
+
+For product-aware writing or media generation, start with `list_products` (or
+`list_campaign_products` when the campaign is already known). Catalog rows are
+deliberately compact and paginated. Call `get_product_details` only for the
+chosen product: it returns the full stored listing, complete image gallery,
+description, attributes, variations, vouchers, current offers, campaign links,
+and attribution. `get_post_context` carries the selected product's id, primary
+image, and a bounded listing preview; use that id with `get_product_details`
+before making specific claims or a product image prompt. Use
+`get_product_attribution` when performance should inform selection without
+loading the long listing. Money is integer cents split by currency; never add
+unlike currencies or treat pending/reversed conversions as settled earnings.
 
 ### Quick path: generate an image, then add it to a campaign
 

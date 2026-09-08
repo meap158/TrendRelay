@@ -181,12 +181,16 @@ def _resolve_products(session: Session, item: CampaignQueueItem) -> list[dict[st
     ).all() if product_ids else []
     names = {product.id: product for product in products}
     resolved: list[dict[str, Any]] = []
+    from trendrelay_api.integrations.mcp.products import product_summary
+
     for offer_id in offer_ids:
         offer = by_id.get(offer_id)
         if not offer:
             continue
         product = names.get(offer.product_id)
+        product_context = product_summary(product) if product else {}
         resolved.append({
+            **product_context,
             "offer_id": offer.id,
             "product_name": product.name if product else None,
             "brand": product.brand if product else None,
@@ -198,6 +202,11 @@ def _resolve_products(session: Session, item: CampaignQueueItem) -> list[dict[st
             "affiliate_link": offer_link_url(session, offer.id),
             "availability": offer.availability,
             "pinned": bool(item.offer_ids),
+            "details_tool": (
+                "Call get_product_details with product_id for the complete listing, "
+                "gallery, variants, vouchers, campaign links and attribution."
+                if product else None
+            ),
         })
     return resolved
 
