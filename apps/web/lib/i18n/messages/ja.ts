@@ -40,7 +40,6 @@ export const ja: Messages = {
   nav: {
     discover: "発見",
     library: "ライブラリ",
-    storytelling: "ストーリー",
     studio: "スタジオ",
     campaigns: "キャンペーン",
     publish: "投稿",

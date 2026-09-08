@@ -54,6 +54,11 @@ const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEd
 const CampaignPicker = dynamic(() => import("./campaign-picker").then((m) => m.CampaignPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const BatchTranscribe = dynamic(() => import("./batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
+const AutoCutDialog = dynamic(() => import("./autocut-dialog").then((m) => m.AutoCutDialog), { ssr: false });
+const StorytellingDialog = dynamic(() => import("./storytelling-dialog").then((m) => m.StorytellingDialog), { ssr: false });
+/** AutoCut cuts pictures, so its minimum is a couple; a single image is not a
+    montage. Matched to the API, which filters non-images out server-side. */
+const AUTOCUT_MIN_IMAGES = 2;
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
@@ -1270,8 +1275,10 @@ function LibraryContent() {
   const [transcribeOpen, setTranscribeOpen] = useState(false);
   const [captionsOpen, setCaptionsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  /** What the campaign picker is about to add. Empty closes it. */
-  const [campaignPickerFor, setCampaignPickerFor] = useState<Asset[]>([]);
+  /** What the campaign picker is about to add. Null closes it. */
+  const [campaignPickerFor, setCampaignPickerFor] = useState<CampaignPickerSelection | null>(null);
+  const [autoCutOpen, setAutoCutOpen] = useState(false);
+  const [storytellingOpen, setStorytellingOpen] = useState(false);
   /** The machine reading open in the reader, or null. */
   const [readingDraft, setReadingDraft] = useState<ReadableTranscript | null>(null);
   const [effectsOpen, setEffectsOpen] = useState(false);
@@ -2083,6 +2090,29 @@ function LibraryContent() {
                       <Button
                         key={action.id}
                         variant={action.id === "delete" ? "danger" : "secondary"}
+                    {selectedVisuals.length >= AUTOCUT_MIN_IMAGES && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!canImport}
+                        title="Cut the selected photos and videos into a beat-synced video from a template"
+                        onClick={() => setAutoCutOpen(true)}
+                      ><ActionIcon name="play" />AutoCut{selectedVisuals.length !== selection.size ? ` ${selectedVisuals.length}` : ""}</Button>
+                    )}
+                    {/* Beside AutoCut because it is the same kind of thing:
+                        many pictures in, one new video out. AutoCut cuts them
+                        to a track's beats and this cuts them to the sentences
+                        of a narration, so they belong in the same place and
+                        are reached the same way. */}
+                    {selectedVisuals.length > 0 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!canImport}
+                        title="Narrate a script over the selected photos and videos"
+                        onClick={() => setStorytellingOpen(true)}
+                      ><ActionIcon name="effects" />Storytelling</Button>
+                    )}
                         size="sm"
                         busy={busy === `bulk-${action.id}`}
                         disabled={!canImport || !action.available}
@@ -2694,6 +2724,28 @@ function LibraryContent() {
             // not know about the form; it hands back words and closes.
             const field = readingDraft?.kind === "ocr" ? ocrField : speechField;
             if (field.current) field.current.value = text;
+      {workspaceId && (
+        <StorytellingDialog
+          open={storytellingOpen}
+          workspaceId={workspaceId}
+          apiFetch={apiFetch}
+          assets={selectedVisuals}
+          onClose={() => setStorytellingOpen(false)}
+          onQueued={(text) => succeed(text)}
+          onError={(text) => fail(text)}
+        />
+      )}
+      {workspaceId && (
+        <AutoCutDialog
+          open={autoCutOpen}
+          workspaceId={workspaceId}
+          apiFetch={apiFetch}
+          assets={selectedVisuals}
+          onClose={() => setAutoCutOpen(false)}
+          onQueued={(text) => { succeed(text); setSelection(new Set()); }}
+          onError={(text) => fail(text)}
+        />
+      )}
             setReadingDraft(null);
           }}
         />

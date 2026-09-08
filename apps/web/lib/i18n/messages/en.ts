@@ -46,7 +46,6 @@ export const en = {
   nav: {
     discover: "Discover",
     library: "Library",
-    storytelling: "Storytelling",
     studio: "Studio",
     campaigns: "Campaigns",
     publish: "Publish",
