@@ -1242,3 +1242,16 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 }
 .autocut-video { position: relative; }
 .autocut-video-updating { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; border-radius: 999px; padding: 2px 10px; background: color-mix(in srgb, var(--ink) 70%, transparent); color: var(--on-ink); font-size: 10px; }
+/* Add-clips: a toggle over the shared library browser, folded away until asked
+   for so it never competes with the timeline it sits under. */
+.autocut-add { display: grid; gap: 8px; }
+.autocut-add-row { display: flex; gap: 10px; align-items: center; }
+.autocut-note { color: var(--muted); font-size: 11px; }
+.autocut-library { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.autocut-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; max-block-size: 260px; overflow-y: auto; }
+.autocut-library-tile { position: relative; display: grid; gap: 4px; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 4px; background: none; color: var(--text); font-size: 10px; text-align: center; cursor: pointer; }
+.autocut-library-tile:hover:not(:disabled) { border-color: var(--line); background: var(--panel); }
+.autocut-library-tile .picker-thumb { inline-size: 100%; block-size: 84px; }
+.autocut-library-tile span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autocut-library-tile.is-chosen { opacity: 0.55; cursor: default; }
+.autocut-in-use { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; border-radius: 4px; padding: 1px 5px; background: color-mix(in srgb, var(--ink) 72%, transparent); color: var(--on-ink); font-size: 9px; font-style: normal; }

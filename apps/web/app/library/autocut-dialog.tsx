@@ -5,7 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { ActionIcon } from "../ui/action-icons";
+import { AssetFilters } from "../ui/asset-filters";
+import { useLibraryAssets } from "../../lib/use-library-assets";
 import { AssetThumbnail } from "../publish/composer";
+import type { LibraryAsset } from "../publish/composer";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -13,6 +16,11 @@ type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 //  Remembered across opens the way an editor remembers your export settings;
 //  the template and music are matched to the actual clips, so they are not.
 const PREFS_KEY = "trendrelay.autocut.prefs";
+
+//: The most clips one AutoCut takes - the API caps a plan at forty, past which
+//  it is a different kind of video, so the modal never lets the set grow beyond
+//  what a render would accept.
+const MAX_CLIPS = 40;
 
 function readPrefs(): { aspect?: string; fill?: string; speed?: number } {
   try {
@@ -104,12 +112,19 @@ export function AutoCutDialog({
   const [aspect, setAspect] = useState<"portrait" | "square" | "landscape">("portrait");
   const [fill, setFill] = useState<"cover" | "blur">("cover");
   const [title, setTitle] = useState("");
+  // Clips pulled from the Library inside the modal, on top of the set the
+  // dialog opened on. Cleared whenever it opens on a different selection.
+  const [added, setAdded] = useState<AutoCutAsset[]>([]);
+  const [browsing, setBrowsing] = useState(false);
 
   const base = `/api/workspaces/${workspaceId}/autocut`;
-  const assetById = useMemo(
-    () => new Map(assets.map((asset) => [asset.id, asset])),
-    [assets],
-  );
+  // The opening selection plus anything added since, the added ones that are
+  // already in the base set dropped so a picture cannot be listed twice.
+  const assetById = useMemo(() => {
+    const map = new Map(assets.map((asset) => [asset.id, asset]));
+    for (const asset of added) if (!map.has(asset.id)) map.set(asset.id, asset);
+    return map;
+  }, [assets, added]);
 
   // The order and preview track the incoming selection - both reset when the
   // dialog opens on a different set, the order left alone otherwise so a drag
@@ -126,6 +141,8 @@ export function AutoCutDialog({
   if (orderKey !== selectionKey) {
     setOrderKey(selectionKey);
     setOrder(selectionKey ? selectionKey.split(",") : []);
+    setAdded([]);
+    setBrowsing(false);
     setPreviewUrl(null);
     setPreviewState("idle");
     setPlan(null);
@@ -295,6 +312,38 @@ export function AutoCutDialog({
   // floor a render still has something to draw from.
   const removeClip = useCallback((assetId: string) => {
     setOrder((current) => (current.length > 1 ? current.filter((id) => id !== assetId) : current));
+  }, []);
+
+  // Browse the workspace's photos and videos to add to the sequence, through
+  // the shared library loop every other picker reads with (ADR 0025) - it owns
+  // the debounce, paging, facets and stale-response guard. Audio is dropped on
+  // arrival: AutoCut cuts visuals, and a sound file has nothing to show.
+  const library = useLibraryAssets<LibraryAsset>({
+    workspaceId,
+    apiFetch,
+    enabled: open && browsing,
+    keep: (asset) => asset.media_kind === "image" || asset.media_kind === "video",
+  });
+
+  // Append a picked clip to the end of the sequence. Guarded against a
+  // duplicate and against passing the render's clip ceiling, and it keeps its
+  // own row so the timeline can draw the thumbnail the same as the rest.
+  const full = order.length >= MAX_CLIPS;
+  const addClip = useCallback((asset: LibraryAsset) => {
+    setOrder((current) => {
+      if (current.includes(asset.id) || current.length >= MAX_CLIPS) return current;
+      setAdded((rows) => (rows.some((row) => row.id === asset.id) ? rows : [...rows, {
+        id: asset.id,
+        title: asset.title,
+        media_kind: asset.media_kind,
+        original_path: asset.original_path,
+        duration_ms: asset.duration_ms,
+        width: asset.width,
+        height: asset.height,
+        versions: asset.versions.map((version) => ({ kind: version.kind })),
+      }]));
+      return [...current, asset.id];
+    });
   }, []);
 
   // Each clip's time on screen, from the plan, so the timeline reads like an
@@ -470,6 +519,70 @@ export function AutoCutDialog({
                 </div>
               );
             })}
+          </div>
+
+          {/* Add more clips without leaving the modal - the set is no longer
+              fixed at what the Library selection opened it on. The shared
+              library browser folds in under a toggle, so it never competes
+              with the timeline above it. */}
+          <div className="autocut-add">
+            <div className="autocut-add-row">
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-expanded={browsing}
+                disabled={full && !browsing}
+                onClick={() => setBrowsing((current) => !current)}
+              >{browsing ? "Done adding" : "Add clips from Library"}</Button>
+              {full && <small className="autocut-note">Forty clips is the most one AutoCut takes.</small>}
+            </div>
+            {browsing && (
+              <div className="autocut-library">
+                <AssetFilters
+                  values={library.filters}
+                  facets={library.facets}
+                  fields={["query", "channel", "platform", "downloaded"]}
+                  cleared={{}}
+                  onChange={(next) => library.setFilters(next)}
+                />
+                {library.failure && <p className="console-error" role="alert">{library.failure}</p>}
+                {library.loading === "list" && !library.assets.length ? (
+                  <p className="autocut-note">Loading…</p>
+                ) : library.assets.length ? (
+                  <>
+                    <div className="autocut-library-grid">
+                      {library.assets.map((asset) => {
+                        const inUse = order.includes(asset.id);
+                        return (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            className={`autocut-library-tile${inUse ? " is-chosen" : ""}`}
+                            disabled={inUse || full}
+                            title={inUse ? "Already in this video" : asset.title}
+                            onClick={() => addClip(asset)}
+                          >
+                            <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                            <span>{asset.title}</span>
+                            {inUse && <em className="autocut-in-use">in video</em>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {library.canLoadMore && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        busy={Boolean(library.loading)}
+                        onClick={() => library.loadMore()}
+                      >Load more</Button>
+                    )}
+                  </>
+                ) : (
+                  <p className="autocut-note">No photos or videos match.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
