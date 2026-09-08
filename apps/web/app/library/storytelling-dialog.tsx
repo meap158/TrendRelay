@@ -582,7 +582,7 @@ export function StorytellingDialog({
             {reading ? "Reading…"
               : lines.length
                 ? <>Splits into <strong>{lines.length}</strong>{" "}
-                  {lines.length === 1 ? "shot" : "shots"}.
+                  {lines.length === 1 ? "sentence" : "sentences"}.
                   {short && ` You picked ${picked.length}, so some repeat.`}</>
                 : "Nothing to read yet."}
           </p>
@@ -883,6 +883,13 @@ export function StorytellingDialog({
               {assignments.some(Boolean)
                 ? "Drag a row onto another to trade their pictures, or pick a row and click a picture above."
                 : "Unarranged, so the pictures play in the order you chose them."}
+              {" "}
+              {/* One row per sentence, and mostly one shot per row - but the
+                  cut needs the voice to know where it lands, so a sentence too
+                  brief to hold a shot joins the one before it. Said here
+                  because the alternative is a list that numbers eleven rows
+                  and quietly renders ten. */}
+              A sentence too short to hold a shot shares the one before it.
             </p>
             <ol className="story-shot-list">
               {lines.map((line, index) => {
