@@ -235,7 +235,20 @@ export function StorytellingDialog({
       // available for free: somebody writing a script in a workspace they run
       // in Vietnamese is writing it in Vietnamese, and opening on "Any
       // language" made them say so every time.
-      setLanguage((current) => current || (voiceBody?.defaults?.language_code ?? "") || locale);
+      //
+      // Only when a model can read it. The interface speaks seven languages
+      // and this key's models seventy-four, but they are not the same
+      // seventy-four - defaulting to one that is missing would open the dialog
+      // on a language nothing can say, with the picker showing a value that is
+      // not among its own options.
+      const spoken = new Set<string>((voiceBody?.models ?? []).flatMap(
+        (model: Model) => (model.languages ?? []).map((item) => item.language_id),
+      ));
+      setLanguage((current) => (
+        current
+        || (voiceBody?.defaults?.language_code ?? "")
+        || (spoken.has(locale) ? locale : "")
+      ));
     })();
     return () => { cancelled = true; };
   }, [apiFetch, base, open, workspaceId, locale]);
