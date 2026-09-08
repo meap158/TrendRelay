@@ -32,6 +32,18 @@ PLAN = {
 }
 
 
+@pytest.fixture(autouse=True)
+def forget_the_model_catalogue():
+    """The catalogue is cached for five minutes, which tests must not inherit.
+
+    Each test here stands up its own fake service; a catalogue left over from
+    the previous one would answer for it and quietly test nothing.
+    """
+    elevenlabs.reset_model_cache()
+    yield
+    elevenlabs.reset_model_cache()
+
+
 @pytest.fixture()
 def saved_key(monkeypatch):
     monkeypatch.setenv(elevenlabs.API_KEY_ENV, KEY)
