@@ -195,3 +195,11 @@
 @media (max-width: 700px) {
   .story-shot { grid-template-columns: 20px 16px 48px minmax(0, 1fr); gap: 8px; }
 }
+/* Save/resume: a story persists as a draft so closing the dialog does not lose
+   the script and its arrangement; a saved one reopens from this list. */
+.story-drafts-list { display: grid; gap: 4px; margin-block-end: 12px; max-block-size: 160px; overflow-y: auto; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.story-draft-row { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 5px 8px; background: none; color: var(--text); font: inherit; font-size: 12px; text-align: start; cursor: pointer; }
+.story-draft-row:hover { border-color: var(--line); background: var(--panel); }
+.story-draft-row.is-current { border-color: var(--link); }
+.story-draft-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.story-draft-meta { flex: none; color: var(--muted); font-size: 10px; }

@@ -240,6 +240,14 @@ export function StorytellingDialog({
   const [searching, setSearching] = useState(false);
 
   const base = workspaceId ? `/api/workspaces/${workspaceId}/storytelling` : "";
+  const creationsBase = workspaceId ? `/api/workspaces/${workspaceId}/creations` : "";
+  // The saved draft this story belongs to, once saved, and the list to resume.
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [savedDrafts, setSavedDrafts] = useState<
+    { id: string; title: string; status: string; summary: { script_chars: number; pictures: number } }[]
+  >([]);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   // The Library selection is where this starts, not where it is confined: it
   // seeds the set, and adding or removing from either source is the same
@@ -264,6 +272,8 @@ export function StorytellingDialog({
     setAssignments([]);
     setWhy({});
     setFocused(null);
+    setDraftId(null);
+    setDraftsOpen(false);
   }
 
   useEffect(() => {
@@ -607,6 +617,104 @@ export function StorytellingDialog({
     }
   }
 
+  // The current story as a storytelling draft spec - the same fields a render
+  // takes, so a saved draft renders to exactly what the dialog would now.
+  function draftSpec() {
+    return {
+      body,
+      asset_ids: picked.map((asset) => asset.id),
+      assignments: forRender(assignments),
+      template_id: templateId,
+      voice_id: effectiveVoiceId || undefined,
+      model_id: modelId || undefined,
+      language_code: language || undefined,
+      aspect,
+      subtitles,
+    };
+  }
+
+  // Save (or re-save) the story as a resumable draft, so closing the dialog no
+  // longer loses the script and its arrangement.
+  async function saveDraft() {
+    if (!body.trim() && !picked.length) return;
+    setSavingDraft(true);
+    try {
+      const title = body.trim().split(/\s+/).slice(0, 6).join(" ") || "Untitled story";
+      const path = draftId ? `${creationsBase}/${draftId}` : creationsBase;
+      const response = await apiFetch(path, {
+        method: draftId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          draftId
+            ? { title, spec: draftSpec() }
+            : { kind: "storytelling", title, spec: draftSpec() },
+        ),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail ?? "Could not save the draft.");
+      setDraftId(payload.id as string);
+      setSavedDrafts((current) => [
+        { id: payload.id, title: payload.title, status: payload.status, summary: payload.summary },
+        ...current.filter((saved) => saved.id !== payload.id),
+      ]);
+      onQueued("Draft saved - reopen it any time from Saved drafts.");
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "Could not save the draft.");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  // Reopen a saved draft: pull its spec and its pictures (fetched by id, so it
+  // resumes even when the dialog opened on a different selection) and set the
+  // whole story from it.
+  async function resumeDraft(id: string) {
+    try {
+      const response = await apiFetch(`${creationsBase}/${id}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail ?? "Could not open the draft.");
+      const spec = payload.spec ?? {};
+      const ids: string[] = (spec.asset_ids ?? []).filter((assetId: string) => !assetId.startsWith("draft:"));
+      let rows: StoryAsset[] = [];
+      if (ids.length) {
+        const assetsRes = await apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/assets?asset_ids=${ids.join(",")}`,
+        );
+        const assetsBody = await assetsRes.json();
+        rows = (assetsBody.assets ?? []).map((asset: StoryAsset) => ({
+          id: asset.id, title: asset.title, media_kind: asset.media_kind,
+          original_path: asset.original_path, duration_ms: asset.duration_ms ?? null,
+          width: asset.width ?? null, height: asset.height ?? null,
+          versions: (asset.versions ?? []).map((v) => ({ kind: v.kind })),
+        }));
+      }
+      setPicked(rows.slice(0, MAX_PICTURES));
+      setBody(spec.body ?? "");
+      setAssignments(Array.isArray(spec.assignments) ? spec.assignments : []);
+      setTemplateId(spec.template_id ?? "explainer");
+      if (spec.voice_id) setVoiceId(spec.voice_id);
+      setLanguage(spec.language_code ?? "");
+      setAspect(spec.aspect ?? "16:9");
+      setSubtitles(spec.subtitles !== false);
+      setDraftId(id);
+      setDraftsOpen(false);
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "Could not open the draft.");
+    }
+  }
+
+  // Offer the saved stories to resume whenever the dialog is open. Inline fetch,
+  // setState in the async callback, like the reads above.
+  useEffect(() => {
+    if (!open || !creationsBase) return;
+    let live = true;
+    void apiFetch(`${creationsBase}?kind=storytelling&limit=50`)
+      .then((res) => res.json())
+      .then((payload) => { if (live && Array.isArray(payload.items)) setSavedDrafts(payload.items); })
+      .catch(() => { /* a drafts list that will not load is not worth an error */ });
+    return () => { live = false; };
+  }, [open, creationsBase, apiFetch]);
+
   /**
    * Whether the plan has the characters to read this script.
    *
@@ -644,6 +752,16 @@ export function StorytellingDialog({
                       : !effectiveVoiceId ? "Choose a voice."
                         : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
           </span>
+          {savedDrafts.length > 0 && (
+            <Button variant="quiet" aria-expanded={draftsOpen} onClick={() => setDraftsOpen((v) => !v)}>
+              {draftsOpen ? "Hide saved" : `Saved · ${savedDrafts.length}`}
+            </Button>
+          )}
+          <Button
+            variant="secondary" busy={savingDraft}
+            disabled={savingDraft || (!body.trim() && !picked.length)}
+            onClick={() => void saveDraft()}
+          >{draftId ? "Update draft" : "Save draft"}</Button>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={!ready} busy={busy} onClick={() => void render()}>
             <ActionIcon name="play" />Make the video
@@ -652,6 +770,25 @@ export function StorytellingDialog({
       }
     >
       <div className="story-dialog">
+        {draftsOpen && savedDrafts.length > 0 && (
+          <div className="story-drafts-list" role="listbox" aria-label="Saved stories">
+            {savedDrafts.map((saved) => (
+              <button
+                key={saved.id}
+                type="button"
+                role="option"
+                aria-selected={saved.id === draftId}
+                className={`story-draft-row${saved.id === draftId ? " is-current" : ""}`}
+                onClick={() => void resumeDraft(saved.id)}
+              >
+                <span className="story-draft-title">{saved.title}</span>
+                <span className="story-draft-meta">
+                  {saved.summary?.pictures ?? 0} pictures · {saved.status}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <section className="story-write">
           <h4>The script</h4>
           <textarea
