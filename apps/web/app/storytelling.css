@@ -168,7 +168,16 @@
 /* The shot list. One row per sentence: its number, the picture it opens on,
    and the words that will be spoken over it. */
 .story-shot-list { display: grid; gap: 4px; max-block-size: 300px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
-.story-shot { display: grid; grid-template-columns: 24px 64px minmax(0, 1fr); gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); cursor: grab; }
+.story-shot { display: grid; grid-template-columns: 24px 16px 64px minmax(0, 1fr); gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); cursor: grab; }
+/* The keyboard's way to do what the drag does. Sixteen pixels of column, which
+   is what two stacked arrows need and less than a row of its own would cost.
+   Shown on hover and whenever one is focused, so tabbing to it reveals it. */
+.story-shot-move { display: grid; gap: 1px; opacity: 0; }
+.story-shot:hover .story-shot-move,
+.story-shot-move:focus-within { opacity: 1; }
+.story-shot-move button { display: grid; place-items: center; inline-size: 16px; block-size: 13px; padding: 0; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); background: var(--panel); font-size: 8px; line-height: 1; cursor: pointer; }
+.story-shot-move button:hover:not(:disabled) { border-color: var(--link); color: var(--link); }
+.story-shot-move button:disabled { opacity: .35; cursor: default; }
 .story-shot.story-focused { border-color: var(--link); background: var(--link-bg); }
 .story-shot.story-held { opacity: .5; cursor: grabbing; }
 .story-shot-index { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: end; }
@@ -184,5 +193,5 @@
 .story-shot-why { color: var(--muted); font-size: 10px; }
 
 @media (max-width: 700px) {
-  .story-shot { grid-template-columns: 20px 48px minmax(0, 1fr); gap: 8px; }
+  .story-shot { grid-template-columns: 20px 16px 48px minmax(0, 1fr); gap: 8px; }
 }

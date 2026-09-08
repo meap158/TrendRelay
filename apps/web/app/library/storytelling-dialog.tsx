@@ -1051,7 +1051,7 @@ export function StorytellingDialog({
             </div>
             <p className="story-note">
               {assignments.some(Boolean)
-                ? "Drag a row onto another to trade their pictures, or pick a row and click a picture above."
+                ? "Drag a row onto another to trade their pictures, or use the arrows. Pick a row and click a picture above to change one."
                 : "Unarranged, so the pictures play in the order you chose them."}
               {" "}
               {/* One row per sentence, and mostly one shot per row - but the
@@ -1085,6 +1085,24 @@ export function StorytellingDialog({
                     }}
                   >
                     <span className="story-shot-index">{index + 1}</span>
+                    {/* The same trade, by keyboard. Alt is deliberate: the
+                        arrows alone belong to the list they are scrolling. */}
+                    <span className="story-shot-move">
+                      <button
+                        type="button"
+                        aria-label={`Move this picture up to sentence ${index}`}
+                        title="Trade with the shot above (Alt+Up)"
+                        disabled={index === 0}
+                        onClick={() => swap(index, index - 1)}
+                      >↑</button>
+                      <button
+                        type="button"
+                        aria-label={`Move this picture down to sentence ${index + 2}`}
+                        title="Trade with the shot below (Alt+Down)"
+                        disabled={index === lines.length - 1}
+                        onClick={() => swap(index, index + 1)}
+                      >↓</button>
+                    </span>
                     <button
                       type="button"
                       className="story-shot-picture"
@@ -1093,6 +1111,17 @@ export function StorytellingDialog({
                         ? `${asset.title} - click, then click a picture above to change it`
                         : "Click, then click a picture above"}
                       onClick={() => setFocused((current) => (current === index ? null : index))}
+                      onKeyDown={(event) => {
+                        if (!event.altKey) return;
+                        if (event.key === "ArrowUp" && index > 0) {
+                          event.preventDefault();
+                          swap(index, index - 1);
+                        }
+                        if (event.key === "ArrowDown" && index < lines.length - 1) {
+                          event.preventDefault();
+                          swap(index, index + 1);
+                        }
+                      }}
                     >
                       {asset
                         ? <AssetThumbnail
