@@ -275,8 +275,12 @@ export function AutoCutDialog({
       if (!res.ok) throw new Error(body?.detail ?? "Could not start the preview.");
       const jobId = body.id as string;
       const deadline = Date.now() + 120_000;
+      // Poll tight at first - an in-process preview is often ready inside a
+      // second or two - then ease off so a slow one does not hammer the API.
+      let wait = 250;
       for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        wait = Math.min(wait + 150, 1000);
         if (Date.now() > deadline) throw new Error("The preview took too long. Try again, or render it.");
         if (stale()) return;
         const status = await apiFetch(`${base}/jobs/${jobId}`).then((r) => r.json());
@@ -304,7 +308,7 @@ export function AutoCutDialog({
   // right pane always shows the current arrangement without a button press.
   useEffect(() => {
     if (!open || !templateId || !order.length) return;
-    const timer = setTimeout(() => void buildPreview(), 600);
+    const timer = setTimeout(() => void buildPreview(), 350);
     return () => clearTimeout(timer);
   }, [open, buildPreview, templateId, order.length]);
 

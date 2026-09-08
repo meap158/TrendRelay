@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -208,6 +208,7 @@ def start_preview(
     workspace_id: str,
     body: PlanRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
@@ -215,8 +216,17 @@ def start_preview(
 
     The rehearsal before the real render: same cuts, same music, same timing
     - just quicker to make and never filed in the Library.
+
+    The preview is drawn in-process, right after this response, rather than
+    waiting for the media worker's next tick to claim it - a preview is watched
+    live while the operator adjusts, so the seconds a queue pickup would cost
+    are the ones that matter most. The worker still runs the same job if it
+    claims it first; the lease makes the two safe, so this is a head start, not
+    a second render.
     """
-    return _queue(session, request, workspace_id, user, body, preview=True)
+    queued = _queue(session, request, workspace_id, user, body, preview=True)
+    background_tasks.add_task(autocut_jobs.run_render_job, queued["id"])
+    return queued
 
 
 @router.get("/jobs/{job_id}")

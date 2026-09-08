@@ -110,14 +110,16 @@ def _grid(onset: np.ndarray, fps: float, bpm: float) -> tuple[float, ...]:
     return tuple(round(phase + i * period, 4) for i in range(max(count, 0)))
 
 
-def analyze_beats(ffmpeg: Path, audio: Path) -> BeatGrid:
-    """Read a track's tempo and beat grid.
+#: A track's beat grid depends only on its bytes, and AutoCut re-reads the same
+#: few template tracks on every plan and preview the operator tweaks. Decoding
+#: and autocorrelating each time spawns an ffmpeg process for a result that
+#: never changes, so grids are memoised by (path, mtime, size): the same file
+#: is analysed once, and an edited one - different mtime - is analysed afresh.
+_GRID_CACHE: dict[tuple[str, int, int], BeatGrid] = {}
+_GRID_CACHE_MAX = 32
 
-    Degrades honestly: a track that cannot be decoded, or is silent, or is
-    too short to read returns a grid with no tempo and no beats rather than a
-    guessed one. AutoCut then falls back to even spacing, which the caller
-    decides - this function never invents a beat that is not there.
-    """
+
+def _analyze(ffmpeg: Path, audio: Path) -> BeatGrid:
     samples = _decode_mono(ffmpeg, audio)
     duration = round(len(samples) / ANALYSIS_RATE, 3)
     onset, fps = _onset_envelope(samples)
@@ -127,3 +129,27 @@ def analyze_beats(ffmpeg: Path, audio: Path) -> BeatGrid:
     if not bpm:
         return BeatGrid(bpm=0.0, beats=(), duration=duration)
     return BeatGrid(bpm=round(bpm, 1), beats=_grid(onset, fps, bpm), duration=duration)
+
+
+def analyze_beats(ffmpeg: Path, audio: Path) -> BeatGrid:
+    """Read a track's tempo and beat grid, memoised by the file's identity.
+
+    Degrades honestly: a track that cannot be decoded, or is silent, or is
+    too short to read returns a grid with no tempo and no beats rather than a
+    guessed one. AutoCut then falls back to even spacing, which the caller
+    decides - this function never invents a beat that is not there.
+    """
+    key: tuple[str, int, int] | None = None
+    try:
+        stat = audio.stat()
+        key = (str(audio.resolve()), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        key = None  # an unstattable path is still analysed, just not cached
+    if key is not None and key in _GRID_CACHE:
+        return _GRID_CACHE[key]
+    grid = _analyze(ffmpeg, audio)
+    if key is not None:
+        if len(_GRID_CACHE) >= _GRID_CACHE_MAX:
+            _GRID_CACHE.pop(next(iter(_GRID_CACHE)))
+        _GRID_CACHE[key] = grid
+    return grid

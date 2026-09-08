@@ -262,7 +262,12 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
 
     def _encode(graph: str, cwd: Path | None):
         after = ["-filter_complex", graph, "-map", "[vout]", *audio_tail]
-        after += ["-r", str(FPS), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+        after += ["-r", str(FPS), "-pix_fmt", "yuv420p"]
+        # A full render is streamed from the Library, so its moov atom goes up
+        # front; a preview is fetched whole as a blob and never streamed, so it
+        # skips that second rewrite pass and finishes sooner.
+        if not request.preview:
+            after += ["-movflags", "+faststart"]
         return encode_h264(
             ffmpeg, before, after, request.destination,
             # A preview is watched once and discarded, so speed beats quality:
