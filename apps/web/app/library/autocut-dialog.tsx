@@ -152,8 +152,17 @@ export function AutoCutDialog({
   // dialog opened on. Cleared whenever it opens on a different selection.
   const [added, setAdded] = useState<AutoCutAsset[]>([]);
   const [browsing, setBrowsing] = useState(false);
+  // The saved draft this arrangement belongs to, once saved - so a re-save
+  // updates it rather than making a second one - and the list to resume from.
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [savedDrafts, setSavedDrafts] = useState<
+    { id: string; title: string; status: string; updated_at: string | null; summary: { clips: number } }[]
+  >([]);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   const base = `/api/workspaces/${workspaceId}/autocut`;
+  const creationsBase = `/api/workspaces/${workspaceId}/creations`;
   // The opening selection plus anything added since, the added ones that are
   // already in the base set dropped so a picture cannot be listed twice.
   const assetById = useMemo(() => {
@@ -186,6 +195,8 @@ export function AutoCutDialog({
     setOrder(selectionKey ? selectionKey.split(",") : []);
     setAdded([]);
     setBrowsing(false);
+    setDraftId(null);
+    setDraftsOpen(false);
     setSlots([null, null]);
     setVisible(0);
     setPreviewState("idle");
@@ -384,6 +395,100 @@ export function AutoCutDialog({
       setRendering(false);
     }
   }, [templateId, order, music, speed, aspect, fill, caption, captionPos, title, apiFetch, base, onQueued, onError, onClose]);
+
+  // The current arrangement as an AutoCut draft spec.
+  const draftSpec = useCallback(() => ({
+    asset_ids: order, template_id: templateId, music, speed, aspect, fill,
+    caption: caption.trim(), caption_position: captionPos,
+  }), [order, templateId, music, speed, aspect, fill, caption, captionPos]);
+
+  // Save (or re-save) this arrangement as a resumable draft, so closing the
+  // dialog no longer loses it. A first save creates; later saves update the
+  // same draft rather than piling up copies.
+  const saveDraft = useCallback(async () => {
+    if (!order.length) return;
+    setSavingDraft(true);
+    try {
+      const path = draftId ? `${creationsBase}/${draftId}` : creationsBase;
+      const res = await apiFetch(path, {
+        method: draftId ? "PATCH" : "POST",
+        body: JSON.stringify(
+          draftId
+            ? { title: title.trim() || undefined, spec: draftSpec() }
+            : { kind: "autocut", title: title.trim() || undefined, spec: draftSpec() },
+        ),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.detail ?? "Could not save the draft.");
+      setDraftId(body.id as string);
+      // Show it in the resume list at once, newest first, without a refetch.
+      setSavedDrafts((current) => [
+        { id: body.id, title: body.title, status: body.status,
+          updated_at: body.updated_at, summary: body.summary },
+        ...current.filter((saved) => saved.id !== body.id),
+      ]);
+      onQueued("Draft saved - reopen it any time from Saved drafts.");
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSavingDraft(false);
+    }
+  }, [order.length, draftId, creationsBase, apiFetch, title, draftSpec, onQueued, onError]);
+
+  // Reopen a saved draft: pull its spec and its media, and set the whole
+  // arrangement from it. The media is fetched by id so a draft resumes even
+  // when the dialog was opened on a different selection.
+  const resumeDraft = useCallback(async (id: string) => {
+    try {
+      const res = await apiFetch(`${creationsBase}/${id}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.detail ?? "Could not open the draft.");
+      const spec = body.spec ?? {};
+      const ids: string[] = spec.asset_ids ?? [];
+      const libraryIds = ids.filter((assetId) => !assetId.startsWith("draft:"));
+      let rows: AutoCutAsset[] = [];
+      if (libraryIds.length) {
+        const assetsRes = await apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/assets?asset_ids=${libraryIds.join(",")}`,
+        );
+        const assetsBody = await assetsRes.json();
+        rows = (assetsBody.assets ?? []).map((asset: AutoCutAsset & { versions?: { kind: string }[] }) => ({
+          id: asset.id, title: asset.title, media_kind: asset.media_kind,
+          original_path: asset.original_path, duration_ms: asset.duration_ms ?? null,
+          width: asset.width ?? null, height: asset.height ?? null,
+          versions: (asset.versions ?? []).map((v) => ({ kind: v.kind })),
+        }));
+      }
+      const present = new Set(rows.map((row) => row.id));
+      setAdded(rows);
+      setOrder(ids.filter((assetId) => present.has(assetId)));
+      setTemplateId(spec.template_id ?? null);
+      setMusic(spec.music ?? null);
+      setSpeed(typeof spec.speed === "number" ? spec.speed : 1);
+      setAspect(spec.aspect ?? "portrait");
+      setFill(spec.fill ?? "cover");
+      setCaption(spec.caption ?? "");
+      setCaptionPos(spec.caption_position ?? "bottom");
+      setTitle(body.title ?? "");
+      setDraftId(id);
+      setDraftsOpen(false);
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [creationsBase, apiFetch, workspaceId, onError]);
+
+  // Offer the saved drafts to resume whenever the dialog is open. Inline fetch
+  // (setState in the async callback, guarded by `live`) like the other reads
+  // here, so no state is set directly in an effect body.
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    void apiFetch(`${creationsBase}?kind=autocut&limit=50`)
+      .then((res) => res.json())
+      .then((body) => { if (live && Array.isArray(body.items)) setSavedDrafts(body.items); })
+      .catch(() => { /* a drafts list that will not load is not worth an error */ });
+    return () => { live = false; };
+  }, [open, apiFetch, creationsBase]);
 
   // Drag-to-reorder: the dragged clip drops before the one it is released on,
   // moving it in the order the plan and preview read from.
@@ -760,6 +865,41 @@ export function AutoCutDialog({
               </>
             )}
           </div>
+          {/* Save the arrangement as a resumable draft, and reopen a saved one.
+              So closing the dialog no longer loses the work, and an AutoCut
+              begun in the app or by an assistant can be carried on. */}
+          <div className="autocut-drafts-bar">
+            {savedDrafts.length > 0 && (
+              <Button
+                variant="quiet" size="sm" aria-expanded={draftsOpen}
+                onClick={() => setDraftsOpen((current) => !current)}
+              >{draftsOpen ? "Hide saved" : `Saved drafts · ${savedDrafts.length}`}</Button>
+            )}
+            <Button
+              variant="secondary" size="sm" busy={savingDraft}
+              disabled={savingDraft || !order.length}
+              onClick={() => void saveDraft()}
+            >{draftId ? "Update draft" : "Save draft"}</Button>
+          </div>
+          {draftsOpen && savedDrafts.length > 0 && (
+            <div className="autocut-drafts-list" role="listbox" aria-label="Saved drafts">
+              {savedDrafts.map((saved) => (
+                <button
+                  key={saved.id}
+                  type="button"
+                  role="option"
+                  aria-selected={saved.id === draftId}
+                  className={`autocut-draft-row${saved.id === draftId ? " is-current" : ""}`}
+                  onClick={() => void resumeDraft(saved.id)}
+                >
+                  <span className="autocut-draft-title">{saved.title}</span>
+                  <span className="autocut-draft-meta">
+                    {saved.summary?.clips ?? 0} clips · {saved.status}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="autocut-actions">
             <Button variant="quiet" onClick={onClose} disabled={rendering}>Cancel</Button>
             <Button
