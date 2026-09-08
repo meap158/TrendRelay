@@ -58,9 +58,8 @@ Storytelling already share.
 
 ## Web entry points
 
-The AutoCut dialog saves its arrangement as a draft (Save draft creates, then
-updates the same one) and reopens a saved draft from a list under the actions,
-pulling its spec and its media (fetched by id, so it resumes even when the dialog
-opened on a different selection). The **Storytelling** dialog follows the same
-shape and is the remaining increment; the drafts system itself is complete
-end-to-end over HTTP and MCP for both kinds.
+Both the AutoCut and Storytelling dialogs save their work as a draft (Save draft
+creates, then updates the same one) and reopen a saved draft from a list, pulling
+its spec and its media (fetched by id, so it resumes even when the dialog opened
+on a different selection). The drafts system is complete end-to-end — web, HTTP
+and MCP — for both kinds.
