@@ -1,0 +1,299 @@
+"""The Storytelling HTTP surface: an outline, a render queued, a job to watch."""
+
+from __future__ import annotations
+
+import asyncio
+
+import httpx
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from trendrelay_api import storytelling_api
+from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.database import get_session
+from trendrelay_api.main import app
+from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.models import Base
+from trendrelay_api.storytelling import jobs as story_jobs
+
+engine = create_engine(
+    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
+TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def session_override():
+    with TestingSession() as session:
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+
+
+def request(method: str, path: str, **kwargs) -> httpx.Response:
+    async def call():
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 50000))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.request(method, path, **kwargs)
+
+    return asyncio.run(call())
+
+
+def setup_function() -> None:
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[current_user] = lambda: CurrentUser(id="owner-user")
+    story_jobs.SessionFactory = TestingSession
+
+
+def teardown_function() -> None:
+    app.dependency_overrides.clear()
+
+
+_slug = [0]
+
+
+def make_workspace() -> str:
+    _slug[0] += 1
+    return request(
+        "POST", "/api/workspaces",
+        json={"name": f"Studio {_slug[0]}", "slug": f"studio-{_slug[0]}"},
+    ).json()["workspace"]["id"]
+
+
+def add_picture(workspace_id: str, asset_id: str, kind: str = "image") -> None:
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id=asset_id, workspace_id=workspace_id, title=asset_id,
+            media_kind=kind, source_type="test", original_path=f"/img/{asset_id}.png",
+            original_sha256=asset_id.ljust(64, "0")[:64],
+            mime_type="image/png", size_bytes=10, created_by="owner-user",
+        ))
+
+
+SCRIPT = "The house was empty. Nobody had been there for weeks. They left before dawn."
+
+
+def test_the_templates_are_pacings_and_say_nothing_about_topic() -> None:
+    workspace_id = make_workspace()
+    body = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/templates"
+    ).json()
+    assert [item["id"] for item in body["templates"]] == ["explainer", "unfolding", "urgent"]
+    assert all(item["description"] for item in body["templates"])
+
+
+def test_an_outline_counts_the_shots_before_anything_is_spoken_or_paid_for() -> None:
+    """The cheap, offline read of the writing.
+
+    It says how many pictures the script wants, which is the number somebody
+    needs before they go and find them - and before a generation is spent.
+    """
+    workspace_id = make_workspace()
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/outline",
+        json={"body": SCRIPT},
+    )
+    assert answer.status_code == 200
+    assert answer.json()["count"] == 3
+    assert answer.json()["pictures_wanted"] == 3
+    assert answer.json()["lines"][0] == "The house was empty."
+
+
+def test_the_outline_counts_what_the_render_will_count(monkeypatch) -> None:
+    """A decomposed accent is a different number of characters, and the split
+    runs on the composed form. If the outline skipped that step it would show a
+    sentence count that the render then disagreed with."""
+    import unicodedata
+
+    workspace_id = make_workspace()
+    decomposed = unicodedata.normalize("NFD", "Căn nhà trống rỗng. Không ai đến đó.")
+    body = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/outline",
+        json={"body": decomposed},
+    ).json()
+    assert body["count"] == 2
+    # The lines come back composed, which is what will be spoken and subtitled.
+    assert body["lines"][0] == unicodedata.normalize("NFC", "Căn nhà trống rỗng.")
+
+
+def queued_kwargs(monkeypatch) -> list[dict]:
+    """Intercept the queue and keep what it was asked for.
+
+    The same shape the AutoCut tests use: this file is about the HTTP surface -
+    what it accepts, what it refuses, and what it passes on - and writing a real
+    job record here would be testing the job store twice.
+    """
+    seen: list[dict] = []
+    monkeypatch.setattr(
+        storytelling_api.story_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: seen.append(kwargs)
+        or {"id": "story_abc", "status": "queued", "preview": kwargs.get("preview")},
+    )
+    return seen
+
+
+def test_a_render_queues_the_script_the_pictures_and_the_voice(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    for index in range(3):
+        add_picture(workspace_id, f"pic{index}")
+    seen = queued_kwargs(monkeypatch)
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={
+            "body": SCRIPT,
+            "asset_ids": ["pic0", "pic1", "pic2"],
+            "template_id": "unfolding",
+            "voice_id": "voice-1",
+        },
+    )
+    assert answer.status_code == 202, answer.text
+    assert seen[0]["body"] == SCRIPT
+    assert seen[0]["template_id"] == "unfolding"
+    assert seen[0]["voice_id"] == "voice-1"
+    assert seen[0]["preview"] is False
+    # Subtitles on unless somebody says otherwise: the words are already known,
+    # so a narrated video that shipped without them would be a choice nobody made.
+    assert seen[0]["subtitles"] is True
+
+
+def test_the_pictures_keep_the_order_they_were_chosen_in(monkeypatch) -> None:
+    """Order is the story. A set has none, and the database returns one."""
+    workspace_id = make_workspace()
+    for index in range(3):
+        add_picture(workspace_id, f"pic{index}")
+    seen = queued_kwargs(monkeypatch)
+
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={
+            "body": SCRIPT,
+            "asset_ids": ["pic2", "pic0", "pic1"],
+            "voice_id": "voice-1",
+        },
+    )
+    assert seen[0]["asset_ids"] == ["pic2", "pic0", "pic1"]
+
+
+def test_a_recording_is_offered_instead_of_a_voice(monkeypatch) -> None:
+    # The other honest source: somebody read it themselves, and the transcript
+    # times it. The surface takes one or the other, never neither.
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    seen = queued_kwargs(monkeypatch)
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={
+            "body": SCRIPT,
+            "asset_ids": ["pic0"],
+            "narration_asset_id": "recording-1",
+        },
+    )
+    assert answer.status_code == 202
+    assert seen[0]["narration_asset_id"] == "recording-1"
+    assert seen[0]["voice_id"] is None
+
+
+def test_another_workspace_s_pictures_are_not_this_story_s() -> None:
+    mine, theirs = make_workspace(), make_workspace()
+    add_picture(theirs, "not-mine")
+    answer = request(
+        "POST", f"/api/workspaces/{mine}/storytelling/render",
+        json={"body": SCRIPT, "asset_ids": ["not-mine"], "voice_id": "voice-1"},
+    )
+    assert answer.status_code == 422
+
+
+def test_a_render_with_no_voice_at_all_is_refused_before_it_is_queued() -> None:
+    # Neither a voice to read it nor a recording of it: there is nothing to cut
+    # on, and finding that out in the worker would waste the queue.
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={"body": SCRIPT, "asset_ids": ["pic0"]},
+    )
+    assert answer.status_code == 422
+    assert "voice" in answer.json()["detail"].lower()
+
+
+def test_a_render_with_no_pictures_is_refused_with_a_reason() -> None:
+    workspace_id = make_workspace()
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={"body": SCRIPT, "asset_ids": [], "voice_id": "voice-1"},
+    )
+    assert answer.status_code == 422
+
+
+def test_an_empty_script_never_reaches_the_queue() -> None:
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={"body": "   ", "asset_ids": ["pic0"], "voice_id": "voice-1"},
+    )
+    assert answer.status_code == 422
+
+
+def a_queued_job(workspace_id: str, *, preview: bool = False) -> str:
+    """A real record, written through the test factory rather than the app's."""
+    from trendrelay_api.jobs import create_job_record
+
+    create_job_record(
+        "story_test01", workspace_id, story_jobs.JOB_KIND,
+        {"workspace_id": workspace_id, "preview": preview, "actor_user_id": "owner-user"},
+        max_attempts=1, factory=TestingSession,
+    )
+    return "story_test01"
+
+
+def test_a_job_reports_the_plan_it_actually_drew() -> None:
+    """The plan cannot be known before the voice exists, so the finished job is
+    the first and only place it can be reported."""
+    workspace_id = make_workspace()
+    job_id = a_queued_job(workspace_id)
+
+    status = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/jobs/{job_id}"
+    )
+    assert status.status_code == 200
+    assert status.json()["status"] == "queued"
+    assert status.json()["ready"] is False
+    # Nothing drawn yet, so nothing claimed about it.
+    assert status.json()["shots"] == 0
+    assert status.json()["duration"] is None
+
+
+def test_another_workspace_cannot_read_this_job() -> None:
+    mine, theirs = make_workspace(), make_workspace()
+    job_id = a_queued_job(mine)
+    assert request(
+        "GET", f"/api/workspaces/{theirs}/storytelling/jobs/{job_id}"
+    ).status_code == 404
+
+
+def test_a_full_render_is_not_served_from_the_preview_route() -> None:
+    # It is watched in the Library through its asset. Serving its file from a
+    # second place would be a download route around the Library's controls.
+    workspace_id = make_workspace()
+    job_id = a_queued_job(workspace_id, preview=False)
+    answer = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/preview/{job_id}/video",
+    )
+    assert answer.status_code == 404
+
+
+def test_a_preview_that_has_not_finished_is_not_served_as_an_empty_file() -> None:
+    workspace_id = make_workspace()
+    job_id = a_queued_job(workspace_id, preview=True)
+    answer = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/preview/{job_id}/video",
+    )
+    assert answer.status_code == 409

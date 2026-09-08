@@ -39,6 +39,8 @@ from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.shopee_enrichment import run_enrich_job  # noqa: E402
 from trendrelay_api.autocut.jobs import JOB_KIND as AUTOCUT_JOB_KIND  # noqa: E402
 from trendrelay_api.autocut.jobs import run_render_job as run_autocut_job  # noqa: E402
+from trendrelay_api.storytelling.jobs import JOB_KIND as STORY_JOB_KIND  # noqa: E402
+from trendrelay_api.storytelling.jobs import run_render_job as run_story_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
 from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND  # noqa: E402
 from trendrelay_api.caption_jobs import run_caption_job  # noqa: E402
@@ -167,6 +169,7 @@ def process_available() -> int:
     # parallelises fine, and everything scheduled after them waited it out.
     run_job_batch(
         media_ids,
+    story_ids = recoverable_job_ids(STORY_JOB_KIND)
         run_ingest_job,
         label="Library ingest",
         refill=lambda: recoverable_job_ids("media_ingest"),
@@ -208,6 +211,14 @@ def process_available() -> int:
             print(f"Media analysis setup {job_id} failed: {error}", flush=True)
     # The listing lane finishes on its own clock; waiting here keeps the
     # pass's count honest and the loop's idle sleep meaningful.
+    # One at a time. A narration render is an AutoCut render with a paid
+    # network call in front of it, and the two-wide pool that suits a montage
+    # would turn one queued batch into simultaneous generations - the same
+    # reason voice generation below keeps its own pool small.
+    run_job_batch(
+        story_ids, run_story_job, label="Storytelling render", workers=1,
+        refill=lambda: recoverable_job_ids(STORY_JOB_KIND),
+    )
     if enrich_lane.is_alive():
         enrich_lane.join()
     return (
@@ -243,6 +254,7 @@ def worker_main() -> None:
     except KeyboardInterrupt:
         print("Durable worker stopped.", flush=True)
 
+        + len(story_ids)
 
 def source_snapshot() -> tuple[tuple[str, int, int], ...]:
     files: list[tuple[str, int, int]] = []
