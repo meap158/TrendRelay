@@ -203,3 +203,63 @@ def test_a_script_longer_than_one_render_can_draw_is_refused_with_a_number() -> 
     lines = [line(f"Sentence {n}.", n * 2.0, n * 2.0 + 1.8) for n in range(MAX_SHOTS + 20)]
     result = plan(lines, PICTURES, EXPLAINER)
     assert len(result.shots) > MAX_SHOTS, "this script must be over the limit to test it"
+
+
+# --------------------------------------------------------------------------- #
+# The assignment: which picture a sentence opens on.
+#
+# Without it the pictures play in the order they were chosen, which is a
+# slideshow with a voice over it. These are about it being honoured, and about
+# the one way it silently goes wrong.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_sentence_opens_on_the_picture_it_was_given() -> None:
+    lines = [line("First.", 0.0, 2.0), line("Second.", 2.0, 4.0)]
+    result = plan(lines, PICTURES, EXPLAINER, assignments=["asset-3", "asset-1"])
+    assert [shot.asset_id for shot in result.shots] == ["asset-3", "asset-1"]
+
+
+def test_an_assignment_survives_two_sentences_folding_into_one_shot() -> None:
+    """The way a per-sentence assignment goes wrong without anybody noticing.
+
+    A sentence too short to be a shot is folded into the one before it, so
+    there is one fewer shot than there are sentences - and every assignment
+    after the fold lands one sentence early. Short sentences are ordinary
+    writing, not an edge case, so this has to hold.
+    """
+    lines = [
+        line("He said nothing.", 0.0, 2.0),
+        line("Nothing at all.", 2.0, 2.0 + MIN_SHOT_SECONDS / 2),
+        line("The rain kept falling.", 3.0, 6.0),
+    ]
+    result = plan(
+        lines, PICTURES, EXPLAINER,
+        assignments=["asset-0", "asset-2", "asset-3"],
+    )
+    # Two shots for three sentences, and the last sentence keeps its picture
+    # rather than inheriting the folded one's.
+    assert len(result.shots) == 2
+    assert [shot.asset_id for shot in result.shots] == ["asset-0", "asset-3"]
+
+
+def test_a_picture_that_is_no_longer_there_falls_back_to_the_order() -> None:
+    # A stale assignment - the asset was removed from the picker after being
+    # assigned - must not empty the shot or crash the render.
+    lines = [line("First.", 0.0, 2.0), line("Second.", 2.0, 4.0)]
+    result = plan(lines, PICTURES, EXPLAINER, assignments=["gone", "asset-1"])
+    assert result.shots[0].asset_id in {picture.asset_id for picture in PICTURES}
+    assert result.shots[1].asset_id == "asset-1"
+
+
+def test_a_long_sentence_still_takes_more_than_one_picture() -> None:
+    """The assignment says where a line opens, not that it holds one still.
+
+    Nine seconds on one photo is the thing the multi-part split exists to
+    prevent, and an assignment that overrode it would reintroduce it.
+    """
+    lines = [line("A very long sentence indeed.", 0.0, 30.0)]
+    result = plan(lines, PICTURES, EXPLAINER, assignments=["asset-2"])
+    assert len(result.shots) > 1
+    assert result.shots[0].asset_id == "asset-2"
+    assert len({shot.asset_id for shot in result.shots}) > 1

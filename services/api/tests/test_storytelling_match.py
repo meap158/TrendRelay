@@ -7,7 +7,7 @@ words, or about a rule that stops a good score producing a bad edit.
 
 from __future__ import annotations
 
-from trendrelay_api.storytelling.match import Candidate, arrange
+from trendrelay_api.storytelling.match import Candidate, arrange, evidence_for
 
 
 def picture(asset_id: str, shows: str, **kwargs) -> Candidate:
@@ -144,3 +144,91 @@ def test_a_match_says_which_words_it_was_made_on() -> None:
 def test_nothing_to_say_or_nothing_to_show_assigns_nothing() -> None:
     assert arrange([], [picture("a", "x")]) == []
     assert arrange(["One."], []) == []
+
+
+# --------------------------------------------------------------------------- #
+# Reading a Library asset. The kinds are this library's own, and getting them
+# wrong is silent: every candidate simply arrives with nothing to match on.
+# --------------------------------------------------------------------------- #
+
+
+class FakeAsset:
+    def __init__(self, **kwargs) -> None:
+        self.title = kwargs.get("title", "")
+        self.caption = kwargs.get("caption", "")
+        self.hashtags = kwargs.get("hashtags", [])
+        self.creator = kwargs.get("creator", "")
+        self.engagement = kwargs.get("engagement", {})
+
+
+class FakeTranscript:
+    def __init__(self, kind: str, text: str, status: str = "machine") -> None:
+        self.kind, self.text, self.status = kind, text, status
+
+
+def test_the_transcript_kinds_this_library_stores_are_the_ones_read() -> None:
+    """`vision` / `ocr` / `speech`, not a guess at what they might be called.
+
+    A label that matches nothing does not fail - it returns empty evidence,
+    and the matcher falls back to filenames and the order things were picked,
+    which looks exactly like the matcher not being very good.
+    """
+    evidence, machine = evidence_for(
+        FakeAsset(title="clip.mp4"),
+        [
+            FakeTranscript("vision", "a harbour at dawn, boats moored"),
+            FakeTranscript("ocr", "SUNRISE"),
+            FakeTranscript("speech", "we set out before six"),
+        ],
+    )
+    assert evidence["what it shows"] == "a harbour at dawn, boats moored"
+    assert evidence["on-screen text"] == "SUNRISE"
+    assert evidence["spoken words"] == "we set out before six"
+    assert machine == {"what it shows", "on-screen text", "spoken words"}
+
+
+def test_a_checked_reading_beats_a_machine_one_of_the_same_kind() -> None:
+    evidence, machine = evidence_for(
+        FakeAsset(),
+        [
+            FakeTranscript("vision", "checked reading", status="reviewed"),
+            FakeTranscript("vision", "machine reading"),
+        ],
+    )
+    assert evidence["what it shows"] == "checked reading"
+    assert "what it shows" not in machine
+
+
+def test_two_revisions_of_one_reading_do_not_crowd_out_the_others() -> None:
+    evidence, _ = evidence_for(
+        FakeAsset(),
+        [
+            FakeTranscript("speech", "first pass"),
+            FakeTranscript("speech", "second pass"),
+            FakeTranscript("vision", "a wet street"),
+        ],
+    )
+    assert evidence["what it shows"] == "a wet street"
+
+
+def test_a_checked_reading_outweighs_a_machine_one_on_the_same_words() -> None:
+    # Both say "harbour"; one of them has been read by a person.
+    lines = ["A quiet harbour at dawn."]
+    guessed = Candidate(
+        asset_id="guessed",
+        evidence={"what it shows": "a harbour at dawn"},
+        machine=frozenset({"what it shows"}),
+    )
+    checked = Candidate(
+        asset_id="checked", evidence={"what it shows": "a harbour at dawn"},
+    )
+    assert chosen(lines, [guessed, checked]) == ["checked"]
+
+
+def test_stock_broll_keeps_full_weight_for_what_it_was_searched_for() -> None:
+    # Nobody machine-read it; the words are the ones somebody typed.
+    evidence, machine = evidence_for(
+        FakeAsset(engagement={"searched_for": "city at night skyline"}), [],
+    )
+    assert evidence["search words"] == "city at night skyline"
+    assert machine == frozenset()

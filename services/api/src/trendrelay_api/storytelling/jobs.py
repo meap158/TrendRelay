@@ -153,6 +153,7 @@ def enqueue_render(
     title: str | None = None,
     preview: bool = False,
     kinds: dict[str, str] | None = None,
+    assignments: list[str] | None = None,
     aspect: str = DEFAULT_ASPECT,
     fill: str = "cover",
     subtitles: bool = True,
@@ -181,6 +182,10 @@ def enqueue_render(
             "body": body,
             "asset_ids": asset_ids,
             "kinds": kinds or {},
+            # One picture per sentence: what the matcher suggested, or what
+            # somebody moved it to. Stored with the job rather than recomputed
+            # at render time, so the video is the one that was arranged.
+            "assignments": assignments or [],
             "template_id": story.id,
             "template_name": story.name,
             "voice_id": voice_id,
@@ -255,7 +260,10 @@ def run_render_job(
             raise NarrationUnavailable("None of those pictures are in the Library any more.")
 
         story = planner.template(payload["template_id"])
-        plan = planner.plan(timed, pictures, story)
+        plan = planner.plan(
+            timed, pictures, story,
+            assignments=payload.get("assignments") or None,
+        )
         if len(plan.shots) > MAX_SHOTS:
             raise NarrationUnavailable(
                 f"This script comes to {len(plan.shots)} shots, and one render can "

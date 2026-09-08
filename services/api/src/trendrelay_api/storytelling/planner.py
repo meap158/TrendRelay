@@ -115,24 +115,36 @@ def _joined(lines: Sequence[TimedLine]) -> list[TimedLine]:
     The text is joined with it. A shot's caption is the words spoken while it
     is on screen, so two lines sharing a shot share its caption.
     """
-    joined: list[TimedLine] = []
-    for line in lines:
-        if joined and line.end - joined[-1].end < MIN_SHOT_SECONDS:
-            previous = joined.pop()
-            joined.append(TimedLine(
+    return [line for line, _ in _folded(lines)]
+
+
+def _folded(lines: Sequence[TimedLine]) -> list[tuple[TimedLine, int]]:
+    """The same folding, each shot still naming the sentence it started as.
+
+    An assignment is made per sentence - that is what somebody was shown and
+    what they dragged. Shots are per *folded* line, and folding is ordinary
+    rather than rare: one short sentence anywhere in the script shifts every
+    index after it. Carrying the origin is what keeps the picture somebody
+    chose for a sentence on that sentence.
+    """
+    joined: list[tuple[TimedLine, int]] = []
+    for index, line in enumerate(lines):
+        if joined and line.end - joined[-1][0].end < MIN_SHOT_SECONDS:
+            previous, origin = joined.pop()
+            joined.append((TimedLine(
                 text=f"{previous.text} {line.text}".strip(),
                 start=previous.start,
                 end=line.end,
-            ))
+            ), origin))
             continue
-        joined.append(line)
-    while len(joined) > 1 and joined[0].duration < MIN_SHOT_SECONDS:
-        head, following = joined[0], joined[1]
-        joined[:2] = [TimedLine(
+        joined.append((line, index))
+    while len(joined) > 1 and joined[0][0].duration < MIN_SHOT_SECONDS:
+        (head, origin), (following, _) = joined[0], joined[1]
+        joined[:2] = [(TimedLine(
             text=f"{head.text} {following.text}".strip(),
             start=head.start,
             end=following.end,
-        )]
+        ), origin)]
     return joined
 
 
@@ -142,6 +154,7 @@ def plan(
     story: StoryTemplate,
     *,
     audio_seconds: float | None = None,
+    assignments: Sequence[str] | None = None,
 ) -> CutPlan:
     """The shot list for this narration, drawn from these pictures.
 
@@ -153,17 +166,34 @@ def plan(
     honest failure: a story with forty sentences and six pictures is a story
     that needs more pictures, and showing the six twice says so plainly, where
     stretching six across forty sentences would hide it.
+
+    `assignments` names a picture per *sentence* - what the matcher suggested,
+    or what somebody dragged it to afterwards - and is what makes this an edit
+    rather than a slideshow with a voice over it. It decides which picture a
+    line opens on; a sentence long enough to need a second picture still takes
+    the next ones in order, because the alternative is holding one still
+    through nine seconds of speech. Without it the order they were given is
+    the assignment, which is what arranging them by hand meant.
     """
     if not lines or not pictures:
         return CutPlan(
             shots=(), duration=0.0, bpm=0.0, beat_synced=False, template_id=story.id,
         )
 
-    spoken = _joined(lines)
+    folded = _folded(lines)
+    spoken = [line for line, _ in folded]
     tail = max(audio_seconds or 0.0, spoken[-1].end)
+    # Where each picture sits in the list, so an assignment can say "open
+    # here" and the parts after it carry on from there rather than restarting
+    # the rotation.
+    at = {picture.asset_id: position for position, picture in enumerate(pictures)}
     shots: list[Shot] = []
     taken = 0
     for index, line in enumerate(spoken):
+        origin = folded[index][1]
+        chosen = assignments[origin] if assignments and origin < len(assignments) else None
+        if chosen in at:
+            taken = at[chosen]
         # Hold until the next line begins; the last one holds to the end of the
         # audio, so narration that trails off is not cut short by its own last
         # full stop.

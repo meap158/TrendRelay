@@ -64,6 +64,15 @@ REUSE_PENALTY = 0.55
 #: with a still, not enough to lose a clear one.
 SHORT_CLIP_PENALTY = 0.6
 
+#: What a machine reading is worth against one a person checked.
+#:
+#: The same discount the offer matcher applies, for the same reason: a
+#: transcript nobody has read is usually right and occasionally confidently
+#: wrong, and "usually" is worth less than "checked". Not zero - every reading
+#: in this library is a machine one, and refusing them would leave the matcher
+#: with filenames.
+MACHINE_TRUST = 0.5
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -74,6 +83,9 @@ class Candidate:
     duration_seconds: float | None = None
     #: label -> text, keyed by `WEIGHTS`.
     evidence: dict[str, str] | None = None
+    #: Which of those labels came from a machine reading rather than a checked
+    #: one. Scored at `MACHINE_TRUST`.
+    machine: frozenset[str] = frozenset()
 
     def words(self) -> dict[str, set[str]]:
         return {
@@ -125,6 +137,8 @@ def _score(
     hits: dict[str, float] = {}
     for label, words in candidate.words().items():
         weight = WEIGHTS[label]
+        if label in candidate.machine:
+            weight *= MACHINE_TRUST
         for word in words & line_words:
             value = weight * rarity.get(word, 1.0)
             total += value
@@ -197,20 +211,35 @@ def arrange(
     return assignments
 
 
-def evidence_for(asset: Any, analysis: Any | None, transcripts: Sequence[Any]) -> dict[str, str]:
-    """Everything a Library asset says about itself, keyed by `WEIGHTS`.
+def evidence_for(asset: Any, transcripts: Sequence[Any]) -> tuple[dict[str, str], frozenset[str]]:
+    """Everything a Library asset says about itself, and which of it is machine-read.
 
     Reads the same records the offer matcher reads, so a clip that matches a
     product for the same words matches a sentence for them too - one idea of
     what a clip is about rather than two that can disagree.
+
+    Transcript kinds are this library's own: `vision` is a reading of what the
+    clip shows, `ocr` the text burnt into it, `speech` what is said in it.
+    Reviewed rows beat machine rows and each kind is taken once, which is the
+    selection the offer matcher makes for the same reason - two revisions of
+    one reading must not crowd out the other two readings.
     """
     engagement = asset.engagement if isinstance(asset.engagement, dict) else {}
-    reviewed = {
-        str(item.kind): str(item.text or "")
-        for item in transcripts
-        if getattr(item, "status", "") == "reviewed" and getattr(item, "text", "")
-    }
-    return {
+    labels = {"vision": "what it shows", "ocr": "on-screen text", "speech": "spoken words"}
+    best: dict[str, Any] = {}
+    for item in transcripts:
+        label = labels.get(str(getattr(item, "kind", "")))
+        if not label or not getattr(item, "text", ""):
+            continue
+        # Reviewed wins outright; otherwise the first one seen, which the
+        # caller ordered newest-first.
+        if label in best and not (
+            getattr(item, "status", "") == "reviewed"
+            and getattr(best[label], "status", "") != "reviewed"
+        ):
+            continue
+        best[label] = item
+    evidence = {
         "title": str(asset.title or ""),
         "caption": str(asset.caption or ""),
         "hashtags": " ".join(asset.hashtags or []),
@@ -218,7 +247,10 @@ def evidence_for(asset: Any, analysis: Any | None, transcripts: Sequence[Any]) -
         # What the picture was searched for, which is the only thing stock
         # b-roll knows about itself and the most direct thing it could know.
         "search words": str(engagement.get("searched_for") or ""),
-        "what it shows": str(getattr(analysis, "visual_description", "") or ""),
-        "spoken words": reviewed.get("speech", ""),
-        "on-screen text": reviewed.get("text", ""),
     }
+    evidence.update({label: str(item.text or "")[:12_000] for label, item in best.items()})
+    machine = frozenset(
+        label for label, item in best.items()
+        if getattr(item, "status", "") != "reviewed"
+    )
+    return evidence, machine
