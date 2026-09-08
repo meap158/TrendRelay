@@ -40,6 +40,7 @@ export const zh: Messages = {
   nav: {
     discover: "发现",
     library: "素材库",
+    storytelling: "讲故事",
     studio: "创作台",
     campaigns: "广告系列",
     publish: "发布",

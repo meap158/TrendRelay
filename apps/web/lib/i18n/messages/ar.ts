@@ -42,6 +42,7 @@ export const ar: Messages = {
   nav: {
     discover: "استكشاف",
     library: "المكتبة",
+    storytelling: "السرد",
     studio: "الاستوديو",
     campaigns: "الحملات",
     publish: "النشر",

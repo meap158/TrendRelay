@@ -40,6 +40,7 @@ export const vi: Messages = {
   nav: {
     discover: "Khám phá",
     library: "Thư viện",
+    storytelling: "Kể chuyện",
     studio: "Xưởng dựng",
     campaigns: "Chiến dịch",
     publish: "Đăng bài",

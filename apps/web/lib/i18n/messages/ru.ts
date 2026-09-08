@@ -41,6 +41,7 @@ export const ru: Messages = {
   nav: {
     discover: "Обзор трендов",
     library: "Библиотека",
+    storytelling: "Истории",
     studio: "Студия",
     campaigns: "Кампании",
     publish: "Публикация",

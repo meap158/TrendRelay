@@ -640,6 +640,7 @@ export function GlobalNav() {
             <circle cx="7.5" cy="21.5" r="2" />
             <circle cx="13" cy="16" r="2" />
             <circle cx="18" cy="19" r="2" />
+  const storytellingActive = pathname === "/storytelling" || pathname.startsWith("/storytelling/");
             <circle cx="24.5" cy="10.5" r="2" />
           </svg>
         </span>
@@ -670,6 +671,10 @@ export function GlobalNav() {
             ref={workspaceButtonRef}
             type="button"
             className="workspace-session-trigger"
+        {/* Beside the Library rather than inside it. Storytelling starts from
+            a script, and a script is not something you can select in a
+            library - so it has nowhere in there to be reached from. */}
+        <Link className={storytellingActive ? "active" : ""} href="/storytelling"><ActionIcon name="effects" /><span>{t("nav.storytelling")}</span></Link>
             aria-label={t("workspace.settings")}
             title={t("workspace.settingsHelp")}
             aria-expanded={workspaceMenuOpen}

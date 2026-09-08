@@ -295,3 +295,18 @@ def import_candidate(
         },
         factory=factory or JOB_SESSION_FACTORY,
     )
+
+
+def lookup(candidate_id: str, kind: str) -> Candidate:
+    """Resolve one result by its Pexels id, and find the file behind it.
+
+    The file URL is never taken from the caller. A search deliberately hands
+    back a preview and a credit and no download link, so an import says only
+    *which* result it wants and this asks Pexels where that lives - which means
+    there is no url on the wire for anybody to swap for one of their own.
+    """
+    if not str(candidate_id).strip().isdigit():
+        raise PexelsUnavailable("That is not a Pexels id.")
+    if kind == "video":
+        return _clip(_get(f"/videos/videos/{candidate_id}", {}))
+    return _photo(_get(f"/v1/photos/{candidate_id}", {}))

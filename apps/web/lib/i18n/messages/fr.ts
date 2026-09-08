@@ -40,6 +40,7 @@ export const fr: Messages = {
   nav: {
     discover: "Découvrir",
     library: "Bibliothèque",
+    storytelling: "Narration",
     studio: "Studio",
     campaigns: "Campagnes",
     publish: "Publier",

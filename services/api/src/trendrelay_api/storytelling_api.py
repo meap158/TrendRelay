@@ -356,15 +356,17 @@ def search_broll(
 
 
 class BrollImport(BaseModel):
-    id: str = Field(min_length=1, max_length=64)
+    """Which result to bring in - and nothing about where it lives.
+
+    The file URL is resolved from the id on this side. A search hands back a
+    preview and a credit and no download link precisely so that an import
+    carries no url for anybody to swap for one of their own, which is the
+    difference between fetching a chosen photo and fetching whatever a caller
+    names.
+    """
+
+    id: str = Field(min_length=1, max_length=32, pattern=r"^[0-9]+$")
     kind: str = "image"
-    source_url: str = Field(min_length=1, max_length=2000)
-    preview_url: str = ""
-    width: int = 0
-    height: int = 0
-    photographer: str = ""
-    photographer_url: str = ""
-    page_url: str = ""
     query: str = ""
 
 
@@ -385,22 +387,8 @@ def import_broll(
     from trendrelay_api.integrations import pexels
 
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
-    if not body.source_url.startswith("https://"):
-        # The url comes back from a search this server made; anything else is
-        # a caller asking this machine to fetch a place of its choosing.
-        raise HTTPException(status_code=422, detail="That is not a Pexels file.")
-    candidate = pexels.Candidate(
-        id=body.id,
-        kind="video" if body.kind == "video" else "image",
-        preview_url=body.preview_url,
-        source_url=body.source_url,
-        width=body.width,
-        height=body.height,
-        photographer=body.photographer,
-        photographer_url=body.photographer_url,
-        page_url=body.page_url,
-    )
     try:
+        candidate = pexels.lookup(body.id, "video" if body.kind == "video" else "image")
         queued = pexels.import_candidate(
             candidate, workspace_id=workspace_id, actor_user_id=user.id, query=body.query,
         )

@@ -1,0 +1,63 @@
+/* Storytelling: a script, its pictures, and the voice that reads it.
+
+   Numbered steps rather than a form, because the work is ordered and the
+   order is not obvious from the fields: nothing can be chosen for a script
+   that has not been written, and nothing can be spoken for pictures nobody
+   has picked. The numbers say so without a wizard's forward and back. */
+
+.storytelling-page { display: grid; gap: 18px; }
+
+.story-step { display: grid; gap: 10px; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.story-step h2 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 14px; font-weight: 600; }
+/* The number is chrome, so it is drawn as chrome: it counts the steps and is
+   never the thing being read. */
+.story-step-number { display: grid; place-items: center; inline-size: 22px; block-size: 22px; border-radius: 999px; color: var(--on-ink); background: var(--ink); font-size: 11px; font-weight: 700; }
+.story-step h3 { margin: 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+
+.story-script { inline-size: 100%; min-block-size: 180px; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 12px 14px; color: var(--text); background: var(--panel); font: inherit; font-size: 14px; line-height: 1.6; resize: vertical; }
+/* The count of sentences, which is also the count of shots. Quiet, because it
+   is an observation about what was typed rather than an instruction. */
+.story-outline { margin: 0; color: var(--muted); font-size: 12px; }
+.story-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+.story-templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.story-templates button { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
+.story-templates button:hover { border-color: var(--link); }
+.story-templates button.selected { border-color: var(--link); background: var(--link-bg); }
+.story-templates strong { font-size: 12px; font-weight: 600; }
+.story-templates small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+
+.story-shape { display: flex; flex-wrap: wrap; gap: 18px; align-items: start; }
+.story-shape > label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 600; }
+.story-toggle { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: center; cursor: pointer; }
+.story-toggle input { grid-row: span 2; margin: 0; cursor: pointer; }
+.story-toggle span { color: var(--text); font-size: 12px; font-weight: 500; }
+.story-toggle small { grid-column: 2; color: var(--muted); font-size: 10px; }
+
+/* Two sources side by side rather than behind a switch: the pictures for one
+   narration usually come from both, and a toggle would make choosing between
+   them a step of its own. */
+.story-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.story-search { display: flex; flex-wrap: wrap; gap: 6px; margin-block-end: 8px; }
+.story-search input { flex: 1 1 160px; min-inline-size: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
+
+.story-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-block-size: 260px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.story-tiles button { inline-size: 100%; display: grid; gap: 4px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
+.story-tiles button:hover { border-color: var(--link); }
+.story-tiles button.selected { border-color: var(--link); background: var(--link-bg); }
+.story-tile-name { overflow: hidden; font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.story-tiles-broll button { padding: 0; overflow: hidden; }
+.story-tiles-broll img { display: block; inline-size: 100%; block-size: 74px; object-fit: cover; }
+/* The credit, under every tile. The licence asks for it wherever the media is
+   shown, and a picker is one of the places it is shown. */
+.story-tiles-broll small { display: block; overflow: hidden; padding: 4px 6px 6px; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+.story-chosen { margin: 0; color: var(--muted); font-size: 11px; }
+
+.story-make { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.story-job { color: var(--muted); font-size: 12px; }
+
+@media (max-width: 700px) {
+  .story-step { padding: 14px; }
+  .story-picker { grid-template-columns: minmax(0, 1fr); }
+}

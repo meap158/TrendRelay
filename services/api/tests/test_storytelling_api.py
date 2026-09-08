@@ -359,21 +359,24 @@ def test_b_roll_that_cannot_be_searched_says_why_rather_than_returning_nothing(
     assert "Check it in Tools" in answer.json()["detail"]
 
 
-def test_an_import_only_fetches_from_where_the_search_pointed(monkeypatch) -> None:
-    """The url is echoed back by the caller, so it is checked before it is used.
+def test_an_import_carries_no_url_for_anybody_to_swap() -> None:
+    """The whole reason a search hands back no download link.
 
-    Otherwise this endpoint is a request to make the machine fetch a place of
-    somebody else's choosing.
+    An import says which result it wants; where that lives is resolved on the
+    server from the id. There is nothing on the wire to point somewhere else,
+    which is the difference between fetching a chosen photo and fetching
+    whatever a caller names.
     """
     workspace_id = make_workspace()
     answer = request(
         "POST", f"/api/workspaces/{workspace_id}/storytelling/broll/import",
-        json={
-            "id": "99", "kind": "image",
-            "source_url": "file:///etc/passwd",
-        },
+        json={"id": "not-an-id", "kind": "image"},
     )
     assert answer.status_code == 422
+    # And a url in the body is simply not a field this accepts.
+    from trendrelay_api.storytelling_api import BrollImport
+
+    assert "source_url" not in BrollImport.model_fields
 
 
 def test_an_imported_clip_goes_through_the_library_s_own_ingest(monkeypatch) -> None:
@@ -384,6 +387,11 @@ def test_an_imported_clip_goes_through_the_library_s_own_ingest(monkeypatch) -> 
 
     workspace_id = make_workspace()
     seen: list = []
+    monkeypatch.setattr(pexels, "lookup", lambda candidate_id, kind: pexels.Candidate(
+        id=candidate_id, kind=kind, preview_url="https://p/thumb.jpg",
+        source_url="https://videos.pexels.com/99.mp4", width=1920, height=1080,
+        photographer="Ada L",
+    ))
     monkeypatch.setattr(
         pexels, "import_candidate",
         lambda candidate, **kwargs: seen.append((candidate, kwargs))
@@ -391,11 +399,7 @@ def test_an_imported_clip_goes_through_the_library_s_own_ingest(monkeypatch) -> 
     )
     answer = request(
         "POST", f"/api/workspaces/{workspace_id}/storytelling/broll/import",
-        json={
-            "id": "99", "kind": "video",
-            "source_url": "https://videos.pexels.com/99.mp4",
-            "photographer": "Ada L", "query": "rain at night",
-        },
+        json={"id": "99", "kind": "video", "query": "rain at night"},
     )
     assert answer.status_code == 202
     assert answer.json()["credit"] == "Video by Ada L on Pexels"
