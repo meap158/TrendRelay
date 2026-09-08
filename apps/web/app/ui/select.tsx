@@ -42,7 +42,10 @@ function optionText(node: ReactNode): string {
 function optionElements(node: ReactNode, result: ReactElement<OptionHTMLAttributes<HTMLOptionElement>>[] = []) {
   Children.forEach(node, (child) => {
     if (!isValidElement(child)) return;
-    if (child.type === Fragment) {
+    if (child.type === Fragment || child.type === "optgroup") {
+      // A grouped option is still an option. Without this the styled trigger
+      // finds nothing, and a select whose native value is perfectly correct
+      // renders blank - which is what it did, silently.
       optionElements((child.props as { children?: ReactNode }).children, result);
     } else if (child.type === "option") {
       result.push(child as ReactElement<OptionHTMLAttributes<HTMLOptionElement>>);

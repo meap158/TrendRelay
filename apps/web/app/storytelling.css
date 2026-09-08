@@ -17,10 +17,14 @@
 .story-write { grid-column: 1; grid-row: 1 / span 2; }
 .story-settings { grid-column: 2; grid-row: 1; }
 .story-broll { grid-column: 2; grid-row: 2; }
-/* Fills the column it was given rather than a fixed number of rows, so the
-   two sides finish level whatever the pacing block comes to. */
-.story-write { align-content: start; }
-.story-write .story-script { min-block-size: 260px; block-size: 100%; }
+/* The script fills the column, so the two sides finish level.
+   `align-items: start` above keeps each section its own height, which is right
+   for the two on the right and wrong for this one: spanning both rows it was
+   still sized to its content, leaving 127 measured pixels of nothing under a
+   textarea that wanted them. Stretching is what makes `block-size: 100%` on
+   the textarea mean anything. */
+.story-write { align-self: stretch; grid-template-rows: auto minmax(0, 1fr) auto; }
+.story-write .story-script { min-block-size: 200px; block-size: 100%; }
 .story-dialog h4 { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 /* What is still missing, in the footer where the button it blocks is. */
 .story-ready { margin-inline-end: auto; color: var(--muted); font-size: 11px; }
@@ -31,22 +35,43 @@
 .story-outline { margin: 0; color: var(--muted); font-size: 12px; }
 .story-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
-.story-templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+/* Three across. At a 180px minimum a 531px column fits two, so the third sat
+   alone with half a row of nothing beside it. There are three templates and
+   they are peers; a wrap that separates one of them reads as a category. */
+.story-templates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.story-templates button { min-inline-size: 0; }
 .story-templates button { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
 .story-templates button:hover { border-color: var(--link); }
 .story-templates button.selected { border-color: var(--link); background: var(--link-bg); }
 .story-templates strong { font-size: 12px; font-weight: 600; }
 .story-templates small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
-.story-shape { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 14px; align-items: start; }
+.story-shape { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 14px; align-items: end; }
+/* One height for every control in the row. The segmented control came to 32px
+   and the select trigger to 36, so three captions that lined up sat over three
+   controls that did not - a four-pixel ragged edge along the bottom of the row.
+   Only the segmented control moves: the trigger's 36 is the app's own size, and
+   the native select beside it is the hidden accessibility layer, which is what
+   the guard on this stopped me dressing. */
+.story-shape .ui-segmented { min-block-size: 36px; }
+/* Filling the cell it was given. Sized to its own three words it left a third
+   of its column empty beside it, so a row of three controls read as two and a
+   half - the gap that made this row look unfinished. */
+.story-shape .ui-segmented { inline-size: 100%; }
+.story-shape .ui-segmented button { flex: 1 1 0; }
+.story-shape .ui-segmented button { min-block-size: 34px; }
 .story-shape > label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 600; }
 .story-toggle { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: center; cursor: pointer; }
 .story-toggle input { grid-row: span 2; margin: 0; cursor: pointer; }
 .story-toggle span { color: var(--text); font-size: 12px; font-weight: 500; }
 .story-toggle small { grid-column: 2; color: var(--muted); font-size: 10px; }
 
-.story-search { display: flex; flex-wrap: wrap; gap: 6px; margin-block-end: 8px; }
-.story-search input { flex: 1 1 160px; min-inline-size: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
+/* One row. As a wrapping flex the select and the button each took a full
+   line, so three controls filled three rows of a column that fits them side by
+   side. Explicit tracks say what the row is instead of leaving it to whatever
+   width the select asks for. */
+.story-search { display: grid; grid-template-columns: minmax(0, 1fr) 116px auto; gap: 6px; align-items: center; margin-block-end: 8px; }
+.story-search input { min-inline-size: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
 
 .story-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-block-size: 190px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
 .story-tiles button { inline-size: 100%; display: grid; gap: 4px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
@@ -65,4 +90,6 @@
 }
 @media (max-width: 700px) {
   .story-shape { gap: 12px; }
+  .story-templates { grid-template-columns: minmax(0, 1fr); }
+  .story-search { grid-template-columns: minmax(0, 1fr); }
 }

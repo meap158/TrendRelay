@@ -133,19 +133,42 @@ export function StorytellingDialog({
     return () => { cancelled = true; };
   }, [apiFetch, base, open, workspaceId]);
 
-  /** Every language some voice on this key is verified in, in order. */
+  /**
+   * Every language that can actually be read, which is the models' list.
+   *
+   * It used to be the voices' list, and that is a different thing: a voice's
+   * `verified_languages` says somebody checked it sounds good in that
+   * language, not that it can speak it. A multilingual model reads any
+   * language it supports in any voice.
+   *
+   * Measured on this key: the voices are verified in eighteen languages and
+   * the models speak seventy-four. Fifty-six were unreachable, Vietnamese
+   * among them - in a workspace that runs in Vietnamese. One voice on the key
+   * is verified in nothing at all, so it vanished the moment any language was
+   * picked.
+   */
   const languages = useMemo(
-    () => [...new Set(voices.flatMap((voice) => voice.languages ?? []))].sort(),
-    [voices],
+    () => [...new Set(models.flatMap(
+      (model) => (model.languages ?? []).map((item) => item.language_id),
+    ))].sort((left, right) => languageName(left).localeCompare(languageName(right))),
+    [models],
   );
 
-  /** The voices that can say it. Everything when no language is chosen. */
-  const speakable = useMemo(
-    () => (language
-      ? voices.filter((voice) => (voice.languages ?? []).includes(language))
-      : voices),
-    [voices, language],
-  );
+  /**
+   * Every voice, with the ones checked in this language first.
+   *
+   * Ordered rather than filtered, because the unverified ones are not
+   * unavailable - they are unlabelled. Hiding them was what made Vietnamese
+   * look unsupported when three models on the key speak it.
+   */
+  const [verified, others] = useMemo(() => {
+    if (!language) return [voices, [] as Voice[]];
+    return [
+      voices.filter((voice) => (voice.languages ?? []).includes(language)),
+      voices.filter((voice) => !(voice.languages ?? []).includes(language)),
+    ];
+  }, [voices, language]);
+  const speakable = useMemo(() => [...verified, ...others], [verified, others]);
 
   /**
    * Which model reads it, which is not a free choice.
@@ -299,7 +322,7 @@ export function StorytellingDialog({
             {!body.trim() ? "Write the script."
               : !lines.length ? "Nothing in the script to read."
                 : !assets.length ? "Choose pictures in the Library first."
-                  : !speakable.length ? "No voice on this key reads that language."
+                  : language && !modelId ? "No model on this key reads that language."
                     : !effectiveVoiceId ? "Choose a voice."
                       : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${assets.length} ${assets.length === 1 ? "picture" : "pictures"}.`}
           </span>
@@ -377,9 +400,17 @@ export function StorytellingDialog({
                 onChange={(event) => setVoiceId(event.target.value)}
                 aria-label="The voice that reads the script"
               >
+                {/* Ordered, not grouped: the styled list this renders into has
+                    no notion of a group, so a group would show as an empty
+                    trigger. The ones checked in this language come first and
+                    say so; the rest can still read it and are still offered. */}
                 {speakable.map((voice) => (
                   <option key={voice.voice_id} value={voice.voice_id}>
-                    {voice.name}{voice.accents?.[0] ? ` · ${voice.accents[0]}` : ""}
+                    {[
+                      voice.name,
+                      voice.accents?.[0],
+                      language && verified.includes(voice) ? `checked in ${languageName(language)}` : "",
+                    ].filter(Boolean).join(" · ")}
                   </option>
                 ))}
               </Select>
