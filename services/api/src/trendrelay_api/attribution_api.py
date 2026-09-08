@@ -1747,7 +1747,7 @@ def read_product_listing(
         "product_id": product.id,
         "name": product.name,
         "product_url": product.product_url,
-        "listing": product.listing,
+        "listing": product.listing if shopee_enrichment.shopee_listing.is_fetched_listing(product.listing) else None,
         "listing_fetched_at": (
             product.listing_fetched_at.isoformat()
             if product.listing_fetched_at else None

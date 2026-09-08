@@ -20,6 +20,10 @@ export type ProductLink = {
   destination_url: string;
   status: string;
   expires_at: string | null;
+  /** The affiliate network's tracking parameters for this link, by slot -
+      `{"sub_id1": "0968cda6328f", "sub_id4": "MyFirstCamp"}`. Optional so a
+      caller reading an older payload stays valid. */
+  sub_ids?: Record<string, string>;
 };
 
 export type EarningsBucket = {

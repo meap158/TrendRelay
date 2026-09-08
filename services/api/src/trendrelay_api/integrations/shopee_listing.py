@@ -63,6 +63,11 @@ class ListingUnavailable(RuntimeError):
     """The page answered, but not with a product's initial state."""
 
 
+def is_fetched_listing(value: Any) -> bool:
+    """A populated product snapshot, not a challenged page's empty shell."""
+    return isinstance(value, dict) and isinstance(value.get("title"), str) and bool(value["title"].strip())
+
+
 def parse_product_ids(url: str) -> tuple[int, int] | None:
     """(shop_id, item_id) from either public product URL form, or None."""
     for pattern in (_PRODUCT_PATH, _ITEM_SLUG):
@@ -125,7 +130,9 @@ def distill(
     name instead of stored as nulls pretending to be answers.
     """
     items = ((state.get("item") or {}).get("items")) or {}
-    item = items.get(str(item_id)) or (next(iter(items.values())) if items else {})
+    item = items.get(str(item_id)) or {}
+    if not isinstance(item, dict) or not str(item.get("title") or "").strip():
+        raise ListingUnavailable("Shopee did not return data for the requested product. Try again later.")
     rating = item.get("item_rating") or {}
     price = {
         "min": item.get("price_min"),

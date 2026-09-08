@@ -91,6 +91,7 @@ def seeded():
             platform="tiktok", campaign_parameter="tr_campaign",
             platform_parameter="tr_platform", disclosure="Affiliate link",
             status="active", expires_at=None, created_by="owner-user",
+            sub_ids={"sub_id1": "0968cda6328f", "sub_id4": "Launch"},
         ))
         session.add(AdSpendEntry(
             id="spend-1", workspace_id=ws, work_id="work-1", product_id="prod-1",
@@ -149,6 +150,10 @@ def test_one_row_carries_identity_links_clicks_and_earnings(seeded) -> None:
     assert row["creators"] == ["Amazon"]
     assert row["offers"][0]["commission_flat_cents"] == 52
     assert [link["code"] for link in row["links"]] == ["abc123"]
+    # The network's own tracking parameters travel with the link. They are the
+    # one field that survives into the network's payout report, so without them
+    # here a number in that report has nothing on this side to match against.
+    assert row["links"][0]["sub_ids"] == {"sub_id1": "0968cda6328f", "sub_id4": "Launch"}
     assert row["clicks"] == 3
     assert row["product_form"] == "paperback"
 

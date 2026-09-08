@@ -166,3 +166,15 @@ def test_a_link_that_is_not_a_product_is_refused_before_any_request() -> None:
         shopee_listing.fetch_listing(
             "https://shopee.vn/mall-page", opener=exploding_opener
         )
+
+
+@pytest.mark.parametrize("state", [
+    {}, {"item": {"items": {}}},
+    {"item": {"items": {"2": {"title": None}}}},
+    {"item": {"items": {"999": {"title": "Another product"}}}},
+])
+def test_empty_or_unrelated_product_state_is_not_a_listing(state) -> None:
+    with pytest.raises(shopee_listing.ListingUnavailable):
+        shopee_listing.fetch_listing(
+            "https://shopee.vn/product/1/2", opener=opener_for(page_for(state)),
+        )

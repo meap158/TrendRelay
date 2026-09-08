@@ -260,19 +260,19 @@
    at zero: their location and the 100-item boundary are always predictable. */
 .product-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-block-end: 12px; }
 .product-toolbar + .product-table-scroll { margin-top: 0; }
-.product-bulk { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; min-block-size: 34px; padding-inline-start: 12px; border-inline-start: 1px solid var(--line); font-size: 12px; }
-.product-bulk-count { display: inline-flex; align-items: baseline; gap: 3px; min-inline-size: 92px; color: var(--muted); white-space: nowrap; }
+.product-bulk { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-inline-size: 0; min-block-size: 34px; padding-block-start: 8px; border-block-start: 1px solid var(--line); font-size: 12px; }
+.product-bulk > .ui-button { flex: none; }
+.product-bulk-count { display: inline-flex; flex: none; align-items: baseline; gap: 3px; color: var(--muted); white-space: nowrap; }
 .product-bulk-count strong { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
 .product-bulk[data-active] .product-bulk-count strong { color: var(--link); }
 /* Why the table is showing a handful of rows out of hundreds, on the row that
    already carries the count rather than a banner of its own. The label may be
    a long notification title, so it is the part that gives way; the button
    keeps its size, because it is the way back. */
-.product-bulk-scope { display: inline-flex; align-items: center; gap: 4px; min-inline-size: 0; color: var(--muted); }
-/* A floor, because flex was shrinking a fifteen-character title to "Shopee …"
-   on a row with plenty of space left - the label is the only item here that
-   can give, so it gave everything. Beyond the floor it still ellipses. */
-.product-bulk-scope > span { min-inline-size: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-bulk-scope { display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-inline-size: 0; max-inline-size: 100%; color: var(--muted); }
+/* Keep the label and escape action in their own flow. A fixed label floor
+   plus shrinking flex siblings let both overflow into neighbouring controls. */
+.product-bulk-scope > span { min-inline-size: 0; max-inline-size: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .product-bulk-scope .ui-button { flex: none; }
 .product-choose { inline-size: 34px; text-align: center; }
 .product-table tr[data-chosen] { background: var(--panel-raised); }
@@ -311,6 +311,7 @@
   .product-filter-dates { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
   .product-bulk { flex-wrap: wrap; inline-size: 100%; min-inline-size: 0; padding: 8px 0 0; border-inline-start: 0; border-block-start: 1px solid var(--line); }
   .product-bulk-count { flex: 1 1 auto; min-inline-size: 0; margin-inline-end: auto; }
+  .product-bulk .ui-button { min-block-size: 44px; }
   .product-tag-campaign { flex: 1 1 180px; inline-size: auto; max-inline-size: none; min-inline-size: 0; }
 }
 

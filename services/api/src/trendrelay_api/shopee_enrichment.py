@@ -33,7 +33,7 @@ from sqlalchemy import select
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.integrations import shopee_listing, shopee_session
 from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
-from trendrelay_api.models import utc_now
+from trendrelay_api.models import DurableJob, utc_now
 from trendrelay_api.opportunity_models import Product
 
 JOB_KIND = "shopee_enrich"
@@ -48,12 +48,6 @@ LISTING_DELAY_SECONDS = 2.5
 #: sweep declares it abandoned.
 LEASE_SECONDS = 300
 
-#: The offer page and importer share this cap. Direct offer reads usually carry
-#: their image already, so this ceiling mainly covers Excel fallbacks and never
-#: silently leaves the back of a valid batch ineligible for enrichment.
-MAX_PER_IMPORT = 100
-
-
 def needs_enrichment(product: Product) -> bool:
     """Whether there is anything to go and look for.
 
@@ -62,7 +56,9 @@ def needs_enrichment(product: Product) -> bool:
     vouchers the export cannot carry, and a product that has never been asked
     about is worth one polite page read.
     """
-    return bool(product.product_url) and (not product.image_url or not product.listing)
+    return bool(product.product_url) and (
+        not product.image_url or not shopee_listing.is_fetched_listing(product.listing)
+    )
 
 
 def enqueue(
@@ -70,7 +66,7 @@ def enqueue(
     products: list[Product],
     *,
     factory: Any = SessionFactory,
-    limit: int = MAX_PER_IMPORT,
+    limit: int | None = None,
     force: bool = False,
 ) -> list[str]:
     """Queue a page read for each product still missing something.
@@ -81,7 +77,7 @@ def enqueue(
     """
     wanted: list[Product] = []
     for product in products:
-        if len(wanted) >= limit:
+        if limit is not None and len(wanted) >= limit:
             break
         if not force and not needs_enrichment(product):
             continue
@@ -95,28 +91,24 @@ def enqueue(
     # a single job as its own row, full product name and all.
     batch = {"id": f"shopee-listing-{token_urlsafe(6)}", "total": len(wanted)}
     queued: list[str] = []
-    for product in wanted:
-        job_id = f"shopee-enrich-{token_urlsafe(8)}"
-        create_job_record(
-            job_id,
-            workspace_id,
-            JOB_KIND,
-            {
-                "workspace_id": workspace_id,
-                "product_id": product.id,
-                # Carried on the job so a notification can name the product
-                # without a join at every poll.
-                "product_name": product.name,
-                "url": product.product_url,
-                "batch": batch,
-            },
-            # Once more, not three times. A page that did not answer is usually
-            # a page that will not answer, and a session that has expired will
-            # fail identically on every retry across every queued product.
-            max_attempts=2,
-            factory=factory,
-        )
-        queued.append(job_id)
+    # Commit the complete batch together, never a half-created queue.
+    with factory.begin() as session:
+        for product in wanted:
+            job_id = f"shopee-enrich-{token_urlsafe(8)}"
+            create_job_record(
+                job_id, workspace_id, JOB_KIND,
+                {
+                    "workspace_id": workspace_id,
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "url": product.product_url,
+                    "batch": batch,
+                },
+                max_attempts=2,
+                factory=factory,
+                session=session,
+            )
+            queued.append(job_id)
     return queued
 
 
@@ -130,16 +122,49 @@ def recent_jobs(
     folds into one card counting how many are left. Results and full payloads
     stay behind - the bell is polled every few seconds from every tab.
     """
-    from trendrelay_api.jobs import list_job_records
+    from trendrelay_api.jobs import list_job_records_including_active
 
     rows = []
-    for job in list_job_records(workspace_id, JOB_KIND, limit, factory=factory):
+    jobs = list_job_records_including_active(workspace_id, JOB_KIND, limit, factory=factory)
+    batch_ids = {((job.get("payload") or {}).get("batch") or {}).get("id") for job in jobs}
+    summaries: dict[str, dict[str, int]] = {}
+    fetched_jobs: set[str] = set()
+    # Narrow columns from *all* members of visible batches. The history cap
+    # limits notification rows, never the arithmetic of a batch.
+    with factory() as session:
+        members = session.execute(select(
+            DurableJob.id,
+            DurableJob.payload["batch"]["id"].as_string(),
+            DurableJob.status, DurableJob.result,
+            Product.listing["title"].as_string(),
+        ).outerjoin(Product, (
+            (Product.id == DurableJob.payload["product_id"].as_string())
+            & (Product.workspace_id == DurableJob.workspace_key)
+        )).where(
+            DurableJob.workspace_key == workspace_id, DurableJob.kind == JOB_KIND,
+            (DurableJob.payload["batch"]["id"].as_string().in_([b for b in batch_ids if b])
+             | DurableJob.id.in_([job["id"] for job in jobs if not (job.get("payload") or {}).get("batch")])),
+        ))
+        for job_id, batch_id, status, result, title in members:
+            summary = summaries.setdefault(batch_id, {
+                "queued": 0, "running": 0, "succeeded": 0, "failed": 0,
+                "cancelled": 0, "fetched": 0, "total": 0,
+            })
+            summary[status] = summary.get(status, 0) + 1
+            summary["total"] += 1
+            if status == "succeeded" and title and title.strip() and "listing" in (result or {}).get("filled", []):
+                summary["fetched"] += 1
+                fetched_jobs.add(job_id)
+    for job in jobs:
         payload = job.get("payload") or {}
         rows.append({
             "id": job.get("id"),
             "status": job.get("status"),
             "created_at": job.get("created_at"),
             "error": job.get("error"),
+            "batch_summary": summaries.get((payload.get("batch") or {}).get("id")),
+            "listing_fetched": job.get("id") in fetched_jobs,
+            "result": {"filled": (job.get("result") or {}).get("filled", [])},
             "payload": {
                 "batch": payload.get("batch"),
                 "product_id": payload.get("product_id"),
@@ -161,9 +186,12 @@ def progress(workspace_id: str, *, limit: int = 200, factory: Any = SessionFacto
     expired partway through the batch - and forty copies of that sentence would
     bury it.
     """
-    from trendrelay_api.jobs import list_job_records
-
-    jobs = list_job_records(workspace_id, JOB_KIND, limit, factory=factory)
+    # Operational counts cannot be truncated to a page of recent history.
+    with factory() as session:
+        jobs = [dict(row) for row in session.execute(select(
+            DurableJob.status.label("status"), DurableJob.result.label("result"),
+            DurableJob.last_error.label("error"),
+        ).where(DurableJob.workspace_key == workspace_id, DurableJob.kind == JOB_KIND)).mappings()]
     counts = {"queued": 0, "running": 0, "succeeded": 0, "failed": 0, "cancelled": 0}
     filled = 0
     #: Taken from a job that has given up in preference to one still retrying,
@@ -240,6 +268,10 @@ def run_enrich_job(
     reader = fetch or _read_product_page
     try:
         found = reader(payload["url"])
+        if not shopee_listing.is_fetched_listing(found.get("listing")):
+            raise shopee_listing.ListingUnavailable(
+                "Shopee returned no usable listing details. The listing has not been fetched."
+            )
         applied = apply_details(payload["workspace_id"], payload["product_id"], found, factory)
         complete_job(job_id, worker_id, applied, factory=factory)
     except Exception as error:
@@ -269,7 +301,7 @@ def apply_details(
             return {"filled": [], "product_id": product_id, "missing": True}
 
         listing = found.get("listing")
-        if isinstance(listing, dict) and listing:
+        if shopee_listing.is_fetched_listing(listing):
             # The one field here that replaces rather than fills: the listing
             # is the page's own account of the product, ours to refresh whole,
             # and half of last month's snapshot is not a correction to keep.

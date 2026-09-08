@@ -116,7 +116,9 @@ def _economics_payload(report: Any) -> dict[str, Any]:
 
 def _listing_summary(listing: dict[str, Any] | None) -> dict[str, Any] | None:
     """The row-sized reading of a stored listing, or None when never fetched."""
-    if not listing:
+    from trendrelay_api.integrations.shopee_listing import is_fetched_listing
+
+    if not is_fetched_listing(listing):
         return None
     return {
         "discount_percent": listing.get("discount_percent"),
@@ -273,6 +275,13 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
                     "destination_url": link.destination_url,
                     "status": link.status,
                     "expires_at": link.expires_at.isoformat() if link.expires_at else None,
+                    # The network's own tracking parameters, so a payout row can
+                    # be searched back to the product that earned it. A sub ID
+                    # is the one field that survives the whole way into the
+                    # network's report, and it was the one field this payload
+                    # did not carry - leaving the number in the report with
+                    # nothing here to match it against.
+                    "sub_ids": dict(link.sub_ids or {}),
                 }
                 for link in product_links
             ],

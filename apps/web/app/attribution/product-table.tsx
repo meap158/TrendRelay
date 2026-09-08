@@ -22,6 +22,7 @@ import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
 import { productMatches } from "../publish/offer-rows";
+import { SearchSelect } from "../ui/search-select";
 import {
   sortProducts,
   type ProductSort,
@@ -173,6 +174,10 @@ export function ProductTable({
   const [filterFile, setFilterFile] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  /** One creator, chosen from the ones actually present in these rows. */
+  const [filterCreator, setFilterCreator] = useState("");
+  /** A sub ID pasted from the network's payout report. */
+  const [filterSubId, setFilterSubId] = useState("");
   /** Whether a product's listing has been read: this table's own kind axis. */
   const [listingFilter, setListingFilter] = useState<"all" | "with" | "without">("all");
   /**
@@ -246,6 +251,24 @@ export function ProductTable({
     }
     return [...names].sort();
   }, [products]);
+  /**
+   * The creators actually present in these rows, counted.
+   *
+   * Built from the rows rather than fetched: a list offering a shop with
+   * nothing in it is a filter that can only empty the table. The count rides
+   * along because "which of these 336 is worth opening" is the question the
+   * list is being read to answer.
+   */
+  const creatorNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const product of products) {
+      for (const creator of product.creators) {
+        counts.set(creator, (counts.get(creator) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  }, [products]);
   const hasImportDates = useMemo(
     () => products.some((product) => product.imported_at),
     [products],
@@ -261,6 +284,7 @@ export function ProductTable({
     // that drifts.
     const filtered = products.filter((product) => productMatches(product, {
       query, campaign: filterCampaign, file: filterFile, from: filterFrom, to: filterTo,
+      creator: filterCreator, subId: filterSubId,
     }, campaignsByOffer))
       // Layered under the shared rules rather than inside them: whether a
       // listing has been read is this table's own axis, the way the Library
@@ -270,6 +294,7 @@ export function ProductTable({
     return sortProducts(filtered, sort);
   }, [
     products, query, sort, filterCampaign, filterFile, filterFrom, filterTo,
+    filterCreator, filterSubId,
     campaignsByOffer, listingFilter, scope,
   ]);
   const listingCounts = useMemo(() => ({
@@ -357,6 +382,7 @@ export function ProductTable({
         // Reflect any narrowing - the text search or any of the filters - so a
         // filtered-down list reports what it is showing, not the whole catalogue.
         count: (query.trim() || filterCampaign || filterFile || filterFrom || filterTo
+          || filterCreator || filterSubId.trim()
           || listingFilter !== "all")
           ? shown.length
           : products.length,
@@ -395,7 +421,8 @@ export function ProductTable({
             ))}
           </div>
         )}
-        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates) && (
+        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates
+          || creatorNames.length > 0) && (
           <div className="product-filters">
             {campaigns.length > 0 && (
               <Select
@@ -423,6 +450,38 @@ export function ProductTable({
                 ))}
               </Select>
             )}
+            {/* A searchable select, not a dropdown: this workspace has 336
+                creators, and a list that long is a scroll rather than a
+                choice. Ordered by how many products each has, so the ones
+                worth filtering to are the ones at the top. */}
+            {creatorNames.length > 0 && (
+              <span className="product-filter-creator">
+                <SearchSelect
+                  value={filterCreator}
+                  options={creatorNames.map(([name, count]) => ({
+                    value: name,
+                    label: name,
+                    description: `${count} ${count === 1 ? "product" : "products"}`,
+                  }))}
+                  onChange={setFilterCreator}
+                  placeholder={t("attribution.allCreators")}
+                  searchPlaceholder={t("attribution.searchCreators")}
+                  emptyLabel={t("attribution.noCreatorMatches")}
+                  ariaLabel={t("attribution.filterByCreator")}
+                />
+              </span>
+            )}
+            {/* Typed, not chosen: the value is pasted from a payout row in the
+                network's own report, and the question it answers is which
+                product earned it. */}
+            <input
+              type="search"
+              className="product-filter product-filter-subid"
+              value={filterSubId}
+              placeholder={t("attribution.subIdPlaceholder")}
+              aria-label={t("attribution.filterBySubId")}
+              onChange={(event) => setFilterSubId(event.target.value)}
+            />
             {hasImportDates && (
               <span className="product-filter-dates">
                 <input
@@ -444,7 +503,8 @@ export function ProductTable({
                 />
               </span>
             )}
-            {(filterCampaign || filterFile || filterFrom || filterTo) && (
+            {(filterCampaign || filterFile || filterFrom || filterTo
+              || filterCreator || filterSubId) && (
               <Button
                 variant="quiet"
                 size="sm"
@@ -453,6 +513,8 @@ export function ProductTable({
                   setFilterFile("");
                   setFilterFrom("");
                   setFilterTo("");
+                  setFilterCreator("");
+                  setFilterSubId("");
                 }}
               >
                 {t("attribution.clearFilters")}

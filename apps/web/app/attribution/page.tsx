@@ -283,13 +283,16 @@ function AttributionContent() {
       .map((job) => job.raw?.payload?.product_id as string | undefined)
       .filter((id): id is string => Boolean(id)),
   ), [workspaceJobs]);
-  // When the last read lands, the table is re-read once, so the new facts
-  // appear without anyone pressing refresh.
-  const listingBusyBefore = useRef(0);
+  // Refresh as verified snapshots land, not only when the last job finishes.
+  // Batch totals also detect completions outside the notification history cap.
+  const listingRevision = useMemo(() => JSON.stringify(workspaceJobs
+    .filter((job) => job.category === "listing")
+    .map((job) => [job.id, job.status, job.raw?.batch_summary?.fetched])), [workspaceJobs]);
+  const listingRevisionBefore = useRef<string | null>(null);
   useEffect(() => {
-    if (listingBusyBefore.current > 0 && listingBusy.size === 0) void refresh();
-    listingBusyBefore.current = listingBusy.size;
-  }, [listingBusy.size, refresh]);
+    if (listingRevisionBefore.current !== null && listingRevisionBefore.current !== listingRevision) void refresh();
+    listingRevisionBefore.current = listingRevision;
+  }, [listingRevision, refresh]);
 
   const readListing = useCallback(async (productId: string) => {
     const body = await json<{ listing: FullListing | null }>(

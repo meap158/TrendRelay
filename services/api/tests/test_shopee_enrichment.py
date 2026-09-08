@@ -20,6 +20,7 @@ from trendrelay_api.opportunity_models import Product
 PAGE = {
     "name": "Giấy ăn rút Topgia",
     "image_url": "https://down-vn.img.susercontent.com/file/abc",
+    "listing": {"title": "Giấy ăn rút Topgia"},
 }
 
 
@@ -127,21 +128,18 @@ def test_a_product_with_no_page_to_read_is_not_queued(factory) -> None:
     assert enrichment.enqueue("w", [orphan], factory=factory) == []
 
 
-def test_a_huge_export_does_not_queue_hundreds_of_page_loads(factory) -> None:
-    """A queue that takes six hours to drain is one nobody trusts.
-
-    The rest keep their export data and can be enriched by importing again.
-    """
+def test_a_large_export_queues_every_requested_listing(factory) -> None:
+    """Rate limiting belongs in the worker, not a silent truncation at enqueue."""
     many = [
         Product(
             workspace_id="w", catalog_key=f"k{index}", name=f"P{index}",
             marketplace="shopee", product_url=f"https://shopee.vn/product/1/{index}",
             created_by="u",
         )
-        for index in range(enrichment.MAX_PER_IMPORT + 15)
+        for index in range(495)
     ]
 
-    assert len(enrichment.enqueue("w", many, factory=factory)) == enrichment.MAX_PER_IMPORT
+    assert len(enrichment.enqueue("w", many, factory=factory)) == 495
 
 
 # --- what a page read fills in ------------------------------------------------
@@ -275,7 +273,7 @@ def test_a_finished_job_reports_what_it_filled(factory) -> None:
 
     record = get_job_record(job_id, factory=factory)
     assert record["status"] == "succeeded"
-    assert set(record["result"]["filled"]) == {"image_url", "name"}
+    assert set(record["result"]["filled"]) == {"image_url", "name", "listing"}
 
 
 def test_a_failed_read_never_writes_a_cookie_onto_the_job(factory) -> None:
@@ -351,15 +349,15 @@ def test_queued_pages_are_counted_as_pending(factory) -> None:
 
 
 def test_what_was_actually_gained_is_counted_not_just_jobs_finished(factory) -> None:
-    """A page that loads with nothing new to add succeeds and fills nothing."""
+    """An empty page is retried, not marked successfully fetched."""
     first, second = queue_two(factory)
     enrichment.run_enrich_job(first, factory=factory, fetch=lambda _url: PAGE)
     enrichment.run_enrich_job(second, factory=factory, fetch=lambda _url: {})
 
     state = enrichment.progress("workspace-1", factory=factory)
 
-    assert state["succeeded"] == 2 and state["pending"] == 0
-    assert state["fields_filled"] == 2, "image and name, from the one useful page"
+    assert state["succeeded"] == 1 and state["pending"] == 1
+    assert state["fields_filled"] == 3, "listing, image and name from the useful page"
 
 
 def test_an_expired_session_says_reconnect_rather_than_retry(factory) -> None:
@@ -417,3 +415,62 @@ def test_another_workspace_sees_none_of_this(factory) -> None:
     queue_two(factory)
 
     assert enrichment.progress("someone-else", factory=factory)["pending"] == 0
+
+
+def test_notification_summary_covers_all_495_jobs_not_only_latest_250(factory) -> None:
+    from trendrelay_api.models import DurableJob
+
+    product = read(factory, add_product(factory, listing={"title": "Verified"}))
+    ids = enrichment.enqueue("workspace-1", [product] * 495, force=True, factory=factory)
+    with factory.begin() as session:
+        for job in session.scalars(select(DurableJob)).all():
+            job.status = "succeeded"
+            job.result = {"filled": ["listing"]}
+        session.get(DurableJob, ids[0]).status = "failed"
+    rows = enrichment.recent_jobs("workspace-1", factory=factory)
+    assert len(rows) == 250
+    assert rows[0]["batch_summary"] == {
+        "total": 495, "succeeded": 494, "failed": 1, "queued": 0,
+        "running": 0, "cancelled": 0, "fetched": 494,
+    }
+    assert enrichment.progress("workspace-1", factory=factory)["succeeded"] == 494
+    assert enrichment.recent_jobs("another-workspace", factory=factory) == []
+    with factory.begin() as session:
+        session.get(DurableJob, ids[0]).status = "queued"
+    assert ids[0] in {job["id"] for job in enrichment.recent_jobs("workspace-1", limit=1, factory=factory)}
+
+
+def test_empty_legacy_listing_is_neither_counted_nor_skipped(factory) -> None:
+    from trendrelay_api.attribution_products import _listing_summary
+
+    product = read(factory, add_product(factory, listing={
+        "source": "shopee-product-page", "title": None, "images": [],
+    }, image_url=PAGE["image_url"]))
+    assert _listing_summary(product.listing) is None
+    assert enrichment.needs_enrichment(product)
+    assert _listing_summary({"title": "Real listing", "images": []}) is not None
+
+
+def test_partial_response_does_not_overwrite_previous_listing(factory) -> None:
+    product = read(factory, add_product(factory, listing={"title": "Previous valid listing"}))
+    job_id = enrichment.enqueue("workspace-1", [product], force=True, factory=factory)[0]
+    enrichment.run_enrich_job(job_id, factory=factory, fetch=lambda _: {"listing": {"title": None}})
+    assert get_job_record(job_id, factory=factory)["status"] == "queued"
+    assert read(factory, product.id).listing["title"] == "Previous valid listing"
+
+
+def test_enqueue_failure_rolls_back_the_whole_batch(factory, monkeypatch) -> None:
+    create = enrichment.create_job_record
+    calls = 0
+
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("insertion failed")
+        return create(*args, **kwargs)
+
+    monkeypatch.setattr(enrichment, "create_job_record", fail_second)
+    with pytest.raises(RuntimeError, match="insertion failed"):
+        queue_two(factory)
+    assert enrichment.recent_jobs("workspace-1", factory=factory) == []
