@@ -68,8 +68,15 @@ def _voice_from_synthesis(
     """Speak the script, and take the synthesiser's own timings with it."""
     from trendrelay_api.integrations import elevenlabs
 
+    # The operator's configured default when the caller named no model.
+    #
+    # Passing the empty string through would not fall back to anything: it
+    # reaches the request body as `model_id: ""` and the service refuses it.
+    # Nothing in the interface sent a model, so every generation would have
+    # been rejected on the first real render.
+    chosen_model = model_id or str(elevenlabs.defaults().get("model_id") or "")
     audio, alignment = elevenlabs.synthesise_with_timings(
-        text, voice_id=voice_id, model_id=model_id, language_code=language_code,
+        text, voice_id=voice_id, model_id=chosen_model, language_code=language_code,
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(audio)
@@ -223,7 +230,7 @@ def run_render_job(
             timed, audio_path = _voice_from_synthesis(
                 payload["body"],
                 voice_id=payload["voice_id"],
-                model_id=payload.get("model_id") or "",
+                model_id=str(payload.get("model_id") or ""),
                 language_code=payload.get("language_code"),
                 destination=root / f"{job_id}.mp3",
             )
