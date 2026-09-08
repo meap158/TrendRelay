@@ -155,6 +155,26 @@ def test_archive_hides_from_the_default_list() -> None:
     assert request("GET", f"/api/workspaces/{workspace_id}/creations").json()["total"] == 0
 
 
+def test_attach_media_by_base64_and_list(monkeypatch, tmp_path) -> None:
+    import base64
+
+    monkeypatch.setattr(drafts, "_draft_media_root", lambda: tmp_path / "media")
+    workspace_id = make_workspace()
+    draft_id = request(
+        "POST", f"/api/workspaces/{workspace_id}/creations",
+        json={"kind": "autocut", "spec": {}},
+    ).json()["id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+    attached = request(
+        "POST", f"/api/workspaces/{workspace_id}/creations/{draft_id}/media",
+        json={"media_base64": base64.b64encode(png).decode(), "filename": "hero.png"},
+    )
+    assert attached.status_code == 201
+    assert attached.json()["ref"].startswith("draft:")
+    listed = request("GET", f"/api/workspaces/{workspace_id}/creations/{draft_id}/media")
+    assert len(listed.json()["media"]) == 1
+
+
 def test_a_draft_in_another_workspace_is_not_found() -> None:
     workspace_id = make_workspace()
     other = make_workspace()

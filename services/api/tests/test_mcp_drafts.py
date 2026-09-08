@@ -90,3 +90,22 @@ def test_render_hands_off_to_the_feature(session, monkeypatch) -> None:
 def test_a_bad_spec_is_refused_readably(session) -> None:
     with pytest.raises(ValueError, match="aspect"):
         drafts.create_draft(session, "ws-1", kind="autocut", spec={"aspect": "circle"})
+
+
+def test_owned_media_is_added_and_listed(session, monkeypatch, tmp_path) -> None:
+    import base64
+
+    from trendrelay_api import creation_drafts as store
+    monkeypatch.setattr(store, "_draft_media_root", lambda: tmp_path / "media")
+    draft_id = drafts.create_draft(session, "ws-1", kind="autocut", spec={})["id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+    view = drafts.add_media(
+        session, "ws-1", draft_id, media_base64=base64.b64encode(png).decode(), filename="hero.png"
+    )
+    assert view["ref"].startswith("draft:") and view["media_kind"] == "image"
+    assert len(drafts.list_media(session, "ws-1", draft_id)["media"]) == 1
+
+
+def test_media_tools_are_classified() -> None:
+    assert policy.is_allowed("list_creation_draft_media")   # read
+    assert policy.is_allowed("add_creation_draft_media")    # workspace write

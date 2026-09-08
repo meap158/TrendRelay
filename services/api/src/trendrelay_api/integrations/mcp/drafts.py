@@ -67,3 +67,33 @@ def render_draft(session: Session, workspace_id: str, draft_id: str) -> dict[str
     return creation_drafts.render_draft(
         session, workspace_id, LOCAL_ADMIN_ID, draft_id, preview=False
     )
+
+
+def list_media(session: Session, workspace_id: str, draft_id: str) -> dict[str, Any]:
+    return creation_drafts.list_media(session, workspace_id, draft_id)
+
+
+def add_media(
+    session: Session, workspace_id: str, draft_id: str,
+    *, media_url: str | None = None, media_base64: str | None = None,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    """Keep media the draft needs that is not a Library asset - by public https
+    URL (fetched under the upload guard) or as base64 bytes. Reference the
+    returned ref in the spec's asset list; it is ingested at render."""
+    import base64 as _b64
+
+    from trendrelay_api.integrations.mcp.intake import _download_media
+
+    if media_url:
+        data, _content_type = _download_media(media_url)
+    elif media_base64:
+        try:
+            data = _b64.b64decode(media_base64, validate=True)
+        except ValueError as error:
+            raise ValueError("media_base64 is not valid base64.") from error
+    else:
+        raise ValueError("Provide media_url or media_base64.")
+    return creation_drafts.attach_media_bytes(
+        session, workspace_id, draft_id, data=data, original_name=filename
+    )

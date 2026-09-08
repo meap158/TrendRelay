@@ -43,6 +43,31 @@ class RenderBody(BaseModel):
     preview: bool = False
 
 
+class AttachMediaBody(BaseModel):
+    #: A direct public https URL (fetched under the same guard MCP uploads use),
+    #: or the bytes themselves as base64 for media with no address. Exactly one.
+    media_url: str | None = None
+    media_base64: str | None = None
+    filename: str | None = Field(default=None, max_length=300)
+
+
+def _media_bytes(body: AttachMediaBody) -> bytes:
+    import base64 as _b64
+
+    from trendrelay_api.integrations.mcp.intake import _download_media
+
+    if body.media_url:
+        data, _content_type = _download_media(body.media_url)
+        return data
+    if body.media_base64:
+        try:
+            # binascii.Error is a ValueError subclass, so this catches both.
+            return _b64.b64decode(body.media_base64, validate=True)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="media_base64 is not valid base64.") from error
+    raise HTTPException(status_code=422, detail="Provide media_url or media_base64.")
+
+
 @router.get("")
 def list_creations(
     workspace_id: str,
@@ -131,6 +156,51 @@ def update_creation(
         raise HTTPException(status_code=422, detail=str(error)) from error
     audit(session, request, workspace_id, user.id, "creation.updated", "creation_draft",
           draft_id, {})
+    session.commit()
+    return view
+
+
+@router.get("/{draft_id}/media")
+def list_creation_media(
+    workspace_id: str,
+    draft_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The media a draft owns that is not a Library asset."""
+    membership(session, workspace_id, user.id)
+    try:
+        return drafts.list_media(session, workspace_id, draft_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail="Draft not found.") from error
+
+
+@router.post("/{draft_id}/media", status_code=201)
+def attach_creation_media(
+    workspace_id: str,
+    draft_id: str,
+    body: AttachMediaBody,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Keep a photo or video with the draft that is not (yet) a Library asset.
+
+    Reference the returned ``ref`` in the spec's asset list; at render it is
+    ingested into the Library and the ref resolves to the new asset.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    data = _media_bytes(body)
+    try:
+        view = drafts.attach_media_bytes(
+            session, workspace_id, draft_id, data=data, original_name=body.filename,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail="Draft not found.") from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(session, request, workspace_id, user.id, "creation.media_attached",
+          "creation_draft", draft_id, {"media_id": view["id"]})
     session.commit()
     return view
 

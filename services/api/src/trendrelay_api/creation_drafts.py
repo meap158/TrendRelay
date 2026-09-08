@@ -17,15 +17,17 @@ input pointed at can vanish between sessions.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api.creation_models import CreationDraft
+from trendrelay_api.creation_models import CreationDraft, CreationDraftMedia
 from trendrelay_api.media_models import MediaAsset
 
 #: Paging defaults, matching the other list surfaces (products, campaign posts).
@@ -214,6 +216,152 @@ def validate_spec(kind: str, spec: dict[str, Any] | None) -> dict[str, Any]:
         raise ValueError(f"{where}: {first.get('msg', 'invalid')}") from error
 
 
+# --- self-contained media -----------------------------------------------------
+#
+# A draft references Library media by asset id. Anything the operator or an
+# assistant brought that is not in the Library is kept by the draft: the bytes
+# under an approved media root, a row per file, and a ``draft:<id>`` ref in the
+# spec's asset list. At render each owned ref is ingested into the Library
+# through the same pipeline an import uses, so the feature only ever sees asset
+# ids - and the media the draft carried never had to be in the Library to be
+# saved and resumed.
+
+#: Suffix and kind by the type the bytes actually are (never a caller's label).
+_MEDIA_EXT = {
+    "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+    "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
+    "video/x-matroska": ".mkv",
+}
+_MEDIA_KIND = {
+    "image/jpeg": "image", "image/png": "image", "image/webp": "image",
+    "video/mp4": "video", "video/quicktime": "video", "video/webm": "video",
+    "video/x-matroska": "video",
+}
+DRAFT_REF_PREFIX = "draft:"
+
+
+def _draft_media_root() -> Path:
+    from trendrelay_api.config import get_settings
+    from trendrelay_api.tool_registry import PROJECT_ROOT
+
+    roots = get_settings().publishing_media_root_list
+    if not roots:
+        raise RuntimeError("No approved media root is configured.")
+    first = Path(roots[0])
+    if not first.is_absolute():
+        first = PROJECT_ROOT / first
+    return first / "creation-drafts"
+
+
+def attach_media_bytes(
+    session: Session, workspace_id: str, draft_id: str,
+    *, data: bytes, original_name: str | None = None,
+) -> dict[str, Any]:
+    """Keep media the draft needs that is not a Library asset.
+
+    The type is decided by the bytes, not the caller. The file is written under
+    an approved media root (so the render-time ingest can read it) named by its
+    digest, deduplicated within the draft, and recorded. Returns the ``draft:``
+    ref to put in the spec's asset list.
+    """
+    from trendrelay_api.integrations.mcp.intake import _sniff_media_type
+
+    draft = get_draft(session, workspace_id, draft_id)
+    media_type = _sniff_media_type(data)
+    if media_type not in _MEDIA_EXT:
+        raise ValueError("Only images and videos are accepted, and the bytes are neither.")
+    digest = hashlib.sha256(data).hexdigest()
+    existing = session.scalars(
+        select(CreationDraftMedia).where(
+            CreationDraftMedia.draft_id == draft.id, CreationDraftMedia.sha256 == digest
+        )
+    ).first()
+    if existing is not None:
+        return _media_view(existing)
+    root = _draft_media_root() / draft.id
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"{digest}{_MEDIA_EXT[media_type]}"
+    if not path.exists():
+        path.write_bytes(data)
+    row = CreationDraftMedia(
+        draft_id=draft.id, media_kind=_MEDIA_KIND[media_type],
+        original_name=(original_name or "").strip()[:300] or None,
+        stored_path=str(path), sha256=digest, mime_type=media_type, size_bytes=len(data),
+    )
+    session.add(row)
+    session.commit()
+    return _media_view(row)
+
+
+def _media_view(row: CreationDraftMedia) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "ref": f"{DRAFT_REF_PREFIX}{row.id}",
+        "media_kind": row.media_kind,
+        "original_name": row.original_name,
+        "size_bytes": row.size_bytes,
+        "ingested_asset_id": row.ingested_asset_id,
+    }
+
+
+def list_media(session: Session, workspace_id: str, draft_id: str) -> dict[str, Any]:
+    """The media a draft owns - what its ``draft:`` refs point at."""
+    draft = get_draft(session, workspace_id, draft_id)
+    rows = session.scalars(
+        select(CreationDraftMedia).where(CreationDraftMedia.draft_id == draft.id)
+        .order_by(CreationDraftMedia.created_at)
+    ).all()
+    return {"media": [_media_view(row) for row in rows]}
+
+
+def _resolve_owned_media(
+    session: Session, workspace_id: str, actor_user_id: str, draft: CreationDraft,
+) -> dict[str, Any]:
+    """A copy of the spec with every ``draft:`` ref turned into a Library asset id.
+
+    Owned media is ingested at render, once, through the standard pipeline; the
+    resulting asset id is cached on the media row so a re-render reuses it. A
+    spec with no owned refs is returned unchanged.
+    """
+    spec = dict(draft.spec or {})
+    ids = spec.get("asset_ids") or []
+    if not any(isinstance(ref, str) and ref.startswith(DRAFT_REF_PREFIX) for ref in ids):
+        return spec
+
+    from trendrelay_api.media_library import create_ingest_job, run_ingest_job
+
+    resolved: list[str] = []
+    changed = False
+    for ref in ids:
+        if not (isinstance(ref, str) and ref.startswith(DRAFT_REF_PREFIX)):
+            resolved.append(ref)
+            continue
+        media = session.get(CreationDraftMedia, ref[len(DRAFT_REF_PREFIX):])
+        if media is None or media.draft_id != draft.id:
+            raise ValueError(f"The draft media {ref} is not on this draft.")
+        if media.ingested_asset_id:
+            resolved.append(media.ingested_asset_id)
+            continue
+        ingest = create_ingest_job(
+            workspace_id=workspace_id, actor_user_id=actor_user_id,
+            path=media.stored_path, title=media.original_name or draft.title,
+            source_type="creation-draft", source_sha256=media.sha256,
+        )
+        asset_id = ingest.get("asset_id")
+        if not asset_id and ingest.get("id"):
+            done = run_ingest_job(ingest["id"])
+            asset_id = (done.get("result") or {}).get("asset_id") or done.get("asset_id")
+        if not asset_id:
+            raise ValueError("A draft's media could not be ingested for rendering.")
+        media.ingested_asset_id = asset_id
+        changed = True
+        resolved.append(asset_id)
+    if changed:
+        session.commit()
+    spec["asset_ids"] = resolved
+    return spec
+
+
 # --- store --------------------------------------------------------------------
 
 
@@ -343,8 +491,11 @@ def render_draft(
     """
     draft = get_draft(session, workspace_id, draft_id)
     adapter = _adapter(draft.kind)
+    # Owned (non-Library) media is ingested here and its draft: refs become asset
+    # ids, so the feature's renderer only ever sees Library assets.
+    spec = _resolve_owned_media(session, workspace_id, actor_user_id, draft)
     queued = adapter.render(
-        session, workspace_id, actor_user_id, draft.spec or {},
+        session, workspace_id, actor_user_id, spec,
         title=draft.title, preview=preview,
     )
     if not preview:

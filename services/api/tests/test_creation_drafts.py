@@ -156,3 +156,53 @@ def test_a_draft_from_another_workspace_is_not_found(session) -> None:
         other.commit()
     with pytest.raises(LookupError):
         drafts.get_draft(session, "ws-2", view["id"])
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40  # enough magic to be sniffed an image
+
+
+def test_attach_stores_owned_media_and_dedupes(session, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(drafts, "_draft_media_root", lambda: tmp_path / "media")
+    view = drafts.create_draft(session, "ws-1", USER, kind="autocut", title="A", spec={})
+    first = drafts.attach_media_bytes(session, "ws-1", view["id"], data=PNG, original_name="hero.png")
+    assert first["ref"].startswith("draft:") and first["media_kind"] == "image"
+    # The same bytes attach once, not twice.
+    again = drafts.attach_media_bytes(session, "ws-1", view["id"], data=PNG)
+    assert again["id"] == first["id"]
+    assert len(drafts.list_media(session, "ws-1", view["id"])["media"]) == 1
+
+
+def test_render_ingests_owned_media_and_substitutes_ids(session, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(drafts, "_draft_media_root", lambda: tmp_path / "media")
+    # Owned media ingests to this Library asset id at render.
+    import trendrelay_api.media_library as media_library
+    monkeypatch.setattr(
+        media_library, "create_ingest_job",
+        lambda **kwargs: {"asset_id": "asset-owned", "duplicate": True},
+    )
+    from trendrelay_api.autocut import jobs as autocut_jobs
+    captured: dict = {}
+    monkeypatch.setattr(
+        autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: captured.update(kwargs) or {"id": "j", "status": "queued", "preview": False},
+    )
+    # A MediaAsset for the resolved id, so _visual_kinds keeps it after substitution.
+    with Session() as s:
+        s.add(MediaAsset(
+            id="asset-owned", workspace_id="ws-1", title="owned", media_kind="image",
+            source_type="creation-draft", original_path="/m/owned",
+            original_sha256="f" * 64, mime_type="image/png", size_bytes=10, created_by=USER,
+        ))
+        s.commit()
+
+    view = drafts.create_draft(session, "ws-1", USER, kind="autocut", title="Cut", spec={})
+    owned = drafts.attach_media_bytes(session, "ws-1", view["id"], data=PNG)
+    drafts.update_draft(session, "ws-1", USER, view["id"],
+                        spec={"asset_ids": ["asset-0", owned["ref"]]})
+
+    drafts.render_draft(session, "ws-1", USER, view["id"])
+    # The draft: ref was ingested and replaced by the Library asset id, in order.
+    assert captured["asset_ids"] == ["asset-0", "asset-owned"]
+    # The ingest is cached, so a re-render does not import the bytes again.
+    media = drafts.list_media(session, "ws-1", view["id"])["media"][0]
+    assert media["ingested_asset_id"] == "asset-owned"

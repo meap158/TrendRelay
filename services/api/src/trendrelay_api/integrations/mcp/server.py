@@ -876,6 +876,42 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="list_creation_draft_media",
+        description=(
+            "The media a draft owns that is not a Library asset - what its "
+            "draft: refs point at. Use to see what a resumed draft already carries."
+        ),
+    )
+    def list_creation_draft_media(draft_id: str) -> dict[str, Any]:
+        return _call(
+            "list_creation_draft_media", lambda s: drafts.list_media(s, workspace_id, draft_id)
+        )
+
+    @server.tool(
+        name="add_creation_draft_media",
+        description=(
+            "Keep a photo or video with a draft that is not in the Library - by a "
+            "direct public https URL, or as base64 bytes for media you generated "
+            "with no address. Returns a draft: ref; put it in the spec's asset "
+            "list with update_creation_draft. It is ingested into the Library at "
+            "render. Prefer list_library_assets for media the operator already has."
+        ),
+    )
+    def add_creation_draft_media(
+        draft_id: str,
+        media_url: str | None = None,
+        media_base64: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        return _call(
+            "add_creation_draft_media",
+            lambda s: drafts.add_media(
+                s, workspace_id, draft_id,
+                media_url=media_url, media_base64=media_base64, filename=filename,
+            ),
+        )
+
+    @server.tool(
         name="get_import_status",
         description=(
             "How upload_media and upload_image imports are going. Pass every "
@@ -1175,6 +1211,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Creation drafts": (
         "list_creation_kinds", "list_creation_drafts", "get_creation_draft",
         "create_creation_draft", "update_creation_draft", "render_creation_draft",
+        "list_creation_draft_media", "add_creation_draft_media",
     ),
 }
 

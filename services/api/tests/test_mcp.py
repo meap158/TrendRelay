@@ -114,24 +114,22 @@ def test_every_operation_is_classified_on_purpose() -> None:
 
 def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
     assert policy.allowed_operations() == [
-        "create_campaign_post", "create_creation_draft", "create_posting_preset",
+        "add_creation_draft_media", "create_campaign_post",
+        "create_creation_draft", "create_posting_preset",
         "get_asset_thumbnails", "get_campaign_config",
         "get_campaign_posting_times", "get_creation_draft", "get_day_slots",
-        "get_import_status",
-        "get_post_context", "get_product_attribution", "get_product_details",
-        "get_sop", "list_campaign_posts",
+        "get_import_status", "get_post_context", "get_product_attribution",
+        "get_product_details", "get_sop", "list_campaign_posts",
         "list_campaign_products", "list_campaigns",
-        "list_creation_drafts", "list_creation_kinds",
-        "list_library_assets",
-        "list_posting_times",
-        "list_posts_needing_copy", "list_products", "list_published_posts", "list_sops",
-        "pin_post_slot", "render_creation_draft", "set_campaign_posting_times",
-        "set_page_posting_times", "set_post_media", "set_post_products",
-        "set_workspace_posting_times",
-        "update_creation_draft",
-        "upload_image", "upload_media",
-        "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
-        "write_post_copy", "write_thread",
+        "list_creation_draft_media", "list_creation_drafts",
+        "list_creation_kinds", "list_library_assets", "list_posting_times",
+        "list_posts_needing_copy", "list_products", "list_published_posts",
+        "list_sops", "pin_post_slot", "render_creation_draft",
+        "set_campaign_posting_times", "set_page_posting_times",
+        "set_post_media", "set_post_products", "set_workspace_posting_times",
+        "update_creation_draft", "upload_image", "upload_media",
+        "write_bio_hint", "write_caption", "write_disclosure",
+        "write_first_comment", "write_post_copy", "write_thread",
     ]
 
 

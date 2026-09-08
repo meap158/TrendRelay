@@ -175,6 +175,11 @@ EXPOSURE: dict[str, Access] = {
     # a Library asset, and what happens to it next is a person's decision on the
     # campaign path, which MCP still refuses.
     "render_creation_draft": Access.WORKSPACE_WRITE,
+    # Reading a draft's own media is a read; adding some is a workspace write of
+    # the same order as an upload - it keeps a file the draft needs and, until
+    # the draft is rendered, does not even reach the Library.
+    "list_creation_draft_media": Access.READ,
+    "add_creation_draft_media": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,
