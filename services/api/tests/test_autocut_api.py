@@ -166,6 +166,40 @@ def test_render_needs_at_least_one_real_picture() -> None:
     assert answer.status_code == 422
 
 
+def test_the_aspect_choice_reaches_the_render_and_defaults_to_portrait(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    for index in range(3):
+        add_image(workspace_id, f"pic-{index}")
+    captured: dict = {}
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: captured.update(kwargs)
+        or {"id": "autocut_x", "status": "queued"},
+    )
+
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": [f"pic-{i}" for i in range(3)], "aspect": "square"},
+    )
+    assert captured["aspect"] == "square"
+
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": [f"pic-{i}" for i in range(3)]},
+    )
+    assert captured["aspect"] == "portrait"
+
+
+def test_an_unknown_aspect_is_refused() -> None:
+    workspace_id = make_workspace()
+    add_image(workspace_id, "pic-0")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "aspect": "circle"},
+    )
+    assert answer.status_code == 422
+
+
 def test_a_preview_queues_a_preview_job_and_status_reads_back(monkeypatch) -> None:
     workspace_id = make_workspace()
     for index in range(3):

@@ -77,6 +77,9 @@ class PlanRequest(BaseModel):
     template_id: str | None = None
     music: str | None = None
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    #: The canvas shape - the plan is the same for all, only the render frame
+    #: differs, so it rides the render/preview calls, not the plan preview.
+    aspect: str = Field(default="portrait", pattern="^(portrait|square|landscape)$")
 
 
 def _known_visuals(
@@ -161,6 +164,7 @@ def _queue(
             title=title,
             preview=preview,
             kinds=kinds,
+            aspect=body.aspect,
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

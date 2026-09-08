@@ -87,6 +87,8 @@ export function AutoCutDialog({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [aspect, setAspect] = useState<"portrait" | "square" | "landscape">("portrait");
+  const [title, setTitle] = useState("");
 
   const base = `/api/workspaces/${workspaceId}/autocut`;
   const assetById = useMemo(
@@ -94,20 +96,30 @@ export function AutoCutDialog({
     [assets],
   );
 
-  // The order tracks the incoming selection - reset when the dialog opens on a
-  // different set, but left alone otherwise so a drag is not undone. Done
-  // during render, not in an effect: React's own way to reset state on a
-  // prop change, without the extra pass an effect would cost.
+  // The order and preview track the incoming selection - both reset when the
+  // dialog opens on a different set, the order left alone otherwise so a drag
+  // is not undone. Done during render, not in an effect: React's own way to
+  // reset state on a prop change, and it clears the last set's preview before
+  // a frame paints, so reopening on new media never flashes the old clip or
+  // its "updating" badge.
   const selectionKey = assets.map((asset) => asset.id).join(",");
   const [orderKey, setOrderKey] = useState(selectionKey);
+  // Bumped on every reset; a preview build in flight when the selection
+  // changes checks it and drops its result rather than painting the old
+  // media's clip over the new one.
+  const buildToken = useRef(0);
   if (orderKey !== selectionKey) {
     setOrderKey(selectionKey);
     setOrder(selectionKey ? selectionKey.split(",") : []);
+    setPreviewUrl(null);
+    setPreviewState("idle");
+    setPlan(null);
+    buildToken.current += 1;
   }
 
-  const previewUrlRef = useRef<string | null>(null);
-  useEffect(() => { previewUrlRef.current = previewUrl; }, [previewUrl]);
-  useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current); }, []);
+  // Revoke a preview blob when it is replaced or the dialog unmounts - the
+  // cleanup captures the URL it was set with, so each is freed exactly once.
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   // Templates, ranked for this many clips, with the best pre-selected.
   useEffect(() => {
@@ -153,11 +165,13 @@ export function AutoCutDialog({
 
   const buildPreview = useCallback(async () => {
     if (!templateId || !order.length) return;
+    const token = buildToken.current;
+    const stale = () => token !== buildToken.current;
     setPreviewState("building");
     try {
       const res = await apiFetch(`${base}/preview`, {
         method: "POST",
-        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed }),
+        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed, aspect }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.detail ?? "Could not start the preview.");
@@ -166,20 +180,26 @@ export function AutoCutDialog({
       for (;;) {
         await new Promise((resolve) => setTimeout(resolve, 1200));
         if (Date.now() > deadline) throw new Error("The preview took too long. Try again, or render it.");
+        if (stale()) return;
         const status = await apiFetch(`${base}/jobs/${jobId}`).then((r) => r.json());
         if (status.status === "failed") throw new Error(status.error ?? "The preview could not be drawn.");
         if (status.ready) break;
       }
       const clip = await apiFetch(`${base}/preview/${jobId}/video`);
       if (!clip.ok) throw new Error("The preview clip could not be loaded.");
-      const url = URL.createObjectURL(await clip.blob());
-      setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
+      const blob = await clip.blob();
+      if (stale()) return;  // a new selection took over while this drew
+      const url = URL.createObjectURL(blob);
+      // The old blob is freed by the revoke-on-change effect, not here, so it
+      // is released exactly once however the URL came to change.
+      setPreviewUrl(url);
       setPreviewState("ready");
     } catch (reason) {
+      if (stale()) return;
       setPreviewState("error");
       onError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [templateId, order, music, speed, apiFetch, base, onError]);
+  }, [templateId, order, music, speed, aspect, apiFetch, base, onError]);
 
   // Preview on by default: it builds when the dialog opens and redraws
   // (debounced) whenever the template, music, speed or order changes - so the
@@ -196,7 +216,10 @@ export function AutoCutDialog({
     try {
       const res = await apiFetch(`${base}/render`, {
         method: "POST",
-        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed }),
+        body: JSON.stringify({
+          asset_ids: order, template_id: templateId, music, speed, aspect,
+          title: title.trim() || undefined,
+        }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.detail ?? "Could not queue the render.");
@@ -207,7 +230,7 @@ export function AutoCutDialog({
     } finally {
       setRendering(false);
     }
-  }, [templateId, order, music, speed, apiFetch, base, onQueued, onError, onClose]);
+  }, [templateId, order, music, speed, aspect, title, apiFetch, base, onQueued, onError, onClose]);
 
   // Drag-to-reorder: the dragged clip drops before the one it is released on,
   // moving it in the order the plan and preview read from.
@@ -287,6 +310,36 @@ export function AutoCutDialog({
                 onChange={(event) => setSpeed(Number(event.target.value))}
               />
             </label>
+            <label>
+              <span>Shape</span>
+              <span className="autocut-aspect" role="radiogroup" aria-label="Video shape">
+                {([
+                  ["portrait", "9:16"],
+                  ["square", "1:1"],
+                  ["landscape", "16:9"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={aspect === value}
+                    className={aspect === value ? "selected" : ""}
+                    onClick={() => setAspect(value)}
+                  >{label}</button>
+                ))}
+              </span>
+            </label>
+            <label>
+              <span>Name <small>optional</small></span>
+              <input
+                type="text"
+                className="autocut-title"
+                value={title}
+                placeholder={chosen ? `AutoCut - ${chosen.name}` : "AutoCut"}
+                maxLength={200}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
           </div>
 
           {/* The timeline: the chosen clips in order, dragged to rearrange
@@ -360,7 +413,7 @@ export function AutoCutDialog({
           {/* The preview, on by default. The old clip stays on screen while a
               redraw runs, with an 'updating' badge, so a settings change never
               flashes an empty pane. */}
-          <div className="autocut-video">
+          <div className="autocut-video" data-aspect={aspect}>
             {previewUrl
               ? <video src={previewUrl} controls autoPlay loop playsInline />
               : <span className="autocut-video-building">

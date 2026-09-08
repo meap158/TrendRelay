@@ -20,7 +20,7 @@ from sqlalchemy import select
 from trendrelay_api.autocut import templates
 from trendrelay_api.autocut.beat_analysis import BeatGrid, analyze_beats
 from trendrelay_api.autocut.planner import CutPlan, Shot, plan_cuts
-from trendrelay_api.autocut.renderer import FRAME_H, FRAME_W, RenderRequest, render
+from trendrelay_api.autocut.renderer import RenderRequest, render
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
 from trendrelay_api.models import utc_now
@@ -36,10 +36,23 @@ from trendrelay_api.tool_registry import PROJECT_ROOT  # noqa: E402
 AUDIO_ROOT = PROJECT_ROOT / ".data" / "autocut" / "audio"
 OUTPUT_ROOT = PROJECT_ROOT / ".data" / "autocut" / "renders"
 PREVIEW_ROOT = PROJECT_ROOT / ".data" / "autocut" / "previews"
-#: Preview at half the frame - fast to encode, big enough to judge the cut
-#: and the motion. The plan and timing are the full render's; only pixels differ.
-PREVIEW_W = 540
-PREVIEW_H = 960
+
+#: The canvas shapes AutoCut renders to, each as (full, preview) dimensions.
+#: The plan is the same for all of them - cuts and timing do not depend on the
+#: frame - so aspect only chooses how each clip is covered into the canvas.
+#: The preview is half-size for speed, big enough to judge the cut.
+ASPECTS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {
+    "portrait": ((1080, 1920), (540, 960)),   # 9:16, the short-form default
+    "square": ((1080, 1080), (540, 540)),     # 1:1
+    "landscape": ((1920, 1080), (960, 540)),  # 16:9
+}
+DEFAULT_ASPECT = "portrait"
+
+
+def dimensions(aspect: str, *, preview: bool) -> tuple[int, int]:
+    """The (width, height) for a canvas shape, full-size or preview."""
+    full, prev = ASPECTS.get(aspect, ASPECTS[DEFAULT_ASPECT])
+    return prev if preview else full
 
 
 def _ffmpeg() -> Path:
@@ -141,6 +154,7 @@ def enqueue_render(
     title: str | None = None,
     preview: bool = False,
     kinds: dict[str, str] | None = None,
+    aspect: str = DEFAULT_ASPECT,
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
     """Plan the render now, queue it to draw in the background.
@@ -154,7 +168,7 @@ def enqueue_render(
     )
     if not plan.shots:
         raise ValueError("Choose at least one photo or video to cut together.")
-    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{preview}:{utc_now()}"
+    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{aspect}:{preview}:{utc_now()}"
     job_id = "autocut_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(
         job_id,
@@ -168,6 +182,7 @@ def enqueue_render(
             "asset_ids": asset_ids,
             "music": music or template.music,
             "speed": speed,
+            "aspect": aspect,
             "preview": preview,
             "title": title or f"AutoCut - {template.name}",
             "plan": _plan_json(plan),
@@ -211,13 +226,14 @@ def run_render_job(
         root.mkdir(parents=True, exist_ok=True)
         destination = root / f"{job_id}.mp4"
         audio_value = payload.get("audio_path")
+        width, height = dimensions(payload.get("aspect", DEFAULT_ASPECT), preview=is_preview)
         render(_ffmpeg(), RenderRequest(
             plan=plan,
             image_paths=image_paths,
             audio_path=Path(audio_value) if audio_value else None,
             destination=destination,
-            width=PREVIEW_W if is_preview else FRAME_W,
-            height=PREVIEW_H if is_preview else FRAME_H,
+            width=width,
+            height=height,
             preview=is_preview,
         ))
 
