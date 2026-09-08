@@ -111,6 +111,10 @@
    match button. Their own row each would be two more half-empty rows in a
    dialog that already earned its height back once. */
 .story-section-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; min-inline-size: 0; }
+/* The controls that belong to a heading, on the heading's own line. A row of
+   their own would be one more band of chrome across a dialog that has four
+   sections already. */
+.story-head-controls { display: flex; gap: 8px; align-items: center; min-inline-size: 0; }
 .story-section-head h4 { display: flex; gap: 6px; align-items: center; }
 .story-count { border-radius: 999px; padding: 1px 6px; color: var(--text); background: var(--panel-raised); font-size: 10px; font-variant-numeric: tabular-nums; }
 

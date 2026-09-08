@@ -199,6 +199,16 @@ export function StorytellingDialog({
       added to from either source without leaving the modal. */
   const [picked, setPicked] = useState<StoryAsset[]>(() => assets.slice(0, MAX_PICTURES));
   const [source, setSource] = useState<string>("library");
+  /**
+   * Whether the browser is open, not which source it shows.
+   *
+   * Chips, six filters and a grid come to about three hundred and eighty
+   * pixels, and they are useful while pictures are being gathered and dead
+   * weight afterwards - gathering and arranging are different jobs and nobody
+   * does both in the same second. AutoCut made this call already, for the same
+   * reason; this section was the copy that forgot to.
+   */
+  const [browsing, setBrowsing] = useState(false);
   /** One picture per sentence, by asset id. Empty until something arranges it. */
   const [assignments, setAssignments] = useState<string[]>([]);
   const [why, setWhy] = useState<Record<number, string[]>>({});
@@ -231,6 +241,10 @@ export function StorytellingDialog({
   if (pickedKey !== selectionKey) {
     setPickedKey(selectionKey);
     setPicked(assets.slice(0, MAX_PICTURES));
+    // Open on an empty set, because then adding pictures is the only thing
+    // there is to do; closed when the Library selection already brought some,
+    // because then the next thing is the script.
+    setBrowsing(assets.length === 0);
     // The arrangement was about the old pictures. Keeping it would leave rows
     // pointing at media this video no longer has.
     setAssignments([]);
@@ -362,7 +376,7 @@ export function StorytellingDialog({
   const library = useLibraryAssets<LibraryAsset>({
     workspaceId,
     apiFetch,
-    enabled: open && source === "library",
+    enabled: open && browsing && source === "library",
     keep: (asset) => asset.media_kind === "image" || asset.media_kind === "video",
   });
 
@@ -793,12 +807,28 @@ export function StorytellingDialog({
         <section className="story-pictures">
           <div className="story-section-head">
             <h4>Pictures <span className="story-count">{picked.length}</span></h4>
-            <SegmentedControl
-              value={source}
-              onChange={setSource}
-              options={SOURCES}
-              label="Where to add pictures from"
-            />
+            <span className="story-head-controls">
+              {/* Only while it is open. A choice between two sources is not
+                  worth a permanent control when the thing it steers is shut. */}
+              {browsing && (
+                <SegmentedControl
+                  value={source}
+                  onChange={setSource}
+                  options={SOURCES}
+                  label="Where to add pictures from"
+                />
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-expanded={browsing}
+                disabled={full && !browsing}
+                onClick={() => setBrowsing((current) => !current)}
+              >
+                <ActionIcon name={browsing ? "confirm" : "add"} />
+                {browsing ? "Done adding" : "Add pictures"}
+              </Button>
+            </span>
           </div>
 
           {/* The set itself, above whichever source is open, so adding one is
@@ -836,7 +866,7 @@ export function StorytellingDialog({
           )}
           {full && <p className="story-note">Two hundred pictures is the most one narration takes.</p>}
 
-          {source === "library" ? (
+          {!browsing ? null : source === "library" ? (
             <div className="story-library">
               {/* The Library's own category tabs, by the Library's own class.
                   The kind is raised above the rest of the row because it is
