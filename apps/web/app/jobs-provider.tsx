@@ -124,6 +124,15 @@ export type BaseJob = {
 type JobsContextValue = {
   jobs: BaseJob[];
   busy: boolean;
+  /**
+   * True until the first listing has settled, however it settled.
+   *
+   * Distinct from `busy`, which is true on every poll as well: keying a
+   * placeholder on `busy` would flash it over a list already on screen. This
+   * answers the narrower question a panel needs before it can say "you have
+   * none" - whether it has ever been told.
+   */
+  initialLoadPending: boolean;
   activeWorkspaceId: string | null;
   announceMediaJobs: (jobs: any[]) => void;
   refresh: () => Promise<void>;
@@ -137,6 +146,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const t = useT();
   const [jobs, setJobs] = useState<BaseJob[]>([]);
   const [busy, setBusy] = useState(false);
+  // Starts pending because nothing has been fetched yet, and a panel that
+  // renders before the first answer must not present an empty list as an
+  // empty account.
+  const [initialLoadPending, setInitialLoadPending] = useState(true);
   const refreshInFlight = useRef<Promise<void> | null>(null);
   const hasActiveJobs = useRef(false);
   const activeWorkspaceId = workspaceId || null;
@@ -250,6 +263,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     const request = (async () => {
       if (!user) {
         setJobs([]);
+        // Signed out is an answer, not a wait: there is nothing to fetch, and
+        // leaving this pending would hold a placeholder up forever.
+        setInitialLoadPending(false);
         return;
       }
       setBusy(true);
@@ -338,7 +354,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             // A batch is titled for the batch - its card counts what is left
             // on its own line - while a single read carries the product's
             // full name, which is the whole notification.
-            const single = j.status === "failed"
+            const incomplete = j.status === "succeeded" && j.listing_fetched === false;
+            const single = j.status === "failed" || incomplete
               ? `Listing could not be read: ${name ?? j.id}`
               : active
                 ? `Reading listing: ${name ?? j.id}`
@@ -346,7 +363,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             return {
               id: j.id,
               category: "listing" as JobCategory,
-              status: j.status,
+              status: incomplete ? "failed" : j.status,
               created_at: j.created_at,
               title: batchTotal > 1 ? `Shopee listings · ${batchTotal} products` : single,
               error: j.error,
@@ -461,6 +478,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         console.error("Failed to refresh jobs", e);
       } finally {
         setBusy(false);
+        // In `finally`, so a listing that failed stops waiting too. A panel
+        // stuck on a placeholder after an error tells the reader less than an
+        // empty state does.
+        setInitialLoadPending(false);
       }
     })();
     refreshInFlight.current = request;
@@ -528,6 +549,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     <JobsContext.Provider value={{
       jobs,
       busy,
+      initialLoadPending,
       activeWorkspaceId,
       announceMediaJobs,
       refresh,

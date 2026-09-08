@@ -22,6 +22,15 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 #: the budget delays the next claim rather than interrupting anything.
 REFILL_BUDGET_SECONDS = 120.0
 
+#: How long the pool waits on its in-flight jobs before giving `on_wait` a turn.
+#:
+#: The budget above stops a pass claiming *more* work; it cannot end a pass that
+#: is still holding a render. A 4K effect takes half an hour, so a queue of them
+#: kept the worker inside one call for that long - and every other kind, a
+#: download most visibly, sat queued until it returned. Five seconds is short
+#: enough that waiting work starts promptly and long enough to cost nothing.
+YIELD_SECONDS = 5.0
+
 
 def adaptive_media_workers() -> int:
     """A conservative local-media width, overridable for measured deployments."""
@@ -48,6 +57,7 @@ def run_job_batch(
     label: str,
     workers: int | None = None,
     refill: Callable[[], Iterable[str]] | None = None,
+    on_wait: Callable[[], object] | None = None,
 ) -> int:
     """Run an independent durable batch concurrently without killing its worker.
 
@@ -76,7 +86,9 @@ def run_job_batch(
             # selected items moving.
             print(f"{label} {job_id} failed: {error}", flush=True)
 
-    if width == 1 and refill is None:
+    # `on_wait` counts too: the sequential path never waits on a future, so a
+    # caller asking to be given turns would silently get none.
+    if width == 1 and refill is None and on_wait is None:
         for job_id in ids:
             run_one(job_id)
         return len(ids)
@@ -95,7 +107,23 @@ def run_job_batch(
                 running.add(pool.submit(run_one, pending.pop(0)))
             if not running:
                 break
-            finished, running = wait(running, return_when=FIRST_COMPLETED)
+            if on_wait is None:
+                finished, running = wait(running, return_when=FIRST_COMPLETED)
+            else:
+                # Wake up regularly rather than sleeping until a render ends, so
+                # the caller can start work that has nothing to do with this
+                # batch. Anything already running is untouched - this only fills
+                # the time the main thread would otherwise spend blocked.
+                finished, running = wait(
+                    running, timeout=YIELD_SECONDS, return_when=FIRST_COMPLETED
+                )
+                if not finished:
+                    try:
+                        on_wait()
+                    except Exception as error:  # noqa: BLE001
+                        # Other people's work must not take this batch down.
+                        print(f"{label} could not yield: {error}", flush=True)
+                    continue
             for future in finished:
                 future.result()
                 done += 1

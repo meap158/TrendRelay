@@ -94,6 +94,19 @@ JOB_KINDS = (
 )
 
 
+def drain_downloads() -> None:
+    """Run any download that is waiting, wherever the worker is in its pass.
+
+    Called from inside the render pool while it has nothing to report, so a
+    download queued during a long batch starts then rather than after it. Each
+    id is claimed the same way the main pass claims it, so a download already
+    running elsewhere is not started twice.
+    """
+    for job_id in recoverable_job_ids("douyin_download"):
+        print(f"Starting download {job_id} without waiting for the render queue.", flush=True)
+        run_download_job(job_id)
+
+
 def process_available() -> int:
     upgraded = upgrade_active_job_recovery(
         EFFECT_JOB_KIND,
@@ -156,6 +169,7 @@ def process_available() -> int:
     enrichment_ids = recoverable_job_ids(ENRICHMENT_JOB_KIND)
     voice_ids = recoverable_job_ids(VOICE_JOB_KIND)
     autocut_ids = recoverable_job_ids(AUTOCUT_JOB_KIND)
+    story_ids = recoverable_job_ids(STORY_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -169,7 +183,6 @@ def process_available() -> int:
     # parallelises fine, and everything scheduled after them waited it out.
     run_job_batch(
         media_ids,
-    story_ids = recoverable_job_ids(STORY_JOB_KIND)
         run_ingest_job,
         label="Library ingest",
         refill=lambda: recoverable_job_ids("media_ingest"),
@@ -184,6 +197,12 @@ def process_available() -> int:
         run_effect_render_job,
         label="Effect render",
         refill=lambda: recoverable_job_ids(EFFECT_JOB_KIND),
+        # Downloads do not wait for renders. A render is CPU on this machine
+        # and a download is a subprocess waiting on Douyin, so they compete for
+        # nothing - but the worker runs one kind at a time, and a queue of
+        # renders held the pass for hours. Two downloads sat "waiting" behind
+        # 205 renders with nothing wrong with either of them.
+        on_wait=drain_downloads,
     )
     run_job_batch(caption_ids, run_caption_job, label="Caption render")
     # One image montage is one ffmpeg graph, tens of seconds of CPU; a small
@@ -191,6 +210,14 @@ def process_available() -> int:
     run_job_batch(
         autocut_ids, run_autocut_job, label="AutoCut render", workers=2,
         refill=lambda: recoverable_job_ids(AUTOCUT_JOB_KIND),
+    )
+    # One at a time. A narration render is an AutoCut render with a paid
+    # network call in front of it, and the two-wide pool that suits a montage
+    # would turn one queued batch into simultaneous generations - the same
+    # reason voice generation below keeps its own pool small.
+    run_job_batch(
+        story_ids, run_story_job, label="Storytelling render", workers=1,
+        refill=lambda: recoverable_job_ids(STORY_JOB_KIND),
     )
     # ElevenLabs plans enforce their own concurrency limits. Two requests keep
     # ordinary plans moving without turning a large selection into a burst of
@@ -211,14 +238,6 @@ def process_available() -> int:
             print(f"Media analysis setup {job_id} failed: {error}", flush=True)
     # The listing lane finishes on its own clock; waiting here keeps the
     # pass's count honest and the loop's idle sleep meaningful.
-    # One at a time. A narration render is an AutoCut render with a paid
-    # network call in front of it, and the two-wide pool that suits a montage
-    # would turn one queued batch into simultaneous generations - the same
-    # reason voice generation below keeps its own pool small.
-    run_job_batch(
-        story_ids, run_story_job, label="Storytelling render", workers=1,
-        refill=lambda: recoverable_job_ids(STORY_JOB_KIND),
-    )
     if enrich_lane.is_alive():
         enrich_lane.join()
     return (
@@ -235,6 +254,7 @@ def process_available() -> int:
         + len(enrichment_ids)
         + len(voice_ids)
         + len(autocut_ids)
+        + len(story_ids)
     )
 
 
@@ -254,7 +274,6 @@ def worker_main() -> None:
     except KeyboardInterrupt:
         print("Durable worker stopped.", flush=True)
 
-        + len(story_ids)
 
 def source_snapshot() -> tuple[tuple[str, int, int], ...]:
     files: list[tuple[str, int, int]] = []

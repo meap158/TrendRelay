@@ -141,3 +141,68 @@ def test_a_batch_with_no_refill_still_runs_everything() -> None:
 
     assert count == 7
     assert sorted(ran) == sorted(f"job-{i}" for i in range(7))
+
+
+def test_a_long_job_does_not_hold_up_unrelated_work(monkeypatch) -> None:
+    """The starvation this hook exists to end.
+
+    The worker runs one kind at a time. A queue of effect renders kept a single
+    pass inside `run_job_batch` for as long as its slowest render - measured at
+    twenty-nine minutes on a 4K clip - and a download queued in the meantime
+    sat "waiting" for all of it, with nothing wrong with either of them.
+    """
+    monkeypatch.setattr(worker_pool, "YIELD_SECONDS", 0.01)
+    release = threading.Event()
+    yielded: list[int] = []
+
+    def slow(_job_id: str) -> None:
+        # Stands in for a render that outlasts the whole refill budget.
+        release.wait(timeout=5)
+
+    def other_work() -> None:
+        yielded.append(1)
+        # Let it run a few times, then let the "render" finish.
+        if len(yielded) >= 3:
+            release.set()
+
+    done = worker_pool.run_job_batch(
+        ["render-1"], slow, label="Effect render", workers=1, on_wait=other_work
+    )
+
+    assert done == 1
+    # The point: the waiting work ran while the long job was still going.
+    assert len(yielded) >= 3
+
+
+def test_yielding_is_off_unless_asked_for(monkeypatch) -> None:
+    """Without the hook the pool blocks as before - no polling, no wake-ups."""
+    monkeypatch.setattr(worker_pool, "YIELD_SECONDS", 0.01)
+    started = time.monotonic()
+
+    done = worker_pool.run_job_batch(
+        ["a", "b"], lambda _job_id: time.sleep(0.02), label="Effect render", workers=2
+    )
+
+    assert done == 2
+    assert time.monotonic() - started < 2
+
+
+def test_a_failure_in_the_yielded_work_does_not_stop_the_batch(monkeypatch) -> None:
+    """Other people's work must not take the render queue down with it."""
+    monkeypatch.setattr(worker_pool, "YIELD_SECONDS", 0.01)
+    calls: list[int] = []
+
+    def exploding() -> None:
+        calls.append(1)
+        raise RuntimeError("the download queue could not be read")
+
+    done = worker_pool.run_job_batch(
+        ["render-1"],
+        lambda _job_id: time.sleep(0.08),
+        label="Effect render",
+        workers=1,
+        on_wait=exploding,
+    )
+
+    assert done == 1
+    assert calls, "the hook never ran"

@@ -98,7 +98,24 @@ def _media_ai_runtime() -> Path:
     return RUNTIME_ROOT
 
 
-def _runtime_distribution_version(distribution: str) -> str | None:
+def _tool_runtime(tool: dict[str, Any]) -> Path:
+    """Where this tool's packages are installed.
+
+    The shared analysis runtime by default, and its own directory when the
+    catalogue asks for one. `pip --target` upgrades dependencies
+    unconditionally, so everything in a directory has to agree about every
+    shared package: a downloader and a transcription stack do not, and the
+    downloader rewrote `requests` and `urllib3` underneath the transcriber.
+    """
+    declared = tool.get("runtime_path")
+    if declared:
+        return _project_path(declared)
+    return _media_ai_runtime()
+
+
+def _runtime_distribution_version(
+    distribution: str, runtime: Path | None = None
+) -> str | None:
     """The version of a distribution in the shared runtime, or None.
 
     Read from the directory name rather than by importing the package. This is
@@ -107,7 +124,7 @@ def _runtime_distribution_version(distribution: str) -> str | None:
     missing a system library it wants - which would read as "not installed".
     """
     normalized = distribution.replace("-", "_").lower()
-    runtime = _media_ai_runtime()
+    runtime = runtime or _media_ai_runtime()
     if not runtime.is_dir():
         return None
     for item in runtime.glob("*.dist-info"):
@@ -171,13 +188,29 @@ def _installed_revision(tool: dict[str, Any]) -> str | None:
     # pinned version in the shared runtime is the same fact in the other form,
     # and reporting it is what lets such a tool be activated at all.
     if tool.get("install_strategy") == "pypi" and tool.get("distribution"):
-        return _runtime_distribution_version(tool["distribution"])
+        return _runtime_distribution_version(tool["distribution"], _tool_runtime(tool))
     if not tool.get("source_path"):
         return None
     source = _project_path(tool["source_path"])
     if not (source / ".git").is_dir():
         return None
     return _git_head_revision(source)
+
+
+def runtime_root_for(tool_id: str) -> Path | None:
+    """Where one tool's packages live, for whatever has to run them.
+
+    Public because a provider needs the same answer the installer used, and
+    working it out twice is how the two come to disagree about which copy is
+    the real one.
+    """
+    try:
+        tool = _tool(tool_id)
+    except ToolRegistryError:
+        return None
+    if tool.get("install_strategy") != "pypi":
+        return None
+    return _tool_runtime(tool)
 
 
 def documentation_for(tool_id: str) -> dict[str, str]:
@@ -273,10 +306,15 @@ def install_tool(tool_id: str) -> dict[str, Any]:
             raise ToolRegistryError("This tool does not name a distribution to install.")
         from trendrelay_api.media_ai import pip_install
 
-        # Into the shared media-analysis runtime rather than the API's own
-        # environment, so a tool the operator never asked for costs nothing and
-        # removing one cannot break the interpreter running this.
-        pip_install([f"{distribution}=={tool['revision']}"])
+        # What pip is asked for is not always what the metadata is filed under.
+        # Extras belong in the requirement - `yt-dlp[curl-cffi]` - and never in
+        # the distribution name, which is what `_installed_revision` looks up
+        # afterwards. Carrying them in `distribution` made the check compare
+        # "yt_dlp[curl_cffi]" against a directory named "yt_dlp", so a perfectly
+        # successful install ended in "completed without the expected pinned
+        # revision" and the tool stayed off.
+        requirement = tool.get("install_requirement") or distribution
+        pip_install([f"{requirement}=={tool['revision']}"], target=_tool_runtime(tool))
     else:
         raise ToolRegistryError(f"Unsupported install strategy: {strategy}")
 

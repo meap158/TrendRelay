@@ -93,6 +93,17 @@ test("a download batch links by its durable id instead of listing every asset", 
   );
 });
 
+test("a grouped download opens the deduplicated union of all its runs", () => {
+  assert.equal(
+    downloadLibraryHref([
+      "download_0123456789abcdef",
+      "download_fedcba9876543210",
+      "download_0123456789abcdef",
+    ]),
+    "/library?downloads=download_0123456789abcdef%2Cdownload_fedcba9876543210&from=download&notice=Downloaded+batch",
+  );
+});
+
 test("one downloaded file opens by the hash of its contents, not by its path", () => {
   // The path in the download folder is not the path of the entry ingestion
   // makes, so it could only ever open the Library and select nothing.

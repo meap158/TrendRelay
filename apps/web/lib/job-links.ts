@@ -133,12 +133,16 @@ export function notificationHref(
  * explicit-id filter. The durable download id is short, shareable, and remains
  * a server-side filter that can still be paged, counted, and narrowed.
  */
-export function downloadLibraryHref(jobId: string, title = "Downloaded batch"): string {
-  const params = new URLSearchParams({
-    download: jobId,
-    from: "download",
-    notice: title.trim().slice(0, 140) || "Downloaded batch",
-  });
+export function downloadLibraryHref(jobIds: string | string[], title = "Downloaded batch"): string {
+  const ids = [...new Set((Array.isArray(jobIds) ? jobIds : [jobIds]).filter(Boolean))];
+  const params = new URLSearchParams();
+  // Keep existing one-run links stable. A grouped Download row carries every
+  // run instead: Library can then return their deduplicated union rather than
+  // silently showing only the newest retry.
+  if (ids.length === 1) params.set("download", ids[0]);
+  else if (ids.length > 1) params.set("downloads", ids.join(","));
+  params.set("from", "download");
+  params.set("notice", title.trim().slice(0, 140) || "Downloaded batch");
   return `/library?${params}`;
 }
 
