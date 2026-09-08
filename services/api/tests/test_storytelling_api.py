@@ -297,3 +297,108 @@ def test_a_preview_that_has_not_finished_is_not_served_as_an_empty_file() -> Non
         "GET", f"/api/workspaces/{workspace_id}/storytelling/preview/{job_id}/video",
     )
     assert answer.status_code == 409
+
+
+def test_b_roll_says_what_to_do_when_there_is_no_key() -> None:
+    # A picker that answers "unavailable" and stops is a dead end; this names
+    # the thing to add and where.
+    workspace_id = make_workspace()
+    body = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/broll/status"
+    ).json()
+    assert body["configured"] is False
+    assert "Tools" in body["reason"]
+
+
+def test_a_b_roll_search_carries_the_credit_onto_every_tile(monkeypatch) -> None:
+    """The licence asks for the photographer wherever the media is shown.
+
+    A picker is one of the places the media is shown, so the credit rides on
+    the result rather than being looked up when somebody remembers.
+    """
+    from trendrelay_api.integrations import pexels
+
+    workspace_id = make_workspace()
+    monkeypatch.setattr(pexels, "search", lambda q, **kwargs: {
+        "query": q, "kind": "image", "page": 1, "total": 1, "next_page": False,
+        "results": [pexels.Candidate(
+            id="99", kind="image", preview_url="https://p/small.jpg",
+            source_url="https://p/large.jpg", width=1920, height=1080,
+            photographer="Ada L", photographer_url="https://p/ada",
+            page_url="https://p/photo/99",
+        )],
+    })
+    answer = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/storytelling/broll/search?q=city+at+night",
+    )
+    assert answer.status_code == 200
+    tile = answer.json()["results"][0]
+    assert tile["credit"] == "Photo by Ada L on Pexels"
+    assert tile["photographer_url"] == "https://p/ada"
+    # The file itself is not handed out: a tile draws the preview, and the
+    # import is what fetches the real thing.
+    assert "source_url" not in tile
+
+
+def test_b_roll_that_cannot_be_searched_says_why_rather_than_returning_nothing(
+    monkeypatch,
+) -> None:
+    from trendrelay_api.integrations import pexels
+
+    workspace_id = make_workspace()
+
+    def _refuse(query, **kwargs):
+        raise pexels.PexelsUnavailable("Pexels refused the key. Check it in Tools.")
+
+    monkeypatch.setattr(pexels, "search", _refuse)
+    answer = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/broll/search?q=rain"
+    )
+    assert answer.status_code == 502
+    assert "Check it in Tools" in answer.json()["detail"]
+
+
+def test_an_import_only_fetches_from_where_the_search_pointed(monkeypatch) -> None:
+    """The url is echoed back by the caller, so it is checked before it is used.
+
+    Otherwise this endpoint is a request to make the machine fetch a place of
+    somebody else's choosing.
+    """
+    workspace_id = make_workspace()
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/broll/import",
+        json={
+            "id": "99", "kind": "image",
+            "source_url": "file:///etc/passwd",
+        },
+    )
+    assert answer.status_code == 422
+
+
+def test_an_imported_clip_goes_through_the_library_s_own_ingest(monkeypatch) -> None:
+    # Not rendered from a url: b-roll is hashed, de-duplicated, thumbnailed and
+    # searchable like everything else, and a narration then plans over Library
+    # assets whatever they came from.
+    from trendrelay_api.integrations import pexels
+
+    workspace_id = make_workspace()
+    seen: list = []
+    monkeypatch.setattr(
+        pexels, "import_candidate",
+        lambda candidate, **kwargs: seen.append((candidate, kwargs))
+        or {"id": "ingest-1", "asset_id": "asset-1"},
+    )
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/broll/import",
+        json={
+            "id": "99", "kind": "video",
+            "source_url": "https://videos.pexels.com/99.mp4",
+            "photographer": "Ada L", "query": "rain at night",
+        },
+    )
+    assert answer.status_code == 202
+    assert answer.json()["credit"] == "Video by Ada L on Pexels"
+    candidate, kwargs = seen[0]
+    assert candidate.kind == "video"
+    assert kwargs["query"] == "rain at night"

@@ -286,3 +286,130 @@ def stream_preview(
         Path(output), media_type=OPAQUE_MEDIA_TYPE,
         filename=f"{job_id}.mp4", content_disposition_type="inline",
     )
+
+
+# --------------------------------------------------------------------------- #
+# B-roll
+#
+# A script about something nobody filmed has no pictures in the Library to cut
+# to. Searching for them is part of writing the video, so it lives beside the
+# script rather than in a separate tab somebody has to leave and come back from.
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/broll/status")
+def broll_status(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Whether b-roll can be searched, and what to do when it cannot."""
+    from trendrelay_api.integrations import pexels
+
+    membership(session, workspace_id, user.id)
+    return pexels.provider_status()
+
+
+@router.get("/broll/search")
+def search_broll(
+    workspace_id: str,
+    q: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    kind: str = "image",
+    page: int = 1,
+    orientation: str = "",
+    locale: str = "",
+) -> dict[str, Any]:
+    """Candidates for one search. Nothing is downloaded by asking."""
+    from trendrelay_api.integrations import pexels
+
+    membership(session, workspace_id, user.id)
+    try:
+        found = pexels.search(
+            q, kind="video" if kind == "video" else "image",
+            page=page, orientation=orientation, locale=locale,
+        )
+    except pexels.PexelsUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {
+        **found,
+        "results": [
+            {
+                "id": item.id,
+                "kind": item.kind,
+                "preview_url": item.preview_url,
+                "width": item.width,
+                "height": item.height,
+                "duration_seconds": item.duration_seconds,
+                # Shown on the tile, not just stored: the licence asks for the
+                # credit wherever the media is, and a picker is one of the
+                # places the media is.
+                "credit": item.credit,
+                "photographer": item.photographer,
+                "photographer_url": item.photographer_url,
+                "page_url": item.page_url,
+            }
+            for item in found["results"]
+        ],
+    }
+
+
+class BrollImport(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    kind: str = "image"
+    source_url: str = Field(min_length=1, max_length=2000)
+    preview_url: str = ""
+    width: int = 0
+    height: int = 0
+    photographer: str = ""
+    photographer_url: str = ""
+    page_url: str = ""
+    query: str = ""
+
+
+@router.post("/broll/import", status_code=202)
+def import_broll(
+    workspace_id: str,
+    body: BrollImport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Bring one chosen result into the Library, credit and all.
+
+    Through the Library's own ingest rather than rendered from a URL: b-roll is
+    then hashed, de-duplicated, thumbnailed and searchable like everything else,
+    and a narration plans over Library assets whatever they came from.
+    """
+    from trendrelay_api.integrations import pexels
+
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    if not body.source_url.startswith("https://"):
+        # The url comes back from a search this server made; anything else is
+        # a caller asking this machine to fetch a place of its choosing.
+        raise HTTPException(status_code=422, detail="That is not a Pexels file.")
+    candidate = pexels.Candidate(
+        id=body.id,
+        kind="video" if body.kind == "video" else "image",
+        preview_url=body.preview_url,
+        source_url=body.source_url,
+        width=body.width,
+        height=body.height,
+        photographer=body.photographer,
+        photographer_url=body.photographer_url,
+        page_url=body.page_url,
+    )
+    try:
+        queued = pexels.import_candidate(
+            candidate, workspace_id=workspace_id, actor_user_id=user.id, query=body.query,
+        )
+    except pexels.PexelsUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    audit(
+        session, request, workspace_id, user.id,
+        "storytelling.broll_imported", "media_asset", queued.get("asset_id") or body.id,
+        {"pexels_id": body.id, "kind": body.kind, "query": body.query},
+    )
+    session.commit()
+    return {"job": queued, "credit": candidate.credit}
