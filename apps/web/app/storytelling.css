@@ -14,9 +14,15 @@
    being big: it is the thing actually being written. */
 .story-dialog { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); gap: 16px 20px; align-items: start; }
 .story-dialog > section { display: grid; gap: 9px; min-inline-size: 0; }
-.story-write { grid-column: 1; grid-row: 1 / span 2; }
+.story-write { grid-column: 1; grid-row: 1; }
 .story-settings { grid-column: 2; grid-row: 1; }
-.story-pictures { grid-column: 2; grid-row: 2; }
+/* The picker takes the width, because it grew one.
+   It used to be a search box and a row of tiles and sat happily in half the
+   dialog. With the Library in it - chips, six filters and a grid - half the
+   dialog made a column tall enough that the script beside it stretched into a
+   textarea three hundred pixels of which were empty. Full width gives the grid
+   twice the columns and gives the script back its own size. */
+.story-pictures { grid-column: 1 / -1; grid-row: 2; }
 /* The shot list runs the width. It is one row per sentence, and a sentence in
    a half-width column wraps to three lines - a list whose rows are taller than
    the thumbnail in them stops reading as a sequence. */
@@ -28,6 +34,9 @@
    textarea that wanted them. Stretching is what makes `block-size: 100%` on
    the textarea mean anything. */
 .story-write { align-self: stretch; grid-template-rows: auto minmax(0, 1fr) auto; }
+/* Level with the settings beside it, and no taller. Stretching is what makes
+   `block-size: 100%` mean anything; the ceiling is what stops it meaning too
+   much now that the row it shares is the shorter of the two. */
 .story-write .story-script { min-block-size: 200px; block-size: 100%; }
 .story-dialog h4 { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 /* What is still missing, in the footer where the button it blocks is. */
@@ -122,10 +131,12 @@
 /* Browsing the Library from inside the dialog. The same filter strip every
    other picker carries, so the controls are where somebody already knows. */
 .story-library { display: grid; gap: 8px; min-inline-size: 0; }
-/* Placement only. The chips themselves are the shared strip's, which owns its
-   own geometry and gesture - a second set of chip rules here is how the two
-   would stop looking like the same control. */
+/* Placement only. The tabs themselves are the Library's own, styled once in
+   media-library.css - this sets where the row sits and nothing about how it
+   looks, which is what keeps it the same control rather than one that
+   resembles it until somebody edits the other. */
 .story-media-kinds { margin-block-end: 2px; }
+.story-tiles-library { max-block-size: 260px; }
 .story-tiles-library small { display: block; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .story-tiles-library button.story-in-use { border-color: var(--link); opacity: .55; }
 .story-tiles-library button:disabled { cursor: default; }
