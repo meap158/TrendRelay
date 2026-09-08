@@ -264,7 +264,7 @@ def write_connection_status(state: str, message: str) -> None:
     temporary.replace(CONNECTION_STATUS_FILE)
 
 
-def connect_provider() -> int:
+def connect_provider(*, require_login: bool = False) -> int:
     """Install login support if needed, then capture cookies without terminal input."""
     try:
         browser_marker = VENV_DIR / "login-browser-installed.txt"
@@ -290,6 +290,7 @@ def connect_provider() -> int:
                 str(DEFAULT_COOKIE_FILE),
                 "--status",
                 str(CONNECTION_STATUS_FILE),
+                *(["--require-login"] if require_login else []),
             ],
             cwd=ROOT,
             check=False,
@@ -987,9 +988,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("check", help="verify the pinned provider installation")
-    subparsers.add_parser(
+    connect = subparsers.add_parser(
         "connect", help="open login and capture cookies automatically"
     )
+    connect.add_argument("--require-login", action="store_true")
     subparsers.add_parser(
         "login",
         help="open a browser, capture Douyin cookies, and save them for downloads",
@@ -1079,7 +1081,7 @@ def main() -> int:
     if args.command == "login":
         return login_provider()
     if args.command == "connect":
-        return connect_provider()
+        return connect_provider(require_login=args.require_login)
     if args.command == "hot":
         return hot_topic(args)
     if args.command == "topic":

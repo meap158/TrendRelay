@@ -1,4 +1,4 @@
-"""Capture Douyin login cookies in a visible browser without terminal input.
+"""Capture Douyin cookies automatically in a visible browser.
 
 A Douyin session comes in two strengths and they are easy to confuse.
 
@@ -8,14 +8,9 @@ board. It is not a logged-in account, and Douyin answers `2483 please log in
 first` to anything that has to *look something up* — which is what topic search
 does.
 
-Signing in adds `sessionid`. That is the only honest marker of an account, so
-it is what this waits for.
-
-It waits without holding the download-capable cookies hostage, though: those are
-saved the moment they appear, so closing the window early still leaves a working
-session. The browser stays open afterwards, and if the operator does log in the
-saved file is upgraded in place. Both outcomes succeed; they are just not the
-same session, and the status says which one was captured.
+By default, save the anonymous cookies, allow late tokens to settle, then close
+the browser automatically. With --require-login, keep the window open for the
+operator to sign in; anonymous cookies are still saved while waiting.
 """
 
 from __future__ import annotations
@@ -55,18 +50,18 @@ def is_signed_in(cookies: dict[str, str]) -> bool:
 
 
 def can_download(cookies: dict[str, str]) -> bool:
-    return DOWNLOAD_COOKIE_KEYS.issubset(cookies)
+    return all(cookies.get(key) for key in DOWNLOAD_COOKIE_KEYS)
 
 
 ANONYMOUS_MESSAGE = (
-    "Douyin session saved. Single links and the hot board download; profiles "
-    "fetch their most recent posts, and re-running keeps them current. Sign "
-    "in for whole profiles and topic search."
+    "Signed-out session saved. Downloads ready; full profiles and search may need login."
 )
 SIGNED_IN_MESSAGE = "Signed in to Douyin. Downloads and topic search are both available."
 
 
-async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
+async def capture(
+    output: Path, status: Path, timeout_seconds: int, *, require_login: bool = False
+) -> int:
     try:
         from playwright.async_api import async_playwright
     except ImportError:
@@ -75,16 +70,31 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
 
     write_status(status, "opening_browser", "Opening the secure Douyin login window.")
     saved_anonymous = False
+    last_saved_cookies: dict[str, str] = {}
+    first_saved_at: float | None = None
+    last_changed_at: float | None = None
     try:
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=False)
             context = await browser.new_context()
+            # Reuse the existing session, including an account session, when
+            # refreshing. Never replace it merely because a new browser is empty.
+            try:
+                existing = json.loads(output.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    await context.add_cookies([
+                        {"name": name, "value": value, "url": "https://www.douyin.com/"}
+                        for name, value in existing.items()
+                        if isinstance(name, str) and isinstance(value, str) and value
+                    ])
+            except (OSError, ValueError):
+                pass
             page = await context.new_page()
             write_status(
                 status,
                 "waiting_for_login",
-                "Log in to Douyin in the opened window. TrendRelay detects it "
-                "automatically. Close the window to keep a download-only session.",
+                ("Log in to Douyin; your session will save automatically."
+                 if require_login else "Saving the browser session automatically. No login needed."),
             )
             try:
                 await page.goto(
@@ -106,7 +116,8 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
                     cookies = {
                         item["name"]: item["value"]
                         for item in await context.cookies()
-                        if str(item.get("domain", "")).endswith("douyin.com")
+                        if (str(item.get("domain", "")).lstrip(".") == "douyin.com"
+                            or str(item.get("domain", "")).endswith(".douyin.com"))
                         and item.get("name")
                         and item.get("value")
                     }
@@ -120,12 +131,25 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
                     await browser.close()
                     return 0
 
-                if can_download(cookies) and not saved_anonymous:
-                    # Saved now rather than at the end, so closing the window
-                    # early still leaves a session that downloads.
+                if can_download(cookies) and cookies != last_saved_cookies:
+                    # Persist refreshed anonymous tokens too: the first usable
+                    # cookie set can precede later browser token updates.
                     write_json(output, cookies)
-                    write_status(status, "waiting_for_login", ANONYMOUS_MESSAGE)
+                    if not saved_anonymous:
+                        write_status(status, "waiting_for_login", ANONYMOUS_MESSAGE)
+                    last_saved_cookies = dict(cookies)
+                    last_changed_at = monotonic()
+                    if first_saved_at is None:
+                        first_saved_at = last_changed_at
                     saved_anonymous = True
+
+                if saved_anonymous and not require_login:
+                    # Allow late browser tokens to settle, but bound the wait
+                    # even if Douyin continuously rotates a cookie.
+                    current_time = monotonic()
+                    if (current_time - last_changed_at >= 3
+                            or current_time - first_saved_at >= 10):
+                        break
 
                 await asyncio.sleep(1.5)
 
@@ -148,12 +172,15 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--output", type=Path, required=True)
     result.add_argument("--status", type=Path, required=True)
     result.add_argument("--timeout-seconds", type=int, default=600)
+    result.add_argument("--require-login", action="store_true")
     return result
 
 
 def main() -> int:
     args = parser().parse_args()
-    return asyncio.run(capture(args.output, args.status, args.timeout_seconds))
+    return asyncio.run(capture(
+        args.output, args.status, args.timeout_seconds, require_login=args.require_login
+    ))
 
 
 if __name__ == "__main__":

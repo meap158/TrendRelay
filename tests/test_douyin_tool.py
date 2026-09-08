@@ -69,9 +69,22 @@ def test_builds_bounded_incremental_batch_config(
     assert config["cookies"]["odin_tt"] == "odin"
     assert "msToken" not in config["cookies"]
     assert config["database"] is True
+    assert config["media_types"] == ["video"]
     # Absent means enabled to the provider, which mid-download opens a visible
     # signed-out browser that can collect nothing. Off must be said.
     assert config["browser_fallback"] == {"enabled": False}
+
+
+def test_images_opt_in_includes_gallery_posts_and_video_covers(tmp_path) -> None:
+    args = Namespace(
+        mode=["post"], limit=10, incremental=True, output=tmp_path,
+        threads=2, retries=1, proxy="", verbose=False, covers=True,
+    )
+
+    config = build_config(args, ["https://www.douyin.com/user/one"])
+
+    assert config["cover"] is True
+    assert config["media_types"] == ["video", "gallery"]
 
 
 def test_downloaded_aweme_ids_reads_the_provider_database(tmp_path, monkeypatch) -> None:

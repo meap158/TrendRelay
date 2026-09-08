@@ -40,6 +40,24 @@ from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 JOB_KIND = "douyin_download"
 JOB_SESSION_FACTORY = SessionFactory
 OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "douyin"
+#: Where TikTok's media lands. Douyin keeps `OUTPUT_ROOT`, the folder it has
+#: always used, so a job queued before services existed still resolves to the
+#: path recorded in its payload.
+TIKTOK_OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "tiktok"
+
+
+def service_roots() -> dict[str, Path]:
+    """Every service's download folder, read when asked rather than at import.
+
+    A function, not a dictionary built once: `OUTPUT_ROOT` is a module global
+    that tests redirect to a temporary folder, and a dictionary literal would
+    have captured the real path at import time and quietly ignored them.
+    """
+    return {"douyin": OUTPUT_ROOT, "tiktok": TIKTOK_OUTPUT_ROOT}
+
+
+def output_root_for(service: str) -> Path:
+    return service_roots().get(service, OUTPUT_ROOT)
 DOWNLOAD_SCRIPT = PROJECT_ROOT / "scripts" / "douyin.py"
 # One source at a time, so a slow or blocked link cannot stall the whole batch.
 SOURCE_TIMEOUT_SECONDS = 1800
@@ -88,8 +106,8 @@ PROFILE_STATS_TIMEOUT_SECONDS = 240
 #: copy. Every run still takes everything the session is offered, so deeper
 #: listings are fetched automatically whenever Douyin serves them.
 ANONYMOUS_PROFILE_NOTE = (
-    "Signed-out sessions fetch a profile's most recent posts. Re-run the "
-    "source to pick up new ones, or sign in to fetch full profiles."
+    "This profile download is incomplete: Douyin returned only part of the "
+    "profile to this session. Use Fetch missing to check for more available posts."
 )
 
 
@@ -108,7 +126,18 @@ def _session_signed_in() -> bool:
 
 
 def _is_profile_source(url: str) -> bool:
-    return "/user/" in urlparse(url).path.lower()
+    """Whether this link is a whole channel rather than one post.
+
+    Two spellings, because the two services spell it differently: Douyin puts
+    a profile under `/user/`, TikTok under `/@handle`. Everything that follows
+    from "is this a profile" - the coverage badge, the shortfall flag, the note
+    about an incomplete listing - was answering no for every TikTok channel.
+    """
+    if "/user/" in urlparse(url).path.lower():
+        return True
+    from trendrelay_api.integrations import tiktok  # noqa: PLC0415 - cycle
+
+    return tiktok.is_profile_source(url)
 
 
 def _profile_stats(urls: list[str]) -> list[dict[str, Any]]:
@@ -180,8 +209,19 @@ def _held_counts(sec_uids: list[str]) -> dict[str, int]:
             snapshot.unlink()
 
 
-def _coverage_stats(urls: list[str]) -> list[dict[str, Any]]:
-    """Per-source coverage: what the profile declares vs what we hold."""
+def _coverage_stats(
+    urls: list[str], *, service: str = "douyin", workspace_id: str = ""
+) -> list[dict[str, Any]]:
+    """Per-source coverage: what the profile declares vs what we hold.
+
+    Both services answer in the same shape because one badge draws both; where
+    the two halves come from is each service's own business, so the TikTok
+    answer is built by the TikTok module rather than by a branch in here.
+    """
+    if service == "tiktok":
+        from trendrelay_api.integrations import tiktok  # noqa: PLC0415 - cycle
+
+        return tiktok.coverage_stats(urls, workspace_id=workspace_id)
     if not any(_is_profile_source(url) or urlparse(url).hostname == "v.douyin.com"
                for url in urls):
         return []
@@ -297,13 +337,28 @@ class DownloadRequest(BaseModel):
     @field_validator("urls")
     @classmethod
     def valid_urls(cls, values: list[str]) -> list[str]:
+        """Every link must be a source some supported service claims.
+
+        Was Douyin-or-nothing, which refused a TikTok link before anything
+        looking at services got to see it. The check is now "does any provider
+        claim this", and which provider is settled afterwards - by the caller,
+        which is also where a batch spanning two of them is refused.
+        """
+        from trendrelay_api.integrations.download_providers import (  # noqa: PLC0415
+            PROVIDERS,
+            provider_for,
+        )
+
         unique: list[str] = []
         for value in values:
             url = value.strip()
-            if not _supported_source_url(url):
+            # The legacy Douyin check stays as an accepted shape of its own, so
+            # nothing that worked before this stops working now.
+            if not (_supported_source_url(url) or provider_for(url)):
                 raise ValueError(
-                    "Use a specific Douyin video, profile, collection, music, "
-                    "or v.douyin.com share link. Discovery pages are not downloadable."
+                    "Use a link to a specific video, profile or collection from "
+                    + " or ".join(provider.label for provider in PROVIDERS)
+                    + ". Discovery pages are not downloadable."
                 )
             if url not in unique:
                 unique.append(url)
@@ -393,16 +448,9 @@ def cookie_status() -> dict[str, Any]:
     missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
     return {
         "ready": not missing,
-        # `sessionid` exists only after an actual login.
-        #
-        # It used to be claimed here that without it a profile stopped at its
-        # first page, about twenty posts. Measured against a 308-video profile
-        # on 2026-08-19 that is simply not true: an anonymous session with a
-        # valid `ttwid` and `odin_tt` paginated the whole thing, 297 videos
-        # spanning a year. The wall somebody sees signed out is in the *web
-        # page*, and the downloader does not read the web page.
-        #
-        # What signing in still buys is topic search, which is walled outright.
+        # `sessionid` exists only after an actual login. Anonymous cookies can
+        # fetch single links and Douyin's first profile window, but current
+        # cursored profile responses are refused server-side.
         "signed_in": bool(cookies.get("sessionid")),
         "source": source,
         "missing": missing,
@@ -492,15 +540,14 @@ def connection_status() -> dict[str, Any]:
             "message": (
                 "Signed in. Everything is available."
                 if cookies.get("signed_in")
-                else "Whole profiles and single links download. Sign in for topic search."
+                else "Single links and recent profile posts download. Sign in for full profiles."
             ),
             "detail": (
                 None
                 if cookies.get("signed_in")
-                else "Douyin's own web page shows signed-out visitors a login "
-                "wall, so a profile looks capped in a browser. The downloader "
-                "reads Douyin's API rather than that page and is not affected. "
-                "Topic search is the one thing that needs an account."
+                else "Douyin currently refuses deeper profile pages to signed-out "
+                "sessions. TrendRelay keeps the recent files it can fetch, then "
+                "marks the batch incomplete instead of calling it fully downloaded."
             ),
             "updated_at": None,
         }
@@ -526,7 +573,7 @@ def connection_status() -> dict[str, Any]:
     }
 
 
-def start_connection(force_refresh: bool = False) -> dict[str, Any]:
+def start_connection(force_refresh: bool = False, *, require_login: bool = False) -> dict[str, Any]:
     global CONNECTION_PROCESS
     with CONNECTION_LOCK:
         current = connection_status()
@@ -537,7 +584,7 @@ def start_connection(force_refresh: bool = False) -> dict[str, Any]:
             "waiting_for_login",
         }:
             return current
-        if cookie_status()["ready"] and not force_refresh:
+        if cookie_status()["ready"] and not force_refresh and not require_login:
             return connection_status()
 
         _write_connection_status("starting", "Preparing the isolated Douyin login browser.")
@@ -545,7 +592,8 @@ def start_connection(force_refresh: bool = False) -> dict[str, Any]:
         creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         with CONNECTION_LOG_FILE.open("a", encoding="utf-8") as log:
             CONNECTION_PROCESS = subprocess.Popen(
-                [sys.executable, str(DOWNLOAD_SCRIPT), "connect"],
+                [sys.executable, str(DOWNLOAD_SCRIPT), "connect",
+                 *(["--require-login"] if require_login else [])],
                 cwd=PROJECT_ROOT,
                 env=_environment(),
                 stdout=log,
@@ -572,23 +620,131 @@ def provider_status() -> dict[str, Any]:
     }
 
 
+def source_group_request(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep manual top-ups attached to the original profile/source batch."""
+    return payload.get("source_group_request") or payload.get("request") or {}
+
+
+class CapturedLinksRequest(BaseModel):
+    # Far above any real profile: a full capture of an 887-post page must not
+    # be refused for outgrowing one download batch. The 400-per-job limit is
+    # DownloadRequest's, and the import honours it by splitting instead.
+    urls: list[str] = Field(min_length=1, max_length=4000)
+    confirm_external_action: bool = False
+
+    @field_validator("urls")
+    @classmethod
+    def canonical_video_urls(cls, values: list[str]) -> list[str]:
+        urls = []
+        for value in values:
+            # Accept only direct video links a provider's bookmarklet can
+            # produce. Never pass credentials, arbitrary hosts or redirect
+            # endpoints onward. TikTok calls these posts ``video`` (and
+            # ``photo`` for carousels), while Douyin uses ``video``.
+            token = value.strip()
+            douyin = re.fullmatch(
+                r"https://(?:www\.)?douyin\.com/video/([0-9]{6,})(?:[?#][^\s]*)?",
+                token,
+            )
+            tiktok = re.fullmatch(
+                r"https://(?:www\.)?tiktok\.com/@[\w.-]+/(?:video|photo)/([0-9]{6,})(?:[?#][^\s]*)?",
+                token,
+                re.IGNORECASE,
+            )
+            if len(token) > 2048 or (not douyin and not tiktok):
+                raise ValueError(
+                    "Paste direct Douyin or TikTok video links only, one per line."
+                )
+            if douyin:
+                urls.append(f"https://www.douyin.com/video/{douyin.group(1)}")
+            else:
+                # Keep the creator handle and the post kind: yt-dlp uses both
+                # to route TikTok posts correctly.
+                parsed = urlparse(token)
+                urls.append(f"https://www.tiktok.com{parsed.path}")
+        return list(dict.fromkeys(urls))
+
+
+def import_captured_links(
+    job_id: str, workspace_id: str, body: CapturedLinksRequest, actor_user_id: str
+) -> dict[str, Any]:
+    """Queue captured links against their parent batch, split as needed.
+
+    A download job takes at most 400 urls, but a full profile capture is as
+    long as the profile - so an oversize import becomes several child jobs,
+    each carrying the parent's source group, and the grouped Downloads row
+    folds them together like any other re-run. The caller gets the first job
+    back, with its siblings named, so nothing changes shape for a small
+    import.
+    """
+    if not body.confirm_external_action:
+        raise PermissionError("Importing links requires confirmation.")
+    with JOB_SESSION_FACTORY() as session:
+        parent = session.get(DurableJob, job_id)
+        if not parent or parent.workspace_key != workspace_id or parent.kind != JOB_KIND:
+            raise FileNotFoundError(job_id)
+        parent_payload = dict(parent.payload or {})
+        original = dict(source_group_request(parent_payload))
+        service = str(parent_payload.get("service") or "douyin")
+    if service not in {"douyin", "tiktok"}:
+        service = "douyin"
+    from trendrelay_api.integrations import download_providers as registry
+    provider, matched, _ignored = registry.detect(list(body.urls))
+    if provider is None or provider.id != service or len(matched) != len(body.urls):
+        raise ValueError(
+            f"Imported links must belong to the {service.title()} batch and be direct video links."
+        )
+    batch_limit = 400
+    jobs = []
+    for start in range(0, len(body.urls), batch_limit):
+        request = DownloadRequest(
+            workspace_id=workspace_id, urls=body.urls[start : start + batch_limit],
+            mode="post", limit=0,
+            media_kinds=original.get("media_kinds") or ["video"],
+            incremental=True, confirm_external_action=True,
+        )
+        kwargs = {"source_group": original, "parent_job_id": job_id}
+        if service != "douyin":
+            kwargs["service"] = service
+        jobs.append(create_download_job(request, actor_user_id, **kwargs))
+    first = dict(jobs[0])
+    if len(jobs) > 1:
+        first["sibling_jobs"] = [job["id"] for job in jobs[1:]]
+        first["batch_count"] = len(jobs)
+    return first
+
+
 def create_download_job(
-    request: DownloadRequest, actor_user_id: str | None = None
+    request: DownloadRequest, actor_user_id: str | None = None,
+    *, source_group: dict[str, Any] | None = None, parent_job_id: str | None = None,
+    service: str = "douyin",
 ) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Download requires explicit confirmation.")
-    status = provider_status()
-    if not status["installed"] or not status["active"]:
-        raise RuntimeError("Install and activate Douyin Downloader before fetching media.")
-    if not status["cookies_ready"]:
-        raise RuntimeError(
-            "Douyin cookies are missing or incomplete. "
-            "Use Connect Douyin in the app or set DOUYIN_COOKIE / "
-            "DOUYIN_TTWID, DOUYIN_ODIN_TT, and DOUYIN_PASSPORT_CSRF_TOKEN, then retry."
-        )
-    nonce = f"{request.workspace_id}:{_now()}:{request.model_dump_json()}"
+    if service == "tiktok":
+        from trendrelay_api.integrations import tiktok  # noqa: PLC0415
+
+        status = tiktok.provider_status()
+        if not status["installed"]:
+            raise RuntimeError(status["reason"])
+        if not status["ready"]:
+            # Its own sentence. TikTok reads a link happily and then refuses
+            # the fetch, so "the download failed" would send somebody to look
+            # at their link rather than at the install.
+            raise RuntimeError(status["reason"])
+    else:
+        status = provider_status()
+        if not status["installed"] or not status["active"]:
+            raise RuntimeError("Install and activate Douyin Downloader before fetching media.")
+        if not status["cookies_ready"]:
+            raise RuntimeError(
+                "Douyin cookies are missing or incomplete. "
+                "Use Connect Douyin in the app or set DOUYIN_COOKIE / "
+                "DOUYIN_TTWID, DOUYIN_ODIN_TT, and DOUYIN_PASSPORT_CSRF_TOKEN, then retry."
+            )
+    nonce = f"{service}:{request.workspace_id}:{_now()}:{request.model_dump_json()}"
     job_id = f"download_{hashlib.sha256(nonce.encode()).hexdigest()[:16]}"
-    output_root = (OUTPUT_ROOT / request.workspace_id / job_id).resolve()
+    output_root = (output_root_for(service) / request.workspace_id / job_id).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     payload = {
         "id": job_id,
@@ -597,13 +753,20 @@ def create_download_job(
         "status": "queued",
         "created_at": _now(),
         "updated_at": _now(),
+        # Which service this job is for, and which tool fetches it. The
+        # service is what the runner dispatches on and what the interface
+        # labels the job with; the tool is what to blame when it breaks.
+        "service": service,
         "provider": {
-            "id": "douyin-downloader",
+            "id": "yt-dlp" if service == "tiktok" else "douyin-downloader",
             "revision": status["revision"],
         },
         "request": request.model_dump(exclude={"confirm_external_action"}),
         "output_root": str(output_root),
     }
+    if source_group:
+        payload["source_group_request"] = source_group
+        payload["parent_job_id"] = parent_job_id
     return create_job_record(
         job_id,
         request.workspace_id,
@@ -715,7 +878,32 @@ def _compact_library_job(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _scan_new_media(output_root: Path, seen_paths: set[str]) -> list[Path]:
+def _requested_media_kinds(request: dict[str, Any]) -> set[str]:
+    """Return the media kinds this job may expose to the Library.
+
+    Old queued jobs predate ``media_kinds`` and intentionally retain their
+    original all-media behaviour. New jobs always carry the explicit choice.
+    """
+    raw = request.get("media_kinds")
+    return set(raw) if isinstance(raw, list) and raw else {"video", "image", "audio"}
+
+
+def _media_kind(path: Path) -> str | None:
+    suffix = path.suffix.lower()
+    if suffix in VIDEO_SUFFIXES:
+        return "video"
+    if suffix in IMAGE_SUFFIXES:
+        return "image"
+    if suffix in AUDIO_SUFFIXES:
+        return "audio"
+    return None
+
+
+def _scan_new_media(
+    output_root: Path,
+    seen_paths: set[str],
+    media_kinds: set[str] | None = None,
+) -> list[Path]:
     """Record media files this job has not seen yet.
 
     Deliberately cheap: it walks the folder and nothing more, so the next
@@ -729,7 +917,8 @@ def _scan_new_media(output_root: Path, seen_paths: set[str]) -> list[Path]:
         # answers False, meaning "I cannot look", not "not a file". Reading it
         # as "no" skipped the over-long downloads entirely - so the files that
         # most needed shortening were the ones never seen.
-        if path.suffix.lower() not in MEDIA_SUFFIXES:
+        kind = _media_kind(path)
+        if kind is None:
             continue
         if not _is_file(path):
             continue
@@ -737,6 +926,12 @@ def _scan_new_media(output_root: Path, seen_paths: set[str]) -> list[Path]:
         if resolved in seen_paths:
             continue
         seen_paths.add(resolved)
+        # A provider can emit a gallery as the post's primary media even when
+        # optional covers are disabled. The operator's media-kind selection is
+        # authoritative at this boundary: such a file is neither imported nor
+        # repeatedly rediscovered on every source scan.
+        if media_kinds is not None and kind not in media_kinds:
+            continue
         discovered.append(path)
 
     # The provider writes through the extended-length prefix, so a file may
@@ -766,6 +961,69 @@ def _describe_media(paths: list[Path]) -> list[dict[str, Any]]:
             }
         )
     return described
+
+
+def _related_output_roots(payload: dict[str, Any]) -> list[Path]:
+    """Earlier run folders for the exact same source set.
+
+    A provider run can finish writing media and fail before its artifact
+    manifest is committed. The provider database then correctly skips those
+    files on retry, which used to strand them outside Library forever. A retry
+    therefore adopts retained files from its sibling runs before fetching.
+    """
+    request = source_group_request(payload)
+    signature = tuple(sorted(str(url) for url in request.get("urls") or []))
+    if not signature:
+        return []
+    current_id = str(payload.get("id") or "")
+    workspace_id = str(payload.get("workspace_id") or "")
+    roots: list[Path] = []
+    with JOB_SESSION_FACTORY() as session:
+        jobs = session.scalars(
+            select(DurableJob).where(
+                DurableJob.workspace_key == workspace_id,
+                DurableJob.kind == JOB_KIND,
+                DurableJob.id != current_id,
+            )
+        ).all()
+        for item in jobs:
+            other_payload = item.payload or {}
+            other_request = source_group_request(other_payload)
+            other_signature = tuple(
+                sorted(str(url) for url in other_request.get("urls") or [])
+            )
+            if other_signature != signature:
+                continue
+            root = _job_output_root(
+                {"workspace_id": item.workspace_key, "payload": other_payload}
+            )
+            if root is not None and root.is_dir():
+                roots.append(root)
+    return roots
+
+
+def _fetch_source(
+    payload: dict[str, Any], url: str, output_root: Path, request: dict[str, Any]
+) -> tuple[int, str]:
+    """Fetch one source with whichever downloader this job's service uses.
+
+    The only step that differs between services. Everything around it - walking
+    the output folder, fingerprinting, de-duplicating, handing files to the
+    Library, stopping between sources when a cancel arrives - is the same work
+    whoever the media came from, so it is shared rather than written once per
+    service.
+
+    Imported here rather than at module scope: the provider table imports this
+    module to resolve the Douyin fetch, and naming it at the top would close
+    the circle.
+    """
+    if payload.get("service") == "tiktok":
+        from trendrelay_api.integrations.tiktok import (  # noqa: PLC0415
+            download_source as tiktok_download,
+        )
+
+        return tiktok_download(url, output_root, request)
+    return _download_source(url, output_root, request)
 
 
 def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tuple[int, str]:
@@ -843,8 +1101,25 @@ def _job_output_root(job: dict[str, Any]) -> Path | None:
     if not workspace_id or not raw_path:
         return None
     output_root = Path(str(raw_path)).resolve()
-    expected_parent = (OUTPUT_ROOT / workspace_id).resolve()
-    return output_root if output_root.parent == expected_parent else None
+    # Against every service's root, not only Douyin's.
+    #
+    # This is a guard against a payload pointing somewhere it should not, and
+    # it was written when there was one place a download could land. A TikTok
+    # job lives under `downloads/tiktok/...`, so it failed the check and this
+    # returned None - which reads downstream as "no files": its progress showed
+    # zero however much had been fetched, and resuming refused with "No
+    # completed media files are available to finish" for a folder full of them.
+    #
+    # The job's own service is preferred, and the rest are still accepted so a
+    # payload written before `service` existed keeps resolving.
+    roots = service_roots()
+    service = str(payload.get("service") or "")
+    candidates = [roots[service]] if service in roots else []
+    candidates += [root for root in roots.values() if root not in candidates]
+    for root in candidates:
+        if output_root.parent == (root / workspace_id).resolve():
+            return output_root
+    return None
 
 
 def _download_progress(job: dict[str, Any]) -> dict[str, Any]:
@@ -860,9 +1135,10 @@ def _download_progress(job: dict[str, Any]) -> dict[str, Any]:
             "has_files_on_disk": False,
         }
     all_files = [path for path in output_root.rglob("*") if _is_file(path)]
-    media_files = [
-        path for path in all_files if path.suffix.lower() in MEDIA_SUFFIXES
-    ]
+    payload = job.get("payload") or {}
+    request = payload.get("request") or {}
+    requested = _requested_media_kinds(request)
+    media_files = [path for path in all_files if _media_kind(path) in requested]
     return {
         "folder_exists": True,
         "files_downloaded": len(media_files),
@@ -913,6 +1189,21 @@ def _library_progress(job: dict[str, Any]) -> dict[str, int]:
         **counts,
         "active": counts["queued"] + counts["running"],
     }
+def _source_platform(urls: list[str]) -> str:
+    """The platform a file actually came from, read off its URLs.
+
+    TikTok posts ride this pipeline now (yt-dlp routes them), and stamping
+    them `douyin` filed them under the wrong network everywhere platform is
+    read - the Library card, the detail panel, the filters. The stamp
+    follows the evidence; douyin remains the default this downloader is.
+    """
+    for url in urls:
+        host = (urlparse(url).hostname or "").lower()
+        if host == "tiktok.com" or host.endswith(".tiktok.com"):
+            return "tiktok"
+    return "douyin"
+
+
 def _queue_library_artifacts(
     payload: dict[str, Any], artifacts: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
@@ -922,7 +1213,10 @@ def _queue_library_artifacts(
         return [], [], []
     from trendrelay_api.media_library import create_ingest_job
 
-    source_urls = payload.get("request", {}).get("urls") or []
+    source_urls = list(dict.fromkeys([
+        *(payload.get("request", {}).get("urls") or []),
+        *(source_group_request(payload).get("urls") or []),
+    ]))
     output_root_value = payload.get("output_root")
     output_root = Path(str(output_root_value)) if output_root_value else None
     queued = []
@@ -944,15 +1238,17 @@ def _queue_library_artifacts(
             source_url = artifact_source_url or (
                 source_urls[0] if len(source_urls) == 1 else None
             )
+            platform = _source_platform(origin_urls)
             queued.append(
                 create_ingest_job(
                     workspace_id=payload["workspace_id"],
                     actor_user_id=actor,
                     path=artifact["path"],
-                    title=artifact.get("name") or "Douyin reference",
+                    title=artifact.get("name")
+                        or ("TikTok reference" if platform == "tiktok" else "Douyin reference"),
                     source_type="douyin-download",
                     source_url=source_url,
-                    platform="douyin",
+                    platform=platform,
                     creator=metadata.get("creator"),
                     published_at=metadata.get("published_at"),
                     caption=metadata.get("caption"),
@@ -963,6 +1259,9 @@ def _queue_library_artifacts(
                         "origin_urls": origin_urls,
                     },
                     source_sha256=artifact.get("sha256"),
+                    # One download run is one notification card, however many
+                    # files it streams into the Library across its sources.
+                    batch={"id": payload.get("id"), "total": 0},
                     factory=JOB_SESSION_FACTORY,
                 )
             )
@@ -1045,10 +1344,13 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
     payload = dict(claimed["payload"])
     try:
         output_root = Path(payload["output_root"]).resolve()
-        expected_parent = (OUTPUT_ROOT / payload["workspace_id"]).resolve()
+        expected_parent = (
+            output_root_for(payload.get("service", "douyin")) / payload["workspace_id"]
+        ).resolve()
         if output_root.parent != expected_parent:
             raise RuntimeError("Invalid download output location")
         request = payload["request"]
+        service_label = "TikTok" if payload.get("service") == "tiktok" else "Douyin"
 
         # Every path a file can reach us by is recorded once, on the download
         # thread only, so a file already handed to the library is never
@@ -1063,6 +1365,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         already_complete = 0
         last_detail = ""
         cancelled = False
+        seen_hashes: set[str] = set()
 
         Prepared = tuple[
             list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]
@@ -1070,7 +1373,14 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
 
         def prepare(paths: list[Path]) -> Prepared:
             """Fingerprint one source's media and hand it to the library."""
-            described = _describe_media(paths)
+            described = []
+            for artifact in _describe_media(paths):
+                digest = str(artifact.get("sha256") or "")
+                if digest and digest in seen_hashes:
+                    continue
+                if digest:
+                    seen_hashes.add(digest)
+                described.append(artifact)
             queued, errors, creators = _queue_library_artifacts(payload, described)
             merge_running_result(
                 job_id,
@@ -1088,8 +1398,18 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         with ThreadPoolExecutor(max_workers=1, thread_name_prefix="douyin-ingest") as ingest:
             pending: list[Future] = []
 
+            requested_kinds = _requested_media_kinds(request)
+            # Recover completed files from an earlier failed/retried run of the
+            # same sources. Provider-level dedupe means downloading again is
+            # neither necessary nor reliable; finalizing what is already on
+            # disk is both faster and lossless.
+            retained: list[Path] = []
+            for related_root in _related_output_roots(payload):
+                retained.extend(_scan_new_media(related_root, seen_paths, requested_kinds))
+            if retained:
+                pending.append(ingest.submit(prepare, retained))
             if payload.get("resume_from_disk"):
-                adopted = _scan_new_media(output_root, seen_paths)
+                adopted = _scan_new_media(output_root, seen_paths, requested_kinds)
                 if adopted:
                     pending.append(ingest.submit(prepare, adopted))
             else:
@@ -1102,21 +1422,22 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
                     if cancellation_requested(job_id, factory=JOB_SESSION_FACTORY):
                         cancelled = True
                         break
-                    code, detail = _download_source(url, output_root, request)
+                    code, detail = _fetch_source(payload, url, output_root, request)
                     last_detail = detail or last_detail
+                    new_paths = _scan_new_media(output_root, seen_paths, requested_kinds)
                     if "already downloaded" in detail.lower():
                         # The skip pass found every requested video already held;
                         # this is completion, not an empty or blocked fetch.
                         already_complete += 1
-                    elif code == 0 or code == 3 or "without saving any media" in detail.lower():
-                        if code != 0:
-                            # Nothing new here: already held, or blocked.
-                            blocked_sources += 1
                     else:
-                        source_errors.append(
-                            f"Source {position} of {len(urls)}: {detail[-500:]}"
-                        )
-                    new_paths = _scan_new_media(output_root, seen_paths)
+                        if code != 0 and (code == 3 or "without saving any media" in detail.lower()):
+                            # An empty response is not evidence of completion.
+                            # Preserve its reason even when another source saved
+                            # files, so mixed batches don't silently read as done.
+                            blocked_sources += 1
+                        if code != 0 or not new_paths:
+                            reason = detail[-500:] or "No new media was saved and completion could not be verified."
+                            source_errors.append(f"Source {position} of {len(urls)}: {reason}")
                     if new_paths:
                         # Hash and register in the background; the next source
                         # starts downloading immediately.
@@ -1185,25 +1506,25 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             # clip already held all look like. Only the provider actually saying
             # so marks the connection broken - anything else had the operator
             # re-authenticating over and over against a session that was fine.
-            if blocked_sources and _looks_like_auth_failure(evidence):
+            if payload.get("service") != "tiktok" and blocked_sources and _looks_like_auth_failure(evidence):
                 _write_connection_status(
                     "refresh_required",
-                    "Douyin rejected the saved session. Refresh the Douyin session and retry.",
+                    f"{service_label} rejected the saved session. Refresh the {service_label} session and retry.",
                 )
                 message = (
-                    "Douyin refused the request for this session. Refresh the Douyin "
-                    "session in TrendRelay, then retry."
+                    f"{service_label} refused the request for this session. Refresh the "
+                    f"{service_label} session in TrendRelay, then retry."
                 )
             elif blocked_sources:
                 message = (
-                    "Douyin returned no media for these links. The post may have been "
+                    f"{service_label} returned no media for these links. The post may have been "
                     "removed, or the link may name a topic or a page rather than a "
                     "video. The saved session was not the problem."
                 )
             else:
                 message = (
-                    "Download finished without media files. Connect Douyin in the app "
-                    "and retry."
+                    f"Download finished without media files. Check the {service_label} "
+                    "connection and retry."
                 )
             # The provider's own words survive whichever branch runs. They were
             # dropped exactly when something unexpected happened, which is when
@@ -1221,7 +1542,11 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         # have this profile", which one run's count alone cannot give.
         source_stats = (
             [] if payload.get("resume_from_disk")
-            else _coverage_stats(list(request.get("urls", [])))
+            else _coverage_stats(
+                list(source_group_request(payload).get("urls", [])),
+                service=str(payload.get("service") or "douyin"),
+                workspace_id=str(payload.get("workspace_id") or ""),
+            )
         )
         coverage = _coverage_line(source_stats)
         if coverage:
@@ -1236,8 +1561,18 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             not source_stats
             and any(_is_profile_source(url) for url in request.get("urls", []))
         )
-        if wall_worth_naming and not _session_signed_in():
+        # Douyin's note, about Douyin's signed-out window. TikTok is fetched
+        # by a different tool with no session of ours to be signed out of, so
+        # attaching this to its summary would explain a shortfall by a cause
+        # that cannot apply.
+        if (
+            payload.get("service") != "tiktok"
+            and wall_worth_naming
+            and not _session_signed_in()
+        ):
             summary = f"{summary} {ANONYMOUS_PROFILE_NOTE}"
+        requested_all = int(request.get("limit") or 0) == 0
+        incomplete_requested_profile = requested_all and incomplete_profiles
         result = {
             **payload,
             "status": "succeeded",
@@ -1249,6 +1584,13 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             "creator_urls": list(dict.fromkeys(creator_urls)),
             "source_errors": source_errors,
             "source_stats": source_stats,
+            # A provider process exiting cleanly does not prove that an `All`
+            # profile request reached the declared end. Preserve and import the
+            # returned media, but make the shortfall first-class so the UI does
+            # not present a recent anonymous window as a completed catalogue.
+            "incomplete_profile": incomplete_requested_profile,
+            # A short listing alone does not establish a login requirement.
+            # Signed-out browsers may be offered more posts than this API session.
             "summary": summary,
         }
         return complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
@@ -1308,9 +1650,18 @@ def resume_download_job(
         progress = _download_progress(
             {"workspace_id": item.workspace_key, "payload": item.payload}
         )
-        if from_saved_files and not progress["files_downloaded"]:
-            raise ValueError("No completed media files are available to finish.")
         payload = dict(item.payload or {})
+        request = payload.get("request") or {}
+        requested_kinds = _requested_media_kinds(request)
+        related_has_media = any(
+            any(
+                _media_kind(path) in requested_kinds and _is_file(path)
+                for path in root.rglob("*")
+            )
+            for root in _related_output_roots(payload)
+        )
+        if from_saved_files and not progress["files_downloaded"] and not related_has_media:
+            raise ValueError("No completed media files are available to finish.")
         payload["resume_from_disk"] = from_saved_files
         item.payload = payload
         item.status = "queued"

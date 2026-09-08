@@ -21,13 +21,14 @@ import trendrelay_api.opportunity_models  # noqa: F401
 
 
 @pytest.fixture
-def job_factory(monkeypatch):
+def job_factory(monkeypatch, tmp_path):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(douyin, "JOB_SESSION_FACTORY", factory)
+    monkeypatch.setattr(douyin, "CONNECTION_STATUS_FILE", tmp_path / "connection-status.json")
     monkeypatch.setattr(
         douyin,
         "provider_status",
@@ -61,7 +62,54 @@ def test_download_request_defaults_to_all_videos() -> None:
     assert download.limit == 0
 
 
-def test_download_jobs_report_live_folder_progress(
+def test_captured_links_validate_and_deduplicate() -> None:
+    body = douyin.CapturedLinksRequest(urls=[
+        "https://douyin.com/video/123456?from=profile",
+        "https://www.douyin.com/video/123456#post",
+    ])
+    assert body.urls == ["https://www.douyin.com/video/123456"]
+    for invalid in [
+        "https://www.douyin.com.evil/video/123456",
+        "https://user@www.douyin.com/video/123456",
+        "http://www.douyin.com/video/123456",
+        "https://www.douyin.com/user/profile",
+    ]:
+        with pytest.raises(ValueError):
+            douyin.CapturedLinksRequest(urls=[invalid])
+    with pytest.raises(ValueError):
+        douyin.CapturedLinksRequest(urls=["https://www.douyin.com/video/123456"] * 401)
+
+
+def test_captured_links_keep_group_and_workspace_boundary(monkeypatch, tmp_path, job_factory):
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    original = douyin.DownloadRequest(
+        workspace_id="workspace-1", urls=["https://www.douyin.com/user/profile"],
+        media_kinds=["video", "image"], confirm_external_action=True,
+    )
+    parent = douyin.create_download_job(original, "owner-1")
+    body = douyin.CapturedLinksRequest(
+        urls=["https://www.douyin.com/video/123456"], confirm_external_action=True,
+    )
+    with pytest.raises(FileNotFoundError):
+        douyin.import_captured_links(parent["id"], "workspace-2", body, "owner-1")
+    with pytest.raises(PermissionError):
+        douyin.import_captured_links(parent["id"], "workspace-1", body.model_copy(update={"confirm_external_action": False}), "owner-1")
+    child = douyin.import_captured_links(parent["id"], "workspace-1", body, "owner-1")
+    payload = child["payload"]
+    assert payload["request"]["urls"] == body.urls
+    assert payload["request"]["media_kinds"] == ["video", "image"]
+    assert payload["request"]["incremental"] is True
+    assert payload["source_group_request"]["urls"] == original.urls
+    assert payload["parent_job_id"] == parent["id"]
+    assert Path(parent["payload"]["output_root"]) in douyin._related_output_roots(payload)
+    # A top-up of a top-up still belongs to the original profile, not the last
+    # set of pasted individual links.
+    next_body = body.model_copy(update={"urls": ["https://www.douyin.com/video/654321"]})
+    grandchild = douyin.import_captured_links(child["id"], "workspace-1", next_body, "owner-1")
+    assert grandchild["payload"]["source_group_request"] == payload["source_group_request"]
+
+
+def test_video_only_progress_excludes_unrequested_files(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
     monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
@@ -76,13 +124,32 @@ def test_download_jobs_report_live_folder_progress(
 
     assert current["progress"] == {
         "folder_exists": True,
-        "files_downloaded": 3,
+        "files_downloaded": 1,
         "videos_downloaded": 1,
-        "images_downloaded": 1,
-        "audio_downloaded": 1,
-        "bytes_downloaded": 15,
+        "images_downloaded": 0,
+        "audio_downloaded": 0,
+        "bytes_downloaded": 5,
         "has_files_on_disk": True,
     }
+
+
+def test_media_scan_marks_unrequested_files_seen_without_ingesting_them(
+    tmp_path: Path,
+) -> None:
+    video = tmp_path / "post.mp4"
+    image = tmp_path / "photo-note.jpg"
+    audio = tmp_path / "sound.mp3"
+    video.write_bytes(b"video")
+    image.write_bytes(b"image")
+    audio.write_bytes(b"audio")
+    seen: set[str] = set()
+
+    first = douyin._scan_new_media(tmp_path, seen, {"video"})
+    second = douyin._scan_new_media(tmp_path, seen, {"video"})
+
+    assert first == [video]
+    assert second == []
+    assert seen == {str(path.resolve()) for path in (video, image, audio)}
 
 
 def test_download_reports_linked_library_processing(job_factory) -> None:
@@ -565,8 +632,9 @@ def test_a_fully_downloaded_batch_reports_success_not_failure(
     assert "already downloaded" in completed["result"]["summary"].lower()
 
 
+@pytest.mark.parametrize("partial_profile", [False, True])
 def test_worker_records_downloaded_media(
-    monkeypatch, tmp_path: Path, job_factory
+    monkeypatch, tmp_path: Path, job_factory, partial_profile: bool
 ) -> None:
     monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
     monkeypatch.setattr(
@@ -580,7 +648,19 @@ def test_worker_records_downloaded_media(
             "cookies": {"ready": True, "missing": []},
         },
     )
-    job = douyin.create_download_job(request(), actor_user_id="user-1")
+    download_request = request()
+    if partial_profile:
+        download_request = douyin.DownloadRequest(
+            workspace_id="workspace-1",
+            urls=["https://www.douyin.com/user/example"],
+            limit=0,
+            confirm_external_action=True,
+        )
+        monkeypatch.setattr(douyin, "_session_signed_in", lambda: False)
+        monkeypatch.setattr(douyin, "_coverage_stats", lambda urls: [
+            {"url": urls[0], "kind": "profile", "nickname": "Creator", "held": 39, "declared_total": 369},
+        ])
+    job = douyin.create_download_job(download_request, actor_user_id="user-1")
 
     def fake_run(command, **_kwargs):
         output = Path(command[command.index("--output") + 1])
@@ -603,13 +683,17 @@ def test_worker_records_downloaded_media(
 
     assert completed["status"] == "succeeded"
     assert completed["result"]["artifacts"][0]["name"] == "clip.mp4"
+    if partial_profile:
+        assert completed["result"]["incomplete_profile"] is True
+        assert not completed["result"].get("requires_sign_in")
+        assert "Sign in" not in completed["result"]["summary"]
     assert completed["result"]["artifacts"][0]["sha256"]
     assert completed["result"]["library_jobs"] == [
         {"id": "media-1", "status": "queued"}
     ]
     assert queued[0]["source_type"] == "douyin-download"
     assert queued[0]["source_sha256"] == completed["result"]["artifacts"][0]["sha256"]
-    assert queued[0]["engagement"]["origin_urls"] == request().urls
+    assert queued[0]["engagement"]["origin_urls"] == download_request.urls
 
 
 def _profile_request() -> douyin.DownloadRequest:
@@ -824,8 +908,13 @@ def test_batch_never_ingests_the_same_file_twice(
     assert len(completed["result"]["artifacts"]) == 1
 
 
+@pytest.mark.parametrize("exit_code,provider_detail", [
+    (2, "network exploded"),
+    (3, "Download finished without saving any media files."),
+    (0, "Provider finished, but did not save a file."),
+])
 def test_batch_keeps_going_when_one_source_fails(
-    monkeypatch, tmp_path: Path, job_factory
+    monkeypatch, tmp_path: Path, job_factory, exit_code: int, provider_detail: str
 ) -> None:
     """A blocked link must not discard the media its neighbours produced."""
     monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
@@ -853,7 +942,7 @@ def test_batch_keeps_going_when_one_source_fails(
         output = Path(command[command.index("--output") + 1])
         output.mkdir(parents=True, exist_ok=True)
         if urls[0].endswith("/1"):
-            return subprocess.CompletedProcess(command, 2, "", "network exploded")
+            return subprocess.CompletedProcess(command, exit_code, "", provider_detail)
         (output / "clip2.mp4").write_bytes(b"second-source")
         return subprocess.CompletedProcess(command, 0, "done", "")
 
@@ -871,7 +960,7 @@ def test_batch_keeps_going_when_one_source_fails(
 
     assert completed["status"] == "succeeded"
     assert [item["name"] for item in completed["result"]["artifacts"]] == ["clip2.mp4"]
-    assert "network exploded" in completed["result"]["source_errors"][0]
+    assert provider_detail in completed["result"]["source_errors"][0]
     assert "1 source(s) failed" in completed["result"]["summary"]
 
 

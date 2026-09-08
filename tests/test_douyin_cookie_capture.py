@@ -41,8 +41,11 @@ class FakeContext:
     async def cookies(self):
         return self.browser.cookies
 
+    async def add_cookies(self, cookies):
+        self.browser.seeded_cookies = cookies
+
     async def close(self):
-        return None
+        self.browser.closed = True
 
 
 class FakeBrowser:
@@ -51,6 +54,7 @@ class FakeBrowser:
         #: How many polls before the operator closes the window, if they do.
         self.closes_after = closes_after
         self.polls = 0
+        self.closed = False
 
     def is_connected(self) -> bool:
         self.polls += 1
@@ -146,3 +150,80 @@ def test_a_window_that_yields_nothing_is_a_failure(monkeypatch, tmp_path: Path) 
     assert code == 2
     assert saved == {}
     assert reported["state"] == "failed"
+
+
+def test_anonymous_token_updates_are_saved_before_the_window_closes(
+    monkeypatch, tmp_path: Path
+) -> None:
+    browser = FakeBrowser(list(ANONYMOUS), closes_after=2)
+
+    async def refresh_tokens(_seconds):
+        browser.cookies = [
+            *ANONYMOUS,
+            {"domain": ".douyin.com", "name": "msToken", "value": "refreshed"},
+            {"domain": "notdouyin.com", "name": "unrelated", "value": "ignore"},
+        ]
+
+    monkeypatch.setattr(douyin_cookie_capture.asyncio, "sleep", refresh_tokens)
+    code, saved, reported = run(monkeypatch, tmp_path, browser)
+
+    assert code == 0
+    assert saved["msToken"] == "refreshed"
+    assert "unrelated" not in saved
+    assert "sessionid" not in saved
+    assert reported["state"] == "connected"
+
+
+def test_empty_required_cookies_are_not_download_ready() -> None:
+    assert not douyin_cookie_capture.can_download({
+        "ttwid": "t", "odin_tt": "", "passport_csrf_token": "p",
+    })
+
+
+def test_default_capture_finishes_without_login_or_manual_close(monkeypatch, tmp_path):
+    browser = FakeBrowser(ANONYMOUS)
+    clock = [0.0]
+
+    async def advance(seconds):
+        clock[0] += seconds
+
+    monkeypatch.setattr(douyin_cookie_capture, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(douyin_cookie_capture.asyncio, "sleep", advance)
+    code, saved, reported = run(monkeypatch, tmp_path, browser, timeout=600)
+    assert code == 0
+    assert clock[0] == 3
+    assert browser.closed
+    assert "sessionid" not in saved
+    assert reported["state"] == "connected"
+
+
+def test_explicit_login_keeps_waiting_then_saves_the_account(monkeypatch, tmp_path):
+    browser = FakeBrowser(ANONYMOUS)
+    clock = [0.0]
+
+    async def advance(seconds):
+        clock[0] += seconds
+        if clock[0] >= 6:
+            browser.cookies = SIGNED_IN
+
+    install(monkeypatch, browser)
+    monkeypatch.setattr(douyin_cookie_capture, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(douyin_cookie_capture.asyncio, "sleep", advance)
+    output = tmp_path / "cookies.json"
+    code = asyncio.run(douyin_cookie_capture.capture(
+        output, tmp_path / "status.json", 600, require_login=True,
+    ))
+    assert code == 0
+    assert clock[0] == 6
+    assert json.loads(output.read_text())["sessionid"] == "sid"
+
+
+def test_refresh_reuses_existing_saved_cookies(monkeypatch, tmp_path):
+    output = tmp_path / "cookies.json"
+    output.write_text(json.dumps({"ttwid": "existing"}))
+    browser = FakeBrowser(SIGNED_IN)
+    code, _, _ = run(monkeypatch, tmp_path, browser)
+    assert code == 0
+    assert browser.seeded_cookies == [
+        {"name": "ttwid", "value": "existing", "url": "https://www.douyin.com/"},
+    ]

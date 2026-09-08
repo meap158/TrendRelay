@@ -1,0 +1,38 @@
+diff --git a/config/default_config.py b/config/default_config.py
+index 9961fad..08788f7 100644
+--- a/config/default_config.py
++++ b/config/default_config.py
+@@ -4,6 +4,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
+     "path": "./Downloaded/",
+     "music": True,
+     "cover": True,
++    # Primary media types to download. TrendRelay narrows this to ["video"]
++    # when the operator leaves Images off.
++    "media_types": ["video", "gallery"],
+     "avatar": True,
+     "json": True,
+     "start_time": "",
+diff --git a/core/downloader_base.py b/core/downloader_base.py
+index 058e60a..ef53d30 100644
+--- a/core/downloader_base.py
++++ b/core/downloader_base.py
+@@ -447,6 +447,19 @@ class BaseDownloader(ABC):
+         save_dir = file_context["save_dir"]
+         downloaded_files: List[Path] = []
+ 
++        allowed_media_types = self.config.get("media_types")
++        if (
++            isinstance(allowed_media_types, list)
++            and media_type not in allowed_media_types
++        ):
++            logger.info(
++                "Skipping %s aweme %s because this run requested %s",
++                media_type,
++                aweme_id,
++                ", ".join(str(item) for item in allowed_media_types),
++            )
++            return True
++
+         session = await self.api_client.get_session()
+         video_path: Optional[Path] = None
+         # 可选资产（封面/音乐/头像）相互独立且不影响主媒体成败：先登记

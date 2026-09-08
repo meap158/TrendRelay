@@ -21,6 +21,57 @@ def test_a_profile_source_is_told_apart_from_a_video(tmp_path) -> None:
     assert douyin._is_profile_source("https://v.douyin.com/abc123/") is False
 
 
+def test_a_tiktok_channel_is_a_profile_source_too() -> None:
+    """This one predicate is what the whole coverage badge hangs off.
+
+    It tested `/user/`, which only Douyin says, so every TikTok channel was
+    treated as a single post: no share to report, no shortfall to flag.
+    """
+    assert douyin._is_profile_source("https://www.tiktok.com/@ai_videos_tiktok") is True
+    assert douyin._is_profile_source(
+        "https://www.tiktok.com/@ai_videos_tiktok/video/7321826489580686594"
+    ) is False
+
+
+def test_coverage_is_asked_of_whichever_service_ran_the_job(monkeypatch) -> None:
+    """One badge, two sources, and neither knows about the other.
+
+    Douyin reads a declared count from its provider and a held count from that
+    provider's database; TikTok has neither, so it measures a listing against
+    what is on disk. Putting that branch here would give this module an opinion
+    about yt-dlp, so it only decides who to ask.
+    """
+    from trendrelay_api.integrations import tiktok
+
+    asked: dict[str, object] = {}
+    monkeypatch.setattr(
+        tiktok, "coverage_stats",
+        lambda urls, *, workspace_id: asked.update(urls=urls, workspace_id=workspace_id)
+        or [{"kind": "profile", "declared_total": 24, "held": 23, "nickname": "somebody"}],
+    )
+
+    stats = douyin._coverage_stats(
+        ["https://www.tiktok.com/@somebody"], service="tiktok", workspace_id="ws-1",
+    )
+    assert asked == {"urls": ["https://www.tiktok.com/@somebody"], "workspace_id": "ws-1"}
+    assert stats[0]["held"] == 23
+
+    # And the badge's own sentence reads the same for either service, because
+    # it is built from the shape rather than from where the shape came from.
+    assert douyin._coverage_line(stats) == "Profile coverage: somebody 23/24 (96%)."
+
+
+def test_a_douyin_link_never_reaches_the_tiktok_reader(monkeypatch) -> None:
+    from trendrelay_api.integrations import tiktok
+
+    def _refuse(*args, **kwargs):
+        raise AssertionError("a Douyin job asked yt-dlp about a Douyin profile")
+
+    monkeypatch.setattr(tiktok, "coverage_stats", _refuse)
+    monkeypatch.setattr(douyin, "_profile_stats", lambda urls: [])
+    assert douyin._coverage_stats(["https://www.douyin.com/user/MS4wLjABAAAAx"]) == []
+
+
 def test_session_strength_is_read_off_the_one_login_cookie(tmp_path, monkeypatch) -> None:
     cookie_file = tmp_path / "cookies.json"
     monkeypatch.setattr(douyin, "COOKIE_FILE", cookie_file)
@@ -132,3 +183,158 @@ def test_coverage_pct_never_rounds_to_a_false_edge() -> None:
 def test_coverage_line_is_silent_without_declared_totals() -> None:
     assert douyin._coverage_line([]) == ""
     assert douyin._coverage_line([{"url": "u", "kind": "video"}]) == ""
+
+
+def test_retry_adopts_retained_files_from_the_same_source_set(tmp_path, monkeypatch) -> None:
+    workspace = "ws_test"
+    output_root = tmp_path / workspace
+    retained = output_root / "download_old"
+    unrelated = output_root / "download_other"
+    retained.mkdir(parents=True)
+    unrelated.mkdir()
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path)
+
+    class Job:
+        def __init__(self, job_id: str, urls: list[str], root: Path):
+            self.id = job_id
+            self.workspace_key = workspace
+            self.payload = {
+                "workspace_id": workspace,
+                "request": {"urls": urls},
+                "output_root": str(root),
+            }
+
+    jobs = [
+        Job("download_old", ["https://v.douyin.com/same/"], retained),
+        Job("download_other", ["https://v.douyin.com/other/"], unrelated),
+    ]
+
+    class Scalars:
+        def all(self):
+            return jobs
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def scalars(self, _statement):
+            return Scalars()
+
+    monkeypatch.setattr(douyin, "JOB_SESSION_FACTORY", lambda: Session())
+    roots = douyin._related_output_roots({
+        "id": "download_current",
+        "workspace_id": workspace,
+        "request": {"urls": ["https://v.douyin.com/same/"]},
+    })
+    assert roots == [retained]
+
+
+def test_an_oversize_import_becomes_batches_that_keep_the_parent_group(monkeypatch) -> None:
+    """A full profile capture is as long as the profile, not one batch.
+
+    A download job takes at most 400 urls, so 900 captured links become three
+    child jobs - every url once, in order, each child carrying the parent's
+    source group so the Downloads row folds them together. A small import
+    stays exactly one job with no extra shape.
+    """
+
+    class Parent:
+        workspace_key = "ws"
+        kind = douyin.JOB_KIND
+        payload = {"request": {
+            "urls": ["https://www.douyin.com/user/profile"], "media_kinds": ["video"],
+        }}
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get(self, _model, _job_id):
+            return Parent()
+
+    monkeypatch.setattr(douyin, "JOB_SESSION_FACTORY", lambda: Session())
+    created: list[dict] = []
+
+    def fake_create(request, actor, *, source_group=None, parent_job_id=None):
+        created.append({
+            "id": f"download_{len(created):016d}",
+            "urls": list(request.urls),
+            "source_group": source_group,
+            "parent_job_id": parent_job_id,
+        })
+        return {"id": created[-1]["id"], "status": "queued"}
+
+    monkeypatch.setattr(douyin, "create_download_job", fake_create)
+    links = [f"https://www.douyin.com/video/{100000 + index}" for index in range(900)]
+    body = douyin.CapturedLinksRequest(urls=links, confirm_external_action=True)
+
+    first = douyin.import_captured_links("download_parent0000", "ws", body, "owner")
+
+    assert [len(call["urls"]) for call in created] == [400, 400, 100]
+    assert [url for call in created for url in call["urls"]] == links
+    assert all(call["parent_job_id"] == "download_parent0000" for call in created)
+    assert all(call["source_group"] == Parent.payload["request"] for call in created)
+    assert first["batch_count"] == 3
+    assert len(first["sibling_jobs"]) == 2
+
+    created.clear()
+    small = douyin.CapturedLinksRequest(urls=links[:5], confirm_external_action=True)
+    single = douyin.import_captured_links("download_parent0000", "ws", small, "owner")
+    assert len(created) == 1
+    assert "batch_count" not in single and "sibling_jobs" not in single
+
+
+def test_the_platform_stamp_follows_the_source_url() -> None:
+    """TikTok posts ride this pipeline now; the stamp reads the evidence."""
+    assert douyin._source_platform(["https://www.tiktok.com/@x/video/1"]) == "tiktok"
+    assert douyin._source_platform(["https://vt.tiktok.com/ZS8x/"]) == "tiktok"
+    assert douyin._source_platform(["https://v.douyin.com/abc/"]) == "douyin"
+    assert douyin._source_platform([]) == "douyin"
+    # A lookalike host is not TikTok.
+    assert douyin._source_platform(["https://tiktok.com.evil.example/x"]) == "douyin"
+
+
+def test_ingests_carry_their_platform_and_one_batch_per_run(monkeypatch) -> None:
+    """The two facts a notification and a Library card need at queue time.
+
+    Every file of one run shares the run's batch marker, so the bell shows
+    one card counting itself down instead of a drawer of file names - and a
+    file fetched from tiktok.com is stamped tiktok, not douyin.
+    """
+    from trendrelay_api import media_library
+
+    created: list[dict] = []
+    monkeypatch.setattr(
+        media_library, "create_ingest_job",
+        lambda **kwargs: created.append(kwargs) or {"id": f"media_{len(created)}"},
+    )
+    monkeypatch.setattr(
+        douyin, "_douyin_artifact_metadata", lambda _path, _root: {},
+    )
+
+    payload = {
+        "id": "download_run0000000000000",
+        "workspace_id": "ws",
+        "actor_user_id": "owner",
+        "request": {"urls": ["https://www.tiktok.com/@ai_videos/video/732182"]},
+    }
+    artifacts = [
+        {"path": r"S:\a.mp4", "name": "a.mp4", "sha256": "a" * 64},
+        {"path": r"S:\b.mp4", "name": "b.mp4", "sha256": "b" * 64},
+    ]
+    queued, errors, _creators = douyin._queue_library_artifacts(payload, artifacts)
+
+    assert errors == [] and len(queued) == 2
+    assert all(call["platform"] == "tiktok" for call in created)
+    assert all(call["batch"] == {"id": "download_run0000000000000", "total": 0} for call in created)
+
+    created.clear()
+    payload["request"] = {"urls": ["https://v.douyin.com/short/"]}
+    douyin._queue_library_artifacts(payload, artifacts[:1])
+    assert created[0]["platform"] == "douyin"
