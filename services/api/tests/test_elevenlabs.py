@@ -507,3 +507,179 @@ def test_what_is_sent_is_what_was_counted(saved_key, monkeypatch) -> None:
 
     assert sent["body"]["text"] == unicodedata.normalize("NFC", decomposed)
     assert len(sent["body"]["text"]) == elevenlabs.characters_in(decomposed)
+
+
+def test_model_languages_come_back_alphabetically(saved_key, monkeypatch) -> None:
+    """A list of 74 languages in popularity order is not a list anybody can use.
+
+    The service returns them roughly by usage - English, Japanese, Chinese,
+    German - which reads as no order at all when somebody is scanning for
+    Vietnamese. Sorted here rather than in each interface, because more than
+    one surface renders them.
+    """
+    answering(
+        [
+            {
+                "model_id": "eleven_flash_v2_5",
+                "name": "Flash",
+                "can_do_text_to_speech": True,
+                "languages": [
+                    {"language_id": "en", "name": "English"},
+                    {"language_id": "vi", "name": "Vietnamese"},
+                    {"language_id": "de", "name": "German"},
+                    {"language_id": "ar", "name": "Arabic"},
+                ],
+            }
+        ],
+        monkeypatch,
+    )
+
+    languages = elevenlabs.models()[0]["languages"]
+
+    assert [row["name"] for row in languages] == [
+        "Arabic", "English", "German", "Vietnamese",
+    ]
+
+
+def test_a_model_that_cannot_say_a_language_simply_omits_it(saved_key, monkeypatch) -> None:
+    """The fact the interface has to explain rather than hide.
+
+    Their default model reads 29 languages and Vietnamese is not among them,
+    while other models on the same key do speak it. Nothing here invents the
+    missing entry - the point is that the absence is real, so a caller can tell
+    "this model cannot" from "the account cannot".
+    """
+    answering(
+        [
+            {
+                "model_id": "eleven_multilingual_v2",
+                "name": "Multilingual v2",
+                "can_do_text_to_speech": True,
+                "languages": [{"language_id": "en", "name": "English"}],
+            },
+            {
+                "model_id": "eleven_flash_v2_5",
+                "name": "Flash v2.5",
+                "can_do_text_to_speech": True,
+                "languages": [
+                    {"language_id": "en", "name": "English"},
+                    {"language_id": "vi", "name": "Vietnamese"},
+                ],
+            },
+        ],
+        monkeypatch,
+    )
+
+    catalogue = {model["model_id"]: model for model in elevenlabs.models()}
+
+    speaks = lambda model, code: any(  # noqa: E731
+        row["language_id"] == code for row in catalogue[model]["languages"]
+    )
+    assert not speaks("eleven_multilingual_v2", "vi")
+    assert speaks("eleven_flash_v2_5", "vi")
+
+
+def test_the_timed_read_asks_for_json_and_returns_both_halves(monkeypatch) -> None:
+    """One call for the audio and for when each character was said.
+
+    The alignment is the synthesiser's own account of its own read. Every other
+    way of learning when a sentence ends is a guess from the text or a second
+    bill for a recogniser to listen to the result.
+    """
+    import base64
+    import json as _json
+
+    seen: dict[str, object] = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return _json.dumps({
+                "audio_base64": base64.b64encode(b"MP3BYTES").decode(),
+                "alignment": {
+                    "characters": ["A", "."],
+                    "character_start_times_seconds": [0.0, 0.4],
+                    "character_end_times_seconds": [0.4, 0.5],
+                },
+                "normalized_alignment": {"characters": ["different"]},
+            }).encode()
+
+    def _open(request, timeout=None):
+        seen["url"] = request.full_url
+        seen["accept"] = request.headers.get("Accept")
+        seen["body"] = _json.loads(request.data.decode())
+        return _Response()
+
+    monkeypatch.setattr(elevenlabs, "api_key", lambda: "k" * 20)
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", _open)
+
+    audio, alignment = elevenlabs.synthesise_with_timings(
+        "A.", voice_id="voice-1", model_id="model-1",
+    )
+
+    assert audio == b"MP3BYTES"
+    assert "/with-timestamps" in str(seen["url"])
+    # JSON, not audio: the two halves come back as one answer.
+    assert seen["accept"] == "application/json"
+    # The plain alignment, not the normalised one - that describes the text
+    # after numbers and abbreviations were expanded, which indexes a string the
+    # caller never saw and never measured its lines against.
+    assert alignment["character_start_times_seconds"] == [0.0, 0.4]
+
+
+def test_the_timed_read_sends_the_same_composed_text_it_is_billed_for(monkeypatch) -> None:
+    # The offsets a caller measured are offsets into the composed form, so
+    # sending anything else would time every line to the wrong characters.
+    import json as _json
+    import unicodedata
+
+    seen: dict[str, object] = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return _json.dumps({"audio_base64": "AA==", "alignment": {}}).encode()
+
+    def _open(request, timeout=None):
+        seen["text"] = _json.loads(request.data.decode())["text"]
+        return _Response()
+
+    monkeypatch.setattr(elevenlabs, "api_key", lambda: "k" * 20)
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", _open)
+
+    decomposed = unicodedata.normalize("NFD", "Căn nhà trống rỗng.")
+    elevenlabs.synthesise_with_timings(decomposed, voice_id="v", model_id="m")
+    assert seen["text"] == unicodedata.normalize("NFC", decomposed)
+
+
+def test_a_timed_read_with_no_audio_is_an_error_not_an_empty_file(monkeypatch) -> None:
+    import json as _json
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return _json.dumps({"alignment": {}}).encode()
+
+    monkeypatch.setattr(elevenlabs, "api_key", lambda: "k" * 20)
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", lambda *a, **k: _Response())
+    try:
+        elevenlabs.synthesise_with_timings("A.", voice_id="v", model_id="m")
+    except elevenlabs.ElevenLabsUnavailable as error:
+        assert "no audio" in str(error).lower()
+    else:
+        raise AssertionError("an empty answer must not pass as a narration")

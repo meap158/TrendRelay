@@ -30,6 +30,7 @@ before anything can spend it - for the pre-flight check stage two owes.
 
 from __future__ import annotations
 
+import base64
 import json
 import unicodedata
 import math
@@ -588,6 +589,89 @@ def synthesise(
     # allowance was checked against. Sending the decomposed form would bill
     # more characters than the check reserved.
     body: dict[str, Any] = {"text": billable(text), "model_id": model_id}
+def synthesise_with_timings(
+    text: str,
+    *,
+    voice_id: str,
+    model_id: str = DEFAULT_MODEL,
+    output_format: str = DEFAULT_OUTPUT_FORMAT,
+    language_code: str | None = None,
+    voice_settings: dict[str, Any] | None = None,
+) -> tuple[bytes, dict[str, Any]]:
+    """The same audio as `synthesise`, and when each character was said.
+
+    The alignment is the synthesiser's own account of its own read - not an
+    estimate from the text, and not a recogniser listening to the result. That
+    is the whole reason this endpoint is worth a second function: cutting a
+    video on narration needs to know when a sentence ends, and every other way
+    of learning that is either a guess or a second bill.
+
+    Returns the audio bytes and the alignment, whose
+    `character_start_times_seconds` and `character_end_times_seconds` index the
+    text *as sent* - which is the composed form, so a caller measuring offsets
+    must measure them against `billable(text)` and not against its own copy.
+
+    Billed exactly as `synthesise` is: same characters, same model, same
+    allowance. The timings come back in the same response rather than costing
+    anything more.
+    """
+    key = api_key()
+    if not key:
+        raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
+    body: dict[str, Any] = {"text": billable(text), "model_id": model_id}
+    if language_code:
+        body["language_code"] = language_code
+    if voice_settings:
+        body["voice_settings"] = voice_settings
+    request = urllib.request.Request(
+        f"{API_ROOT}/text-to-speech/{voice_id}/with-timestamps"
+        f"?output_format={output_format}",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            AUTH_HEADER: key,
+            "Content-Type": "application/json",
+            # JSON here, not audio: the response carries the audio base64'd
+            # beside the alignment, because they are one answer.
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=GENERATION_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = ""
+        try:
+            detail = error.read().decode("utf-8", "replace")[:300]
+        except Exception:
+            detail = ""
+        if error.code in {401, 403}:
+            raise ElevenLabsUnavailable(
+                "ElevenLabs refused the key. Nothing was generated."
+            ) from error
+        if error.code == 429:
+            raise ElevenLabsUnavailable(
+                "ElevenLabs is rate limiting this key. Nothing was generated; "
+                "wait before retrying."
+            ) from error
+        raise ElevenLabsUnavailable(
+            f"ElevenLabs answered HTTP {error.code}. {detail}".strip()
+        ) from error
+    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+        raise ElevenLabsUnavailable(
+            "ElevenLabs could not be reached, so nothing was generated."
+        ) from error
+    audio = payload.get("audio_base64") if isinstance(payload, dict) else None
+    if not audio:
+        raise ElevenLabsUnavailable("ElevenLabs returned no audio for this script.")
+    # The normalised alignment describes the text after the service expanded
+    # numbers and abbreviations, so its offsets index a string the caller never
+    # saw. The plain one indexes what was sent, which is what a line's offsets
+    # were measured against.
+    alignment = payload.get("alignment") or {}
+    return base64.b64decode(audio), alignment if isinstance(alignment, dict) else {}
+
+
     if language_code:
         body["language_code"] = language_code
     if voice_settings:
