@@ -25,13 +25,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useLibraryAssets } from "../../lib/use-library-assets";
-import { useLocale } from "../i18n-provider";
+import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
 import { ActionIcon } from "../ui/action-icons";
 import { AssetFilters } from "../ui/asset-filters";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { FilterChipStrip } from "../ui/filter-strip";
 import { Select } from "../ui/select";
 import { SegmentedControl } from "../ui/segmented";
 
@@ -148,6 +149,7 @@ export function StorytellingDialog({
   onError: (text: string) => void;
 }) {
   const { locale } = useLocale();
+  const t = useT();
   const [body, setBody] = useState("");
   const [lines, setLines] = useState<string[]>([]);
   const [reading, setReading] = useState(false);
@@ -405,6 +407,27 @@ export function StorytellingDialog({
     enabled: open && source === "library",
     keep: (asset) => asset.media_kind === "image" || asset.media_kind === "video",
   });
+
+  /**
+   * How many photos and how many videos the current filter matches.
+   *
+   * From the facets rather than from the hook's `total`, which counts audio
+   * too - this picker never offers a sound file, so a total that included
+   * them would be a number nothing on screen adds up to.
+   *
+   * "All" is the two added together for the same reason. It is not the
+   * server's total and is not meant to be.
+   */
+  const kindCount = useCallback(
+    (kind: string) =>
+      library.facets.media_kinds.find((facet) => facet.value === kind)?.count ?? 0,
+    [library.facets],
+  );
+  const kindChips = useMemo(() => [
+    { key: "", label: t("common.all"), count: kindCount("image") + kindCount("video") },
+    { key: "image", label: t("library.images"), count: kindCount("image") },
+    { key: "video", label: t("library.videos"), count: kindCount("video") },
+  ], [t, kindCount]);
 
   const full = picked.length >= MAX_PICTURES;
 
@@ -800,10 +823,39 @@ export function StorytellingDialog({
 
           {source === "library" ? (
             <div className="story-library">
+              {/* The kind first and as chips, the way the campaign picker
+                  raises it above the rest of the row: it is the one filter a
+                  narration asks about constantly - stills to cut on the
+                  sentences, clips where something has to move - and a third
+                  select in a row of selects is not that.
+
+                  Audio is left off rather than listed and refused. A narration
+                  plays pictures; there is no third thing for a sound file to
+                  become here, and `keep` on the hook drops them on arrival. */}
+              <FilterChipStrip
+                chips={kindChips}
+                selected={library.filters.mediaKind ?? ""}
+                onSelect={(kind) => library.setFilters({
+                  ...library.filters,
+                  mediaKind: kind as "" | "image" | "video",
+                }, true)}
+                ariaLabel={t("filters.byMediaKind")}
+                className="story-media-kinds"
+                dense
+              />
+              {/* Everything else the Library narrows by, through the one shared
+                  control (ADR 0025). It was four fields of the eight, which
+                  made the same library answer a smaller question here than on
+                  the page it was picked from - and "the clip with the reviewed
+                  transcript, from this channel, under fifteen seconds" is
+                  exactly how somebody finds a shot for a sentence. */}
               <AssetFilters
                 values={library.filters}
                 facets={library.facets}
-                fields={["query", "channel", "platform", "downloaded"]}
+                fields={[
+                  "query", "effect", "channel", "platform", "processing",
+                  "length", "downloaded",
+                ]}
                 cleared={{}}
                 onChange={(next) => library.setFilters(next)}
               />

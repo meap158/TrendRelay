@@ -122,6 +122,10 @@
 /* Browsing the Library from inside the dialog. The same filter strip every
    other picker carries, so the controls are where somebody already knows. */
 .story-library { display: grid; gap: 8px; min-inline-size: 0; }
+/* Placement only. The chips themselves are the shared strip's, which owns its
+   own geometry and gesture - a second set of chip rules here is how the two
+   would stop looking like the same control. */
+.story-media-kinds { margin-block-end: 2px; }
 .story-tiles-library small { display: block; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .story-tiles-library button.story-in-use { border-color: var(--link); opacity: .55; }
 .story-tiles-library button:disabled { cursor: default; }
