@@ -77,6 +77,27 @@ def test_blur_fill_fits_over_a_blurred_copy_and_cover_crops() -> None:
     assert "force_original_aspect_ratio=decrease" in blur  # the fit foreground
 
 
+def test_a_caption_burns_on_last_and_reads_the_hook_text() -> None:
+    from trendrelay_api.autocut.renderer import _caption_ass
+
+    plan = a_plan("steady-two", 3)
+    request = RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None, destination=Path("/out.mp4"),
+        caption="Wait for the end", caption_position="top",
+    )
+    # No caption file: the final step is a plain copy, no subtitles filter.
+    assert "subtitles=" not in build_filtergraph(request)
+    # With one: it is the last thing done to the montage, over [vout].
+    graph = build_filtergraph(request, caption_file="caption.ass")
+    assert graph.endswith("subtitles=caption.ass[vout]")
+    # The ASS carries the hook text and honours the top placement.
+    ass = _caption_ass(request)
+    assert "Wait for the end" in ass
+    assert "PlayResY: 1920" in ass  # scaled against the real frame height
+
+
 def test_a_hard_cut_template_concats_and_a_fade_template_xfades() -> None:
     # rapid-one and steady-two hard-cut (the references do at those cadences);
     # breathe is the confirmed dissolve.

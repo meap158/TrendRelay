@@ -86,6 +86,10 @@ class PlanRequest(BaseModel):
     #: How off-ratio media meets the canvas: crop to fill, or fit whole over
     #: a blurred copy of itself.
     fill: str = Field(default="cover", pattern="^(cover|blur)$")
+    #: A hook line burned over the whole video; empty draws none. Placed top or
+    #: bottom. Rides the plan/preview/render calls like the other look choices.
+    caption: str = Field(default="", max_length=120)
+    caption_position: str = Field(default="bottom", pattern="^(top|bottom)$")
 
 
 def _known_visuals(
@@ -172,6 +176,8 @@ def _queue(
             kinds=kinds,
             aspect=body.aspect,
             fill=body.fill,
+            caption=body.caption.strip(),
+            caption_position=body.caption_position,
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

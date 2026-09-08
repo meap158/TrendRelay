@@ -22,7 +22,7 @@ const PREFS_KEY = "trendrelay.autocut.prefs";
 //  what a render would accept.
 const MAX_CLIPS = 40;
 
-function readPrefs(): { aspect?: string; fill?: string; speed?: number } {
+function readPrefs(): { aspect?: string; fill?: string; speed?: number; captionPos?: string } {
   try {
     const raw = window.localStorage.getItem(PREFS_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -140,6 +140,8 @@ export function AutoCutDialog({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [aspect, setAspect] = useState<"portrait" | "square" | "landscape">("portrait");
   const [fill, setFill] = useState<"cover" | "blur">("cover");
+  const [caption, setCaption] = useState("");
+  const [captionPos, setCaptionPos] = useState<"top" | "bottom">("bottom");
   const [title, setTitle] = useState("");
   // Clips pulled from the Library inside the modal, on top of the set the
   // dialog opened on. Cleared whenever it opens on a different selection.
@@ -193,6 +195,7 @@ export function AutoCutDialog({
     if (typeof prefs.speed === "number" && prefs.speed >= 0.5 && prefs.speed <= 2) {
       setSpeed(prefs.speed);
     }
+    if (prefs.captionPos === "top" || prefs.captionPos === "bottom") setCaptionPos(prefs.captionPos);
   } else if (!open && wasOpen) {
     setWasOpen(false);
   }
@@ -203,11 +206,11 @@ export function AutoCutDialog({
   useEffect(() => {
     if (!open) return;
     try {
-      window.localStorage.setItem(PREFS_KEY, JSON.stringify({ aspect, fill, speed }));
+      window.localStorage.setItem(PREFS_KEY, JSON.stringify({ aspect, fill, speed, captionPos }));
     } catch {
       /* storage unavailable - the choices simply do not carry over */
     }
-  }, [open, aspect, fill, speed]);
+  }, [open, aspect, fill, speed, captionPos]);
 
   // Revoke a preview blob when it is replaced or the dialog unmounts - the
   // cleanup captures the URL it was set with, so each is freed exactly once.
@@ -263,7 +266,10 @@ export function AutoCutDialog({
     try {
       const res = await apiFetch(`${base}/preview`, {
         method: "POST",
-        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed, aspect, fill }),
+        body: JSON.stringify({
+          asset_ids: order, template_id: templateId, music, speed, aspect, fill,
+          caption: caption.trim(), caption_position: captionPos,
+        }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.detail ?? "Could not start the preview.");
@@ -291,7 +297,7 @@ export function AutoCutDialog({
       setPreviewState("error");
       onError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [templateId, order, music, speed, aspect, fill, apiFetch, base, onError]);
+  }, [templateId, order, music, speed, aspect, fill, caption, captionPos, apiFetch, base, onError]);
 
   // Preview on by default: it builds when the dialog opens and redraws
   // (debounced) whenever the template, music, speed or order changes - so the
@@ -310,6 +316,7 @@ export function AutoCutDialog({
         method: "POST",
         body: JSON.stringify({
           asset_ids: order, template_id: templateId, music, speed, aspect, fill,
+          caption: caption.trim(), caption_position: captionPos,
           title: title.trim() || undefined,
         }),
       });
@@ -322,7 +329,7 @@ export function AutoCutDialog({
     } finally {
       setRendering(false);
     }
-  }, [templateId, order, music, speed, aspect, fill, title, apiFetch, base, onQueued, onError, onClose]);
+  }, [templateId, order, music, speed, aspect, fill, caption, captionPos, title, apiFetch, base, onQueued, onError, onClose]);
 
   // Drag-to-reorder: the dragged clip drops before the one it is released on,
   // moving it in the order the plan and preview read from.
@@ -472,6 +479,37 @@ export function AutoCutDialog({
                 ))}
               </span>
             </label>
+            <label className="autocut-field-wide">
+              <span>Caption <small>optional hook, burned on</small></span>
+              <input
+                type="text"
+                className="autocut-title"
+                value={caption}
+                placeholder="Wait for the end…"
+                maxLength={120}
+                onChange={(event) => setCaption(event.target.value)}
+              />
+            </label>
+            {caption.trim() && (
+              <label>
+                <span>Caption place</span>
+                <span className="autocut-aspect" role="radiogroup" aria-label="Caption position">
+                  {([
+                    ["top", "Top"],
+                    ["bottom", "Bottom"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={captionPos === value}
+                      className={captionPos === value ? "selected" : ""}
+                      onClick={() => setCaptionPos(value)}
+                    >{label}</button>
+                  ))}
+                </span>
+              </label>
+            )}
             <label>
               <span>Name <small>optional</small></span>
               <input

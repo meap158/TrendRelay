@@ -235,6 +235,45 @@ def test_an_unknown_fill_is_refused() -> None:
     assert answer.status_code == 422
 
 
+def test_a_caption_reaches_the_render_trimmed_and_placed(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    for index in range(2):
+        add_image(workspace_id, f"pic-{index}")
+    captured: dict = {}
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: captured.update(kwargs)
+        or {"id": "autocut_c", "status": "queued"},
+    )
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0", "pic-1"], "caption": "  Wait for it  ", "caption_position": "top"},
+    )
+    assert captured["caption"] == "Wait for it"  # trimmed
+    assert captured["caption_position"] == "top"
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0", "pic-1"]},
+    )
+    assert captured["caption"] == ""  # none by default
+    assert captured["caption_position"] == "bottom"
+
+
+def test_a_caption_past_the_limit_or_off_frame_is_refused() -> None:
+    workspace_id = make_workspace()
+    add_image(workspace_id, "pic-0")
+    too_long = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "caption": "x" * 121},
+    )
+    assert too_long.status_code == 422
+    off_frame = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "caption": "hi", "caption_position": "left"},
+    )
+    assert off_frame.status_code == 422
+
+
 def test_a_preview_queues_a_preview_job_and_status_reads_back(monkeypatch) -> None:
     workspace_id = make_workspace()
     for index in range(3):

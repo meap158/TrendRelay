@@ -1192,6 +1192,7 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-template-meta em { color: var(--warn); font-style: normal; }
 .autocut-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .autocut-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.autocut-controls label.autocut-field-wide { grid-column: 1 / -1; }
 .autocut-controls input[type="range"] { inline-size: 100%; }
 .autocut-music-row { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 12px; font-weight: 400; }
 .autocut-music-row small { color: var(--muted); }

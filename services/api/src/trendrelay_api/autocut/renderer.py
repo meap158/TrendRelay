@@ -16,7 +16,8 @@ sitting letterboxed in it.
 
 from __future__ import annotations
 
-import subprocess
+import tempfile
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,10 +57,19 @@ class RenderRequest:
     #: whole clip inside, over a blurred, frame-filling copy of itself - the
     #: short-form look that keeps a landscape photo whole in a portrait video.
     fill: str = "cover"
+    #: A hook line burned over the whole video, the way short-form leans on a
+    #: caption to carry the opening. Empty draws none.
+    caption: str = ""
+    #: Where the caption sits: "top" or "bottom".
+    caption_position: str = "bottom"
 
     @property
     def blurred(self) -> bool:
         return self.fill == "blur"
+
+    @property
+    def captioned(self) -> bool:
+        return bool(self.caption.strip())
 
 
 #: How hard the fill background is blurred. Enough that it reads as a wash of
@@ -161,8 +171,40 @@ def _join(shots: tuple[Shot, ...], labels: list[str]) -> tuple[str, str]:
     return ";".join(graph), current
 
 
-def build_filtergraph(request: RenderRequest) -> str:
-    """The full -filter_complex string for this plan. Pure, so it is testable."""
+def _caption_ass(request: RenderRequest) -> str:
+    """A one-cue ASS file for the hook caption, spanning the whole video.
+
+    Built through the app's shared subtitle formatter, so an AutoCut caption
+    reads with the same weight and outline as a burned-in subtitle elsewhere.
+    Size, margin and outline scale with the frame height, so the caption keeps
+    its proportion whether it is drawn into a full render or a half-size
+    preview, a portrait or a square.
+    """
+    from trendrelay_api.subtitle_formats import Style, to_ass
+    from trendrelay_api.subtitles import Cue
+
+    duration_ms = max(1, round(request.plan.duration * 1000))
+    lines = textwrap.wrap(request.caption.strip(), width=26)[:4] or [request.caption.strip()]
+    cue = Cue(index=1, start_ms=0, end_ms=duration_ms, lines=lines)
+    style = Style(
+        name="AutoCut",
+        font="Arial",
+        size=max(16, round(request.height * 0.045)),
+        bold=True,
+        outline=max(2.0, request.height * 0.004),
+        alignment="top" if request.caption_position == "top" else "bottom",
+        margin_v=max(20, round(request.height * 0.06)),
+    )
+    return to_ass([cue], style, play_width=request.width, play_height=request.height)
+
+
+def build_filtergraph(request: RenderRequest, *, caption_file: str | None = None) -> str:
+    """The full -filter_complex string for this plan. Pure, so it is testable.
+
+    When ``caption_file`` is given (a bare filename resolved from ffmpeg's own
+    working directory), the hook caption is burned onto the finished montage as
+    the last step before the encoder maps it.
+    """
     shots = request.plan.shots
     per_shot = [
         _cover_and_move(shot, index, request.width, request.height, blurred=request.blurred)
@@ -172,8 +214,10 @@ def build_filtergraph(request: RenderRequest) -> str:
     join_graph, final = _join(shots, labels)
     parts = per_shot + ([join_graph] if join_graph else [])
     graph = ";".join(parts)
-    # The final video stream is tagged [vout] for the encoder to map.
-    return f"{graph};[{final}]copy[vout]"
+    # The final video stream is tagged [vout] for the encoder to map. A caption
+    # is drawn on last, so it sits over every clip and transition.
+    last = f"subtitles={caption_file}" if caption_file else "copy"
+    return f"{graph};[{final}]{last}[vout]"
 
 
 def render(ffmpeg: Path, request: RenderRequest) -> Path:
@@ -203,30 +247,48 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
             # rendered as twenty-eight.
             inputs += ["-i", str(path)]
 
-    graph = build_filtergraph(request)
     before = [str(ffmpeg), "-hide_banner", "-nostdin", "-y", *inputs]
-    after = ["-filter_complex", graph, "-map", "[vout]"]
 
     audio = request.audio_path
+    audio_tail: list[str] = []
     if audio is not None and audio.is_file():
         before += ["-i", str(audio)]
-        after += [
+        audio_tail = [
             "-map", f"{len(shots)}:a",
             # End with the video, however long the track is.
             "-shortest",
             "-c:a", "aac", "-b:a", "160k",
         ]
-    after += ["-r", str(FPS), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
 
-    completed, _profile = encode_h264(
-        ffmpeg, before, after, request.destination,
-        # A preview is watched once and discarded, so speed beats quality:
-        # the fastest preset and a looser quantiser cut the encode to a few
-        # seconds. A full render keeps the shared defaults.
-        preset="ultrafast" if request.preview else "veryfast",
-        quality=30 if request.preview else 20,
-        timeout=1800,
-    )
+    def _encode(graph: str, cwd: Path | None):
+        after = ["-filter_complex", graph, "-map", "[vout]", *audio_tail]
+        after += ["-r", str(FPS), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+        return encode_h264(
+            ffmpeg, before, after, request.destination,
+            # A preview is watched once and discarded, so speed beats quality:
+            # the fastest preset and a looser quantiser cut the encode to a few
+            # seconds. A full render keeps the shared defaults.
+            preset="ultrafast" if request.preview else "veryfast",
+            quality=30 if request.preview else 20,
+            timeout=1800,
+            cwd=cwd,
+        )
+
+    if request.captioned:
+        # libass' subtitles filter parses its own argument, where a Windows
+        # path's drive colon and backslashes are read as option separators and
+        # escapes - so the .ass is written into a scratch directory and ffmpeg
+        # is run from inside it, leaving the filter a bare filename. The same
+        # trick the app's subtitle burn-in uses.
+        with tempfile.TemporaryDirectory(prefix="trendrelay-autocut-") as scratch:
+            work = Path(scratch)
+            (work / "caption.ass").write_text(_caption_ass(request), encoding="utf-8")
+            completed, _profile = _encode(
+                build_filtergraph(request, caption_file="caption.ass"), work,
+            )
+    else:
+        completed, _profile = _encode(build_filtergraph(request), None)
+
     if completed.returncode != 0 or not request.destination.is_file():
         stderr = (completed.stderr or b"")
         message = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else str(stderr)
