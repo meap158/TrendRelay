@@ -155,6 +155,7 @@ def enqueue_render(
     preview: bool = False,
     kinds: dict[str, str] | None = None,
     aspect: str = DEFAULT_ASPECT,
+    fill: str = "cover",
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
     """Plan the render now, queue it to draw in the background.
@@ -168,7 +169,7 @@ def enqueue_render(
     )
     if not plan.shots:
         raise ValueError("Choose at least one photo or video to cut together.")
-    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{aspect}:{preview}:{utc_now()}"
+    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{aspect}:{fill}:{preview}:{utc_now()}"
     job_id = "autocut_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(
         job_id,
@@ -183,6 +184,7 @@ def enqueue_render(
             "music": music or template.music,
             "speed": speed,
             "aspect": aspect,
+            "fill": fill,
             "preview": preview,
             "title": title or f"AutoCut - {template.name}",
             "plan": _plan_json(plan),
@@ -235,6 +237,7 @@ def run_render_job(
             width=width,
             height=height,
             preview=is_preview,
+            fill=payload.get("fill", "cover"),
         ))
 
         if is_preview:

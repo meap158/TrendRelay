@@ -88,6 +88,7 @@ export function AutoCutDialog({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [aspect, setAspect] = useState<"portrait" | "square" | "landscape">("portrait");
+  const [fill, setFill] = useState<"cover" | "blur">("cover");
   const [title, setTitle] = useState("");
 
   const base = `/api/workspaces/${workspaceId}/autocut`;
@@ -171,7 +172,7 @@ export function AutoCutDialog({
     try {
       const res = await apiFetch(`${base}/preview`, {
         method: "POST",
-        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed, aspect }),
+        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed, aspect, fill }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.detail ?? "Could not start the preview.");
@@ -199,7 +200,7 @@ export function AutoCutDialog({
       setPreviewState("error");
       onError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [templateId, order, music, speed, aspect, apiFetch, base, onError]);
+  }, [templateId, order, music, speed, aspect, fill, apiFetch, base, onError]);
 
   // Preview on by default: it builds when the dialog opens and redraws
   // (debounced) whenever the template, music, speed or order changes - so the
@@ -217,7 +218,7 @@ export function AutoCutDialog({
       const res = await apiFetch(`${base}/render`, {
         method: "POST",
         body: JSON.stringify({
-          asset_ids: order, template_id: templateId, music, speed, aspect,
+          asset_ids: order, template_id: templateId, music, speed, aspect, fill,
           title: title.trim() || undefined,
         }),
       });
@@ -230,7 +231,7 @@ export function AutoCutDialog({
     } finally {
       setRendering(false);
     }
-  }, [templateId, order, music, speed, aspect, title, apiFetch, base, onQueued, onError, onClose]);
+  }, [templateId, order, music, speed, aspect, fill, title, apiFetch, base, onQueued, onError, onClose]);
 
   // Drag-to-reorder: the dragged clip drops before the one it is released on,
   // moving it in the order the plan and preview read from.
@@ -325,6 +326,24 @@ export function AutoCutDialog({
                     aria-checked={aspect === value}
                     className={aspect === value ? "selected" : ""}
                     onClick={() => setAspect(value)}
+                  >{label}</button>
+                ))}
+              </span>
+            </label>
+            <label>
+              <span>Off-ratio media</span>
+              <span className="autocut-aspect" role="radiogroup" aria-label="How off-ratio media fills the frame">
+                {([
+                  ["cover", "Crop to fill"],
+                  ["blur", "Fit · blur bg"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={fill === value}
+                    className={fill === value ? "selected" : ""}
+                    onClick={() => setFill(value)}
                   >{label}</button>
                 ))}
               </span>

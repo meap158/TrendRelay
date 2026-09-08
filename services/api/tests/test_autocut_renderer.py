@@ -56,6 +56,27 @@ def test_a_video_shot_trims_and_a_still_zoompans() -> None:
     assert "trim=duration=" in graph  # the video is trimmed to its slot
 
 
+def test_blur_fill_fits_over_a_blurred_copy_and_cover_crops() -> None:
+    grid = BeatGrid(bpm=120.0, beats=tuple(round(i * 0.5, 4) for i in range(20)), duration=10.0)
+    plan = plan_cuts(get_template("steady-two"), grid, ["a", "b"])
+    paths = {"a": Path("/a.png"), "b": Path("/b.png")}
+
+    cover = build_filtergraph(RenderRequest(
+        plan=plan, image_paths=paths, audio_path=None, destination=Path("/o.mp4"), fill="cover",
+    ))
+    assert "gblur" not in cover and "overlay" not in cover
+    assert "increase" in cover  # cover scales up then crops
+
+    blur = build_filtergraph(RenderRequest(
+        plan=plan, image_paths=paths, audio_path=None, destination=Path("/o.mp4"), fill="blur",
+    ))
+    # Each clip: split into a blurred frame-filling background and a contained
+    # foreground, overlaid centre.
+    assert blur.count("gblur") == 2
+    assert blur.count("overlay=") == 2
+    assert "force_original_aspect_ratio=decrease" in blur  # the fit foreground
+
+
 def test_a_hard_cut_template_concats_and_a_fade_template_xfades() -> None:
     # rapid-one and steady-two hard-cut (the references do at those cadences);
     # breathe is the confirmed dissolve.

@@ -200,6 +200,38 @@ def test_an_unknown_aspect_is_refused() -> None:
     assert answer.status_code == 422
 
 
+def test_the_fill_mode_reaches_the_render_and_defaults_to_cover(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    for index in range(2):
+        add_image(workspace_id, f"pic-{index}")
+    captured: dict = {}
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: captured.update(kwargs)
+        or {"id": "autocut_f", "status": "queued"},
+    )
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0", "pic-1"], "fill": "blur"},
+    )
+    assert captured["fill"] == "blur"
+    request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0", "pic-1"]},
+    )
+    assert captured["fill"] == "cover"
+
+
+def test_an_unknown_fill_is_refused() -> None:
+    workspace_id = make_workspace()
+    add_image(workspace_id, "pic-0")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "fill": "melt"},
+    )
+    assert answer.status_code == 422
+
+
 def test_a_preview_queues_a_preview_job_and_status_reads_back(monkeypatch) -> None:
     workspace_id = make_workspace()
     for index in range(3):

@@ -80,6 +80,9 @@ class PlanRequest(BaseModel):
     #: The canvas shape - the plan is the same for all, only the render frame
     #: differs, so it rides the render/preview calls, not the plan preview.
     aspect: str = Field(default="portrait", pattern="^(portrait|square|landscape)$")
+    #: How off-ratio media meets the canvas: crop to fill, or fit whole over
+    #: a blurred copy of itself.
+    fill: str = Field(default="cover", pattern="^(cover|blur)$")
 
 
 def _known_visuals(
@@ -165,6 +168,7 @@ def _queue(
             preview=preview,
             kinds=kinds,
             aspect=body.aspect,
+            fill=body.fill,
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

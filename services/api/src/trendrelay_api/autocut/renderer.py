@@ -51,47 +51,79 @@ class RenderRequest:
     #: rather than waiting out a full-quality encode to decide whether to keep
     #: it. The plan and the timing are identical - only the resolution differs.
     preview: bool = False
+    #: How off-ratio media meets the canvas. "cover" fills the frame and crops
+    #: the overflow - clean for media already near the shape. "blur" fits the
+    #: whole clip inside, over a blurred, frame-filling copy of itself - the
+    #: short-form look that keeps a landscape photo whole in a portrait video.
+    fill: str = "cover"
+
+    @property
+    def blurred(self) -> bool:
+        return self.fill == "blur"
 
 
-def _cover_and_move(shot: Shot, index: int, width: int, height: int) -> str:
-    """The filter chain for one picture: cover the frame, then move slowly.
+#: How hard the fill background is blurred. Enough that it reads as a wash of
+#: the clip's colour rather than a second, competing picture.
+FILL_BLUR_SIGMA = 24
 
-    zoompan does the Ken Burns work. It counts in frames, so the shot's
-    seconds become a frame count, and the zoom ramps linearly across them.
-    A pan is a slow drift of the crop centre; both are small on purpose - a
-    still should breathe, not lurch.
+
+def _cover_and_move(shot: Shot, index: int, width: int, height: int, *, blurred: bool) -> str:
+    """The filter chain for one clip: fit it to the canvas, and move a still.
+
+    zoompan does the Ken Burns work on stills; a video carries its own motion.
+    In cover mode the clip fills the frame and the overflow is cropped; in
+    blur mode the whole clip is fitted inside, over a blurred copy of itself
+    that fills the frame - so nothing off-ratio is cut off.
     """
-    cover = (
-        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height}"
-    )
-    if shot.media_kind == "video":
-        # A video carries its own motion, so no zoompan: cover the frame,
-        # normalise the frame rate so xfade/concat align, and trim to the
-        # slot (the input is looped ahead of this, so a short clip still
-        # fills its beats rather than leaving a gap).
-        return (
-            f"[{index}:v]{cover},fps={FPS},trim=duration={shot.duration:.4f},"
-            f"setpts=PTS-STARTPTS,setsar=1,format=yuv420p[v{index}]"
-        )
     frames = max(1, round(shot.duration * FPS))
-    motion: Motion = shot.motion
-    # Oversize first so zoompan has pixels to push into, then cover-crop.
-    scaled = (
-        f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
-        f"crop={width * 2}:{height * 2}"
+    src = f"[{index}:v]"
+
+    if shot.media_kind == "video":
+        # A video's own frames are the timeline; only normalise fps and trim
+        # to the slot (the input is looped ahead of this so a short clip fills
+        # its beats). A still is held for `frames` by zoompan below.
+        prep = f"fps={FPS},trim=duration={shot.duration:.4f},setpts=PTS-STARTPTS"
+    else:
+        prep = None
+
+    if not blurred:
+        cover = (
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}"
+        )
+        if shot.media_kind == "video":
+            return f"{src}{prep},{cover},setsar=1,format=yuv420p[v{index}]"
+        # Oversize so zoompan has pixels to push into, then cover-crop by zoom.
+        motion: Motion = shot.motion
+        scaled = (
+            f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
+            f"crop={width * 2}:{height * 2}"
+        )
+        zoompan = (
+            f"zoompan=z='1+{motion.zoom:.4f}*on/{frames}'"
+            f":x='iw/2-(iw/zoom/2)+({motion.pan_x:.4f}*iw*on/{frames})'"
+            f":y='ih/2-(ih/zoom/2)+({motion.pan_y:.4f}*ih*on/{frames})'"
+            f":d={frames}:s={width}x{height}:fps={FPS}"
+        )
+        return f"{src}{scaled},{zoompan},setsar=1,format=yuv420p[v{index}]"
+
+    # Blur-fit: one source split into a frame-filling blurred background and a
+    # fully-contained foreground, overlaid centre. A still is held to `frames`
+    # on each branch (zoom=1, so a static hold, not a Ken Burns) so the clip
+    # has length; a video's branches inherit its own frames.
+    hold = "" if shot.media_kind == "video" else f",zoompan=z=1:d={frames}:s={width}x{height}:fps={FPS}"
+    pre = f"{src}{prep}," if prep else src
+    bg = (
+        f"[bgsrc{index}]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height}{hold},gblur=sigma={FILL_BLUR_SIGMA}[bg{index}]"
     )
-    # zoom ramps 1.0 -> 1+zoom across the shot; the centre drifts by pan.
-    zoom_expr = f"1+{motion.zoom:.4f}*on/{frames}"
-    x_expr = f"iw/2-(iw/zoom/2)+({motion.pan_x:.4f}*iw*on/{frames})"
-    y_expr = f"ih/2-(ih/zoom/2)+({motion.pan_y:.4f}*ih*on/{frames})"
-    zoompan = (
-        f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}'"
-        f":d={frames}:s={width}x{height}:fps={FPS}"
+    fg = (
+        f"[fgsrc{index}]scale={width}:{height}:force_original_aspect_ratio=decrease{hold}[fg{index}]"
     )
-    return (
-        f"[{index}:v]{scaled},{zoompan},setsar=1,format=yuv420p[v{index}]"
+    overlay = (
+        f"[bg{index}][fg{index}]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v{index}]"
     )
+    return f"{pre}split=2[bgsrc{index}][fgsrc{index}];{bg};{fg};{overlay}"
 
 
 def _join(shots: tuple[Shot, ...], labels: list[str]) -> tuple[str, str]:
@@ -133,7 +165,7 @@ def build_filtergraph(request: RenderRequest) -> str:
     """The full -filter_complex string for this plan. Pure, so it is testable."""
     shots = request.plan.shots
     per_shot = [
-        _cover_and_move(shot, index, request.width, request.height)
+        _cover_and_move(shot, index, request.width, request.height, blurred=request.blurred)
         for index, shot in enumerate(shots)
     ]
     labels = [f"v{index}" for index in range(len(shots))]
