@@ -235,7 +235,7 @@ export const fr: Messages = {
   },
 
   downloads: {
-    heading: "Télécharger depuis Douyin",
+    heading: "Télécharger des médias",
     eyebrowAcquisition: "ACQUISITION DE MÉDIAS",
     intro:
       "Collez des vidéos, des profils ou des collections. TrendRelay les télécharge en arrière-plan et ajoute les fichiers à votre bibliothèque.",
@@ -248,10 +248,10 @@ export const fr: Messages = {
       "L'espace de travail regroupe les médias, les validations et l'historique de publication.",
     createWorkspace: "Créer un espace de travail",
     step: "ÉTAPE {number}",
-    addLinks: "Ajouter des liens Douyin",
+    addLinks: "Ajouter des liens",
     addLinksHelp:
       "Collez un message de partage copié, ou saisissez un lien par ligne.",
-    linksLabel: "Liens Douyin",
+    linksLabel: "Liens",
     pasteFromClipboard: "Coller depuis le presse-papiers",
     readyToDownload: "Prêt à télécharger",
     remove: "Retirer",
@@ -289,7 +289,7 @@ export const fr: Messages = {
     reuseLinks: "Actualisez la session Douyin, puis réutilisez ces liens.",
     openInLibrary: "Ouvrir dans la bibliothèque",
     plan: "Planifier",
-    detectedSources: "Sources Douyin détectées",
+    detectedSources: "Sources détectées",
     refreshList: "Actualiser les téléchargements",
     filter: "Filtrer les téléchargements",
     addCreatorProfile:
@@ -994,6 +994,12 @@ export const fr: Messages = {
     removeFromCampaign: "Retirer",
     tagSelectionAria: "Campagne à laquelle associer la sélection",
     filterByCampaign: "Filtrer par campagne",
+    allCreators: "Tous les créateurs",
+    filterByCreator: "Filtrer par créateur",
+    searchCreators: "Rechercher des créateurs…",
+    noCreatorMatches: "Aucun créateur correspondant",
+    filterBySubId: "Filtrer par sub ID",
+    subIdPlaceholder: "Sub ID d'un rapport de paiement",
     allCampaigns: "Toutes les campagnes",
     filterByFile: "Filtrer par fichier d’import",
     allImports: "Tous les imports",
@@ -1409,6 +1415,8 @@ export const fr: Messages = {
     unreadCount: "Notifications, {count} non lues",
     scheduledFor: "Prévu {when}",
     destinations: "{count, plural, one {# destination} other {# destinations}}",
+    showMore: "{count, plural, one {Afficher 1 plus ancienne} other {Afficher # plus anciennes}}",
+    showingCount: "Affichage de {shown} sur {total}",
     filterLabel: "Filtrer les notifications par statut",
     filterAll: "Tout",
     filter_running: "En cours",

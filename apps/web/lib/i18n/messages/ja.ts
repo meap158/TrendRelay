@@ -231,7 +231,7 @@ export const ja: Messages = {
   },
 
   downloads: {
-    heading: "Douyin からダウンロード",
+    heading: "メディアをダウンロード",
     eyebrowAcquisition: "素材の取得",
     intro:
       "動画・プロフィール・コレクションのリンクを貼り付けてください。バックグラウンドでダウンロードし、ライブラリに追加します。",
@@ -243,10 +243,10 @@ export const ja: Messages = {
     workspaceOwns: "ワークスペースが素材・承認・投稿履歴を管理します。",
     createWorkspace: "ワークスペースを作成",
     step: "ステップ {number}",
-    addLinks: "Douyin のリンクを追加",
+    addLinks: "リンクを追加",
     addLinksHelp:
       "コピーした共有メッセージを貼り付けるか、1 行に 1 つずつリンクを入力してください。",
-    linksLabel: "Douyin リンク",
+    linksLabel: "リンク",
     pasteFromClipboard: "クリップボードから貼り付け",
     readyToDownload: "ダウンロード準備完了",
     remove: "削除",
@@ -282,7 +282,7 @@ export const ja: Messages = {
     reuseLinks: "Douyin セッションを更新してから、これらのリンクを再利用してください。",
     openInLibrary: "ライブラリで開く",
     plan: "企画",
-    detectedSources: "検出された Douyin ソース",
+    detectedSources: "検出されたソース",
     refreshList: "ダウンロード一覧を更新",
     filter: "ダウンロードを絞り込む",
     addCreatorProfile:
@@ -982,6 +982,12 @@ export const ja: Messages = {
     removeFromCampaign: "解除",
     tagSelectionAria: "選択した商品を紐付けるキャンペーン",
     filterByCampaign: "キャンペーンで絞り込み",
+    allCreators: "すべてのクリエイター",
+    filterByCreator: "クリエイターで絞り込む",
+    searchCreators: "クリエイターを検索…",
+    noCreatorMatches: "該当するクリエイターはありません",
+    filterBySubId: "サブIDで絞り込む",
+    subIdPlaceholder: "支払レポートのサブID",
     allCampaigns: "すべてのキャンペーン",
     filterByFile: "インポートファイルで絞り込み",
     allImports: "すべてのインポート",
@@ -1382,6 +1388,8 @@ export const ja: Messages = {
     unreadCount: "通知、未読 {count} 件",
     scheduledFor: "予約済み {when}",
     destinations: "{count, plural, other {# 件の宛先}}",
+    showMore: "{count, plural, other {過去の通知をさらに # 件表示}}",
+    showingCount: "{total} 件中 {shown} 件を表示",
     filterLabel: "ステータスで通知を絞り込む",
     filterAll: "すべて",
     filter_running: "実行中",

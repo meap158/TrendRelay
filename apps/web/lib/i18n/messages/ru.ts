@@ -233,7 +233,7 @@ export const ru: Messages = {
   },
 
   downloads: {
-    heading: "Загрузка из Douyin",
+    heading: "Скачивание медиа",
     eyebrowAcquisition: "СБОР МАТЕРИАЛА",
     intro:
       "Вставьте ссылки на видео, профили или подборки. TrendRelay загрузит их в фоне и добавит файлы в вашу библиотеку.",
@@ -246,10 +246,10 @@ export const ru: Messages = {
       "Рабочее пространство хранит материалы, согласования и историю публикаций.",
     createWorkspace: "Создать рабочее пространство",
     step: "ШАГ {number}",
-    addLinks: "Добавить ссылки Douyin",
+    addLinks: "Добавить ссылки",
     addLinksHelp:
       "Вставьте скопированное сообщение с ссылкой или укажите по одной ссылке в строке.",
-    linksLabel: "Ссылки Douyin",
+    linksLabel: "Ссылки",
     pasteFromClipboard: "Вставить из буфера обмена",
     readyToDownload: "Готово к загрузке",
     remove: "Убрать",
@@ -287,7 +287,7 @@ export const ru: Messages = {
     reuseLinks: "Обновите сессию Douyin и используйте эти ссылки повторно.",
     openInLibrary: "Открыть в библиотеке",
     plan: "Спланировать",
-    detectedSources: "Найденные источники Douyin",
+    detectedSources: "Найденные источники",
     refreshList: "Обновить загрузки",
     filter: "Фильтровать загрузки",
     addCreatorProfile:
@@ -994,6 +994,12 @@ export const ru: Messages = {
     removeFromCampaign: "Убрать из неё",
     tagSelectionAria: "Кампания для отметки выбранного",
     filterByCampaign: "Фильтр по кампании",
+    allCreators: "Все авторы",
+    filterByCreator: "Фильтр по автору",
+    searchCreators: "Поиск авторов…",
+    noCreatorMatches: "Нет подходящих авторов",
+    filterBySubId: "Фильтр по sub ID",
+    subIdPlaceholder: "Sub ID из отчёта о выплатах",
     allCampaigns: "Все кампании",
     filterByFile: "Фильтр по файлу импорта",
     allImports: "Все импорты",
@@ -1408,6 +1414,8 @@ export const ru: Messages = {
     unreadCount: "Уведомления, непрочитанных: {count}",
     scheduledFor: "Запланировано на {when}",
     destinations: "{count, plural, one {# назначение} few {# назначения} many {# назначений} other {# назначения}}",
+    showMore: "{count, plural, one {Показать ещё # старое} few {Показать ещё # старых} other {Показать ещё # старых}}",
+    showingCount: "Показано {shown} из {total}",
     filterLabel: "Фильтровать уведомления по статусу",
     filterAll: "Все",
     filter_running: "Выполняется",
