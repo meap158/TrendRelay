@@ -160,13 +160,16 @@ def queue(
         raise ValueError("Choose a voice before generating.")
     model_id = str(request.get("model_id") or configured["model_id"])
 
-    selected_model = None
-    if request.get("model_id"):
-        selected_model = next(
-            (item for item in elevenlabs.models() if item["model_id"] == model_id), None
-        )
-        if selected_model is None:
-            raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
+    # Looked up whichever way the model was arrived at. This used to run only
+    # when the request named one, so falling back to the configured default
+    # left the model unknown - and an unknown model means no per-request
+    # character ceiling and a cost multiplier silently treated as 1. The
+    # guards were switched off by the ordinary case rather than the odd one.
+    selected_model = next(
+        (item for item in elevenlabs.models() if item["model_id"] == model_id), None
+    )
+    if selected_model is None and request.get("model_id"):
+        raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
 
     # Before the job exists, so a refusal is a sentence with a number in it
     # rather than a failed row somebody finds later.

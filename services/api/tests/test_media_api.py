@@ -1,6 +1,7 @@
 import asyncio
 
 import httpx
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -68,6 +69,36 @@ def test_workspace_member_can_submit_douyin_download(monkeypatch) -> None:
     assert response.json()["job"]["status"] == "queued"
 
 
+@pytest.mark.parametrize("role,status", [("owner", 202), ("analyst", 403)])
+def test_import_links_checks_role_and_passes_scoped_parent(monkeypatch, role, status):
+    workspace = asyncio.run(request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})).json()["workspace"]
+    if role == "analyst":
+        asyncio.run(request("POST", f"/api/workspaces/{workspace['id']}/members", json={"user_id": "analyst-user", "role": role}))
+        app.dependency_overrides[current_user] = lambda: CurrentUser(id="analyst-user")
+    calls = []
+
+    def fake_import(job_id, workspace_id, body, actor):
+        calls.append((job_id, workspace_id, body.urls, actor))
+        return {"id": "download_0123456789abcdef", "status": "queued"}
+
+    monkeypatch.setattr(media_api, "import_captured_links", fake_import)
+    response = asyncio.run(request("POST", f"/api/workspaces/{workspace['id']}/media/downloads/download_aaaaaaaaaaaaaaaa/import-links", json={"urls": ["https://douyin.com/video/123456?x=1"], "confirm_external_action": True}))
+    assert response.status_code == status
+    assert calls == ([("download_aaaaaaaaaaaaaaaa", workspace["id"], ["https://www.douyin.com/video/123456"], "owner-user")] if role == "owner" else [])
+
+
+def test_import_links_hides_missing_or_cross_workspace_parent(monkeypatch):
+    workspace = asyncio.run(request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})).json()["workspace"]
+
+    def missing(*args):
+        raise FileNotFoundError("private parent")
+
+    monkeypatch.setattr(media_api, "import_captured_links", missing)
+    response = asyncio.run(request("POST", f"/api/workspaces/{workspace['id']}/media/downloads/download_aaaaaaaaaaaaaaaa/import-links", json={"urls": ["https://www.douyin.com/video/123456"], "confirm_external_action": True}))
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Download not found."
+
+
 def test_analyst_cannot_submit_download() -> None:
     workspace = asyncio.run(
         request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
@@ -120,7 +151,7 @@ def test_owner_can_start_automatic_douyin_connection(monkeypatch) -> None:
 
     assert response.status_code == 202
     assert response.json()["connection"]["state"] == "waiting_for_login"
-    assert received == {"force_refresh": True}
+    assert received == {"force_refresh": True, "require_login": False}
 
 
 def test_douyin_connection_requires_explicit_confirmation(monkeypatch) -> None:

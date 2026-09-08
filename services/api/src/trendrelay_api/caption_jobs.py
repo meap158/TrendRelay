@@ -193,6 +193,7 @@ def _render(
             regions = _on_screen_regions(reading, asset)
             source_language = reading.language or "en"
             transcript_id = reading.id
+            source_kind = reading.kind
             segments = []
         else:
             transcript = _transcript(
@@ -203,6 +204,7 @@ def _render(
             segments = caption_segments(session, workspace_id, asset_id, transcript)
             source_language = transcript.language or "en"
             transcript_id = transcript.id
+            source_kind = transcript.kind
             regions = []
         source_path = _burn_source(session, asset)
 
@@ -247,6 +249,23 @@ def _render(
         raise RuntimeError(
             "That reading produced no lines to place." if on_screen
             else "The transcript produced no captions."
+        )
+
+    # A translation is a reading of this clip in another language, so it is
+    # filed as one. Kept only in the sidecar files, it was invisible to
+    # everything that reads transcripts - a clip captioned into Vietnamese had
+    # nothing a voiceover could speak, and no way to say why.
+    if target and target != source_language:
+        _record_translation(
+            factory,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            source_transcript_id=transcript_id,
+            kind=source_kind,
+            language=target,
+            cues=cues,
+            job_id=payload.get("id"),
+            actor_user_id=payload.get("actor_user_id"),
         )
 
     progress(0.42, "Writing subtitle files")
@@ -326,6 +345,72 @@ def _burn_source(session: Any, asset: Any) -> Path:
         if candidate.is_file():
             return candidate
     return Path(asset.original_path)
+
+
+def _record_translation(
+    factory: Any,
+    *,
+    workspace_id: str,
+    asset_id: str,
+    source_transcript_id: str,
+    kind: str,
+    language: str,
+    cues: Any,
+    job_id: str | None,
+    actor_user_id: str | None,
+) -> None:
+    """File a translated reading beside the one it came from.
+
+    Filed as `machine`, because it is: a machine read the clip and a machine
+    translated what it read. Nothing here promotes it, and the same rule that
+    keeps an unreviewed draft out of a billed voiceover keeps this out too -
+    what changes is that there is now something to review.
+
+    Re-running a translation replaces the previous one for that language rather
+    than adding a second. The cues are the whole of it, so an older row is a
+    stale copy of the same thing, not a revision worth keeping.
+    """
+    text = "\n".join(
+        " ".join(line for line in getattr(cue, "lines", []) if line).strip()
+        for cue in cues
+    ).strip()
+    if not text:
+        return
+    segments = [
+        {
+            "start_ms": getattr(cue, "start_ms", 0),
+            "end_ms": getattr(cue, "end_ms", 0),
+            "text": " ".join(line for line in getattr(cue, "lines", []) if line).strip(),
+        }
+        for cue in cues
+    ]
+    with factory.begin() as session:
+        existing = session.scalar(
+            select(MediaTranscript).where(
+                MediaTranscript.source_transcript_id == source_transcript_id,
+                MediaTranscript.language == language,
+            )
+        )
+        if existing is not None:
+            existing.text = text
+            existing.segments = segments
+            existing.job_id = job_id
+            return
+        session.add(
+            MediaTranscript(
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                kind=kind,
+                language=language,
+                provider="machine-translation",
+                status="machine",
+                text=text,
+                segments=segments,
+                job_id=job_id,
+                source_transcript_id=source_transcript_id,
+                created_by=actor_user_id,
+            )
+        )
 
 
 def _on_screen_reading(session: Any, workspace_id: str, asset_id: str) -> Any:

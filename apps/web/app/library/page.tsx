@@ -45,6 +45,7 @@ import {
   type LibrarySelectionActionId,
   type LibrarySelectionTarget,
 } from "../../lib/library-selection-actions";
+import { campaignPickerSelection } from "../../lib/campaign-import";
 
 // The editors are heavy and only render inside their dialogs, so their code is
 // loaded when one opens rather than in the Library page's first bundle. ssr:false
@@ -53,12 +54,12 @@ const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.Cap
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
 const CampaignPicker = dynamic(() => import("./campaign-picker").then((m) => m.CampaignPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
-const BatchTranscribe = dynamic(() => import("./batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 const AutoCutDialog = dynamic(() => import("./autocut-dialog").then((m) => m.AutoCutDialog), { ssr: false });
 const StorytellingDialog = dynamic(() => import("./storytelling-dialog").then((m) => m.StorytellingDialog), { ssr: false });
 /** AutoCut cuts pictures, so its minimum is a couple; a single image is not a
     montage. Matched to the API, which filters non-images out server-side. */
 const AUTOCUT_MIN_IMAGES = 2;
+const BatchTranscribe = dynamic(() => import("./batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
@@ -1198,7 +1199,12 @@ function LibraryContent() {
   const [filters, setFilters] = useState<AssetFilterValues>({});
   const notificationAssetQuery = searchParams.get("assets") ?? "";
   const notificationTitle = notificationActionTitle(searchParams.get("notice") ?? "");
-  const downloadJobId = searchParams.get("download") ?? "";
+  const downloadJobQuery = searchParams.get("downloads") ?? searchParams.get("download") ?? "";
+  const downloadJobIds = useMemo(
+    () => [...new Set(downloadJobQuery.split(",").filter((id) => /^download_[a-f0-9]{16}$/.test(id)))],
+    [downloadJobQuery],
+  );
+  const downloadJobFilter = downloadJobIds.join(",");
   // One downloaded file, addressed by the hash of its contents. Checked here
   // rather than trusted, so a hand-edited URL narrows the library to nothing
   // on the server instead of being sent there as a filter it will reject.
@@ -1322,10 +1328,10 @@ function LibraryContent() {
   const filterParams = useCallback(() => {
     const params = assetFilterParams(filters);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
-    if (downloadJobId) params.set("download_job_id", downloadJobId);
+    if (downloadJobFilter) params.set("download_job_ids", downloadJobFilter);
     if (downloadFileHash) params.set("sha256", downloadFileHash);
     return params;
-  }, [downloadFileHash, downloadJobId, filters, notificationAssetIds]);
+  }, [downloadFileHash, downloadJobFilter, filters, notificationAssetIds]);
 
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
@@ -1338,7 +1344,7 @@ function LibraryContent() {
     // use what the controls show now, rather than silently restoring "All".
     const params = assetFilterParams(latestFilters.current);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
-    if (downloadJobId) params.set("download_job_id", downloadJobId);
+    if (downloadJobFilter) params.set("download_job_ids", downloadJobFilter);
     if (downloadFileHash) params.set("sha256", downloadFileHash);
     params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
@@ -1398,7 +1404,7 @@ function LibraryContent() {
         setLoadedWorkspaceId(nextWorkspace);
       }
     }
-  }, [apiFetch, downloadFileHash, downloadJobId, notificationAssetIds, workspaceId]);
+  }, [apiFetch, downloadFileHash, downloadJobFilter, notificationAssetIds, workspaceId]);
 
   useEffect(() => {
     const mediaJobs = notificationJobs.filter((job) => Boolean(job.assetId));
@@ -1452,6 +1458,12 @@ function LibraryContent() {
     title: asset.title,
     mediaKind: asset.media_kind,
   }));
+  // AutoCut cuts photos and videos together; the button appears once the
+  // selection holds enough visuals, and it hands the assets over in order so
+  // the dialog can show and rearrange them on a timeline.
+  const selectedVisuals = selectionList.filter(
+    (asset) => asset.media_kind === "image" || asset.media_kind === "video",
+  );
   const selectionActionItems: ActionMenuItem[] = LIBRARY_SELECTION_ACTIONS.map((action) => {
     const state = selectionActionState(action, selectionTargets);
     const suffix = SELECTION_ACTION_KEY[action.id];
@@ -1924,10 +1936,10 @@ function LibraryContent() {
         <aside className="library-browser">
           <div className="library-browser-sticky-controls">
             <div className="library-browser-toolbar">
-          {(notificationAssetIds.length > 0 || downloadJobId || downloadFileHash) && (
+          {(notificationAssetIds.length > 0 || downloadJobFilter || downloadFileHash) && (
             <div className="library-notification-view" role="status">
               <span className="library-notification-copy">
-                <strong title={notificationTitle || undefined}>{notificationTitle || (downloadJobId ? "Downloaded batch" : downloadFileHash ? "Downloaded file" : t("library.fromNotifications"))}</strong>
+                <strong title={notificationTitle || undefined}>{notificationTitle || (downloadJobFilter ? "Downloaded batch" : downloadFileHash ? "Downloaded file" : t("library.fromNotifications"))}</strong>
                 <small>
                   {downloadFileHash
                     ? loadingAssets
@@ -1939,7 +1951,7 @@ function LibraryContent() {
                       : total
                         ? "One file from your downloads"
                         : "This file is not in your Library yet"
-                    : downloadJobId
+                    : downloadJobFilter
                     ? loadingAssets
                       ? "Filtering this download…"
                       : `${total.toLocaleString()} ${total === 1 ? "item" : "items"} from this download`
@@ -2075,21 +2087,9 @@ function LibraryContent() {
                       disabled={!canImport || selection.size === 0}
                       title="Queue the selected clips into a campaign"
                       onClick={() => setCampaignPickerFor(
-                        assets.filter((asset) => selection.has(asset.id)),
+                        campaignPickerSelection(selection, assets),
                       )}
                     ><ActionIcon name="campaign" />Add to campaign</Button>
-                    <ActionMenu
-                      label={t("library.selectionActions")}
-                      ariaLabel={t("library.selectionActionsLabel")}
-                      icon={<ActionIcon name="edit" />}
-                      items={selectionActionItems}
-                      disabled={!canImport || selectionList.length === 0}
-                      onSelect={(id) => setSelectionAction(id as LibrarySelectionActionId)}
-                    />
-                    {visibleBulkActions.map((action) => (
-                      <Button
-                        key={action.id}
-                        variant={action.id === "delete" ? "danger" : "secondary"}
                     {selectedVisuals.length >= AUTOCUT_MIN_IMAGES && (
                       <Button
                         variant="secondary"
@@ -2113,6 +2113,18 @@ function LibraryContent() {
                         onClick={() => setStorytellingOpen(true)}
                       ><ActionIcon name="effects" />Storytelling</Button>
                     )}
+                    <ActionMenu
+                      label={t("library.selectionActions")}
+                      ariaLabel={t("library.selectionActionsLabel")}
+                      icon={<ActionIcon name="edit" />}
+                      items={selectionActionItems}
+                      disabled={!canImport || selectionList.length === 0}
+                      onSelect={(id) => setSelectionAction(id as LibrarySelectionActionId)}
+                    />
+                    {visibleBulkActions.map((action) => (
+                      <Button
+                        key={action.id}
+                        variant={action.id === "delete" ? "danger" : "secondary"}
                         size="sm"
                         busy={busy === `bulk-${action.id}`}
                         disabled={!canImport || !action.available}
@@ -2703,27 +2715,15 @@ function LibraryContent() {
       )}
       {workspaceId && (
         <CampaignPicker
-          open={campaignPickerFor.length > 0}
+          open={campaignPickerFor !== null}
           workspaceId={workspaceId}
-          assets={campaignPickerFor}
+          assets={campaignPickerFor?.assets ?? []}
+          assetIds={campaignPickerFor?.assetIds ?? []}
           apiFetch={apiFetch}
-          onClose={() => setCampaignPickerFor([])}
+          onClose={() => setCampaignPickerFor(null)}
           onAdded={(text) => { succeed(text); setSelection(new Set()); }}
         />
       )}
-      {workspaceId && selected && (
-        <TranscriptReader
-          open={readingDraft !== null}
-          transcript={readingDraft}
-          workspaceId={workspaceId}
-          assetId={selected.id}
-          apiFetch={apiFetch}
-          onClose={() => setReadingDraft(null)}
-          onUse={(text) => {
-            // Whichever field this reading is a candidate for. The reader does
-            // not know about the form; it hands back words and closes.
-            const field = readingDraft?.kind === "ocr" ? ocrField : speechField;
-            if (field.current) field.current.value = text;
       {workspaceId && (
         <StorytellingDialog
           open={storytellingOpen}
@@ -2746,6 +2746,19 @@ function LibraryContent() {
           onError={(text) => fail(text)}
         />
       )}
+      {workspaceId && selected && (
+        <TranscriptReader
+          open={readingDraft !== null}
+          transcript={readingDraft}
+          workspaceId={workspaceId}
+          assetId={selected.id}
+          apiFetch={apiFetch}
+          onClose={() => setReadingDraft(null)}
+          onUse={(text) => {
+            // Whichever field this reading is a candidate for. The reader does
+            // not know about the form; it hands back words and closes.
+            const field = readingDraft?.kind === "ocr" ? ocrField : speechField;
+            if (field.current) field.current.value = text;
             setReadingDraft(null);
           }}
         />

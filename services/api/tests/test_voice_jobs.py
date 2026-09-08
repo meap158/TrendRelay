@@ -523,3 +523,43 @@ def test_the_length_is_not_part_of_what_makes_a_take_the_same(database) -> None:
         session.get(MediaAsset, item).duration_ms = 61_000
 
     assert queue(item)["id"] == first["id"]
+
+
+def test_the_default_model_is_costed_and_bounded_like_a_chosen_one(monkeypatch) -> None:
+    """Leaving the model unchosen must not switch the guards off.
+
+    The model was looked up only when the request named one. Falling back to
+    the configured default left it unknown, so the per-request character
+    ceiling went unchecked and the cost multiplier defaulted to 1. A long
+    script therefore sailed past the refusal that exists to catch it and failed
+    at the service instead - after the wait, with the model's own answer.
+    """
+    seen: dict = {}
+
+    def models():
+        return [
+            {
+                "model_id": "eleven_multilingual_v2",
+                "character_cost_multiplier": 2,
+                "maximum_text_length": 40,
+            }
+        ]
+
+    def check(text, *, status=None, model=None):
+        seen["model"] = model
+        return len(text)
+
+    monkeypatch.setattr(elevenlabs, "models", models)
+    monkeypatch.setattr(elevenlabs, "defaults", lambda: {
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {},
+        "language_code": None,
+        "voice_id": "voice-abc",
+    })
+    monkeypatch.setattr(elevenlabs, "check_allowance", check)
+    item = asset()
+
+    queue(item)
+
+    assert seen["model"] is not None, "the default model was costed as though unknown"
+    assert seen["model"]["model_id"] == "eleven_multilingual_v2"

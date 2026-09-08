@@ -11,10 +11,10 @@ from sqlalchemy.pool import StaticPool
 
 from trendrelay_api import campaigns_api, media_library, media_library_api
 from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.autopilot_models import CampaignQueueItem
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
-from trendrelay_api.autopilot_models import CampaignQueueItem
 from trendrelay_api.models import Base, Campaign, utc_now
 
 engine = create_engine(
@@ -804,6 +804,24 @@ def test_a_download_batch_narrows_the_list_and_selection_without_an_id_list() ->
         "asset-download-2",
     }
 
+    # A grouped Download row opens all retries as one deduplicated Library
+    # slice, rather than only the latest run represented by the row.
+    grouped = asyncio.run(
+        request(
+            "GET",
+            f"{base}/assets?download_job_ids={wanted},download_fedcba9876543210",
+        )
+    )
+    grouped_selectable = asyncio.run(
+        request(
+            "GET",
+            f"{base}/assets/ids?download_job_ids={wanted},download_fedcba9876543210",
+        )
+    )
+    assert grouped.status_code == 200
+    assert grouped.json()["total"] == 3
+    assert grouped_selectable.json()["matched"] == 3
+
 
 def test_one_downloaded_file_is_found_by_the_hash_of_its_contents() -> None:
     """The link Downloads puts on a single file has only the hash to go on.
@@ -855,7 +873,11 @@ def test_one_downloaded_file_is_found_by_the_hash_of_its_contents() -> None:
 
 def test_a_duplicate_download_keeps_membership_in_each_batch(monkeypatch) -> None:
     workspace_id = create_workspace()
-    source = Path("services/api/tests/.download-membership-test.mp4").resolve()
+    # Beside this file, not beside whatever directory pytest was started from.
+    # Written as a repo-relative path, it resolved against the working
+    # directory - so the test passed from the repo root and failed from
+    # `services/api`, which is where the API suite is usually run.
+    source = Path(__file__).resolve().parent / ".download-membership-test.mp4"
     source.write_bytes(b"same downloaded media")
     monkeypatch.setattr(
         media_library,
@@ -1039,6 +1061,109 @@ def test_an_oversize_captioned_cut_streams_instead_of_refusing(
     assert streamed.status_code == 200
     assert streamed.headers["content-type"].startswith("video/mp4")
     assert streamed.content == b"long captioned render"
+
+
+def _asset_with_versions(workspace_id: str, tmp_path: Path) -> str:
+    clip = tmp_path / "clip.mp4"
+    still = tmp_path / "thumbnail.jpg"
+    clip.write_bytes(b"original bytes")
+    still.write_bytes(b"a small still")
+    with TestingSession() as session:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="Clip",
+            media_kind="video",
+            source_type="upload",
+            original_path=str(clip),
+            original_sha256="a" * 64,
+            mime_type="video/mp4",
+            size_bytes=clip.stat().st_size,
+            created_by="library-owner",
+        )
+        session.add(asset)
+        session.flush()
+        for kind, path, mime in (
+            ("original", clip, "video/mp4"),
+            ("thumbnail", still, "image/jpeg"),
+        ):
+            session.add(MediaAssetVersion(
+                workspace_id=workspace_id,
+                asset_id=asset.id,
+                version_kind=kind,
+                path=str(path),
+                sha256="b" * 64,
+                mime_type=mime,
+                size_bytes=path.stat().st_size,
+            ))
+        session.commit()
+        return asset.id
+
+
+def test_a_streamed_preview_is_the_real_type_by_default(tmp_path: Path) -> None:
+    """An element pointed straight at the stream needs a type it can play."""
+    workspace_id = create_workspace()
+    asset_id = _asset_with_versions(workspace_id, tmp_path)
+
+    response = asyncio.run(request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}"
+        + "/preview/stream?cut=original",
+    ))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("video/mp4")
+    assert response.content == b"original bytes"
+
+
+def test_an_opaque_stream_does_not_announce_itself_as_media(tmp_path: Path) -> None:
+    """The whole point: a grabber reads the type, and video/* is what it takes.
+
+    The Library's large-file fallback used to be the one surface left handing
+    an element a plain `video/mp4` URL - exactly the request IDM catches. The
+    interface now fetches this route itself and asks for it opaque.
+    """
+    workspace_id = create_workspace()
+    asset_id = _asset_with_versions(workspace_id, tmp_path)
+
+    response = asyncio.run(request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}"
+        + "/preview/stream?cut=original&opaque=true",
+    ))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(media_library_api.OPAQUE_MEDIA_TYPE)
+    assert "video" not in response.headers["content-type"]
+    assert "attachment" not in response.headers.get("content-disposition", "")
+    # Only the label changes; a caller that retypes the blob would otherwise
+    # be handed a silently different player.
+    assert response.content == b"original bytes"
+
+
+def test_an_opaque_thumbnail_is_the_same_still_under_a_quiet_type(
+    tmp_path: Path,
+) -> None:
+    """Stills are grabbed too - by grabbers configured for pictures."""
+    workspace_id = create_workspace()
+    asset_id = _asset_with_versions(workspace_id, tmp_path)
+
+    plain = asyncio.run(request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}"
+        + "/content/thumbnail",
+    ))
+    opaque = asyncio.run(request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}"
+        + "/content/thumbnail?opaque=true",
+    ))
+
+    assert plain.status_code == 200
+    assert plain.headers["content-type"].startswith("image/jpeg")
+    assert opaque.status_code == 200
+    assert opaque.headers["content-type"].startswith(media_library_api.OPAQUE_MEDIA_TYPE)
+    assert "image" not in opaque.headers["content-type"]
+    assert opaque.content == plain.content
 
 
 def test_a_campaign_browser_can_hide_what_it_already_queued() -> None:

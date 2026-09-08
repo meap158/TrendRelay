@@ -106,6 +106,9 @@ type Transcript = {
   /** Who produced it - "faster-whisper", "operator-reviewed". The API has
       always sent this; it was read here before it was declared. */
   provider?: string | null;
+  /** The reading this was derived from: set on a translation, and on a review
+      of a machine draft. Null on a first reading of the media itself. */
+  source_transcript_id?: string | null;
 };
 
 type VoiceTarget = {
@@ -118,6 +121,8 @@ type PreparedVoiceTarget = VoiceTarget & {
   transcript: Transcript | null;
   /** The machine reading, kept only when there is no reviewed one to use. */
   draft: Transcript | null;
+  /** Every reading of this clip, original and translated, in any language. */
+  readings: Transcript[];
 };
 
 type Job = {
@@ -198,6 +203,8 @@ export function VoiceEditor({
   const [modelId, setModelId] = useState("");
   const [languageCode, setLanguageCode] = useState("");
   const [languageFilter, setLanguageFilter] = useState("");
+  /** Which reading is spoken: the original, or one of its translations. */
+  const [readingLanguage, setReadingLanguage] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_SETTINGS);
   /** The override. Empty means "use the transcript", which is the common case. */
@@ -249,7 +256,11 @@ export function VoiceEditor({
           const draft = transcript
             ? null
             : speech.find((item) => item.status === "machine") ?? null;
-          return { ...target, transcript, draft };
+          // Every language this clip has been read or translated into. A
+          // translation is a reading in another language, so it belongs in the
+          // same list as the original rather than in a separate idea of
+          // "subtitles" the voice never sees.
+          return { ...target, transcript, draft, readings: speech };
         });
         const reviewed = preparedTargets[0]?.transcript ?? null;
         setData({
@@ -345,8 +356,34 @@ export function VoiceEditor({
   const models = data?.models ?? NO_MODELS;
   const status = data?.status ?? null;
   const preparedTargets = data?.preparedTargets ?? [];
-  const transcript = preparedTargets[0]?.transcript ?? null;
-  const draft = preparedTargets[0]?.draft ?? null;
+  const readings = preparedTargets[0]?.readings ?? [];
+  /**
+   * The languages this clip can be spoken in.
+   *
+   * A translation is a reading in another language, so it is offered here
+   * beside the original. Before translations were transcripts this list was
+   * always one entry long, and a clip captioned into Vietnamese could only be
+   * voiced in the language it was filmed in.
+   */
+  const readingLanguages = [...new Set(
+    readings.map((item) => item.language ?? "und"),
+  )].sort();
+  const chosenLanguage = readingLanguage
+    || preparedTargets[0]?.transcript?.language
+    || preparedTargets[0]?.draft?.language
+    || readingLanguages[0]
+    || "";
+  const inChosen = readings.filter(
+    (item) => (item.language ?? "und") === chosenLanguage,
+  );
+  const chosenReviewed = inChosen.find((item) => item.status === "reviewed") ?? null;
+  const chosenDraft = chosenReviewed
+    ? null
+    : inChosen.find((item) => item.status === "machine") ?? null;
+  const transcript = readingLanguage
+    ? chosenReviewed
+    : preparedTargets[0]?.transcript ?? null;
+  const draft = readingLanguage ? chosenDraft : preparedTargets[0]?.draft ?? null;
   const voicableTargets = preparedTargets.filter((target) => target.transcript);
   const missingTranscripts = preparedTargets.length - voicableTargets.length;
   const loading = open && !data && !loadError;
@@ -681,6 +718,38 @@ export function VoiceEditor({
             </label>
           </div>
 
+          {/* Which reading is spoken. Shown only when there is a choice: a
+              clip read once has nothing to pick, and the control would be a
+              select with a single option asking a question with one answer. */}
+          {readingLanguages.length > 1 && (
+            <label className="voice-field">
+              <span>Script language <em>{readingLanguages.length} readings</em></span>
+              <Select value={chosenLanguage} onChange={(event) => {
+                setReadingLanguage(event.target.value);
+                // The words change, so anything typed against the old reading
+                // is no longer an override of what is on screen.
+                setScript("");
+              }}>
+                {readingLanguages.map((code) => {
+                  const reviewed = readings.some(
+                    (item) => (item.language ?? "und") === code
+                      && item.status === "reviewed",
+                  );
+                  const translated = readings.some(
+                    (item) => (item.language ?? "und") === code
+                      && item.source_transcript_id,
+                  );
+                  return (
+                    <option key={code} value={code}>
+                      {code}
+                      {translated ? " · translated" : " · original"}
+                      {reviewed ? " · reviewed" : " · draft"}
+                    </option>
+                  );
+                })}
+              </Select>
+            </label>
+          )}
           {!batch && <label className="voice-field">
             <span>
               Script

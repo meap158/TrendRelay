@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from trendrelay_api import media_vision
 
-
 # --- the vocabulary -----------------------------------------------------------
 
 

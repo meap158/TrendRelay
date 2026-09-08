@@ -13,11 +13,13 @@ from trendrelay_api.auth import CurrentUser, current_user, require_governed_assu
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, membership, require_role
 from trendrelay_api.integrations.douyin import (
+    CapturedLinksRequest,
     DownloadRequest,
     cancel_download_job,
     clear_download_history,
     create_download_job,
     download_job,
+    import_captured_links,
     list_download_jobs,
     provider_status,
     reconcile_downloads_to_library,
@@ -38,6 +40,7 @@ DatabaseSession = Annotated[Session, Depends(get_session)]
 class ConnectionRequest(BaseModel):
     confirm_external_action: bool = False
     force_refresh: bool = False
+    require_login: bool = False
 
 
 class LibrarySyncRequest(BaseModel):
@@ -176,7 +179,9 @@ def connect_douyin(
             status_code=400,
             detail="Opening the Douyin login browser requires explicit confirmation.",
         )
-    connection = start_connection(force_refresh=body.force_refresh)
+    connection = start_connection(
+        force_refresh=body.force_refresh, require_login=body.require_login
+    )
     audit(
         session,
         request,
@@ -330,6 +335,124 @@ def submit_download(
         job["id"],
         {"provider": "douyin-downloader", "source_count": len(body.urls)},
     )
+    return {"job": job}
+
+
+@router.get("/download-providers")
+def download_providers(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Which services can be downloaded from, and whether each one can run now.
+
+    The interface reads its host patterns, modes and labels from here rather
+    than keeping a second copy: two copies of "which link belongs to whom" is
+    how the box and the server come to disagree about what somebody pasted.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations import download_providers as registry
+    from trendrelay_api.integrations import tiktok
+
+    douyin_status = provider_status()
+    rows = []
+    for row in registry.catalogue():
+        if row["id"] == "tiktok":
+            live = tiktok.provider_status()
+            row = {**row, "ready": live["ready"], "reason": live["reason"],
+                   "revision": live["revision"]}
+        else:
+            row = {
+                **row,
+                "ready": bool(
+                    douyin_status["installed"]
+                    and douyin_status["active"]
+                    and douyin_status["cookies_ready"]
+                ),
+                "reason": "" if douyin_status.get("cookies_ready") else (
+                    "Connect Douyin before downloading."
+                ),
+                "revision": douyin_status.get("revision", ""),
+            }
+        rows.append(row)
+    return {"providers": rows}
+
+
+@router.post("/downloads", status_code=202)
+def submit_provider_download(
+    workspace_id: str,
+    body: DownloadRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Start a download, with the service worked out from the links themselves.
+
+    One submission is one service. A batch spanning two is refused here, named,
+    and counted - it cannot be run as one job, and running it as two behind a
+    single status would leave "failed" unable to say which half.
+    """
+    if body.workspace_id != workspace_id:
+        raise HTTPException(status_code=422, detail="Workspace path and body must match.")
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    from trendrelay_api.integrations import download_providers as registry
+
+    try:
+        provider, matched, _ignored = registry.detect(list(body.urls))
+    except registry.MixedProviders as error:
+        # 409, not 422: nothing about the request is malformed. The links are
+        # each perfectly valid and simply cannot travel together.
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if body.mode not in provider.modes:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{provider.label} cannot fetch {body.mode!r}. It offers: "
+                + ", ".join(provider.modes)
+                + "."
+            ),
+        )
+    try:
+        job = create_download_job(
+            body.model_copy(update={"urls": matched}),
+            actor_user_id=user.id,
+            service=provider.id,
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.download_submitted",
+        "download",
+        job["id"],
+        {"provider": provider.id, "source_count": len(matched)},
+    )
+    return {"job": job}
+
+
+@router.post("/downloads/{job_id}/import-links", status_code=202)
+def import_download_links(
+    workspace_id: str, job_id: str, body: CapturedLinksRequest,
+    request: Request, user: AuthenticatedUser, session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    try:
+        job = import_captured_links(job_id, workspace_id, body, user.id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Download not found.") from error
+    except PermissionError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(session, request, workspace_id, user.id, "media.download_links_imported",
+          "download", job["id"], {"parent_job_id": job_id, "source_count": len(body.urls)})
     return {"job": job}
 
 

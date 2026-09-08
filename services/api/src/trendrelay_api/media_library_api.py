@@ -101,6 +101,19 @@ def _words(value: str | None, limit: int, max_length: int) -> list[str]:
     return result[:limit]
 
 
+def _download_job_ids(value: str | None) -> list[str]:
+    """Parse a bounded CSV of durable download ids without widening a bad filter."""
+    ids = _words(value, 100, 25)
+    if value and (
+        not ids
+        or any(
+            not re.fullmatch(r"download_[a-f0-9]{16}", item) for item in ids
+        )
+    ):
+        raise HTTPException(status_code=422, detail="Invalid download job ids.")
+    return ids
+
+
 class LibraryImport(BaseModel):
     path: str = Field(min_length=1, max_length=1200)
     title: str = Field(min_length=1, max_length=300)
@@ -319,6 +332,12 @@ def _asset_view(
                 "status": transcript.status,
                 "text": transcript.text,
                 "segments": transcript.segments,
+                # What this reading came from: the transcript a translation was
+                # made from, or the draft a review corrects. Without it the
+                # interface cannot tell an original reading from a translated
+                # one, and offered every language as though the clip had been
+                # filmed in it.
+                "source_transcript_id": transcript.source_transcript_id,
                 "created_at": transcript.created_at,
             }
             for transcript in transcripts
@@ -620,6 +639,9 @@ class AssetFilter(BaseModel):
     #: Assets produced by one downloader run. Unlike explicit ids this can
     #: represent thousands of files without putting thousands of ids in a URL.
     download_job_id: str | None = None
+    #: Assets produced by any run represented by a grouped Download row.
+    #: This is a union; identical media still occupies one Library row.
+    download_job_ids: list[str] = Field(default_factory=list, max_length=100)
     #: The content hash of one original file.
     #:
     #: A downloaded file and the library entry made from it share nothing else:
@@ -748,17 +770,25 @@ def asset_conditions(
         values.append(MediaAsset.id.in_(filters.asset_ids))
     if filters.sha256:
         values.append(MediaAsset.original_sha256 == filters.sha256)
-    if filters.download_job_id:
-        batch_id = filters.download_job_id
-        escaped_batch_id = batch_id.replace("_", r"\_")
-        values.append(
-            or_(
+    batch_ids = list(
+        dict.fromkeys(
+            [
+                *filters.download_job_ids,
+                *([filters.download_job_id] if filters.download_job_id else []),
+            ]
+        )
+    )
+    if batch_ids:
+        batch_matches = []
+        for batch_id in batch_ids:
+            escaped_batch_id = batch_id.replace("_", r"\_")
+            batch_matches.extend((
                 MediaAsset.engagement["download_job_id"].as_string() == batch_id,
                 cast(MediaAsset.engagement["download_job_ids"], String).like(
                     f'%"{escaped_batch_id}"%', escape="\\"
                 ),
-            )
-        )
+            ))
+        values.append(or_(*batch_matches))
     if omit != "platform":
         if filters.platform:
             values.append(MediaAsset.platform == filters.platform)
@@ -871,6 +901,7 @@ def list_asset_ids(
     download_job_id: Annotated[
         str | None, Query(pattern=r"^download_[a-f0-9]{16}$")
     ] = None,
+    download_job_ids: Annotated[str | None, Query(max_length=3300)] = None,
     sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
@@ -887,6 +918,7 @@ def list_asset_ids(
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
+        download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
     )
     where = asset_conditions(workspace_id, filters)
@@ -928,6 +960,7 @@ def list_assets(
     download_job_id: Annotated[
         str | None, Query(pattern=r"^download_[a-f0-9]{16}$")
     ] = None,
+    download_job_ids: Annotated[str | None, Query(max_length=3300)] = None,
     sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
@@ -947,6 +980,7 @@ def list_assets(
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
+        download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
     )
 

@@ -401,7 +401,12 @@ DEFAULT_TRANSLATION_PAIRS: tuple[tuple[str, str], ...] = (
 )
 
 
-def pip_install(packages: tuple[str, ...] | list[str], *, no_deps: bool = False) -> None:
+def pip_install(
+    packages: tuple[str, ...] | list[str],
+    *,
+    no_deps: bool = False,
+    target: Path | None = None,
+) -> None:
     """Packages into the isolated runtime, never into the API's own environment.
 
     `--target` rather than a virtual environment because the API already adds
@@ -414,8 +419,16 @@ def pip_install(packages: tuple[str, ...] | list[str], *, no_deps: bool = False)
     Windows rewriting a loaded `.pyd` is denied - so preparing one provider
     while another is mid-analysis failed on a file it had no need to touch.
     The caller then names exactly what is missing instead.
+
+    `target` names a different directory for a tool that has no business
+    sharing this one. `--target` upgrades dependencies unconditionally, so two
+    tools in one directory must agree about every package they have in common:
+    installing a downloader here rewrote `requests`, `urllib3` and `certifi`
+    underneath the transcription stack that was using them. Anything whose
+    dependencies are not the analysis stack's gets its own.
     """
-    RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
+    destination = target or RUNTIME_ROOT
+    destination.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
         [
             sys.executable,
@@ -424,7 +437,7 @@ def pip_install(packages: tuple[str, ...] | list[str], *, no_deps: bool = False)
             "install",
             "--upgrade",
             "--target",
-            str(RUNTIME_ROOT),
+            str(destination),
             *(["--no-deps"] if no_deps else []),
             *packages,
         ],

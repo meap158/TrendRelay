@@ -766,12 +766,14 @@ def test_a_missing_blurred_file_refuses_rather_than_falling_back(
 
 def test_gpu_device_loss_recovers_to_cpu(monkeypatch) -> None:
     """When DirectML GPU device crashes with 887A0005, detect() seamlessly falls back to CPU."""
-    from trendrelay_api.integrations import face_detect_onnx
     import numpy as np
+
+    from trendrelay_api.integrations import face_detect_onnx
 
     error = RuntimeError(
         "[ONNXRuntimeError] : 1 : FAIL : ... Exception(2277) tid(905c) 887A0005 "
-        "The GPU device instance has been suspended. Use GetDeviceRemovedReason to determine the appropriate action."
+        "The GPU device instance has been suspended. "
+        "Use GetDeviceRemovedReason to determine the appropriate action."
     )
     assert face_detect_onnx._is_device_lost(error) is True
 

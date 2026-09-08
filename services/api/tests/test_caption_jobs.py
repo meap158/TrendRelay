@@ -572,3 +572,93 @@ def test_a_clip_that_was_never_measured_cannot_place_anything() -> None:
         assert "never measured" in str(error)
     else:
         raise AssertionError("an unmeasured clip placed a line anyway")
+
+
+def _source_transcript() -> str:
+    """A reading to translate, and the asset it belongs to."""
+    add_asset()
+    with Factory() as session:
+        return session.scalar(select(MediaTranscript.id))
+
+
+def _translate(language: str, *lines: str) -> None:
+    from types import SimpleNamespace
+
+    caption_jobs._record_translation(
+        Factory,
+        workspace_id="ws1",
+        asset_id="asset1",
+        source_transcript_id=_SOURCE[0],
+        kind="speech",
+        language=language,
+        cues=[
+            SimpleNamespace(lines=[line], start_ms=index * 900, end_ms=(index + 1) * 900)
+            for index, line in enumerate(lines)
+        ],
+        job_id=None,
+        actor_user_id="owner",
+    )
+
+
+_SOURCE: list[str] = [""]
+
+
+def test_a_translation_is_filed_as_a_reading_in_that_language() -> None:
+    """The gap this closes: a translated clip with nothing to voice.
+
+    Translations lived only as subtitle files named after their language, so
+    everything reading transcripts - voiceover most of all - was blind to them.
+    A clip captioned into Vietnamese had a Vietnamese track on disk and, as far
+    as the model was concerned, nothing said in Vietnamese at all.
+    """
+    _SOURCE[0] = _source_transcript()
+
+    _translate("vi", "Xin chào", "thế giới")
+
+    with Factory() as session:
+        row = session.scalar(
+            select(MediaTranscript).where(MediaTranscript.language == "vi")
+        )
+    assert row is not None
+    assert row.text.splitlines() == ["Xin chào", "thế giới"]
+    assert row.source_transcript_id == _SOURCE[0]
+    # Machine, because it is: a machine read the clip and a machine translated
+    # it. The rule keeping unreviewed words out of billed speech still holds -
+    # what changes is that there is now something to review.
+    assert row.status == "machine"
+    assert [cue["start_ms"] for cue in row.segments] == [0, 900]
+
+
+def test_translating_the_same_reading_twice_replaces_the_track() -> None:
+    """Cues are the whole of it, so an older row is a stale copy, not history."""
+    _SOURCE[0] = _source_transcript()
+
+    _translate("vi", "first pass")
+    _translate("vi", "second pass")
+
+    with Factory() as session:
+        rows = session.scalars(
+            select(MediaTranscript).where(MediaTranscript.language == "vi")
+        ).all()
+    assert len(rows) == 1
+    assert rows[0].text == "second pass"
+
+
+def test_one_reading_can_be_translated_into_several_languages() -> None:
+    """What the old unique-on-source constraint quietly forbade.
+
+    `source_transcript_id` was unique on its own, which said "a draft is
+    reviewed once" and, unintentionally, "a transcript is translated once".
+    """
+    _SOURCE[0] = _source_transcript()
+
+    for language, word in (("vi", "chào"), ("es", "hola"), ("fr", "salut")):
+        _translate(language, word)
+
+    with Factory() as session:
+        rows = session.scalars(
+            select(MediaTranscript).where(
+                MediaTranscript.source_transcript_id == _SOURCE[0]
+            )
+        ).all()
+    assert sorted(row.language for row in rows) == ["es", "fr", "vi"]
