@@ -1212,12 +1212,18 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-actions { display: flex; justify-content: flex-end; gap: 8px; }
 /* The rendered preview, played inside the dialog before the real render is
    committed - a portrait clip sized to sit without dominating. */
-.autocut-video { display: grid; place-items: center; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); }
-/* The video sits in the chosen canvas shape, capped so a landscape preview
-   does not overrun the pane's height. */
-.autocut-video video { max-block-size: 46vh; max-inline-size: 100%; border-radius: var(--radius-sm); }
-.autocut-video[data-aspect="landscape"] video { max-block-size: 34vh; }
-.autocut-video-building { color: var(--on-ink); font-size: 12px; }
+/* The pane itself takes the chosen canvas shape, so the preview is the right
+   shape the instant Shape changes - before a frame is even drawn - not only
+   once a video of that ratio loads. Sized from a definite height per shape
+   (kept small for landscape so it fits the pane's width) with the width
+   following the aspect-ratio, and centred so the column does not stretch it. */
+.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); }
+.autocut-video[data-aspect="square"] { aspect-ratio: 1 / 1; block-size: min(46vh, 340px); }
+.autocut-video[data-aspect="landscape"] { aspect-ratio: 16 / 9; block-size: min(28vh, 191px); }
+/* The video fills the shaped pane, contained so its own ratio is never cropped
+   even if it and the pane differ for a frame while a new shape renders. */
+.autocut-video video { inline-size: 100%; block-size: 100%; object-fit: contain; }
+.autocut-video-building { color: var(--on-ink); font-size: 12px; padding: 8px; text-align: center; }
 /* The reorder timeline: the chosen clips in sequence, dragged to rearrange -
    a numbered thumbnail per clip, videos marked, scrolling horizontally like
    an editor's track. */
