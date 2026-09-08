@@ -9,6 +9,20 @@ import { AssetThumbnail } from "../publish/composer";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
+//: How this operator likes their AutoCuts presented - shape, fill and speed.
+//  Remembered across opens the way an editor remembers your export settings;
+//  the template and music are matched to the actual clips, so they are not.
+const PREFS_KEY = "trendrelay.autocut.prefs";
+
+function readPrefs(): { aspect?: string; fill?: string; speed?: number } {
+  try {
+    const raw = window.localStorage.getItem(PREFS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};  // no storage, a private window, or malformed - just use defaults
+  }
+}
+
 /** Just what the timeline needs of a selected clip - a superset of what the
     Library and Publish both hold, so either can pass its own asset rows. */
 export type AutoCutAsset = {
@@ -117,6 +131,37 @@ export function AutoCutDialog({
     setPlan(null);
     buildToken.current += 1;
   }
+
+  // Restore the operator's saved presentation choices when the dialog opens.
+  // Done on the open transition during render - like the selection reset
+  // above - so it sets no state in an effect and never mismatches the
+  // server's closed first render, which reads no storage at all.
+  const [wasOpen, setWasOpen] = useState(false);
+  if (open && !wasOpen) {
+    setWasOpen(true);
+    const prefs = readPrefs();
+    if (prefs.aspect === "portrait" || prefs.aspect === "square" || prefs.aspect === "landscape") {
+      setAspect(prefs.aspect);
+    }
+    if (prefs.fill === "cover" || prefs.fill === "blur") setFill(prefs.fill);
+    if (typeof prefs.speed === "number" && prefs.speed >= 0.5 && prefs.speed <= 2) {
+      setSpeed(prefs.speed);
+    }
+  } else if (!open && wasOpen) {
+    setWasOpen(false);
+  }
+
+  // Persist those choices as they change. Only while open, so the closed
+  // mount's defaults never clobber what a past session saved; no setState, so
+  // it is an effect the lint rule is happy with.
+  useEffect(() => {
+    if (!open) return;
+    try {
+      window.localStorage.setItem(PREFS_KEY, JSON.stringify({ aspect, fill, speed }));
+    } catch {
+      /* storage unavailable - the choices simply do not carry over */
+    }
+  }, [open, aspect, fill, speed]);
 
   // Revoke a preview blob when it is replaced or the dialog unmounts - the
   // cleanup captures the URL it was set with, so each is freed exactly once.
