@@ -135,7 +135,12 @@ export function AutoCutDialog({
   const [planning, setPlanning] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [previewState, setPreviewState] = useState<"idle" | "building" | "ready" | "error">("idle");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Two video layers, double-buffered: a new clip loads into the hidden slot
+  // and is cross-faded to only once it has decoded, so the shown frame never
+  // blanks to black on a redraw. `visible` is which slot is on top.
+  const [slots, setSlots] = useState<[string | null, string | null]>([null, null]);
+  const [visible, setVisible] = useState<0 | 1>(0);
+  const hasPreview = slots[0] !== null || slots[1] !== null;
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [aspect, setAspect] = useState<"portrait" | "square" | "landscape">("portrait");
@@ -165,19 +170,27 @@ export function AutoCutDialog({
   // its "updating" badge.
   const selectionKey = assets.map((asset) => asset.id).join(",");
   const [orderKey, setOrderKey] = useState(selectionKey);
-  // Bumped on every reset; a preview build in flight when the selection
-  // changes checks it and drops its result rather than painting the old
-  // media's clip over the new one.
-  const buildToken = useRef(0);
+  // Bumped on every build start and on every reset. A build in flight when a
+  // newer one begins, or when the selection changes, sees the number has moved
+  // and drops its result rather than painting a stale clip over a fresh one -
+  // which is what let a slow older redraw flash in after a newer one.
+  const previewSeq = useRef(0);
+  // Read by the async build to pick the hidden slot, and to free the layers on
+  // unmount, without either becoming a render dependency.
+  const visibleRef = useRef<0 | 1>(0);
+  visibleRef.current = visible;
+  const slotsRef = useRef<[string | null, string | null]>([null, null]);
+  slotsRef.current = slots;
   if (orderKey !== selectionKey) {
     setOrderKey(selectionKey);
     setOrder(selectionKey ? selectionKey.split(",") : []);
     setAdded([]);
     setBrowsing(false);
-    setPreviewUrl(null);
+    setSlots([null, null]);
+    setVisible(0);
     setPreviewState("idle");
     setPlan(null);
-    buildToken.current += 1;
+    previewSeq.current += 1;
   }
 
   // Restore the operator's saved presentation choices when the dialog opens.
@@ -212,9 +225,33 @@ export function AutoCutDialog({
     }
   }, [open, aspect, fill, speed, captionPos]);
 
-  // Revoke a preview blob when it is replaced or the dialog unmounts - the
-  // cleanup captures the URL it was set with, so each is freed exactly once.
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  // Free a preview blob once it leaves both slots - displaced by a newer clip
+  // or cleared on a reset. Compared against the previous slots so a URL still
+  // shown (or waiting hidden) is never revoked, only one nothing points at any
+  // more. Never touches the visible layer, so the picture never drops out.
+  const prevSlots = useRef<[string | null, string | null]>([null, null]);
+  useEffect(() => {
+    for (const url of prevSlots.current) {
+      if (url && url !== slots[0] && url !== slots[1]) URL.revokeObjectURL(url);
+    }
+    prevSlots.current = slots;
+  }, [slots]);
+  // The last blobs outstanding when the dialog unmounts.
+  useEffect(() => () => { for (const url of slotsRef.current) if (url) URL.revokeObjectURL(url); }, []);
+
+  // The shown layer carries the sound; the hidden one is muted so a cross-fade
+  // never plays two tracks at once. Set on the element itself - React's `muted`
+  // prop does not reliably reach the DOM property.
+  const layer0 = useRef<HTMLVideoElement>(null);
+  const layer1 = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (layer0.current) layer0.current.muted = visible !== 0;
+    if (layer1.current) layer1.current.muted = visible !== 1;
+    // Nudge the shown layer to keep playing after it unmutes, in case the
+    // browser would otherwise pause a track that began muted. Best-effort.
+    const front = visible === 0 ? layer0.current : layer1.current;
+    front?.play?.().catch(() => {});
+  }, [visible, slots]);
 
   // Templates, ranked for this many clips, with the best pre-selected.
   useEffect(() => {
@@ -260,8 +297,8 @@ export function AutoCutDialog({
 
   const buildPreview = useCallback(async () => {
     if (!templateId || !order.length) return;
-    const token = buildToken.current;
-    const stale = () => token !== buildToken.current;
+    const seq = ++previewSeq.current;
+    const stale = () => seq !== previewSeq.current;
     setPreviewState("building");
     try {
       const res = await apiFetch(`${base}/preview`, {
@@ -290,11 +327,18 @@ export function AutoCutDialog({
       const clip = await apiFetch(`${base}/preview/${jobId}/video`);
       if (!clip.ok) throw new Error("The preview clip could not be loaded.");
       const blob = await clip.blob();
-      if (stale()) return;  // a new selection took over while this drew
+      if (stale()) return;  // a newer build took over while this drew
       const url = URL.createObjectURL(blob);
-      // The old blob is freed by the revoke-on-change effect, not here, so it
-      // is released exactly once however the URL came to change.
-      setPreviewUrl(url);
+      // Into the hidden slot. Its <video> loads it and, on its first decoded
+      // frame, cross-fades itself in (see onLoadedData) - so the shown clip
+      // stays put until the new one is actually ready to paint. The displaced
+      // blob is freed by the slots effect, never here.
+      const target = (visibleRef.current ^ 1) as 0 | 1;
+      setSlots((current) => {
+        const next: [string | null, string | null] = [...current];
+        next[target] = url;
+        return next;
+      });
       setPreviewState("ready");
     } catch (reason) {
       if (stale()) return;
@@ -659,16 +703,32 @@ export function AutoCutDialog({
         </div>
 
         <div className="autocut-right">
-          {/* The preview, on by default. The old clip stays on screen while a
-              redraw runs, with an 'updating' badge, so a settings change never
-              flashes an empty pane. */}
+          {/* The preview, on by default and double-buffered: two stacked video
+              layers, a redraw loading into the hidden one and cross-fading in
+              only once it has decoded, so the shown clip never blanks. The
+              placeholder holds until a frame is actually visible, and the
+              'updating' badge marks a redraw in flight over the current clip. */}
           <div className="autocut-video" data-aspect={aspect}>
-            {previewUrl
-              ? <video src={previewUrl} controls autoPlay loop playsInline />
-              : <span className="autocut-video-building">
-                  {previewState === "error" ? "Preview failed - adjust and it retries." : "Drawing the preview…"}
-                </span>}
-            {previewState === "building" && previewUrl && (
+            {!slots[visible] && (
+              <span className="autocut-video-building">
+                {previewState === "error" ? "Preview failed - adjust and it retries." : "Drawing the preview…"}
+              </span>
+            )}
+            <video
+              ref={layer0}
+              className={visible === 0 ? "is-shown" : ""}
+              src={slots[0] ?? undefined}
+              controls autoPlay loop playsInline
+              onLoadedData={() => setVisible(0)}
+            />
+            <video
+              ref={layer1}
+              className={visible === 1 ? "is-shown" : ""}
+              src={slots[1] ?? undefined}
+              controls autoPlay loop playsInline
+              onLoadedData={() => setVisible(1)}
+            />
+            {previewState === "building" && slots[visible] && (
               <span className="autocut-video-updating">Updating…</span>
             )}
           </div>

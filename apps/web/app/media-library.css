@@ -1220,9 +1220,13 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); }
 .autocut-video[data-aspect="square"] { aspect-ratio: 1 / 1; block-size: min(46vh, 340px); }
 .autocut-video[data-aspect="landscape"] { aspect-ratio: 16 / 9; block-size: min(28vh, 191px); }
-/* The video fills the shaped pane, contained so its own ratio is never cropped
-   even if it and the pane differ for a frame while a new shape renders. */
-.autocut-video video { inline-size: 100%; block-size: 100%; object-fit: contain; }
+/* Two stacked layers, cross-faded: the shown one is opaque, the hidden one
+   sits at zero opacity waiting for the next clip, so a redraw never flashes
+   black between clips. Contained, so a layer's own ratio is never cropped even
+   if it and the pane differ for a frame while a new shape renders. */
+.autocut-video video { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; object-fit: contain; opacity: 0; transition: opacity 200ms ease; pointer-events: none; }
+.autocut-video video.is-shown { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .autocut-video video { transition: none; } }
 .autocut-video-building { color: var(--on-ink); font-size: 12px; padding: 8px; text-align: center; }
 /* The reorder timeline: the chosen clips in sequence, dragged to rearrange -
    a numbered thumbnail per clip, videos marked, scrolling horizontally like
