@@ -13,7 +13,7 @@ from trendrelay_api import storytelling_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
-from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.media_models import MediaAsset, MediaTranscript
 from trendrelay_api.models import Base
 from trendrelay_api.storytelling import jobs as story_jobs
 
@@ -299,9 +299,17 @@ def test_a_preview_that_has_not_finished_is_not_served_as_an_empty_file() -> Non
     assert answer.status_code == 409
 
 
-def test_b_roll_says_what_to_do_when_there_is_no_key() -> None:
+def test_b_roll_says_what_to_do_when_there_is_no_key(monkeypatch) -> None:
     # A picker that answers "unavailable" and stops is a dead end; this names
     # the thing to add and where.
+    #
+    # The absence is staged rather than assumed: `provider_status` reads the
+    # operator's own saved keys, so a test that just asserted "not configured"
+    # was really asserting "nobody has set Pexels up yet" and started failing
+    # the day somebody did.
+    from trendrelay_api.integrations import pexels
+
+    monkeypatch.setattr(pexels, "configured_keys", lambda names: {name: "" for name in names})
     workspace_id = make_workspace()
     body = request(
         "GET", f"/api/workspaces/{workspace_id}/storytelling/broll/status"
@@ -406,3 +414,87 @@ def test_an_imported_clip_goes_through_the_library_s_own_ingest(monkeypatch) -> 
     candidate, kwargs = seen[0]
     assert candidate.kind == "video"
     assert kwargs["query"] == "rain at night"
+
+
+# --------------------------------------------------------------------------- #
+# Arranging. The step that makes a narration an edit rather than a slideshow.
+# --------------------------------------------------------------------------- #
+
+
+def describe(workspace_id: str, asset_id: str, shows: str) -> None:
+    """Give one picture a machine reading of what it shows."""
+    with TestingSession.begin() as session:
+        session.add(MediaTranscript(
+            id=f"tr-{asset_id}", asset_id=asset_id, workspace_id=workspace_id,
+            kind="vision", status="machine", text=shows, created_by="owner-user",
+            provider="test",
+        ))
+
+
+def test_arranging_answers_every_sentence_with_the_picture_it_is_about() -> None:
+    workspace_id = make_workspace()
+    for asset_id, shows in [
+        ("rain", "heavy rain falling on an empty street"),
+        ("house", "an empty house with boarded windows"),
+        ("dawn", "an empty road at dawn"),
+    ]:
+        add_picture(workspace_id, asset_id)
+        describe(workspace_id, asset_id, shows)
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/arrange",
+        json={"body": SCRIPT, "asset_ids": ["rain", "house", "dawn"]},
+    )
+    assert answer.status_code == 200
+    found = answer.json()
+    assert len(found["assignments"]) == len(found["lines"])
+    # "The house was empty" is answered by the house, not by whatever happened
+    # to be first in the list.
+    assert found["assignments"][0]["asset_id"] == "house"
+    assert "house" in found["assignments"][0]["matched"]
+
+
+def test_arranging_writes_nothing_and_needs_no_voice() -> None:
+    # It is the free step: somebody arranges, changes their mind, arranges
+    # again, and has not spent a generation on any of it.
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "only")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/arrange",
+        json={"body": SCRIPT, "asset_ids": ["only"]},
+    )
+    assert answer.status_code == 200
+    assert {item["asset_id"] for item in answer.json()["assignments"]} == {"only"}
+
+
+def test_arranging_ignores_a_picture_from_another_workspace() -> None:
+    mine, theirs = make_workspace(), make_workspace()
+    add_picture(mine, "mine")
+    add_picture(theirs, "theirs")
+    found = request(
+        "POST", f"/api/workspaces/{mine}/storytelling/arrange",
+        json={"body": SCRIPT, "asset_ids": ["mine", "theirs"]},
+    ).json()
+    assert {item["asset_id"] for item in found["assignments"]} == {"mine"}
+
+
+def test_an_arrangement_reaches_the_render_filtered_to_this_workspace(monkeypatch) -> None:
+    """A named picture the workspace does not own must not reach the planner.
+
+    It would arrive as a shot pointing at a file that cannot be drawn. Blanked
+    rather than rejected, so one stale tile in a long arrangement does not
+    throw away the other forty.
+    """
+    mine, theirs = make_workspace(), make_workspace()
+    add_picture(mine, "mine")
+    add_picture(theirs, "theirs")
+    seen = queued_kwargs(monkeypatch)
+    answer = request(
+        "POST", f"/api/workspaces/{mine}/storytelling/render",
+        json={
+            "body": SCRIPT, "asset_ids": ["mine"], "voice_id": "voice-1",
+            "assignments": ["theirs", "mine", "theirs"],
+        },
+    )
+    assert answer.status_code == 202
+    assert seen[0]["assignments"] == ["", "mine", ""]

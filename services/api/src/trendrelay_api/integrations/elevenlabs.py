@@ -32,8 +32,9 @@ from __future__ import annotations
 
 import base64
 import json
-import unicodedata
 import math
+import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -337,8 +338,26 @@ def voices() -> list[dict[str, Any]]:
     return [_voice_view(item) for item in collected if item.get("voice_id")]
 
 
+#: The model catalogue, briefly. Unlike the allowance - which is deliberately
+#: read live, because a cached one is how a batch gets waved through an empty
+#: account - this is a catalogue rather than a moving number. Every queued
+#: generation needs it to know the per-request ceiling and the cost multiplier,
+#: and a batch of twenty-five should not ask twenty-five times.
+_MODEL_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+MODEL_CACHE_SECONDS = 300
+
+
+def reset_model_cache() -> None:
+    """Forget the catalogue. For tests, and for a key that has just changed."""
+    _MODEL_CACHE.clear()
+
+
 def models() -> list[dict[str, Any]]:
-    """The live text-to-speech models and limits available to this key."""
+    """The text-to-speech models and limits available to this key."""
+    key = api_key()
+    cached = _MODEL_CACHE.get(key)
+    if cached and (time.monotonic() - cached[0]) < MODEL_CACHE_SECONDS:
+        return cached[1]
     payload = _request("/models")
     if not isinstance(payload, list):
         raise ElevenLabsUnavailable("ElevenLabs returned an invalid model catalog.")
@@ -379,7 +398,11 @@ def models() -> list[dict[str, Any]]:
                 "maximum_text_length": _int_or_none(item, "maximum_text_length_per_request"),
             }
         )
-    return sorted(available, key=lambda item: (item["model_id"] != DEFAULT_MODEL, item["name"]))
+    ordered = sorted(
+        available, key=lambda item: (item["model_id"] != DEFAULT_MODEL, item["name"])
+    )
+    _MODEL_CACHE[key] = (time.monotonic(), ordered)
+    return ordered
 
 
 def voice_catalog() -> dict[str, Any]:
@@ -566,29 +589,6 @@ def check_allowance(
     return cost
 
 
-def synthesise(
-    text: str,
-    *,
-    voice_id: str,
-    model_id: str = DEFAULT_MODEL,
-    output_format: str = DEFAULT_OUTPUT_FORMAT,
-    language_code: str | None = None,
-    voice_settings: dict[str, Any] | None = None,
-) -> bytes:
-    """One block of text as audio. Returns the bytes; writes nothing.
-
-    Deliberately does not check the allowance itself. The check belongs at the
-    moment somebody asks - where it can still be a refusal with a number in it -
-    rather than here, where it would be a second call on every generation and a
-    surprise at the end of a queue.
-    """
-    key = api_key()
-    if not key:
-        raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
-    # Composed, because that is what `characters_in` counted and what the
-    # allowance was checked against. Sending the decomposed form would bill
-    # more characters than the check reserved.
-    body: dict[str, Any] = {"text": billable(text), "model_id": model_id}
 def synthesise_with_timings(
     text: str,
     *,
@@ -672,6 +672,29 @@ def synthesise_with_timings(
     return base64.b64decode(audio), alignment if isinstance(alignment, dict) else {}
 
 
+def synthesise(
+    text: str,
+    *,
+    voice_id: str,
+    model_id: str = DEFAULT_MODEL,
+    output_format: str = DEFAULT_OUTPUT_FORMAT,
+    language_code: str | None = None,
+    voice_settings: dict[str, Any] | None = None,
+) -> bytes:
+    """One block of text as audio. Returns the bytes; writes nothing.
+
+    Deliberately does not check the allowance itself. The check belongs at the
+    moment somebody asks - where it can still be a refusal with a number in it -
+    rather than here, where it would be a second call on every generation and a
+    surprise at the end of a queue.
+    """
+    key = api_key()
+    if not key:
+        raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
+    # Composed, because that is what `characters_in` counted and what the
+    # allowance was checked against. Sending the decomposed form would bill
+    # more characters than the check reserved.
+    body: dict[str, Any] = {"text": billable(text), "model_id": model_id}
     if language_code:
         body["language_code"] = language_code
     if voice_settings:
@@ -712,3 +735,79 @@ def synthesise_with_timings(
         raise ElevenLabsUnavailable(
             "ElevenLabs could not be reached, so nothing was generated."
         ) from error
+
+
+def shared_voices(language: str, *, page_size: int = 20) -> list[dict[str, Any]]:
+    """Voices in ElevenLabs' shared library that read this language.
+
+    `/v2/voices` answers "what is on this key", and for most accounts that is
+    the premade set, which is verified in English and a handful of others. A
+    Vietnamese narration finds nothing there and reads as unsupported - twelve
+    Vietnamese voices exist, they are simply in the library rather than in the
+    account.
+
+    A read. Adding one to the account is a separate, deliberate act, because it
+    changes what the operator's ElevenLabs subscription holds.
+    """
+    if not language:
+        return []
+    query = urllib.parse.urlencode({"language": language, "page_size": page_size})
+    try:
+        payload = _request(f"/v1/shared-voices?{query}")
+    except ElevenLabsUnavailable:
+        # The picker still works without this; it is an offer of more voices,
+        # never a precondition for using the ones already there.
+        return []
+    found = payload.get("voices") if isinstance(payload, dict) else None
+    return [
+        {
+            "voice_id": str(item.get("voice_id") or ""),
+            "public_owner_id": str(item.get("public_owner_id") or ""),
+            "name": str(item.get("name") or "Unnamed voice"),
+            "accent": str(item.get("accent") or ""),
+            "description": str(item.get("description") or ""),
+            "preview_url": str(item.get("preview_url") or ""),
+            "language": str(item.get("language") or language),
+        }
+        for item in (found or [])
+        if isinstance(item, dict) and item.get("voice_id") and item.get("public_owner_id")
+    ]
+
+
+def add_shared_voice(public_owner_id: str, voice_id: str, name: str) -> str:
+    """Add one shared voice to this key's library, and return its new id.
+
+    The id a shared voice is listed under is not the id it has once added, so
+    the new one is read back from the response rather than assumed - using the
+    library's id to speak would address a voice this key does not have.
+    """
+    key = api_key()
+    if not key:
+        raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
+    if not public_owner_id or not voice_id:
+        raise ElevenLabsUnavailable("That voice cannot be added.")
+    request = urllib.request.Request(
+        f"{API_ROOT}/v1/voices/add/{urllib.parse.quote(public_owner_id)}"
+        f"/{urllib.parse.quote(voice_id)}",
+        data=json.dumps({"new_name": name[:100] or "Added voice"}).encode("utf-8"),
+        headers={AUTH_HEADER: key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=GENERATION_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = ""
+        try:
+            detail = error.read().decode("utf-8", "replace")[:200]
+        except Exception:
+            detail = ""
+        raise ElevenLabsUnavailable(
+            f"ElevenLabs would not add that voice (HTTP {error.code}). {detail}".strip()
+        ) from error
+    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+        raise ElevenLabsUnavailable("ElevenLabs could not be reached.") from error
+    added = payload.get("voice_id") if isinstance(payload, dict) else None
+    if not added:
+        raise ElevenLabsUnavailable("ElevenLabs added the voice but did not say under which id.")
+    return str(added)

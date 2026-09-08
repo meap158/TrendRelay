@@ -48,6 +48,10 @@ MAX_PICTURES = 200
 #: speech, and past the point where one ffmpeg graph draws the whole thing.
 MAX_SCRIPT_CHARACTERS = 20_000
 
+#: How many sentences an arrangement can name. A script at the character
+#: ceiling written entirely in very short sentences, with room over.
+MAX_SENTENCES = 2_000
+
 
 def _template_view(story: planner.StoryTemplate) -> dict[str, Any]:
     return {
@@ -113,6 +117,9 @@ def story_text(body: str) -> str:
 
 class RenderBody(ScriptRequest):
     asset_ids: list[str] = Field(default_factory=list, max_length=MAX_PICTURES)
+    #: One picture per sentence - the matcher's suggestion, or what somebody
+    #: moved it to. Empty means the order the pictures were chosen in.
+    assignments: list[str] = Field(default_factory=list, max_length=MAX_SENTENCES)
     template_id: str = "explainer"
     #: The ElevenLabs voice to read it, or nothing when a recording is used.
     voice_id: str | None = None
@@ -160,6 +167,12 @@ def _queue(
             workspace_id, user.id,
             body=body.body,
             asset_ids=visuals,
+            # Filtered against the same set the pictures were: an assignment
+            # naming something this workspace does not own would otherwise
+            # reach the planner as a picture that cannot be drawn.
+            assignments=[
+                asset_id if asset_id in set(visuals) else "" for asset_id in body.assignments
+            ],
             template_id=body.template_id,
             voice_id=body.voice_id,
             model_id=body.model_id,
@@ -401,3 +414,157 @@ def import_broll(
     )
     session.commit()
     return {"job": queued, "credit": candidate.credit}
+
+
+# --------------------------------------------------------------------------- #
+# Arranging: which picture belongs to which sentence.
+# --------------------------------------------------------------------------- #
+
+
+class ArrangeBody(ScriptRequest):
+    asset_ids: list[str] = Field(default_factory=list, max_length=MAX_PICTURES)
+
+
+@router.post("/arrange")
+def arrange_pictures(
+    workspace_id: str,
+    body: ArrangeBody,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Suggest a picture for each sentence, and say what it was suggested on.
+
+    Offline and free: no voice is generated, nothing is written. It answers
+    the question somebody would otherwise answer by dragging twenty tiles into
+    order, and it is a suggestion - the arrangement that comes back is sent on
+    to `/render` only after somebody has looked at it, changed what they
+    disagree with, and pressed the button.
+
+    No durations, because there is no audio yet. The clip-too-short rule
+    therefore does not fire here; it is the one thing this cannot know before
+    the voice exists, and guessing at reading speed would apply it wrongly in
+    whichever language the guess was not calibrated for.
+    """
+    from trendrelay_api.media_models import MediaTranscript
+    from trendrelay_api.storytelling import match
+
+    membership(session, workspace_id, user.id)
+    lines = [line.text for line in script.split(story_text(body.body))]
+    ordered = _known_visuals(session, workspace_id, body.asset_ids)
+    if not lines or not ordered:
+        return {"lines": lines, "assignments": []}
+
+    assets = {
+        asset.id: asset
+        for asset in session.scalars(
+            select(MediaAsset).where(MediaAsset.id.in_(ordered))
+        ).all()
+    }
+    readings: dict[str, list[Any]] = {}
+    for transcript in session.scalars(
+        select(MediaTranscript)
+        .where(MediaTranscript.asset_id.in_(ordered))
+        .order_by(
+            (MediaTranscript.status == "reviewed").desc(),
+            MediaTranscript.created_at.desc(),
+        )
+    ).all():
+        readings.setdefault(transcript.asset_id, []).append(transcript)
+
+    candidates = []
+    for asset_id in ordered:
+        asset = assets.get(asset_id)
+        if asset is None:
+            continue
+        evidence, machine = match.evidence_for(asset, readings.get(asset_id, []))
+        candidates.append(match.Candidate(
+            asset_id=asset_id,
+            media_kind=asset.media_kind or "image",
+            duration_seconds=(asset.duration_ms / 1000.0) if asset.duration_ms else None,
+            evidence=evidence,
+            machine=machine,
+        ))
+
+    found = match.arrange(lines, candidates)
+    return {
+        "lines": lines,
+        "assignments": [
+            {
+                "line": item.line,
+                "asset_id": item.asset_id,
+                "score": item.score,
+                # The words it was matched on. Shown, because a suggestion
+                # nobody can see the reason for is one nobody trusts twice.
+                "matched": list(item.matched),
+            }
+            for item in found
+        ],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Voices. The ones on the key, and the ones that could be.
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/voices/shared")
+def shared_voices(
+    workspace_id: str,
+    language: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Voices in ElevenLabs' library that read this language.
+
+    A read, and the answer to a question the picker could not otherwise
+    answer. `/v2/voices` reports what is on the key, which for most accounts
+    is the premade set - verified in English and a handful of others. Asking
+    for a Vietnamese narration finds nothing there and reads as "Vietnamese is
+    not supported", when what is true is that twelve Vietnamese voices exist
+    and none of them have been added to this account.
+    """
+    from trendrelay_api.integrations import elevenlabs
+
+    membership(session, workspace_id, user.id)
+    return {"voices": elevenlabs.shared_voices(language), "language": language}
+
+
+class AddVoice(BaseModel):
+    public_owner_id: str = Field(min_length=1, max_length=128)
+    voice_id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/voices/add", status_code=201)
+def add_voice(
+    workspace_id: str,
+    body: AddVoice,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Add one shared voice to this key's ElevenLabs library.
+
+    Deliberately its own endpoint and its own button rather than something
+    choosing a language quietly does. It changes what the operator's
+    ElevenLabs account holds, it counts against that account's voice slots,
+    and it is theirs - so it happens when they ask for it, once, and is
+    written down in the audit log like every other outward change.
+    """
+    from trendrelay_api.integrations import elevenlabs
+
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    try:
+        added = elevenlabs.add_shared_voice(body.public_owner_id, body.voice_id, body.name)
+    except elevenlabs.ElevenLabsUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    audit(
+        session, request, workspace_id, user.id,
+        "storytelling.voice_added", "elevenlabs_voice", added,
+        {"name": body.name, "from_library": body.voice_id},
+    )
+    session.commit()
+    # The id it is listed under is not the id it has once added, so the picker
+    # is told the new one rather than left addressing a voice this key has not
+    # got.
+    return {"voice_id": added, "name": body.name}
