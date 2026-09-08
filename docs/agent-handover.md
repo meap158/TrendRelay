@@ -7,6 +7,131 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Shopee listing counts corrected (2026-09-06)
+
+User requested truthful notification/Attribution counts and complete, efficient
+fetch batches. The notification used only 250 recent job rows to calculate a
+495-product batch, falsely claiming the others were never queued. All 495 jobs
+existed. `shopee-listing-e6DNi7A0` had 494 succeeded jobs and one failed job;
+one of those successes stored an empty product-state shell. Thus that refresh
+had 493 verified fetches, one empty response, and one failure. The catalog has
+494 valid snapshots out of 495 products (the failed refresh retained an older
+valid snapshot). Never conflate historical batch results with current catalog
+coverage, or count a nonempty JSON wrapper as a fetched listing.
+
+Changes: `shopee_enrichment.recent_jobs` retains all active jobs and returns
+workspace-scoped full-batch summaries independent of the history cap. Frontend
+`listing-batch-progress.ts` displays fetched/pending/failed/missing-data counts;
+single notifications also reject empty successes. The parser rejects empty or
+wrong-product state; workers retry responses without usable listing data and
+preserve previous valid snapshots. Attribution summaries/full reads suppress
+legacy empty listings, and its page refreshes as batch results change. Enqueue
+now queues all eligible requested products by default (removed silent 100 cap),
+atomically; worker rate limiting and bounded retries remain. Operational progress
+no longer silently truncates to 200 jobs.
+
+Recovery was scoped to the affected workspace and two products. Retry
+`shopee-enrich-m4UAUu7URI0` succeeded for the previously failed refresh of
+`product_cf153492a929447ebffdaad28ea5f7be`. Retry `shopee-enrich-8BY7-3bozsQ`
+targets `product_28bcc2ed19714b3a995361c26241b1ce`; last observed running in the
+existing worker after an initial sandbox network refusal. An independent public
+page check outside the sandbox confirmed Shopee still returned no actual product
+data at `https://shopee.vn/product/1102885844/55502053067`. Do not count that
+product as fetched or claim full completion. Recheck job state before retrying.
+No servers/workers were restarted. No historical jobs/listings were deleted.
+
+Verification: 70 targeted Python tests, 3 frontend progress regressions,
+TypeScript and targeted ESLint passed. Node test subprocesses were sandbox-blocked;
+running `node --experimental-strip-types lib/listing-batch-progress.test.ts`
+from `apps/web` runs the same tests in-process. Changes coexist with a very large
+pre-existing dirty worktree; do not stage or revert unrelated edits.
+
+## Douyin download investigation: resume here (2026-09-05)
+
+The requested outcome is to recover the profile's available videos, not merely
+make a small batch report success. Source: `https://v.douyin.com/PTWjhbbFNY4/`,
+creator `塔塔Thalia`, profile sec_uid
+`MS4wLjABAAAAde6Wgqq4LSxzTsQueTz3BgTXSWQ7JhhBqn3IyZIaxWE`.
+Workspace: `ws_03c59534908647d892d8e0dab62780e8`.
+
+Verified state: Library originally had three videos because failed earlier
+runs retained media without finalizing imports. Sibling-run reconciliation
+recovered 40 batch files: 39 by this creator plus one credited to `14cc`.
+Latest profile runs `download_f02063a692691da8` and
+`download_8d0d4aa2b8664fcd` have 40 artifacts. A subsequent manual 20-link batch,
+`download_062a9ad83033bbce`, completed with three artifacts, bringing this
+creator's Library count to 42. The profile declares 369 posts; completion is
+not established. All paths and counts need revalidation before acting.
+
+Final follow-up state (after the bookmarklet capture and retries): the original
+384-link pass produced 299 artifacts with 45 source errors; an incremental
+retry recovered 40, and a final retry recovered the remaining five. The last
+retry has 344 cumulative artifacts and zero source errors. Provider storage now
+contains 366 unique posts for this creator and the Library contains 366 creator
+video assets; the profile declares 369, so three posts were not exposed by the
+provider/session. All related Library-ingest jobs are terminal (no queued jobs).
+
+Anonymous cookie capture now saves automatically, waits briefly for tokens to
+settle and closes; explicit `require_login` keeps the login window open. Cookie
+values are only in ignored `.data/douyin/cookies.json`; never print them.
+Sign-in belongs in the left connection panel. Each batch retains **Fetch
+missing**, including signed-out sessions, with provider/Library deduplication.
+A short response alone no longer sets `requires_sign_in`.
+
+The user reports variable results in signed-out Chrome. The controlled browser
+showed a service error on one load and 20 profile video links followed by
+`登录后查看更多作品` on another. Earlier API probes returned HTTP 403. Those are
+session-specific observations, not proof that all anonymous sessions have a
+fixed 40-post ceiling. Stop at explicit login/access checks. No evasion needed
+or implemented. Do not repeat empty polling or restart servers/workers.
+
+The manual fallback is **Import links** on each expanded download batch. Its
+bookmarklet is `apps/web/lib/douyin-bookmarklet.ts`, shown in a shared Dialog
+from `apps/web/app/dashboard.tsx`. It collects only loaded profile video anchors,
+excludes hidden/footer links, canonicalizes/deduplicates and stores the capture
+per profile in browser localStorage. Run it after each manual scroll to retain
+virtualized links. It copies links; clipboard failure opens selectable text.
+Nothing is transmitted automatically. Captures over 400 links are refused
+without truncation because DownloadRequest currently accepts at most 400 URLs.
+The Import links dialog now accepts the pasted result directly. It validates
+direct HTTPS video URLs, canonicalizes/deduplicates them, refuses more than 400
+without truncation, and queues a scoped incremental child job. The child keeps
+the parent's source group, media-kind selection, and provenance, so Fetch
+missing and Open Library continue to operate on the cumulative batch. The API
+checks workspace membership/role and governed assurance before accepting the
+import; no clipboard contents or browser cookies are transmitted automatically.
+Fetch missing on a grouped batch retries the union of manually captured direct
+video links through that same parent-group endpoint; a profile-only batch still
+uses the original profile URL.
+
+The first bookmarklet selected whole-page anchors and could include unrelated
+footer videos. The current v2 storage key avoids reusing those captures.
+Six tests execute the actual generated code in a DOM fixture and cover scope,
+newlines, repeated capture, corrupted/blocked storage and clipboard rejection.
+Live Chrome bookmark installation/copy QA still remains.
+
+Another confirmed bug: mixed batches silently omitted empty/code-3 responses
+from `source_errors`, explaining the unhelpful “Fetched 3” success record for
+the 20-link trial. The worker now preserves each failed/empty source's detail;
+the dashboard displays these batches as Needs attention with expandable
+reasons. Historical job results were not rewritten. A retry can now capture
+the missing evidence for the other 17 links. Do not claim all 20 downloaded.
+
+Verification: six bookmarklet execution tests, three import-link frontend tests,
+ten focused worker/API tests, TypeScript and focused ESLint pass. Worker tests now isolate their connection
+status file in tmp_path. Approved pytest execution may be needed because of
+Windows temp-directory permissions. A synthetic test status write was restored
+to the previously verified anonymous-connected state; no cookies were changed.
+
+Next steps: verify bookmarklet on the user's working Chrome profile and inspect
+outcomes of future captured-link retries. Per-batch paste/import is implemented
+at `POST /api/workspaces/{workspace_id}/media/downloads/{job_id}/import-links`;
+the endpoint enforces membership/assurance, strict direct-video URL validation,
+deduplication, the 400-link cap, and cumulative provenance. All 369 remains
+unverified; no stealth or login-gate bypass is intended.
+Preserve unrelated dirty worktree edits. The larger local log is in the ignored
+root `AGENT_HANDOVER.md`.
+
 ---
 
 ## 1. Working agreements
