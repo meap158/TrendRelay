@@ -498,3 +498,69 @@ def test_an_arrangement_reaches_the_render_filtered_to_this_workspace(monkeypatc
     )
     assert answer.status_code == 202
     assert seen[0]["assignments"] == ["", "mine", ""]
+
+
+# --------------------------------------------------------------------------- #
+# The shared-voice offer. What exists, and what this key may actually have.
+# --------------------------------------------------------------------------- #
+
+
+def test_each_offered_voice_says_whether_this_plan_can_take_it(monkeypatch) -> None:
+    """The verdict travels with the voice, decided once on the server.
+
+    Nineteen of the thirty Vietnamese voices are closed to a free key. Sending
+    the list without saying which is how the picker grew nineteen Add buttons
+    that could not work.
+    """
+    from trendrelay_api.integrations import elevenlabs
+
+    workspace_id = make_workspace()
+    monkeypatch.setattr(elevenlabs, "plan", lambda: {
+        "known": True, "tier": "free", "voice_limit": 3,
+        "voice_slots_used": 0, "voice_slots_left": 3,
+        "characters_left": 10_000, "character_limit": 10_000,
+    })
+    monkeypatch.setattr(elevenlabs, "shared_voices", lambda language: [
+        {"voice_id": "open", "public_owner_id": "o", "name": "Ms.Thanh", "accent": "southern",
+         "description": "", "preview_url": "", "language": language,
+         "free_users_allowed": True, "already_added": False},
+        {"voice_id": "closed", "public_owner_id": "o", "name": "Minh", "accent": "southern",
+         "description": "", "preview_url": "", "language": language,
+         "free_users_allowed": False, "already_added": False},
+    ])
+
+    body = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/voices/shared?language=vi",
+    ).json()
+
+    offered = {voice["name"]: voice for voice in body["voices"]}
+    assert offered["Ms.Thanh"]["addable"] is True
+    assert offered["Minh"]["addable"] is False
+    assert "paid" in offered["Minh"]["reason"].lower()
+    # And the plan itself, because "3 slots" is not guessable from a row of
+    # names and is the other thing that stops an add.
+    assert body["plan"]["tier"] == "free"
+    assert body["plan"]["voice_slots_left"] == 3
+
+
+def test_a_plan_that_cannot_be_read_still_offers_the_voices(monkeypatch) -> None:
+    # An unreadable plan is not a refusal. The voices are still listed and
+    # ElevenLabs gets to answer for itself.
+    from trendrelay_api.integrations import elevenlabs
+
+    workspace_id = make_workspace()
+    monkeypatch.setattr(elevenlabs, "plan", lambda: {
+        "known": False, "tier": "", "voice_limit": 0,
+        "voice_slots_used": 0, "voice_slots_left": 0,
+        "characters_left": 0, "character_limit": 0,
+    })
+    monkeypatch.setattr(elevenlabs, "shared_voices", lambda language: [
+        {"voice_id": "v", "public_owner_id": "o", "name": "Someone", "accent": "",
+         "description": "", "preview_url": "", "language": language,
+         "free_users_allowed": False, "already_added": False},
+    ])
+    body = request(
+        "GET", f"/api/workspaces/{workspace_id}/storytelling/voices/shared?language=vi",
+    ).json()
+    assert body["voices"][0]["addable"] is True
+    assert body["plan"]["known"] is False
