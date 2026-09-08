@@ -56,8 +56,11 @@ surface for free. The renderer it maps to needs an `enqueue_render(workspace_id,
 actor_user_id, *, …, preview, kinds, factory)` in the shape AutoCut and
 Storytelling already share.
 
-## Still to smooth
+## Web entry points
 
-The Library dialogs (AutoCut, Storytelling) do not yet Save-as-draft or resume
-from one — the feature is complete end-to-end over HTTP and MCP, but the web
-entry points are the next increment.
+The AutoCut dialog saves its arrangement as a draft (Save draft creates, then
+updates the same one) and reopens a saved draft from a list under the actions,
+pulling its spec and its media (fetched by id, so it resumes even when the dialog
+opened on a different selection). The **Storytelling** dialog follows the same
+shape and is the remaining increment; the drafts system itself is complete
+end-to-end over HTTP and MCP for both kinds.
