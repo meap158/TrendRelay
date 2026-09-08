@@ -46,6 +46,18 @@ JOB_KIND = "storytelling_render"
 DEFAULT_ASPECT = "16:9"
 
 
+#: The most shots one render can draw.
+#:
+#: Not a taste limit. Every shot is an `-i` on ffmpeg's command line, and
+#: Windows refuses one over 32,767 characters - measured at about two hundred
+#: and ten with real library paths, once the filtergraph itself was moved into
+#: a file. Held below that so a long path cannot be the thing that decides it.
+#:
+#: Refused here, where the number is known and the message can say what to do,
+#: rather than by ffmpeg at the end of a paid generation.
+MAX_SHOTS = 180
+
+
 class NarrationUnavailable(RuntimeError):
     """The script could not be turned into timed speech."""
 
@@ -237,6 +249,11 @@ def run_render_job(
 
         story = planner.template(payload["template_id"])
         plan = planner.plan(timed, pictures, story)
+        if len(plan.shots) > MAX_SHOTS:
+            raise NarrationUnavailable(
+                f"This script comes to {len(plan.shots)} shots, and one render can "
+                f"draw {MAX_SHOTS}. Split it into parts and make them separately."
+            )
         cues = tuple(planner.captions(timed)) if payload.get("subtitles", True) else ()
 
         destination = root / f"{job_id}.mp4"

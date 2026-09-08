@@ -186,3 +186,20 @@ def test_every_shipped_template_plans_something_renderable() -> None:
 
 def test_an_unknown_template_falls_back_rather_than_failing() -> None:
     assert template("no-such-template").id == TEMPLATES[0].id
+
+
+def test_a_script_longer_than_one_render_can_draw_is_refused_with_a_number() -> None:
+    """The renderer's real ceiling, said where the number is known.
+
+    Every shot is an `-i` on ffmpeg's command line and Windows caps that at
+    32,767 characters - about two hundred and ten shots with real library
+    paths. Past it the failure is `CreateProcess` refusing, at the end of a
+    paid generation, with nothing a person could act on.
+    """
+    from trendrelay_api.storytelling.jobs import MAX_SHOTS
+
+    # Comfortably under the measured wall, so a long path cannot decide it.
+    assert MAX_SHOTS < 210
+    lines = [line(f"Sentence {n}.", n * 2.0, n * 2.0 + 1.8) for n in range(MAX_SHOTS + 20)]
+    result = plan(lines, PICTURES, EXPLAINER)
+    assert len(result.shots) > MAX_SHOTS, "this script must be over the limit to test it"
