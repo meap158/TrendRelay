@@ -695,3 +695,57 @@ def test_a_timed_read_with_no_audio_is_an_error_not_an_empty_file(monkeypatch) -
         assert "no audio" in str(error).lower()
     else:
         raise AssertionError("an empty answer must not pass as a narration")
+
+
+# --------------------------------------------------------------------------- #
+# The URL. One rule, because the request that got it wrong was the one that
+# could not use the helper holding it.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_path_that_names_its_version_is_not_given_a_second_one() -> None:
+    """`/v1/v1/...` answers 404, and a 404 here reads as "no such voice".
+
+    Which is why adding a Vietnamese voice failed with "ElevenLabs would not
+    add that voice (HTTP 404)" while the voice, the ids and the endpoint were
+    all perfectly real.
+    """
+    assert elevenlabs._url("/v1/voices/add/owner/voice") == (
+        "https://api.elevenlabs.io/v1/voices/add/owner/voice"
+    )
+    assert elevenlabs._url("/v2/voices") == "https://api.elevenlabs.io/v2/voices"
+
+
+def test_a_path_that_names_no_version_is_given_one() -> None:
+    assert elevenlabs._url("/text-to-speech/abc") == (
+        "https://api.elevenlabs.io/v1/text-to-speech/abc"
+    )
+
+
+def test_adding_a_voice_asks_the_endpoint_that_exists(monkeypatch, saved_key) -> None:
+    """The URL is asserted, not just the happy answer.
+
+    A test that only stubbed the response would have passed against the broken
+    address - the whole failure was that the request went somewhere real and
+    wrong.
+    """
+    seen: dict = {}
+
+    class Answer:
+        def read(self): return json.dumps({"voice_id": "new-id"}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+
+    def capture(request, timeout=None):
+        seen["url"] = request.full_url
+        seen["method"] = request.method
+        seen["body"] = json.loads(request.data.decode())
+        return Answer()
+
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", capture)
+    added = elevenlabs.add_shared_voice("owner-1", "voice-1", "Ms.Thanh")
+
+    assert added == "new-id"
+    assert seen["method"] == "POST"
+    assert seen["url"] == "https://api.elevenlabs.io/v1/voices/add/owner-1/voice-1"
+    assert seen["body"] == {"new_name": "Ms.Thanh"}

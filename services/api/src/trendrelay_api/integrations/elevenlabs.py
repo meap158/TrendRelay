@@ -71,6 +71,21 @@ def api_key() -> str:
     return effective_value(API_KEY_ENV).strip()
 
 
+def _url(path: str) -> str:
+    """The full URL for a path, whether or not it names its own version.
+
+    `API_ROOT` already ends in `/v1`, so a path that also starts with a version
+    has to be joined to the origin instead. Getting this wrong asks for
+    `/v1/v1/...`, and the answer is a 404 that reads exactly like the voice not
+    existing rather than the URL not existing - which is how it survived being
+    looked at.
+
+    A function rather than a line inside the GET helper, because the request
+    that got it wrong was the one POST that could not use that helper.
+    """
+    return f"{API_ORIGIN}{path}" if path.startswith(("/v1/", "/v2/")) else f"{API_ROOT}{path}"
+
+
 def _request(path: str) -> Any:
     """One GET, with the failure translated into something readable.
 
@@ -82,7 +97,7 @@ def _request(path: str) -> Any:
     key = api_key()
     if not key:
         raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
-    url = f"{API_ORIGIN}{path}" if path.startswith(("/v1/", "/v2/")) else f"{API_ROOT}{path}"
+    url = _url(path)
     request = urllib.request.Request(
         url,
         headers={AUTH_HEADER: key, "Accept": "application/json"},
@@ -787,8 +802,10 @@ def add_shared_voice(public_owner_id: str, voice_id: str, name: str) -> str:
     if not public_owner_id or not voice_id:
         raise ElevenLabsUnavailable("That voice cannot be added.")
     request = urllib.request.Request(
-        f"{API_ROOT}/v1/voices/add/{urllib.parse.quote(public_owner_id)}"
-        f"/{urllib.parse.quote(voice_id)}",
+        _url(
+            f"/v1/voices/add/{urllib.parse.quote(public_owner_id)}"
+            f"/{urllib.parse.quote(voice_id)}"
+        ),
         data=json.dumps({"new_name": name[:100] or "Added voice"}).encode("utf-8"),
         headers={AUTH_HEADER: key, "Content-Type": "application/json"},
         method="POST",
