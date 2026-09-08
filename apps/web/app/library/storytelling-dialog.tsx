@@ -49,6 +49,7 @@ import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
 import { ActionIcon } from "../ui/action-icons";
 import { AssetFilters } from "../ui/asset-filters";
+import { Badge } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
@@ -78,6 +79,24 @@ type SharedVoice = {
   /** What it was listed under, so a list fetched for one language is never
       shown under another. */
   language: string;
+  /** Whether this plan may actually take it, and what to say when it may not.
+      Decided on the server, where the one set of rules about plans lives. */
+  addable: boolean;
+  reason: string;
+};
+
+/** What the ElevenLabs subscription allows. `known` is false when it could not
+    be read, which is different from a plan that allows nothing. */
+type Plan = {
+  known: boolean;
+  tier: string;
+  voice_limit: number;
+  voice_slots_used: number;
+  voice_slots_left: number;
+  /** Characters this plan has left to speak before it resets. A narration is
+      charged by the character, so this is what the script is measured against. */
+  characters_left: number;
+  character_limit: number;
 };
 type Tile = {
   id: string;
@@ -172,6 +191,7 @@ export function StorytellingDialog({
       because a model reads a language in any voice. */
   const [anyVoice, setAnyVoice] = useState(false);
   const [shared, setShared] = useState<SharedVoice[]>([]);
+  const [plan, setPlan] = useState<Plan | null>(null);
   const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -235,6 +255,7 @@ export function StorytellingDialog({
       setVoices(voiceBody?.voices ?? []);
       setModels(voiceBody?.models ?? []);
       setDefaultModel(voiceBody?.defaults?.model_id ?? "");
+      setPlan(voiceBody?.plan ?? null);
       // What this workspace works in, unless ElevenLabs was configured for
       // something else, and only ever a language something can read.
       setLanguage((current) => current || openingLanguage({
@@ -278,7 +299,9 @@ export function StorytellingDialog({
           `${base}/voices/shared?language=${encodeURIComponent(language)}`,
         );
         const payload = await response.json();
-        if (!cancelled) setShared(response.ok ? payload.voices ?? [] : []);
+        if (cancelled) return;
+        setShared(response.ok ? payload.voices ?? [] : []);
+        setPlan(response.ok ? payload.plan ?? null : null);
       } catch {
         if (!cancelled) setShared([]);
       }
@@ -497,6 +520,20 @@ export function StorytellingDialog({
         accents: voice.accent ? [voice.accent] : [],
       }]);
       setVoiceId(payload.voice_id);
+      // It is on the key now, so it is neither on offer nor free of charge:
+      // the row stops being addable and the slot it took is spent. Both are
+      // corrected here rather than by re-reading, so the list does not
+      // silently keep offering a voice that has just been taken.
+      setShared((current) => current.map((item) => (
+        item.voice_id === voice.voice_id
+          ? { ...item, addable: false, reason: "Already on your key" }
+          : item
+      )));
+      setPlan((current) => (current && current.known ? {
+        ...current,
+        voice_slots_used: current.voice_slots_used + 1,
+        voice_slots_left: Math.max(0, current.voice_slots_left - 1),
+      } : current));
       onQueued(`${voice.name} is on your ElevenLabs key now.`);
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That voice could not be added.");
@@ -539,8 +576,23 @@ export function StorytellingDialog({
     }
   }
 
+  /**
+   * Whether the plan has the characters to read this script.
+   *
+   * A narration is charged per character, and the free tier holds ten
+   * thousand a month - about six minutes of speech. Over that, the render
+   * does not refuse: it queues, spends the voice, and fails partway with the
+   * audio half made. Counted from the script's own length, which is what the
+   * synthesiser is sent.
+   */
+  const overBudget = Boolean(
+    plan?.known && plan.character_limit > 0 && body.length > plan.characters_left,
+  );
+
   const byId = useMemo(() => new Map(picked.map((asset) => [asset.id, asset])), [picked]);
-  const ready = Boolean(body.trim() && lines.length && picked.length && effectiveVoiceId && !busy);
+  const ready = Boolean(
+    body.trim() && lines.length && picked.length && effectiveVoiceId && !busy && !overBudget,
+  );
   const short = lines.length > 0 && picked.length > 0 && picked.length < lines.length;
 
   return (
@@ -557,8 +609,9 @@ export function StorytellingDialog({
               : !lines.length ? "Nothing in the script to read."
                 : !picked.length ? "Add a picture for the narration to play over."
                   : language && !modelId ? "No model on this key reads that language."
-                    : !effectiveVoiceId ? "Choose a voice."
-                      : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
+                    : overBudget ? "The script is longer than this plan has characters left."
+                      : !effectiveVoiceId ? "Choose a voice."
+                        : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
           </span>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={!ready} busy={busy} onClick={() => void render()}>
@@ -584,6 +637,15 @@ export function StorytellingDialog({
                   {lines.length === 1 ? "sentence" : "sentences"}.
                   {short && ` You picked ${picked.length}, so some repeat.`}</>
                 : "Nothing to read yet."}
+            {/* Before the voice is spent, not after. Going over does not come
+                back as a refusal - it comes back as a half-made recording. */}
+            {overBudget && plan && (
+              <><br /><strong>
+                {body.length.toLocaleString()} characters, and this plan has{" "}
+                {plan.characters_left.toLocaleString()} left of{" "}
+                {plan.character_limit.toLocaleString()}.
+              </strong></>
+            )}
           </p>
         </section>
 
@@ -651,22 +713,56 @@ export function StorytellingDialog({
                 </p>
                 {offers.length > 0 && (
                   <ul className="story-shared">
-                    {offers.slice(0, 6).map((voice) => (
+                    {offers.slice(0, 8).map((voice) => (
                       <li key={voice.voice_id}>
                         <span>
                           <strong>{voice.name}</strong>
-                          {voice.accent && <small>{voice.accent}</small>}
+                          <small>
+                            <span className="story-voice-accent">{voice.accent}</span>
+                            {/* Why this one cannot be taken, on the row it
+                                cannot be taken from. The three refusals are
+                                different problems - a plan, a full shelf, and
+                                one that already happened - and a badge saying
+                                which is the difference between knowing what
+                                to do and clicking again. */}
+                            {!voice.addable && voice.reason && (
+                              <Badge
+                                tone={voice.reason.startsWith("Already") ? "good" : "warn"}
+                                title={voice.reason.startsWith("Already")
+                                  ? "This voice is already on your ElevenLabs key"
+                                  : `${voice.reason}. Your key is on the ${plan?.tier || "current"} plan.`}
+                              >{voice.reason}</Badge>
+                            )}
+                          </small>
                         </span>
                         <Button
                           variant="secondary"
                           size="sm"
                           busy={adding === voice.voice_id}
+                          disabled={!voice.addable}
                           onClick={() => void addVoice(voice)}
-                          title={`Add ${voice.name} to your ElevenLabs voices`}
+                          title={voice.addable
+                            ? `Add ${voice.name} to your ElevenLabs voices`
+                            : voice.reason}
                         >Add</Button>
                       </li>
                     ))}
                   </ul>
+                )}
+                {/* What the plan actually allows, said once under the list.
+                    The free tier holds three voices and is closed to most of
+                    the library, and neither of those is guessable from a row
+                    of names. */}
+                {plan?.known && (
+                  <p className="story-note">
+                    {plan.tier ? `${plan.tier} plan` : "This plan"}
+                    {" · "}
+                    {plan.voice_slots_left > 0
+                      ? `${plan.voice_slots_left} of ${plan.voice_limit} voice slots free`
+                      : `all ${plan.voice_limit} voice slots used`}
+                    {offers.some((voice) => !voice.addable && voice.reason.includes("paid"))
+                      && ", and some of these need a paid plan"}
+                  </p>
                 )}
                 <label className="story-toggle">
                   <input

@@ -149,7 +149,17 @@
 .story-shared li { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-inline-size: 0; }
 .story-shared span { display: grid; min-inline-size: 0; }
 .story-shared strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.story-shared small { color: var(--muted); font-size: 10px; }
+/* The accent and, when it cannot be taken, why. A row rather than a line so
+   the badge sits beside the accent instead of pushing the name apart. */
+.story-shared small { display: flex; gap: 5px; align-items: center; min-inline-size: 0; color: var(--muted); font-size: 10px; }
+/* The accent gives way, not the badge. Sized here rather than by reaching
+   into the badge's own class from this stylesheet - a component's classes
+   belong to the component, and restyling one from outside makes it a thing
+   two files define. */
+.story-voice-accent { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A refusal reads as unavailable, not as broken: the row stays, the name stays
+   legible, and only the offer is withdrawn. */
+.story-shared li:has(button:disabled) strong { color: var(--muted); }
 
 /* The shot list. One row per sentence: its number, the picture it opens on,
    and the words that will be spoken over it. */
