@@ -44,6 +44,7 @@ import {
   type Voice,
 } from "../../lib/storytelling-voice";
 import { useLibraryAssets } from "../../lib/use-library-assets";
+import { usePersistedState } from "../ui/use-persisted-state";
 import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
@@ -172,7 +173,20 @@ export function StorytellingDialog({
 }) {
   const { locale } = useLocale();
   const t = useT();
-  const [body, setBody] = useState("");
+  /**
+   * The script, kept where a closed dialog cannot take it.
+   *
+   * Everything else here is a choice that takes a second to make again - a
+   * template, a shape, a language. The script is writing, and it was being
+   * thrown away by Escape, by a misplaced click on the backdrop, and by
+   * picking one more picture from the Library. Per workspace, because two
+   * workspaces are two different pieces of work.
+   */
+  const [body, setBody] = usePersistedState<string>(
+    `trendrelay.storytelling.script.${workspaceId || "none"}`,
+    "",
+    (value): value is string => typeof value === "string",
+  );
   const [lines, setLines] = useState<string[]>([]);
   const [reading, setReading] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -582,6 +596,9 @@ export function StorytellingDialog({
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail ?? "That could not be queued.");
       onQueued("Reading the script, then cutting the pictures to it. It lands in your Library.");
+      // It has been said now. Held until this point on purpose: a render that
+      // failed is precisely when the words are still wanted.
+      setBody("");
       onClose();
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That could not be queued.");
@@ -651,14 +668,18 @@ export function StorytellingDialog({
                   {lines.length === 1 ? "sentence" : "sentences"}.
                   {short && ` You picked ${picked.length}, so some repeat.`}</>
                 : "Nothing to read yet."}
-            {/* Before the voice is spent, not after. Going over does not come
-                back as a refusal - it comes back as a half-made recording. */}
-            {overBudget && plan && (
-              <><br /><strong>
-                {body.length.toLocaleString()} characters, and this plan has{" "}
-                {plan.characters_left.toLocaleString()} left of{" "}
-                {plan.character_limit.toLocaleString()}.
-              </strong></>
+            {/* What it will cost, on the line that already exists rather than
+                a status row of its own. Before the voice is spent, not after:
+                going over does not come back as a refusal, it comes back as a
+                half-made recording. */}
+            {plan?.known && plan.character_limit > 0 && body.length > 0 && (
+              overBudget
+                ? <><br /><strong>
+                  {body.length.toLocaleString()} characters, and this plan has{" "}
+                  {plan.characters_left.toLocaleString()} left of{" "}
+                  {plan.character_limit.toLocaleString()}.
+                </strong></>
+                : ` ${body.length.toLocaleString()} of ${plan.characters_left.toLocaleString()} characters left this month.`
             )}
           </p>
         </section>
