@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import trendrelay_api.main  # noqa: E402,F401  isort:skip
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
@@ -17,7 +18,6 @@ from trendrelay_api.autopilot_models import (
 from trendrelay_api.campaign_slots import day_slots, pin_item_to_slot, release_pin
 from trendrelay_api.models import Base, PublishingSlot, UserProfile, Workspace
 from trendrelay_api.publication_models import PublicationExecution
-import trendrelay_api.main  # noqa: E402,F401  isort:skip
 
 NOW = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)  # a Monday
 DAY = date(2026, 8, 10)

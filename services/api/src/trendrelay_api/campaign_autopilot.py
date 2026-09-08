@@ -211,6 +211,18 @@ def resolve_placement(
         follow_up_kind,
     )
 
+    # Before the `has_link` check, because this is a decision about the
+    # destination rather than about the campaign's offers. An operator turning
+    # affiliate links off on one account - a network that treats them as spam,
+    # an account under review - is a different fact from a campaign that has no
+    # offer to attach, and the two must not wear each other's explanation.
+    if override == "none":
+        return LinkPlacement(
+            "none",
+            "Affiliate links are off for this destination, so this account "
+            "posts organically. The campaign's products are untouched and "
+            "still go out on its other accounts.",
+        )
     if not has_link:
         return LinkPlacement("none", "No offer is attached to this campaign.")
     if override and override != "auto":
@@ -384,12 +396,19 @@ def compose_products(
     networks put additional products in disclosed replies; other link-friendly
     networks keep the small product list in the clickable caption/description.
     """
-    if not products:
+    # No products, or an account told to carry none. Both compose the same
+    # post: the words and the hashtags, no link, and no disclosure - there is
+    # nothing to disclose. Checked here rather than left to the placement
+    # branches below, because "none" is not a place a link can go: falling
+    # through, it would have landed in the first-comment branch and published
+    # the very link that was switched off.
+    if not products or placement_override == "none":
         return compose(
             platform=platform,
             body=body,
             hashtags=hashtags,
             disclosure="",
+            placement_override=placement_override,
         )
     # Required unless the campaign has said otherwise. Off is a decision an
     # operator makes in Campaign settings and carries themselves; empty while

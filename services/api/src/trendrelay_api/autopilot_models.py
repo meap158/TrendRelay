@@ -202,7 +202,10 @@ class CampaignDestination(Base):
             "campaign_id", "provider", "integration_id", name="unique_campaign_destination"
         ),
         CheckConstraint(
-            "link_placement IN ('auto','caption','first_comment','bio')",
+            # `none` is a real answer, not the absence of one: this account
+            # publishes without the campaign's affiliate link, which is how a
+            # network that penalises them stays usable.
+            "link_placement IN ('auto','caption','first_comment','bio','none')",
             name="valid_destination_link_placement",
         ),
     )

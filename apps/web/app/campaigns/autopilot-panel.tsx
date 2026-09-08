@@ -480,7 +480,9 @@ type Destination = {
   resolved_post_type?: string;
   post_types?: { id: string; label: string; help: string }[];
   /** The stored configuration; 'auto' lets the network decide. */
-  link_placement_setting: "auto" | "caption" | "first_comment" | "bio";
+  /** What the operator chose. `none` carries no affiliate link on this
+      account at all, whatever the campaign has matched. */
+  link_placement_setting: "auto" | "caption" | "first_comment" | "bio" | "none";
   /** What the configuration resolves to today. */
   link_placement: "caption" | "first_comment" | "bio" | "none";
   link_reason: string;
@@ -1813,12 +1815,19 @@ export function AutopilotPanel({
   const queuePages = Math.max(1, Math.ceil(shownQueue.length / QUEUE_PAGE_SIZE));
   const safeQueuePage = Math.min(queuePage, queuePages - 1);
   const accountSnapshotKey = `campaign-accounts:${workspaceId}:${campaignId}`;
+  // Publish and Campaigns discover the same engine accounts. Publish's shape
+  // is deliberately the smaller subset of this one, so it is safe to paint
+  // those rows immediately while Campaigns refreshes its scheduling and
+  // availability details behind the open dialog. This is the common path for
+  // somebody who connected an account in Publish and came straight here.
+  const cachedAccountSnapshot = readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey)
+    ?? readTabSnapshot<CampaignAccountsSnapshot>(`publish-accounts:${workspaceId}`);
   const [accounts, setAccounts] = useState<Account[]>(() =>
-    readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey)?.accounts ?? []);
+    cachedAccountSnapshot?.accounts ?? []);
   const [accountsLoaded, setAccountsLoaded] = useState(() =>
-    readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey) !== null);
+    cachedAccountSnapshot !== null);
   const [accountEngines, setAccountEngines] = useState<AccountEngine[]>(() =>
-    readTabSnapshot<CampaignAccountsSnapshot>(accountSnapshotKey)?.engines ?? []);
+    cachedAccountSnapshot?.engines ?? []);
   const [accountsBusy, setAccountsBusy] = useState(false);
   const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
   const accountsPrimed = useRef(false);
@@ -2375,8 +2384,7 @@ export function AutopilotPanel({
     action: "approve" | "dismiss",
     { publishNow = false, stopProposing = false } = {},
   ) {
-    setBusy(`${action}-${executionId}`);
-    try {
+    await run(`${action}-${executionId}`, async () => {
       const response = await apiFetch(
         `${base}/autopilot/executions/${executionId}/${action}`,
         {
@@ -2391,22 +2399,14 @@ export function AutopilotPanel({
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail ?? "The decision was refused.");
-      succeed(action === "dismiss"
+      return action === "dismiss"
         ? stopProposing
           ? "Declined. The post is paused, so it stops being proposed until you put it back."
           : "Skipped this time. Its slot and clip are free, and the post returns next cycle."
         : publishNow
           ? "Approved and publishing now."
-          : "Approved. The post is queued exactly as you approved it.");
-      await loadExceptions();
-      await onCampaignChanged();
-      // The queue shows the paused post, so it has to be re-read to show it.
-      if (stopProposing) await refresh();
-    } catch (reason) {
-      fail(explainFailure(reason, "The decision was refused."));
-    } finally {
-      setBusy("");
-    }
+          : "Approved. The post is queued exactly as you approved it.";
+    });
   }
 
   /** Save the operator's rewrite of a held post; approval still covers it. */
@@ -2419,8 +2419,7 @@ export function AutopilotPanel({
       thread: string[];
     },
   ) {
-    setBusy(`edit-held-${executionId}`);
-    try {
+    await run(`edit-held-${executionId}`, async () => {
       const response = await apiFetch(
         `${base}/autopilot/executions/${executionId}`,
         {
@@ -2431,14 +2430,9 @@ export function AutopilotPanel({
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail ?? "The edit was refused.");
-      succeed("Saved. What you approve is what you wrote.");
       setEditingHeld(null);
-      await loadExceptions();
-    } catch (reason) {
-      fail(explainFailure(reason, "The edit was refused."));
-    } finally {
-      setBusy("");
-    }
+      return "Saved. What you approve is what you wrote.";
+    });
   }
 
   async function loadAccounts({ quiet = false }: { quiet?: boolean } = {}) {
@@ -2596,7 +2590,7 @@ export function AutopilotPanel({
     }
   }, [apiFetch, base, fail, succeed, t]);
 
-  const run = useCallback(async (label: string, work: () => Promise<string>) => {
+  async function run(label: string, work: () => Promise<string>) {
     setBusy(label);
     // Whether a plan was on screen before this changed it. Cleared below
     // because a plan drawn before the change is wrong, but clearing was all
@@ -2611,18 +2605,13 @@ export function AutopilotPanel({
         showingPlan.current = false;
       }
       succeed(await work());
-      await refresh();
-      // And the page that owns the campaign list, because its rows count
-      // things this panel changes. The badge beside a campaign's name counts
-      // posts held for approval; approving one left it reading the old number
-      // until the tab was reloaded, which is the one moment somebody is
-      // certain the number moved.
-      //
-      // Every action goes through here, so this is the one place it belongs -
-      // an action that forgot to say so is the bug this replaces, and a list
-      // of which actions count is a list that goes stale.
+      // The panel summary, approval inbox, parent campaign/sidebar counts and
+      // calendar are separate API reads. Every mutation refreshes them here,
+      // in parallel, so no action can update its row but strand a stale total
+      // elsewhere on the same screen. A single held-post approval used to
+      // bypass this path, leaving authority progress stale until page reload.
       if (label !== "preview") {
-        await Promise.all([loadExceptions(), onCampaignChanged()]);
+        await Promise.all([refresh(), loadExceptions(), onCampaignChanged()]);
       }
       if (replanning) await loadPreview(false);
     } catch (reason) {
@@ -2630,7 +2619,7 @@ export function AutopilotPanel({
     } finally {
       setBusy("");
     }
-  }, [refresh, succeed, fail, loadPreview, loadExceptions, onCampaignChanged]);
+  }
 
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
@@ -2718,7 +2707,6 @@ export function AutopilotPanel({
       setBatchResults(body.results.filter((row) => !row.dismissed));
       setPicked(new Set(body.results.filter((row) => !row.dismissed)
         .map((row) => row.execution_id)));
-      await refresh();
       const verb = stopProposing ? "declined" : "skipped";
       return body.refused
         ? `${body.dismissed} ${verb}, ${body.refused} left held.`
@@ -2762,7 +2750,6 @@ export function AutopilotPanel({
       // still there and still the thing to deal with.
       setPicked(new Set(body.results.filter((row) => !row.approved)
         .map((row) => row.execution_id)));
-      await refresh();
       return body.refused
         ? `${body.approved} approved, ${body.refused} left held.`
         : `${body.approved} post${body.approved === 1 ? "" : "s"} approved.`;
@@ -2817,9 +2804,6 @@ export function AutopilotPanel({
         }),
       );
       setTagged(body.products);
-      // Refreshed because what may be attached has changed, and the queue rows
-      // show what each post would carry.
-      await refresh();
       return body.tagged
         ? `${body.tagged} product${body.tagged === 1 ? "" : "s"} added.`
         : "Already on this campaign.";
@@ -2835,7 +2819,6 @@ export function AutopilotPanel({
         await apiFetch(`${base}/products/${offerId}`, { method: "DELETE" }),
       );
       setTagged(body.products);
-      await refresh();
       return `${name} removed.`;
     });
   }
@@ -2863,7 +2846,6 @@ export function AutopilotPanel({
       );
       setTagged(body.products);
       setPickedProducts(new Set());
-      await refresh();
       return `${body.untagged} product${body.untagged === 1 ? "" : "s"} removed.`;
     });
   }
@@ -3113,7 +3095,7 @@ export function AutopilotPanel({
       setBusy("");
     }
     // After the busy flag is back down, so the quiet replan owns its own.
-    if (slot && showingPlan.current) await loadPreview(false);
+    if (showingPlan.current) await loadPreview(false);
   }
 
   /** Close the editor and return to whichever view opened it. */
@@ -3564,7 +3546,8 @@ export function AutopilotPanel({
     if (!window.confirm(
       `Publish "${displayTitle(entry.title) || "this post"}" to ${label} now, `
       + `instead of waiting for ${when}?\n\nThe remaining planned posts shift `
-      + "to fill the freed slot; a locked post keeps its own.",
+      + "through the campaign's configured slots; a locked post keeps its own, "
+      + "and daily or weekly caps still apply.",
     )) return;
     await run(`publish-entry-${entry.key}`, async () => {
       const body = await json<{
@@ -3578,8 +3561,8 @@ export function AutopilotPanel({
         }),
       );
       if (body.published.length) {
-        return `Published to ${body.published[0].destination_label} immediately. `
-          + "The remaining posts reflow to fill the slot.";
+        return `Publishing now to ${body.published[0].destination_label}. `
+          + "The remaining posts reflow through the configured slots.";
       }
       return `Not published: ${body.skipped
         .map((skip) => `${skip.label}: ${skip.reason}`).join("; ")}`;
@@ -5285,16 +5268,71 @@ export function AutopilotPanel({
                         Publish now
                       </Button>
                     </Tooltip>
-                    <Button variant="quiet" size="sm"
-                      onClick={() => openPostEditor(item)}>Edit content</Button>
-                    <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
-                      onClick={() => void loadRecommendations(item)}>
-                      {item.offer_ids.length ? "Edit products" : "Review products"}
-                    </Button>
-                    <Button variant="quiet" size="sm" onClick={() => void run("drop", async () => {
-                      await json(await apiFetch(`${base}/queue/${item.id}`, { method: "DELETE" }));
-                      return t("autopilot.itemRemoved");
-                    })}>{t("common.delete")}</Button>
+                    <span className="campaign-queue-secondary-actions">
+                      <Button variant="quiet" size="sm"
+                        onClick={() => openPostEditor(item)}>Edit</Button>
+                      <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
+                        onClick={() => void loadRecommendations(item)}>
+                        {item.offer_ids.length ? "Edit products" : "Review products"}
+                      </Button>
+                      <Tooltip content="Remove this post from the campaign queue.">
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          iconOnly
+                          data-destructive-icon="true"
+                          aria-label={`${t("common.delete")} ${displayTitle(item.title) ?? "this post"}`}
+                          onClick={() => void run("drop", async () => {
+                            await json(await apiFetch(`${base}/queue/${item.id}`, { method: "DELETE" }));
+                            return t("autopilot.itemRemoved");
+                          })}
+                        >
+                          <ActionIcon name="delete" />
+                        </Button>
+                      </Tooltip>
+                    </span>
+                    <ActionMenu
+                      className="campaign-queue-compact-actions"
+                      label="More"
+                      ariaLabel={`More actions for ${displayTitle(item.title) ?? "this post"}`}
+                      variant="quiet"
+                      items={[
+                        {
+                          id: "edit-content",
+                          label: "Edit",
+                          description: "Change the post copy or media.",
+                          icon: <ActionIcon name="edit" />,
+                        },
+                        {
+                          id: "review-products",
+                          label: item.offer_ids.length ? "Edit products" : "Review products",
+                          description: "Inspect the products and affiliate links for this post.",
+                          icon: <ActionIcon name="link" />,
+                          disabled: busy === `recommend-${item.id}`,
+                          disabledReason: "Product recommendations are loading.",
+                        },
+                        {
+                          id: "delete",
+                          label: t("common.delete"),
+                          description: "Remove this post from the campaign queue.",
+                          icon: <ActionIcon name="delete" />,
+                        },
+                      ]}
+                      onSelect={(action) => {
+                        if (action === "edit-content") {
+                          openPostEditor(item);
+                        } else if (action === "review-products") {
+                          void loadRecommendations(item);
+                        } else if (action === "delete") {
+                          void run("drop", async () => {
+                            await json(await apiFetch(`${base}/queue/${item.id}`, {
+                              method: "DELETE",
+                            }));
+                            return t("autopilot.itemRemoved");
+                          });
+                        }
+                      }}
+                    />
                   </div>
                 )}
                 {/* A row of its own, spanning every column. Nested in the copy
@@ -6119,7 +6157,6 @@ export function AutopilotPanel({
                             }),
                           },
                         ));
-                        await refresh();
                         // Where the link goes decides what the caption says,
                         // so this reaches the posts already waiting for this
                         // account - and says how many.
@@ -6151,7 +6188,19 @@ export function AutopilotPanel({
                       <option value="caption">Always in the caption</option>
                       <option value="first_comment">First comment, where deliverable</option>
                       <option value="bio">Always via bio link</option>
+                      {/* "Nowhere" belongs in the list of places, not in a
+                          separate switch elsewhere on the page: somebody
+                          deciding where the link goes is the same person
+                          deciding it should not go anywhere. */}
+                      <option value="none">No affiliate link — post organically</option>
                     </Select>
+                    {item.link_placement_setting === "none" && (
+                      <small className="campaign-placement-note">
+                        This account posts the words and hashtags only — no link and
+                        no disclosure. The campaign keeps its products, and every
+                        other account still carries them.
+                      </small>
+                    )}
                   </label>
                   {/* The icon, like every other removal in the app. As a word
                       it stretched to a grid column: 106px of button beside a
@@ -6982,7 +7031,7 @@ export function AutopilotPanel({
                                   Edit
                                 </Button>
                                 <Tooltip content={`Publish this post to ${entry.destination?.label
-                                  ?? "its account"} immediately. The remaining planned posts shift to fill the slot.`}>
+                                  ?? "its account"} immediately. The remaining posts reflow through configured slots; caps still apply.`}>
                                   <Button variant="quiet" size="sm"
                                     busy={busy === `publish-entry-${entry.key}`}
                                     onClick={() => void publishPlannedEntry(entry)}>
@@ -7206,7 +7255,7 @@ export function AutopilotPanel({
                         {/* Icon-only on the card: the foot is a strip, and the
                             words are on the tooltip where they cost nothing. */}
                         <Tooltip content={`Publish to ${entry.destination?.label
-                          ?? "its account"} immediately; the rest shift to fill the slot.`}>
+                          ?? "its account"} immediately; the rest reflow through configured slots.`}>
                           <Button variant="quiet" size="sm" iconOnly
                             busy={busy === `publish-entry-${entry.key}`}
                             aria-label="Publish this post now"
@@ -7375,7 +7424,7 @@ export function AutopilotPanel({
                   {selectable && (
                     <span className="campaign-entry-actions">
                       <Tooltip content={`Publish to ${destination?.label
-                        ?? "its account"} immediately; the rest shift to fill the slot.`}>
+                        ?? "its account"} immediately; the rest reflow through configured slots.`}>
                         <Button variant="quiet" size="sm" iconOnly
                           busy={busy === `publish-entry-${entry.key}`}
                           aria-label="Publish this post now"

@@ -17,7 +17,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import CurrentUser, current_user
-from trendrelay_api.autopilot_models import CampaignOffer
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.models import Base

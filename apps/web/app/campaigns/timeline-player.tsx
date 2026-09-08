@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { mediaTypeFor, opaquePreviewUrl } from "../../lib/media-preview";
+import { useOpaqueMedia } from "../../lib/media-preview";
 
 /**
  * The timeline's media, read as opaque bytes and shown from a blob.
@@ -34,46 +34,9 @@ import { mediaTypeFor, opaquePreviewUrl } from "../../lib/media-preview";
  * - which is what keeps a timeline of fifty rows from reading fifty files.
  */
 
-function useOpaqueMedia(src: string, path: string, fallbackType: string, wanted: boolean) {
-  const [objectUrl, setObjectUrl] = useState("");
-  const [problem, setProblem] = useState("");
-
-  useEffect(() => {
-    if (!wanted) return;
-    let cancelled = false;
-    let created = "";
-    // No credentials, matching what the media element sent before this: the
-    // API grants a local identity to loopback callers, and asking for
-    // credentials here would need the CORS exchange to allow them.
-    fetch(opaquePreviewUrl(src))
-      .then((response) => {
-        if (!response.ok) throw new Error(`The media could not be read (${response.status}).`);
-        // Not `.blob()`: that would carry the opaque type through to the
-        // element, which then refuses to show it. The bytes are retyped here.
-        return response.arrayBuffer();
-      })
-      .then((bytes) => {
-        if (cancelled) return;
-        created = URL.createObjectURL(
-          new Blob([bytes], { type: mediaTypeFor(path, fallbackType) }),
-        );
-        setObjectUrl(created);
-      })
-      .catch((reason) => {
-        if (!cancelled) {
-          setProblem(reason instanceof Error ? reason.message : "The media could not be read.");
-        }
-      });
-    return () => {
-      cancelled = true;
-      if (created) URL.revokeObjectURL(created);
-    };
-  }, [src, path, fallbackType, wanted]);
-
-  return { objectUrl, problem };
-}
-
-/** True once the wrapper has been on screen, which for a `details` means open. */
+/**
+ * True once the wrapper has been on screen, which for a `details` means open.
+ */
 function useSeen(wrapper: React.RefObject<HTMLElement | null>) {
   const [seen, setSeen] = useState(false);
   useEffect(() => {

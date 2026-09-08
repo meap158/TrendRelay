@@ -198,9 +198,8 @@ def test_a_saved_preset_can_be_deleted_and_its_pages_fall_back(slots) -> None:
 def test_a_built_in_preset_refuses_deletion(slots) -> None:
     """It exists in every workspace and would resurrect on the next read - a
     delete that does not delete is worse than no delete."""
-    with slots() as session, session.begin():
-        with pytest.raises(ValueError, match="built in"):
-            posting_slots.delete_preset("w1", "commute", session=session)
+    with slots() as session, session.begin(), pytest.raises(ValueError, match="built in"):
+        posting_slots.delete_preset("w1", "commute", session=session)
 
 
 def test_deleting_another_workspaces_preset_is_not_found(slots) -> None:
@@ -303,11 +302,10 @@ def test_a_rename_cannot_land_on_a_built_in_either(slots) -> None:
 
 def test_a_built_in_preset_refuses_editing(slots) -> None:
     """Same reason it refuses deletion: the next read would undo it."""
-    with slots() as session, session.begin():
-        with pytest.raises(ValueError, match="built in"):
-            posting_slots.update_preset(
-                "w1", "commute", session=session, label="My hours",
-            )
+    with slots() as session, session.begin(), pytest.raises(ValueError, match="built in"):
+        posting_slots.update_preset(
+            "w1", "commute", session=session, label="My hours",
+        )
 
 
 def test_editing_another_workspaces_preset_is_not_found(slots) -> None:

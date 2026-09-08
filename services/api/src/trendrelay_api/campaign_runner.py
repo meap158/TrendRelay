@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import deque
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,7 @@ from trendrelay_api.campaign_scheduler import (
     record_scheduled,
 )
 from trendrelay_api.models import DurableJob
-from trendrelay_api.publication_models import PublicationExecution
+from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
 
 #: Error text that means the request may have reached the provider before the
 #: answer was lost. These must settle as `uncertain`, never as a clean failure:
@@ -1147,7 +1147,6 @@ def publish_queue_item_now(
       unless force=True is explicitly passed.
     - If repeat_posts is True: skips destinations posted within min_recycle_days, unless force=True.
     """
-    from sqlalchemy.orm.attributes import flag_modified
     from trendrelay_api.autopilot_models import (
         CampaignAutopilot,
         CampaignDestination,
@@ -1159,7 +1158,6 @@ def publish_queue_item_now(
     from trendrelay_api.campaign_offer_matcher import resolve_matches
     from trendrelay_api.campaign_scheduler import (
         _as_utc,
-        record_published,
         resolve_frozen_media,
     )
     from trendrelay_api.integrations.publishing import (
@@ -1236,9 +1234,30 @@ def publish_queue_item_now(
     published: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     stamps = dict(item.last_posted_by_destination or {})
+    # An immediate job reserves the queue item before the provider confirms
+    # it. That reservation is enough for the scheduler to reflow the outlook,
+    # and it also closes the double-click/race window without pretending the
+    # provider has published anything yet. `record_published` remains solely
+    # in reconciliation, where a confirmed outcome advances rotation and
+    # metrics truthfully.
+    pending_destinations = set(session.scalars(
+        select(PublicationExecution.destination_id).where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.queue_item_id == item.id,
+            PublicationExecution.state.in_(sorted(HOLDING_STATES)),
+        )
+    ).all())
 
     for destination in destinations:
         dest_label = destination.label or destination.platform
+
+        if destination.id in pending_destinations:
+            skipped.append({
+                "destination_id": destination.id,
+                "label": dest_label,
+                "reason": "This post is already queued or publishing to this account.",
+            })
+            continue
 
         # Check format compatibility
         if item.image_paths:
@@ -1246,12 +1265,20 @@ def publish_queue_item_now(
                 destination.provider, destination.platform, len(item.image_paths)
             )
             if not fits:
-                skipped.append({"destination_id": destination.id, "label": dest_label, "reason": why})
+                skipped.append({
+                    "destination_id": destination.id,
+                    "label": dest_label,
+                    "reason": why,
+                })
                 continue
         elif item.video_path:
             fits, why = video_fits_platform(destination.platform, frozen.path)
             if not fits:
-                skipped.append({"destination_id": destination.id, "label": dest_label, "reason": why})
+                skipped.append({
+                    "destination_id": destination.id,
+                    "label": dest_label,
+                    "reason": why,
+                })
                 continue
 
         # Check delivery block / quota
@@ -1270,7 +1297,10 @@ def publish_queue_item_now(
             skipped.append({
                 "destination_id": destination.id,
                 "label": dest_label,
-                "reason": "Already published to this account ('Let a post go out more than once' is Off).",
+                "reason": (
+                    "Already published to this account "
+                    "('Let a post go out more than once' is Off)."
+                ),
             })
             continue
 
@@ -1284,14 +1314,17 @@ def publish_queue_item_now(
                         skipped.append({
                             "destination_id": destination.id,
                             "label": dest_label,
-                            "reason": f"Rested less than {autopilot.min_recycle_days} days since last post.",
+                            "reason": (
+                                f"Rested less than {autopilot.min_recycle_days} "
+                                "days since last post."
+                            ),
                         })
                         continue
                 except Exception:
                     pass
 
         # Resolve matched products & affiliate links
-        cached_matches, ranked, match_strategy = resolve_matches(
+        cached_matches, _ranked, _match_strategy = resolve_matches(
             session, campaign, autopilot, item, [destination]
         )
         matched = list(cached_matches)
@@ -1328,7 +1361,11 @@ def publish_queue_item_now(
                 written_thread=item.thread or (),
             )
         except DisclosureMissing as error:
-            skipped.append({"destination_id": destination.id, "label": dest_label, "reason": str(error)})
+            skipped.append({
+                "destination_id": destination.id,
+                "label": dest_label,
+                "reason": str(error),
+            })
             continue
 
         topic_tag = (
@@ -1385,7 +1422,6 @@ def publish_queue_item_now(
         execution.state = "queued"
         execution.queued_at = moment
         execution.scheduled_at = moment
-        record_published(session, execution, now=moment)
 
         published.append({
             "destination_id": destination.id,
@@ -1402,7 +1438,6 @@ def publish_queue_item_now(
     if item.state != "approved":
         item.state = "approved"
 
-    flag_modified(item, "last_posted_by_destination")
     return {
         "item_id": item.id,
         "published": published,
@@ -1452,4 +1487,3 @@ def batch_publish_queue_items(
         "results": results,
         "failures": failures,
     }
-

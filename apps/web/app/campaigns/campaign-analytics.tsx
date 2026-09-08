@@ -23,7 +23,7 @@ import { WaitingBlock } from "../ui/waiting-block";
 import { useOpaqueMedia } from "../../lib/media-preview";
 import { platformLabels, type PublishingPlatform } from "../publishing-icons";
 
-type AnalyticsRange = "today" | "7d" | "28d" | "90d";
+type AnalyticsRange = "today" | "7d" | "14d" | "28d" | "90d";
 type RankingMetric = "views" | "engagement" | "likes" | "comments" | "shares" | "saves";
 type ChartMetric =
   | "views" | "engagement" | "likes" | "comments" | "shares" | "saves" | "published";
@@ -89,6 +89,7 @@ type Analytics = {
 const RANGE_OPTIONS = [
   { value: "today", label: "Today" },
   { value: "7d", label: "7 days" },
+  { value: "14d", label: "14 days" },
   { value: "28d", label: "28 days" },
   { value: "90d", label: "90 days" },
 ] as const;
@@ -189,25 +190,30 @@ function TrendLine({
   const last = data.at(-1)?.date;
   const active = activeIndex === null ? null : points[activeIndex] ?? null;
   /**
-   * The one point worth labelling without being asked.
+   * Values printed on the chart itself.
    *
-   * A tooltip enhances; it must not be the only way to read a number, and the
-   * peak is the number everybody wants - the chart's whole shape is one spike
-   * and "how high" was unanswerable without finding the hover.
-   *
-   * The extreme only, never a number on every point: direct labels work
-   * because they are sparing. Nothing is labelled when the series is flat or
-   * empty, because then there is no extreme to point at.
+   * One peak label made smaller days look like missing data. Ordinary 7- and
+   * Short 7-, 14-, and 28-day ranges can carry every non-zero value without
+   * becoming a wall of numbers, so they do. A dense 90-day range gets a
+   * bounded, temporally spread subset: the strongest days first, but never
+   * two labels close enough to overlap. Hover, tap and the keyboard still
+   * expose every single day.
    */
-  const peakIndex = values.reduce(
-    (best, value, index) => (value > (values[best] ?? -1) ? index : best),
-    0,
-  );
-  const peak = values.length > 1
-    && (values[peakIndex] ?? 0) > 0
-    && new Set(values).size > 1
-    ? points[peakIndex] ?? null
-    : null;
+  const nonZeroIndices = values.flatMap((value, index) => value > 0 ? [index] : []);
+  const MAX_DIRECT_LABELS = 12;
+  const directLabelIndices = nonZeroIndices.length <= MAX_DIRECT_LABELS
+    ? nonZeroIndices
+    : [...nonZeroIndices]
+      .sort((left, right) => (values[right] ?? 0) - (values[left] ?? 0))
+      .reduce<number[]>((chosen, index) => {
+        const minimumGap = Math.max(1, Math.floor(values.length / MAX_DIRECT_LABELS));
+        if (chosen.every((other) => Math.abs(other - index) >= minimumGap)) {
+          chosen.push(index);
+        }
+        return chosen;
+      }, [])
+      .slice(0, MAX_DIRECT_LABELS)
+      .sort((left, right) => left - right);
   const spokenPoint = active ?? points.at(-1);
   const dateLabel = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString(
     undefined,
@@ -283,22 +289,23 @@ function TrendLine({
               onBlur={() => setActiveIndex(null)}
               onKeyDown={moveByKeyboard} />
           </svg>
-          {/* Hidden while that point is the hovered one - the tooltip is
-              already saying it, and two readouts of one number at one place
-              read as two numbers. */}
-          {peak && peakIndex !== activeIndex ? (
-            <span className="campaign-trend-peak" aria-hidden="true"
-              /* Below its point when there is no room above it. A label that
-                 does not fit is moved, never clipped, and a peak that fills
-                 the plot leaves nothing overhead. */
-              data-below={peak.y / 44 < 0.2 ? "" : undefined}
-              style={{
-                // Clamped so a label at either end is not clipped by the plot
-                // it belongs to; it is centred on its point everywhere else.
-                "--trend-point-x": `${Math.min(92, Math.max(8, peak.x))}%`,
-                "--trend-point-y": `${(peak.y / 44) * 100}%`,
-              } as CSSProperties}>{compact(values[peakIndex] ?? 0)}</span>
-          ) : null}
+          {directLabelIndices.map((index, labelPosition) => {
+            const point = points[index];
+            if (!point || index === activeIndex) return null;
+            return (
+              <span key={`${point.day.date}-${metric}`}
+                className="campaign-trend-value" aria-hidden="true"
+                /* Neighbours use two lanes above the line. Only a point near
+                   the top moves below: putting a small value below the
+                   baseline would collide with the date axis. */
+                data-below={point.y / 44 < 0.2 ? "" : undefined}
+                data-lane={labelPosition % 4}
+                style={{
+                  "--trend-point-x": `${Math.min(96, Math.max(4, point.x))}%`,
+                  "--trend-point-y": `${(point.y / 44) * 100}%`,
+                } as CSSProperties}>{compact(values[index] ?? 0)}</span>
+            );
+          })}
           {active ? (
             <span className="campaign-trend-active-dot" aria-hidden="true"
               style={{
@@ -494,7 +501,7 @@ export function CampaignAnalytics({
   const [range, setRange] = usePersistedState<AnalyticsRange>(
     `${preferenceScope}.range`,
     "28d",
-    oneOf<AnalyticsRange>("today", "7d", "28d", "90d"),
+    oneOf<AnalyticsRange>("today", "7d", "14d", "28d", "90d"),
   );
   const [ranking, setRanking] = usePersistedState<RankingMetric>(
     `${preferenceScope}.ranking`,

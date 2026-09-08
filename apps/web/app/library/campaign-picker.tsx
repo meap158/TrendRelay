@@ -7,6 +7,10 @@ import { Dialog } from "../ui/dialog";
 import { SegmentedControl } from "../ui/segmented";
 import { Badge } from "../ui/primitives";
 import { handoffPath, type VersionedAsset } from "../../lib/media-rules";
+import {
+  CAMPAIGN_IMPORT_CHUNK_SIZE,
+  campaignImportChunks,
+} from "../../lib/campaign-import";
 /**
  * The shape this needs: whatever `handoffPath` reads, plus enough to name it.
  *
@@ -60,14 +64,17 @@ export function CampaignPicker({
   open,
   workspaceId,
   assets,
+  assetIds,
   apiFetch,
   onClose,
   onAdded,
 }: {
   open: boolean;
   workspaceId: string;
-  /** What to add. One from the panel, or everything ticked in the grid. */
+  /** Loaded details for labels and the optional small image-carousel flow. */
   assets: ChosenAsset[];
+  /** Every selected row, including filter-wide selections not loaded in the grid. */
+  assetIds: string[];
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   onClose: () => void;
   onAdded: (message: string) => void;
@@ -75,6 +82,7 @@ export function CampaignPicker({
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ campaignId: string; added: number } | null>(null);
   /**
    * Whether several pictures become several posts or one carousel.
    *
@@ -88,7 +96,7 @@ export function CampaignPicker({
    * apart by hand, while five posts merged by mistake never happened.
    */
   const [shape, setShape] = useState<"each" | "carousel">("each");
-  const count = assets.length;
+  const count = assetIds.length;
   /**
    * Whether a carousel is even a choice here.
    *
@@ -98,6 +106,7 @@ export function CampaignPicker({
    */
   const canCarousel = count > 1
     && count <= MAX_CAROUSEL
+    && assets.length === count
     && assets.every((asset) => asset.media_kind === "image");
   const asCarousel = canCarousel && shape === "carousel";
 
@@ -120,9 +129,17 @@ export function CampaignPicker({
     return () => controller.abort();
   }, [open, apiFetch, workspaceId]);
 
+  const close = useCallback(() => {
+    setProgress(null);
+    setShape("each");
+    setError(null);
+    onClose();
+  }, [onClose]);
+
   const add = useCallback(async (campaign: Campaign) => {
     setBusy(campaign.id);
     setError(null);
+    let added = progress?.campaignId === campaign.id ? progress.added : 0;
     try {
       // One carousel is one package, so it is one request carrying every
       // path in the order they were picked - which is the order they are
@@ -130,34 +147,12 @@ export function CampaignPicker({
       // one row standing for several files still needs a thumbnail to draw and
       // something for the rest window to recognise, and the first is the one
       // somebody will see on the card.
-      const packages = asCarousel
-        ? [{
+      if (asCarousel) {
+        const item = {
           asset_id: assets[0].id,
           title: assets[0].title,
           image_paths: assets.map(handoffPath),
-        }]
-        : assets.map((asset) => ({
-          // The identity and the name, both of which the queue item keeps
-          // and neither of which the file path carries.
-          //
-          // `asset_id` is how the scheduler resolves the newest rendered
-          // cut, how the rest window recognises the same clip queued
-          // twice, and how the timeline draws a thumbnail. `title` is what
-          // that timeline shows - without it every row added this way read
-          // "Untitled campaign video", which is what sent somebody looking
-          // at this flow in the first place.
-          asset_id: asset.id,
-          title: asset.title,
-          ...(asset.media_kind === "image"
-            ? { image_paths: [handoffPath(asset)] }
-            : { video_path: handoffPath(asset) }),
-        }));
-
-      // One request per package, in order, because each is its own queue item
-      // and the API takes them singly. Sequential rather than parallel: twenty
-      // at once is twenty writes racing for the same position counter, and the
-      // order somebody chose is the order they should arrive in.
-      for (const item of packages) {
+        };
         const response = await apiFetch(
           `/api/workspaces/${workspaceId}/campaigns/${campaign.id}/queue`,
           {
@@ -170,20 +165,49 @@ export function CampaignPicker({
           const payload = (await response.json()) as { detail?: string };
           throw new Error(payload.detail ?? `${item.title} could not be added.`);
         }
+        added = count;
+      } else {
+        // A filter-wide selection can contain thousands of ids while the grid
+        // intentionally holds only one page of full asset objects. Resolve and
+        // insert those ids server-side in bounded chunks: a handful of atomic
+        // requests instead of loading every object and issuing one write per
+        // post. Chunks remain sequential so queue order is deterministic.
+        for (const chunk of campaignImportChunks(assetIds, added)) {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/campaigns/${campaign.id}/queue/assets`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ asset_ids: chunk }),
+            },
+          );
+          const payload = (await response.json()) as { added?: number; detail?: string };
+          if (!response.ok) {
+            throw new Error(payload.detail ?? "The selected media could not be added.");
+          }
+          if (payload.added !== chunk.length) {
+            throw new Error("The campaign did not confirm the complete media batch.");
+          }
+          added += chunk.length;
+          setProgress({ campaignId: campaign.id, added });
+        }
       }
       onAdded(
         (asCarousel
           ? `A carousel of ${assets.length} pictures added to ${campaign.name}.`
-          : `${packages.length} ${packages.length === 1 ? "post" : "posts"} added to ${campaign.name}.`)
+          : `${count.toLocaleString()} ${count === 1 ? "post" : "posts"} added to ${campaign.name}.`)
         + " Write their copy in the campaign to put them in the rotation.",
       );
-      onClose();
+      close();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The media could not be added.");
+      const detail = reason instanceof Error ? reason.message : "The media could not be added.";
+      setError(added > 0 && added < count
+        ? `${added.toLocaleString()} of ${count.toLocaleString()} posts were added. ${detail} Choose the same campaign to continue with the remaining posts.`
+        : detail);
     } finally {
       setBusy(null);
     }
-  }, [assets, asCarousel, apiFetch, workspaceId, onAdded, onClose]);
+  }, [assetIds, assets, asCarousel, apiFetch, workspaceId, onAdded, close, count, progress]);
 
 
   return (
@@ -191,12 +215,12 @@ export function CampaignPicker({
       open={open}
       title="Add to campaign"
       description={count === 1
-        ? assets[0]?.title
+        ? assets[0]?.title ?? "1 selected item"
         : asCarousel
           ? `${count} pictures will be added as one carousel.`
           : `${count} items will be added as ${count} posts.`}
-      onClose={onClose}
-      footer={<Button variant="quiet" onClick={onClose}>Cancel</Button>}
+      onClose={busy ? () => undefined : close}
+      footer={<Button variant="quiet" disabled={busy !== null} onClick={close}>Cancel</Button>}
     >
       {/* Asked before the campaign, because it changes what is being filed
           rather than where it goes - and answered in the consequence rather
@@ -219,7 +243,9 @@ export function CampaignPicker({
       )}
       {/* Said rather than silently filed as separate posts: somebody who picked
           twenty-five pictures meant them to go together. */}
-      {count > MAX_CAROUSEL && assets.every((asset) => asset.media_kind === "image") && (
+      {count > MAX_CAROUSEL
+        && assets.length === count
+        && assets.every((asset) => asset.media_kind === "image") && (
         <p className="voice-note">
           A carousel holds {MAX_CAROUSEL} pictures. These will be added as
           {" "}{count} separate posts.
@@ -257,7 +283,11 @@ export function CampaignPicker({
                   </small>
                 </span>
                 {busy === campaign.id
-                  ? <Badge tone="neutral">Adding…</Badge>
+                  ? <Badge tone="neutral">
+                    {count > CAMPAIGN_IMPORT_CHUNK_SIZE
+                      ? `Adding ${(progress?.campaignId === campaign.id ? progress.added : 0).toLocaleString()} / ${count.toLocaleString()}…`
+                      : "Adding…"}
+                  </Badge>
                   : campaign.status === "active"
                     ? <Badge tone="good">Running</Badge>
                     : <Badge tone="neutral">Draft</Badge>}

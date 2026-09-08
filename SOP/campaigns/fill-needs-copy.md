@@ -3,7 +3,7 @@ id: campaigns.fill-needs-copy
 action: campaigns.fill-needs-copy
 title: Fill campaign posts that need copy
 summary: Adaptively write only missing campaign copy from live campaign, post, platform, and product context.
-version: 2
+version: 4
 tags: [campaigns, copywriting, needs-copy]
 aliases: [fill-campaign-needs-copy, campaigns.needs-copy, write-campaign-copy]
 ---
@@ -20,6 +20,17 @@ Do not rely on old queue state, previous campaign assumptions, or memory of lang
 ## 2. Identify the campaign and pull the live queue
 
 Start with the campaign's current `needs copy` list. Call `list_posts_needing_copy` with a deliberate `limit` and `offset` (start at `offset: 0`), then follow `more` and `next_offset` until the requested scope is complete. The default page is 50 posts and the maximum is 250; prefer smaller pages when post context is large. Use the live queue as the source of truth for which posts need work, which campaign they belong to, and whether caption, first comment, thread, title, or disclosure is actually missing. Do not write fields that are not needed.
+
+## 2b. Load the editorial layer before writing
+
+This SOP decides *what* to write and *when a batch is finished*. It does not
+decide whether the writing is any good. Before composing the first caption of a
+run, call `get_sop` for `campaigns.editorial-quality` and apply it throughout:
+it covers voice, variety across a batch, honest handling of source claims, and
+how the queue reads as a sequence rather than as fifty isolated answers.
+
+That SOP also lists the few questions worth asking the operator up front. Ask
+them before the run rather than after fifty posts have inherited a guess.
 
 ## 3. Pull post context before writing
 
@@ -96,6 +107,38 @@ If product matching is uncertain, avoid language implying the product shown is d
 
 If a strong product match exists, let the caption reference the relevant category naturally. If the match is weak, prioritize creative engagement over forced product naming. Do not contort the caption merely to improve semantic product matching.
 
+## 16b. Change the product when the media makes a better one obvious
+
+Smart matching chooses from the campaign's tagged products using the evidence it
+has, which is mostly text. When you have read the media and a different tagged
+product is plainly the fit, change it rather than writing around the wrong one:
+call `list_campaign_products` for the campaign, then `set_post_products` with
+the chosen `offer_id`.
+
+The campaign-product rows include `product_id`, the primary image, and a bounded
+listing preview. Before naming a specific feature, discount, variant, voucher,
+or visible product detail, call `get_product_details(product_id)` and ground the
+copy in its full live listing. That same full record is the source for
+product-aware image prompts. Use `get_product_attribution(product_id)` only when
+click/conversion evidence is relevant to choosing between otherwise fitting
+products; performance is evidence of audience response, not evidence that a
+claim about the product is true.
+
+Three things are worth knowing before you do:
+
+- **Each product goes to one post.** A product pinned to another post is hidden
+  from the list and refused by the write. That is the campaign's rotation - every
+  product gets its turn - and pinning is the one route that could bypass it.
+- **The pool is the campaign's tagged products and nothing else.** If the right
+  product is not tagged to this campaign, it cannot be attached here; say so
+  rather than substituting something close.
+- **This overrides smart matching for that post.** Use it when the product should
+  match the media, never to make a caption match a product. Passing an empty list
+  hands the choice back to smart matching.
+
+If no tagged product genuinely fits, leave the match alone and write the post on
+its own merits - see the editorial layer on media-first writing.
+
 ## 17. Avoid unsupported claims
 
 Do not invent price, discount, stock, fabric quality, fit, shipping speed, performance, product benefits, popularity, or exact visual identity. Use only claims supported by live product and post context.
@@ -119,6 +162,12 @@ After finishing the current page, call the live `needs copy` list again from `of
 ## 22. Verify before declaring completion
 
 Never say "done" based only on the original queue. Final verification must come from a fresh live MCP check.
+
+Count a post as completed only once the write returned successfully and the item no longer appears as needing copy. For a completed run, the fresh check must return a total of zero - a queue that still lists work is a run that is not finished, whatever the batch loop believed.
+
+## 22b. Repair a failed write immediately
+
+When a write is refused, fix that item before moving on. Adjust the wording that caused the refusal and retry the same id; move on only after it succeeds, or after a hard failure you can describe to the operator. Do not skip it silently: nothing later in the run will come back for it, and the post will sit unwritten while the batch reports progress.
 
 ## 23. Treat each campaign independently
 

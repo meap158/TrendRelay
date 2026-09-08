@@ -7,15 +7,16 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import CurrentUser, current_user
-from trendrelay_api.autopilot_models import CampaignAutopilot
+from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignQueueItem
+from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
-from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Base, Campaign
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
@@ -1426,6 +1427,79 @@ def test_media_can_be_picked_before_the_copy_is_written(workspace) -> None:
     assert item["body"]
 
 
+def test_library_assets_are_added_as_an_ordered_server_side_batch(workspace) -> None:
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        session.add_all([
+            MediaAsset(
+                id="asset-video-a", workspace_id=workspace, title="First video",
+                media_kind="video", source_type="upload", hashtags=[],
+                original_path=r"S:\media\first.mp4", original_sha256="a" * 64,
+                mime_type="video/mp4", size_bytes=20, created_by="owner-user",
+            ),
+            MediaAsset(
+                id="asset-image-b", workspace_id=workspace, title="Second image",
+                media_kind="image", source_type="upload", hashtags=[],
+                original_path=r"S:\media\second.jpg", original_sha256="b" * 64,
+                mime_type="image/jpeg", size_bytes=10, created_by="owner-user",
+            ),
+        ])
+        session.add(MediaAssetVersion(
+            id="version-video-a", workspace_id=workspace, asset_id="asset-video-a",
+            version_kind="edited", path=r"S:\media\first-edited.mp4",
+            sha256="c" * 64, mime_type="video/mp4", size_bytes=18,
+        ))
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/assets",
+        json={"asset_ids": ["asset-video-a", "asset-image-b"]},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["added"] == 2
+    with TestingSession() as session:
+        items = list(session.scalars(
+            select(CampaignQueueItem)
+            .where(CampaignQueueItem.campaign_id == campaign_id)
+            .order_by(CampaignQueueItem.position)
+        ).all())
+    assert [item.asset_id for item in items] == ["asset-video-a", "asset-image-b"]
+    assert items[0].video_path == r"S:\media\first-edited.mp4"
+    assert items[0].image_paths == []
+    assert items[1].video_path == ""
+    assert items[1].image_paths == [r"S:\media\second.jpg"]
+    assert all(item.body == PLACEHOLDER_BODY for item in items)
+
+
+def test_library_asset_batch_is_atomic_when_an_asset_is_missing(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "asset-present", "Present", "", [])
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/assets",
+        json={"asset_ids": ["asset-present", "asset-missing"]},
+    )
+
+    assert response.status_code == 404
+    with TestingSession() as session:
+        queued = session.scalar(select(func.count(CampaignQueueItem.id)).where(
+            CampaignQueueItem.campaign_id == campaign_id
+        ))
+    assert queued == 0
+
+
+def test_library_asset_batch_has_a_bounded_transaction_size(workspace) -> None:
+    campaign_id = campaign(workspace)
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/assets",
+        json={"asset_ids": [f"asset-{index}" for index in range(201)]},
+    )
+    assert response.status_code == 422
+
+
 def test_copy_somebody_wrote_is_not_marked_as_needing_writing(workspace) -> None:
     campaign_id = campaign(workspace)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
@@ -2315,9 +2389,20 @@ def test_campaign_analytics_compares_periods_without_double_counting_reads(works
     assert body["coverage"]["measured"] == 1
     assert body["top_content"][0]["id"] == "current-measured"
     assert body["top_content"][0]["asset_id"] == "asset-current-measured"
+    assert body["top_content"][0]["media_path"] == r"S:\media\analytics.mp4"
+    assert body["top_content"][0]["image_paths"] == []
     assert body["top_content"][0]["post_url"] == (
         "https://facebook.test/posts/current-measured"
     )
+
+    fortnight = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/analytics",
+        params={"range": "14d", "sort": "views", "timezone": "UTC"},
+    )
+    assert fortnight.status_code == 200, fortnight.text
+    assert fortnight.json()["range"] == "14d"
+    assert len(fortnight.json()["daily"]) == 14
 
 
 def test_campaign_analytics_top_posts_follow_the_selected_metric(workspace) -> None:

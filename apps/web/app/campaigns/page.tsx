@@ -907,7 +907,7 @@ export default function CampaignsPage() {
         description="Set the campaign goal once. Media, accounts, schedule, and deployment come next in this workspace."
         onClose={closeNewCampaign}
       >
-        <form className="campaign-dialog-form" onSubmit={createCampaign}>
+        <form className="campaign-dialog-form" data-contain-select-popovers="true" onSubmit={createCampaign}>
           {/* Above the fields, and first in the DOM rather than moved there by
               `order`. Reordering visually would leave the keyboard tabbing to
               a Create button that is no longer where it appears, which is the
@@ -1095,6 +1095,7 @@ export default function CampaignsPage() {
       >
         {settingsFor && (
           <form id="campaign-settings-form" className="campaign-dialog-form"
+            data-contain-select-popovers="true"
             onSubmit={saveCampaignSettings}>
             <label>{t("campaigns.name")}
               <input name="name" required maxLength={160} defaultValue={settingsFor.name} />

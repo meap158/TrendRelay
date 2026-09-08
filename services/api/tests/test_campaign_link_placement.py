@@ -329,3 +329,88 @@ def test_scaffolding_speaks_the_language_or_falls_back_to_english() -> None:
     assert localised_text("de", "disclosure") == localised_text("en", "disclosure"), (
         "an unknown language falls back to English rather than to silence"
     )
+
+
+# --- switching affiliate off for one account ---------------------------------
+
+
+def test_an_account_can_be_told_to_carry_no_link() -> None:
+    """The answer the placement list was missing.
+
+    Some networks penalise affiliate links, and an account under review wants a
+    quiet week. Before this the only way to stop them was to turn products off
+    for the whole campaign, which stops them everywhere.
+    """
+    placement = resolve_placement("tiktok", override="none")
+
+    assert placement.placement == "none"
+    # Its own explanation. "No offer is attached to this campaign" is a
+    # different fact and would send somebody to fix the campaign's products.
+    assert "off for this destination" in placement.reason
+    assert "other accounts" in placement.reason
+
+
+def test_switching_it_off_publishes_no_link_and_no_disclosure() -> None:
+    """`none` is not a place a link can go.
+
+    Left to the branches below it, the resolved placement fell through to the
+    first-comment case and published the link that had just been switched off.
+    """
+    post = compose_products(
+        platform="tiktok",
+        body="Hard techno in a steel cage.",
+        hashtags=["techno", "rave"],
+        products=[("Ring light", "https://example.test/aff/ring-light")],
+        disclosure="#ad",
+        placement_override="none",
+        comment_deliverable=True,
+    )
+
+    assert post.placement.placement == "none"
+    assert "example.test" not in post.caption
+    assert not post.first_comment
+    assert not post.thread
+    # Nothing is being endorsed, so there is nothing to disclose. Leaving "#ad"
+    # on an organic post claims a relationship that this post does not have.
+    assert "#ad" not in post.caption
+    # The words and the hashtags still go out - this is a post, not a refusal.
+    assert "Hard techno" in post.caption
+    assert "#techno" in post.caption
+
+
+def test_switching_it_off_does_not_need_a_disclosure_to_be_configured() -> None:
+    """A campaign mid-setup can still post organically to one account.
+
+    `compose_products` refuses to publish an undisclosed endorsement. With the
+    link off there is no endorsement, so the refusal must not fire - otherwise
+    turning affiliate off would be blocked by the affiliate settings.
+    """
+    post = compose_products(
+        platform="tiktok",
+        body="Just the music.",
+        hashtags=[],
+        products=[("Ring light", "https://example.test/aff/ring-light")],
+        disclosure="",
+        require_disclosure=True,
+        placement_override="none",
+    )
+
+    assert post.placement.placement == "none"
+    assert "example.test" not in post.caption
+
+
+def test_the_other_accounts_still_carry_the_link() -> None:
+    """Off here is not off everywhere; that is the whole point of the setting."""
+    products = [("Ring light", "https://example.test/aff/ring-light")]
+
+    quiet = compose_products(
+        platform="tiktok", body="Same post.", hashtags=[], products=products,
+        disclosure="#ad", placement_override="none",
+    )
+    selling = compose_products(
+        platform="facebook", body="Same post.", hashtags=[], products=products,
+        disclosure="#ad", placement_override="caption",
+    )
+
+    assert "example.test" not in quiet.caption
+    assert "example.test" in selling.caption

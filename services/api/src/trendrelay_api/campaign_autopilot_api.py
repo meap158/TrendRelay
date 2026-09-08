@@ -51,7 +51,7 @@ from trendrelay_api.integrations.publishing import (
     resolve_post_type,
     resolve_provider,
 )
-from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 from trendrelay_api.publication_models import PublicationExecution
@@ -179,13 +179,14 @@ class DestinationCreate(BaseModel):
     posting_preset_id: str | None = Field(default=None, max_length=64)
     post_type: str | None = Field(default=None, max_length=24)
     #: 'auto' lets the network's behaviour decide, and is the recommendation.
+    #: 'none' carries no affiliate link on this account at all.
     link_placement: str = Field(
-        default="auto", pattern=r"^(auto|caption|first_comment|bio)$"
+        default="auto", pattern=r"^(auto|caption|first_comment|bio|none)$"
     )
 
 
 class DestinationPlacement(BaseModel):
-    link_placement: str = Field(pattern=r"^(auto|caption|first_comment|bio)$")
+    link_placement: str = Field(pattern=r"^(auto|caption|first_comment|bio|none)$")
 
 
 class DestinationSchedule(BaseModel):
@@ -281,6 +282,24 @@ class QueueItemCreate(BaseModel):
         from trendrelay_api.integrations.publishing import clean_topic
 
         return clean_topic(value)
+
+
+class QueueAssetsCreate(BaseModel):
+    """Library assets to add as separate campaign posts in one bounded write."""
+
+    # The Library can select thousands of rows without loading them. The web
+    # client sends that selection in bounded chunks: large enough to avoid a
+    # request per post, small enough that one transaction and its match work
+    # cannot grow without limit.
+    asset_ids: list[str] = Field(min_length=1, max_length=200)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def usable_asset_ids(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values]
+        if any(not value or len(value) > 64 for value in cleaned):
+            raise ValueError("Every Library asset id must be between 1 and 64 characters.")
+        return list(dict.fromkeys(cleaned))
 
 
 class QueueItemUpdate(BaseModel):
@@ -1173,6 +1192,108 @@ def add_queue_item(
     return {"item": _queue_view(item)}
 
 
+@router.post("/{campaign_id}/queue/assets", status_code=201)
+def add_queue_assets(
+    workspace_id: str,
+    campaign_id: str,
+    body: QueueAssetsCreate,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Add a page of Library assets as separate posts without an N-request handoff.
+
+    The ids are resolved here rather than expanding every selected asset into a
+    full browser object. That keeps a filter-wide Library selection cheap, does
+    not expose filesystem paths to the caller, and makes each chunk atomic.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+    _campaign(session, workspace_id, campaign_id)
+
+    requested = body.asset_ids
+    found = list(session.scalars(select(MediaAsset).where(
+        MediaAsset.workspace_id == workspace_id,
+        MediaAsset.id.in_(requested),
+    )).all())
+    by_id = {asset.id: asset for asset in found}
+    missing = [asset_id for asset_id in requested if asset_id not in by_id]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"{len(missing)} selected Library "
+                f"{'asset was' if len(missing) == 1 else 'assets were'} not found. "
+                "Refresh the Library selection and try again."
+            ),
+        )
+    unsupported = [
+        asset.id for asset in found if asset.media_kind not in {"video", "image"}
+    ]
+    if unsupported:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Campaign posts support video and images. "
+                f"Remove {len(unsupported)} unsupported selected "
+                f"{'asset' if len(unsupported) == 1 else 'assets'} and try again."
+            ),
+        )
+
+    # Match the Library's handoff rule: newest completed edit, then original.
+    # One ordered query replaces a versions query for every selected asset.
+    latest_render: dict[str, MediaAssetVersion] = {}
+    for version in session.scalars(
+        select(MediaAssetVersion)
+        .where(
+            MediaAssetVersion.workspace_id == workspace_id,
+            MediaAssetVersion.asset_id.in_(requested),
+            MediaAssetVersion.version_kind.in_(("blurred", "edited")),
+        )
+        .order_by(MediaAssetVersion.created_at)
+    ).all():
+        latest_render[version.asset_id] = version
+
+    last = session.scalar(
+        select(func.max(CampaignQueueItem.position)).where(
+            CampaignQueueItem.campaign_id == campaign_id
+        )
+    ) or 0
+    items: list[CampaignQueueItem] = []
+    for offset, asset_id in enumerate(requested, start=1):
+        asset = by_id[asset_id]
+        rendered = latest_render.get(asset.id)
+        media_path = rendered.path if rendered else asset.original_path
+        item = CampaignQueueItem(
+            workspace_id=workspace_id,
+            campaign_id=campaign_id,
+            asset_id=asset.id,
+            video_path=media_path if asset.media_kind == "video" else "",
+            image_paths=[media_path] if asset.media_kind == "image" else [],
+            text_only=False,
+            post_type_overrides={},
+            title=asset.title[:200],
+            body=PLACEHOLDER_BODY,
+            hashtags=[],
+            first_comment=None,
+            thread=[],
+            topic=None,
+            offer_ids=[],
+            offer_match={},
+            state="approved",
+            position=last + offset,
+            last_posted_by_destination={},
+            created_by=user.id,
+        )
+        items.append(item)
+    session.add_all(items)
+    # One flush assigns every id and position before matching starts. Matching
+    # then carries rotation forward in memory instead of rereading the growing
+    # queue once for every new row.
+    session.flush()
+    _refresh_item_matches(session, campaign_id, items)
+    return {"added": len(items)}
+
+
 class QueuePublishRequest(BaseModel):
     """Deliver one queue item immediately."""
 
@@ -1598,6 +1719,52 @@ def _refresh_item_match(
         "chosen_offer_ids": [match.offer_id for match in chosen],
         "generated_at": datetime.now(UTC).isoformat(),
     }
+
+
+def _refresh_item_matches(
+    session: Session,
+    campaign_id: str,
+    items: list[CampaignQueueItem],
+) -> None:
+    """Match a newly inserted batch while carrying rotation in memory."""
+    if not items:
+        return
+    from trendrelay_api.campaign_offer_matcher import (
+        last_promoted,
+        resolve_matches,
+        spoken_for,
+    )
+
+    campaign = session.get(Campaign, campaign_id)
+    autopilot = session.scalar(select(CampaignAutopilot).where(
+        CampaignAutopilot.campaign_id == campaign_id
+    ))
+    if not campaign or not autopilot:
+        return
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.enabled.is_(True),
+    )).all()
+    used = spoken_for(session, campaign_id)
+    last_used = last_promoted(session, campaign_id)
+    for item in items:
+        chosen, ranked, strategy = resolve_matches(
+            session,
+            campaign,
+            autopilot,
+            item,
+            destinations,
+            used_in_run=used,
+            last_used=last_used,
+        )
+        item.offer_match = {
+            "matches": [match.view() for match in ranked[:8]],
+            "strategy": strategy,
+            "selected_offer_ids": list(item.offer_ids or []),
+            "chosen_offer_ids": [match.offer_id for match in chosen],
+            "generated_at": datetime.now(UTC).isoformat(),
+        }
+        used.extend(match.offer_id for match in chosen)
 
 
 def _existing_autopilot(
@@ -2163,7 +2330,7 @@ def _measurement_gaps(destinations: Any) -> list[dict[str, Any]]:
     return sorted(gaps.values(), key=lambda item: item["label"])
 
 
-ANALYTICS_RANGE_DAYS = {"today": 1, "7d": 7, "28d": 28, "90d": 90}
+ANALYTICS_RANGE_DAYS = {"today": 1, "7d": 7, "14d": 14, "28d": 28, "90d": 90}
 
 
 def _aware_utc(value: datetime | None) -> datetime | None:
@@ -2236,7 +2403,11 @@ def campaign_analytics(
     campaign_id: str,
     user: AuthenticatedUser,
     session: DatabaseSession,
-    period: str = Query(default="28d", alias="range", pattern=r"^(today|7d|28d|90d)$"),
+    period: str = Query(
+        default="28d",
+        alias="range",
+        pattern=r"^(today|7d|14d|28d|90d)$",
+    ),
     sort_by: str = Query(
         default="views",
         alias="sort",
@@ -2332,6 +2503,11 @@ def campaign_analytics(
             top_content.append({
                 "id": execution.id,
                 "asset_id": execution.asset_id,
+                # Keep the frozen path as a fallback. Older executions and
+                # image-only posts can outlive a Library thumbnail, but the
+                # exact media they published is still a valid preview source.
+                "media_path": execution.media_path,
+                "image_paths": list(execution.image_paths or []),
                 "title": execution.title or execution.caption[:100] or "Untitled post",
                 "platform": execution.platform,
                 "destination": execution.destination_label,

@@ -1,14 +1,27 @@
-"""Tests for immediate publishing of campaign queue items."""
+"""Tests for immediate publishing of campaign queue items.
+
+On its own database, which is the only way these can pass twice.
+
+They used to run against the application's real `SessionFactory` with fixed
+ids, so every run wrote a workspace, a campaign and a queue item into the
+developer's library - and, once a publish had been attempted, a
+`PublicationExecution` that outlived the run. `uncertain` is a holding state,
+so the second run met the in-flight guard refusing to publish an item the
+first run had already claimed. The suite poisoned the database it was reading,
+and could not pass again until somebody deleted the rows by hand.
+"""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import LOCAL_ADMIN_ID
 from trendrelay_api.autopilot_models import (
@@ -16,16 +29,42 @@ from trendrelay_api.autopilot_models import (
     CampaignDestination,
     CampaignQueueItem,
 )
-from trendrelay_api.models import Campaign, Workspace, WorkspaceMember
 from trendrelay_api.campaign_runner import batch_publish_queue_items, publish_queue_item_now
-from trendrelay_api.database import SessionFactory
+from trendrelay_api.campaign_scheduler import record_published
+from trendrelay_api.database import get_session
 from trendrelay_api.main import app
+from trendrelay_api.models import Base, Campaign, Workspace, WorkspaceMember
 from trendrelay_api.publication_models import PublicationExecution
+
+engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+SessionFactory = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def session_override():
+    with SessionFactory() as session:
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 
 
 @pytest.fixture
-def workspace_with_campaign(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Workspace, campaign, autopilot, connected destination, and sample queue item."""
+def workspace_with_campaign(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Workspace, campaign, autopilot, connected destination, and sample queue item.
+
+    Built fresh each time. The get-or-create below is left as it was, but it now
+    always creates: the schema is dropped and rebuilt per test, so no execution
+    survives to hold the queue item against the next one.
+    """
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    app.dependency_overrides[get_session] = session_override
     monkeypatch.setenv("TRENDRELAY_MEDIA_ROOTS", str(tmp_path))
 
     monkeypatch.setattr(
@@ -58,7 +97,12 @@ def workspace_with_campaign(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
         ws = session.get(Workspace, ws_id)
         if not ws:
-            ws = Workspace(id=ws_id, name="Test WS", slug="test-ws-pubnow", created_by=LOCAL_ADMIN_ID)
+            ws = Workspace(
+                id=ws_id,
+                name="Test WS",
+                slug="test-ws-pubnow",
+                created_by=LOCAL_ADMIN_ID,
+            )
             session.add(ws)
             session.flush()
 
@@ -135,16 +179,17 @@ def workspace_with_campaign(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         session.merge(item)
         session.commit()
 
-    return {
+    yield {
         "workspace_id": ws_id,
         "campaign_id": camp_id,
         "destination_id": dest_id,
         "item_id": "queued_pubnow_test_1",
         "sample_media": sample_media,
     }
+    app.dependency_overrides.clear()
 
 
-def test_publish_queue_item_now_creates_execution_and_updates_item(
+def test_publish_queue_item_now_reserves_without_counting_before_confirmation(
     workspace_with_campaign: dict[str, Any]
 ) -> None:
     ws_id = workspace_with_campaign["workspace_id"]
@@ -166,9 +211,8 @@ def test_publish_queue_item_now_creates_execution_and_updates_item(
 
         item = session.get(CampaignQueueItem, item_id)
         assert item is not None
-        assert item.times_posted == 1
-        assert dest_id in item.last_posted_by_destination
-        assert item.last_posted_by_destination[dest_id] == now.isoformat()
+        assert item.times_posted == 0
+        assert dest_id not in item.last_posted_by_destination
 
         exec_id = result["published"][0]["execution_id"]
         execution = session.get(PublicationExecution, exec_id)
@@ -190,7 +234,13 @@ def test_repeat_posts_off_skips_already_posted_destination_unless_forced(
     now2 = datetime(2026, 8, 30, 12, 0, 0, tzinfo=UTC)
 
     with SessionFactory() as session:
-        publish_queue_item_now(session, ws_id, camp_id, item_id, now=now1)
+        first = publish_queue_item_now(session, ws_id, camp_id, item_id, now=now1)
+        execution = session.get(
+            PublicationExecution, first["published"][0]["execution_id"]
+        )
+        assert execution is not None
+        record_published(session, execution, now=now1)
+        execution.state = "published"
         session.commit()
 
         with pytest.raises(ValueError, match="Let a post go out more than once.*is Off"):
@@ -202,6 +252,29 @@ def test_repeat_posts_off_skips_already_posted_destination_unless_forced(
         session.commit()
         assert len(forced_result["published"]) == 1
         assert forced_result["published"][0]["destination_id"] == dest_id
+
+
+def test_an_inflight_immediate_publish_cannot_be_duplicated(
+    workspace_with_campaign: dict[str, Any]
+) -> None:
+    ws_id = workspace_with_campaign["workspace_id"]
+    camp_id = workspace_with_campaign["campaign_id"]
+    item_id = workspace_with_campaign["item_id"]
+    now = datetime(2026, 8, 30, 10, 0, 0, tzinfo=UTC)
+
+    with SessionFactory() as session:
+        publish_queue_item_now(session, ws_id, camp_id, item_id, now=now)
+        session.commit()
+
+        with pytest.raises(ValueError, match="already queued or publishing"):
+            publish_queue_item_now(
+                session,
+                ws_id,
+                camp_id,
+                item_id,
+                force=True,
+                now=datetime(2026, 8, 30, 10, 1, 0, tzinfo=UTC),
+            )
 
 
 def test_batch_publish_queue_items(workspace_with_campaign: dict[str, Any]) -> None:
