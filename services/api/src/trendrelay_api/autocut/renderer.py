@@ -260,8 +260,22 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
             "-c:a", "aac", "-b:a", "160k",
         ]
 
-    def _encode(graph: str, cwd: Path | None):
-        after = ["-filter_complex", graph, "-map", "[vout]", *audio_tail]
+    def _encode(graph: str, cwd: Path | None, scratch: Path):
+        # The graph goes to a file, never onto the command line.
+        #
+        # It grows about 420 characters per shot, and Windows refuses a command
+        # line over 32,767 - so a plan of roughly seventy-seven shots was the
+        # ceiling, and the failure is `CreateProcess` refusing rather than
+        # ffmpeg saying anything useful. AutoCut's own templates ask for at
+        # most twenty-four pictures and never came near it; a narrated video is
+        # one shot per sentence and walks straight into it.
+        #
+        # `-filter_complex_script` takes a plain path and is not parsed the way
+        # the subtitles filter's argument is, so an absolute one is safe here
+        # even on Windows.
+        script = scratch / "filtergraph.txt"
+        script.write_text(graph, encoding="utf-8")
+        after = ["-filter_complex_script", str(script), "-map", "[vout]", *audio_tail]
         after += ["-r", str(FPS), "-pix_fmt", "yuv420p"]
         # A full render is streamed from the Library, so its moov atom goes up
         # front; a preview is fetched whole as a blob and never streamed, so it
@@ -279,20 +293,21 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
             cwd=cwd,
         )
 
-    if request.captioned:
-        # libass' subtitles filter parses its own argument, where a Windows
-        # path's drive colon and backslashes are read as option separators and
-        # escapes - so the .ass is written into a scratch directory and ffmpeg
-        # is run from inside it, leaving the filter a bare filename. The same
-        # trick the app's subtitle burn-in uses.
-        with tempfile.TemporaryDirectory(prefix="trendrelay-autocut-") as scratch:
-            work = Path(scratch)
+    # One scratch directory for both paths now: the graph is written to a file
+    # whether or not there are captions, so there is always something to write.
+    with tempfile.TemporaryDirectory(prefix="trendrelay-autocut-") as scratch:
+        work = Path(scratch)
+        if request.captioned:
+            # libass' subtitles filter parses its own argument, where a Windows
+            # path's drive colon and backslashes are read as option separators
+            # and escapes - so the .ass is written into the scratch directory
+            # and ffmpeg is run from inside it, leaving the filter a bare
+            # filename. The same trick the app's subtitle burn-in uses.
             (work / "caption.ass").write_text(_caption_ass(request), encoding="utf-8")
-            completed, _profile = _encode(
-                build_filtergraph(request, caption_file="caption.ass"), work,
-            )
-    else:
-        completed, _profile = _encode(build_filtergraph(request), None)
+            graph = build_filtergraph(request, caption_file="caption.ass")
+            completed, _profile = _encode(graph, work, work)
+        else:
+            completed, _profile = _encode(build_filtergraph(request), None, work)
 
     if completed.returncode != 0 or not request.destination.is_file():
         stderr = (completed.stderr or b"")
