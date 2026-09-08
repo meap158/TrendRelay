@@ -51,7 +51,6 @@ import { ActionIcon } from "../ui/action-icons";
 import { AssetFilters } from "../ui/asset-filters";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
-import { FilterChipStrip } from "../ui/filter-strip";
 import { Select } from "../ui/select";
 import { SegmentedControl } from "../ui/segmented";
 
@@ -743,26 +742,42 @@ export function StorytellingDialog({
 
           {source === "library" ? (
             <div className="story-library">
-              {/* The kind first and as chips, the way the campaign picker
-                  raises it above the rest of the row: it is the one filter a
-                  narration asks about constantly - stills to cut on the
-                  sentences, clips where something has to move - and a third
-                  select in a row of selects is not that.
+              {/* The Library's own category tabs, by the Library's own class.
+                  The kind is raised above the rest of the row because it is
+                  the filter a narration asks about constantly - stills to cut
+                  on the sentences, clips where something has to move - and a
+                  third select in a row of selects is not that.
+
+                  Wearing the page's control rather than a lookalike: this is a
+                  Library dialog reached from the row it is copying, and the
+                  same question asked twice in one surface should not be asked
+                  by two different-looking things. Nothing is restyled here, so
+                  the day that row changes this changes with it.
 
                   Audio is left off rather than listed and refused. A narration
                   plays pictures; there is no third thing for a sound file to
                   become here, and `keep` on the hook drops them on arrival. */}
-              <FilterChipStrip
-                chips={kindChips}
-                selected={library.filters.mediaKind ?? ""}
-                onSelect={(kind) => library.setFilters({
-                  ...library.filters,
-                  mediaKind: kind as "" | "image" | "video",
-                }, true)}
-                ariaLabel={t("filters.byMediaKind")}
-                className="story-media-kinds"
-                dense
-              />
+              <div
+                className="library-category-tabs story-media-kinds"
+                role="group"
+                aria-label={t("filters.byMediaKind")}
+              >
+                {kindChips.map((chip) => {
+                  const active = (library.filters.mediaKind ?? "") === chip.key;
+                  return (
+                    <button
+                      key={chip.key || "all"}
+                      type="button"
+                      className={active ? "selected" : ""}
+                      aria-pressed={active}
+                      onClick={() => library.setFilters({
+                        ...library.filters,
+                        mediaKind: chip.key as "" | "image" | "video",
+                      }, true)}
+                    >{chip.label} <span>{chip.count.toLocaleString()}</span></button>
+                  );
+                })}
+              </div>
               {/* Everything else the Library narrows by, through the one shared
                   control (ADR 0025). It was four fields of the eight, which
                   made the same library answer a smaller question here than on
