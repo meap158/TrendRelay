@@ -119,3 +119,72 @@ def test_the_xfade_offsets_walk_the_running_timeline() -> None:
     ]
     assert offsets == sorted(offsets)  # monotonic
     assert offsets[0] > 0  # the first transition is not at time zero
+
+
+def test_a_hook_caption_is_one_cue_held_over_the_whole_video() -> None:
+    from trendrelay_api.autocut.renderer import _caption_ass
+
+    plan = a_plan("breathe", 3)
+    ass = _caption_ass(RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None,
+        destination=Path("/out.mp4"),
+        caption="One line over everything",
+    ))
+    assert ass.count("Dialogue:") == 1
+
+
+def test_timed_cues_become_one_subtitle_each() -> None:
+    """What a narration needs, and what one cue cannot express.
+
+    A montage holds one line over the whole video; a narrated video shows the
+    sentence being spoken now. Both go through the same formatter, so they read
+    with the same weight - only the number of cues differs.
+    """
+    from trendrelay_api.autocut.renderer import _caption_ass
+
+    plan = a_plan("breathe", 3)
+    ass = _caption_ass(RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None,
+        destination=Path("/out.mp4"),
+        # Deliberately alongside a hook: the cues replace it rather than
+        # joining it, because two sets of words on one frame is a subtitle
+        # fighting a title.
+        caption="A hook that must not appear",
+        cues=((0, 2000, "First sentence."), (2000, 4500, "Second sentence.")),
+    ))
+    assert ass.count("Dialogue:") == 2
+    assert "First sentence." in ass
+    assert "Second sentence." in ass
+    assert "A hook that must not appear" not in ass
+
+
+def test_an_empty_cue_is_not_drawn_as_a_blank_subtitle() -> None:
+    from trendrelay_api.autocut.renderer import _caption_ass
+
+    plan = a_plan("breathe", 3)
+    ass = _caption_ass(RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None,
+        destination=Path("/out.mp4"),
+        cues=((0, 2000, "Said aloud."), (2000, 3000, "   ")),
+    ))
+    assert ass.count("Dialogue:") == 1
+
+
+def test_cues_alone_are_enough_to_burn_subtitles() -> None:
+    # `captioned` gates whether the .ass is written at all; a narration has no
+    # hook line, so keying it on the hook would silently drop every subtitle.
+    plan = a_plan("breathe", 3)
+    request = RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None,
+        destination=Path("/out.mp4"),
+        cues=((0, 2000, "Said aloud."),),
+    )
+    assert request.captioned is True

@@ -62,6 +62,17 @@ class RenderRequest:
     caption: str = ""
     #: Where the caption sits: "top" or "bottom".
     caption_position: str = "bottom"
+    #: Timed subtitles, as (start_ms, end_ms, text) in order.
+    #:
+    #: A hook caption is one line held over a whole video, which is what a
+    #: montage wants. A narration wants the sentence being spoken right now,
+    #: which is a different thing and cannot be expressed as one cue. Both go
+    #: through the same subtitle formatter and come out with the same weight
+    #: and outline; only the number of cues differs.
+    #:
+    #: Supplying these replaces the hook caption rather than joining it: two
+    #: sets of words on one frame is a subtitle fighting a title.
+    cues: tuple[tuple[int, int, str], ...] = ()
 
     @property
     def blurred(self) -> bool:
@@ -69,7 +80,7 @@ class RenderRequest:
 
     @property
     def captioned(self) -> bool:
-        return bool(self.caption.strip())
+        return bool(self.cues) or bool(self.caption.strip())
 
 
 #: How hard the fill background is blurred. Enough that it reads as a wash of
@@ -172,7 +183,7 @@ def _join(shots: tuple[Shot, ...], labels: list[str]) -> tuple[str, str]:
 
 
 def _caption_ass(request: RenderRequest) -> str:
-    """A one-cue ASS file for the hook caption, spanning the whole video.
+    """The subtitle file: one cue for a hook, or one a sentence for a narration.
 
     Built through the app's shared subtitle formatter, so an AutoCut caption
     reads with the same weight and outline as a burned-in subtitle elsewhere.
@@ -184,8 +195,28 @@ def _caption_ass(request: RenderRequest) -> str:
     from trendrelay_api.subtitles import Cue
 
     duration_ms = max(1, round(request.plan.duration * 1000))
-    lines = textwrap.wrap(request.caption.strip(), width=26)[:4] or [request.caption.strip()]
-    cue = Cue(index=1, start_ms=0, end_ms=duration_ms, lines=lines)
+    if request.cues:
+        # One cue a sentence, each wrapped the same way the hook is - a
+        # narration line is a sentence rather than a slogan, so it is the one
+        # that actually needs the wrap.
+        cues = [
+            Cue(
+                index=index + 1,
+                start_ms=max(0, start_ms),
+                end_ms=max(start_ms + 1, end_ms),
+                lines=textwrap.wrap(text.strip(), width=26)[:4] or [text.strip()],
+            )
+            for index, (start_ms, end_ms, text) in enumerate(request.cues)
+            if text.strip()
+        ]
+    else:
+        cues = [Cue(
+            index=1,
+            start_ms=0,
+            end_ms=duration_ms,
+            lines=textwrap.wrap(request.caption.strip(), width=26)[:4]
+            or [request.caption.strip()],
+        )]
     style = Style(
         name="AutoCut",
         font="Arial",
@@ -195,7 +226,7 @@ def _caption_ass(request: RenderRequest) -> str:
         alignment="top" if request.caption_position == "top" else "bottom",
         margin_v=max(20, round(request.height * 0.06)),
     )
-    return to_ass([cue], style, play_width=request.width, play_height=request.height)
+    return to_ass(cues, style, play_width=request.width, play_height=request.height)
 
 
 def build_filtergraph(request: RenderRequest, *, caption_file: str | None = None) -> str:
