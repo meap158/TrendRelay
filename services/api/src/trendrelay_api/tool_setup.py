@@ -526,6 +526,10 @@ def setup_report(tool_id: str) -> dict[str, Any]:
         from trendrelay_api.integrations.elevenlabs_setup import setup_report
 
         report.update(setup_report())
+    elif tool_id == "pexels":
+        from trendrelay_api.integrations.pexels_setup import setup_report
+
+        report.update(setup_report())
     elif tool_id == "mediacrawler":
         report.update(
             summary=(

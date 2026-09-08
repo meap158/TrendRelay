@@ -184,6 +184,9 @@ const guidedSetup = new Set([
   // Hosted rather than installed: Setup owns the API key, validates it live,
   // and shows the plan allowance before Library can spend it.
   "elevenlabs",
+  // The other hosted one, and the same story: one free key, and without it
+  // the b-roll search in Storytelling can only say what is missing.
+  "pexels",
 ]);
 
 /** How often to re-read a setup report while its download is running. */
