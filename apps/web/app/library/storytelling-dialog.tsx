@@ -24,6 +24,25 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  assign as assignPicture,
+  forRender,
+  fromSuggestions,
+  reasonsFrom,
+  swap as swapPictures,
+  withoutPicture,
+  type Suggestion,
+} from "../../lib/storytelling-shots";
+import {
+  effectiveVoice,
+  modelFor,
+  offeredVoices,
+  openingLanguage,
+  partitionVoices,
+  readableLanguages,
+  type Model,
+  type Voice,
+} from "../../lib/storytelling-voice";
 import { useLibraryAssets } from "../../lib/use-library-assets";
 import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
@@ -50,15 +69,6 @@ export type StoryAsset = {
 };
 
 type Template = { id: string; name: string; description: string };
-type Voice = {
-  voice_id: string;
-  name: string;
-  /** Language ids this voice is verified in - what the filter matches on. */
-  languages: string[];
-  accents: string[];
-  category?: string | null;
-  labels?: Record<string, string> | null;
-};
 /** A voice in ElevenLabs' shared library that this key has not got. */
 type SharedVoice = {
   voice_id: string;
@@ -70,9 +80,6 @@ type SharedVoice = {
       shown under another. */
   language: string;
 };
-/** A speech model and the languages it can say. Not every model speaks every
-    language, which is the whole reason this is read rather than assumed. */
-type Model = { model_id: string; languages: { language_id: string; name: string }[] };
 type Tile = {
   id: string;
   kind: string;
@@ -80,9 +87,6 @@ type Tile = {
   credit: string;
   photographer_url: string;
 };
-/** One sentence's picture, and the words it was suggested on. */
-type Suggestion = { line: number; asset_id: string; score: number; matched: string[] };
-
 /** A language code as a reader would recognise it, falling back to the code.
     `Intl.DisplayNames` is in every browser this runs in and knows far more
     languages than a table here would. */
@@ -233,103 +237,35 @@ export function StorytellingDialog({
       setModels(voiceBody?.models ?? []);
       setDefaultModel(voiceBody?.defaults?.model_id ?? "");
       // What this workspace works in, unless ElevenLabs was configured for
-      // something else. The interface language is the better of the two guesses
-      // available for free: somebody writing a script in a workspace they run
-      // in Vietnamese is writing it in Vietnamese, and opening on "Any
-      // language" made them say so every time.
-      //
-      // Only when a model can read it. The interface speaks seven languages
-      // and this key's models seventy-four, but they are not the same
-      // seventy-four - defaulting to one that is missing would open the dialog
-      // on a language nothing can say, with the picker showing a value that is
-      // not among its own options.
-      const spoken = new Set<string>((voiceBody?.models ?? []).flatMap(
-        (model: Model) => (model.languages ?? []).map((item) => item.language_id),
-      ));
-      setLanguage((current) => (
-        current
-        || (voiceBody?.defaults?.language_code ?? "")
-        || (spoken.has(locale) ? locale : "")
-      ));
+      // something else, and only ever a language something can read.
+      setLanguage((current) => current || openingLanguage({
+        configured: voiceBody?.defaults?.language_code ?? "",
+        locale,
+        models: voiceBody?.models ?? [],
+      }));
     })();
     return () => { cancelled = true; };
   }, [apiFetch, base, open, workspaceId, locale]);
 
-  /**
-   * Every language that can actually be read, which is the models' list.
-   *
-   * It used to be the voices' list, and that is a different thing: a voice's
-   * `verified_languages` says somebody checked it sounds good in that
-   * language, not that it can speak it. A multilingual model reads any
-   * language it supports in any voice.
-   *
-   * Measured on this key: the voices are verified in eighteen languages and
-   * the models speak seventy-four. Fifty-six were unreachable, Vietnamese
-   * among them - in a workspace that runs in Vietnamese.
-   */
+  // Which language, which model and which voice are three choices that look
+  // like one, and each has an edge that made the picker wrong once. They live
+  // in `lib/storytelling-voice`, where they can be exercised without rendering
+  // a modal - see that file for what each rule is protecting against.
   const languages = useMemo(
-    () => [...new Set(models.flatMap(
-      (model) => (model.languages ?? []).map((item) => item.language_id),
-    ))].sort((left, right) => languageName(left).localeCompare(languageName(right))),
-    [models],
+    () => readableLanguages(models, languageName), [models],
   );
-
-  /** The voices checked in the chosen language, and everything else. */
-  const [verified, others] = useMemo(() => {
-    if (!language) return [voices, [] as Voice[]];
-    return [
-      voices.filter((voice) => (voice.languages ?? []).includes(language)),
-      voices.filter((voice) => !(voice.languages ?? []).includes(language)),
-    ];
-  }, [voices, language]);
-
-  /**
-   * The voices offered: the chosen language's own.
-   *
-   * Filtered, which is the point - a key with three hundred voices offers a
-   * handful in any one language, and scrolling past the rest to find them is
-   * the whole problem. The two escapes below exist because filtering alone
-   * produced an empty picker: `anyVoice` says the rest can still read it,
-   * which is true, and the shared library offers the ones that actually are
-   * this language.
-   */
+  const { verified } = useMemo(
+    () => partitionVoices(voices, language), [voices, language],
+  );
   const speakable = useMemo(
-    () => (!language || anyVoice ? [...verified, ...others] : verified),
-    [language, anyVoice, verified, others],
+    () => offeredVoices(voices, language, anyVoice), [voices, language, anyVoice],
   );
-
-  /**
-   * Which model reads it, which is not a free choice.
-   *
-   * The configured model unless it cannot say the words. On this key
-   * `eleven_multilingual_v2` is the default and reads twenty-nine languages;
-   * Vietnamese is not one of them, and three other models on the same key do
-   * speak it. Sending the default anyway is how a language the account can
-   * speak comes back refused.
-   */
-  const modelId = useMemo(() => {
-    if (!language) return "";
-    const speaks = (model: Model | undefined) =>
-      Boolean(model?.languages?.some((item) => item.language_id === language));
-    const configured = models.find((model) => model.model_id === defaultModel);
-    if (speaks(configured)) return configured!.model_id;
-    return models.find(speaks)?.model_id ?? "";
-  }, [models, language, defaultModel]);
-
-  /**
-   * The voice actually used: the chosen one while it is on offer, and
-   * otherwise the first that is.
-   *
-   * Derived rather than corrected in an effect. Writing the correction back
-   * into state means a render that immediately schedules another, and it also
-   * loses the operator's choice permanently - this way, narrowing to a
-   * language and widening again returns the voice they picked.
-   */
-  const effectiveVoiceId = useMemo(() => (
-    voiceId && speakable.some((voice) => voice.voice_id === voiceId)
-      ? voiceId
-      : speakable[0]?.voice_id ?? ""
-  ), [voiceId, speakable]);
+  const modelId = useMemo(
+    () => modelFor(models, language, defaultModel), [models, language, defaultModel],
+  );
+  const effectiveVoiceId = useMemo(
+    () => effectiveVoice(speakable, voiceId), [speakable, voiceId],
+  );
 
   // Nothing on this key reads the chosen language, so ask what does. A read,
   // and the answer to a question the picker could not otherwise answer: the
@@ -454,7 +390,7 @@ export function StorytellingDialog({
   // shot list that is true and one that only renders true.
   const removePicture = useCallback((assetId: string) => {
     setPicked((current) => current.filter((item) => item.id !== assetId));
-    setAssignments((current) => current.map((id) => (id === assetId ? "" : id)));
+    setAssignments((current) => withoutPicture(current, assetId));
   }, []);
 
   /** Ask which picture suits which sentence. Free and offline, and a
@@ -471,14 +407,8 @@ export function StorytellingDialog({
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail ?? "That could not be arranged.");
       const found: Suggestion[] = payload.assignments ?? [];
-      const next = Array<string>(payload.lines?.length ?? lines.length).fill("");
-      const reasons: Record<number, string[]> = {};
-      for (const item of found) {
-        next[item.line] = item.asset_id;
-        reasons[item.line] = item.matched ?? [];
-      }
-      setAssignments(next);
-      setWhy(reasons);
+      setAssignments(fromSuggestions(found, payload.lines?.length ?? lines.length));
+      setWhy(reasonsFrom(found));
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That could not be arranged.");
     } finally {
@@ -489,12 +419,7 @@ export function StorytellingDialog({
   /** Put a picture on one sentence by hand. The reason goes with it: it was
       the matcher's, and it is not any more. */
   const assign = useCallback((line: number, assetId: string) => {
-    setAssignments((current) => {
-      const next = [...current];
-      while (next.length < lines.length) next.push("");
-      next[line] = assetId;
-      return next;
-    });
+    setAssignments((current) => assignPicture(current, line, assetId, lines.length));
     setWhy((current) => ({ ...current, [line]: [] }));
     setFocused(null);
   }, [lines.length]);
@@ -504,12 +429,7 @@ export function StorytellingDialog({
       sentences themselves do not move - the script decides their order. */
   const swap = useCallback((from: number, to: number) => {
     if (from === to) return;
-    setAssignments((current) => {
-      const next = [...current];
-      while (next.length < lines.length) next.push("");
-      [next[from], next[to]] = [next[to], next[from]];
-      return next;
-    });
+    setAssignments((current) => swapPictures(current, from, to, lines.length));
     setWhy((current) => ({ ...current, [from]: [], [to]: [] }));
   }, [lines.length]);
 
@@ -598,7 +518,7 @@ export function StorytellingDialog({
           // The arrangement, when there is one. Absent means the order the
           // pictures were chosen in, which is what arranging them by hand in
           // the Library meant.
-          assignments: assignments.some(Boolean) ? assignments : [],
+          assignments: forRender(assignments),
           template_id: templateId,
           voice_id: effectiveVoiceId,
           // Both, because the language decides two different things: which
