@@ -58,12 +58,12 @@ export function SegmentedControl<T extends string>({
             // radio set, and a radiogroup would promise arrow-key roving that
             // this does not implement.
             aria-pressed={option.value === value}
-            aria-label={option.label ? undefined : name}
+            aria-label={name}
             title={name}
             onClick={() => onChange(option.value)}
           >
             {option.icon}
-            {option.label}
+            {option.label ? <span>{option.label}</span> : null}
           </button>
         );
       })}

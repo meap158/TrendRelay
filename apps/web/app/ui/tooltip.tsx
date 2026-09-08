@@ -4,6 +4,8 @@ import {
   cloneElement,
   isValidElement,
   useId,
+  useRef,
+  useState,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -26,6 +28,23 @@ export function Tooltip({
   children: ReactElement<TooltipTriggerProps>;
 }) {
   const id = useId();
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const [alignment, setAlignment] = useState<"start" | "center" | "end">("center");
+
+  const placeInsideViewport = () => {
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // The surface is at most 260px wide. Near either viewport edge, anchor it
+    // to the trigger's near edge rather than centring it beyond the document
+    // and creating a horizontal scrollbar. Recomputed when it is opened so it
+    // also follows responsive reflow and keyboard focus.
+    const half = Math.min(130, Math.max(0, (window.innerWidth - 24) / 2));
+    setAlignment(rect.left + rect.width / 2 < half + 12
+      ? "start"
+      : window.innerWidth - (rect.left + rect.width / 2) < half + 12
+        ? "end"
+        : "center");
+  };
 
   if (!isValidElement(children)) return children as ReactNode;
 
@@ -34,7 +53,13 @@ export function Tooltip({
     .join(" ");
 
   return (
-    <span className="ui-tooltip">
+    <span
+      className="ui-tooltip"
+      data-align={alignment}
+      ref={wrapperRef}
+      onFocusCapture={placeInsideViewport}
+      onPointerEnter={placeInsideViewport}
+    >
       {cloneElement(children, {
         "aria-describedby": describedBy,
         // Also gives touch and browser-native fallback contexts a hint when

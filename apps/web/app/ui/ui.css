@@ -189,6 +189,7 @@ a.ui-button { text-decoration: none; }
    this wrapper only positions a hint and never replaces its accessible name. */
 .ui-tooltip { position: relative; display: inline-flex; max-width: 100%; }
 .ui-tooltip-content {
+  display: none;
   position: absolute;
   inset-inline-start: 50%;
   inset-block-end: calc(100% + 8px);
@@ -222,9 +223,31 @@ a.ui-button { text-decoration: none; }
 }
 .ui-tooltip:hover > .ui-tooltip-content,
 .ui-tooltip:focus-within > .ui-tooltip-content {
+  display: block;
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);
+}
+.ui-tooltip[data-align="start"] > .ui-tooltip-content {
+  inset-inline-start: 0;
+  transform: translate(0, 2px);
+}
+.ui-tooltip[data-align="end"] > .ui-tooltip-content {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  transform: translate(0, 2px);
+}
+.ui-tooltip[data-align="start"]:hover > .ui-tooltip-content,
+.ui-tooltip[data-align="start"]:focus-within > .ui-tooltip-content,
+.ui-tooltip[data-align="end"]:hover > .ui-tooltip-content,
+.ui-tooltip[data-align="end"]:focus-within > .ui-tooltip-content { transform: translate(0, 0); }
+.ui-tooltip[data-align="start"] > .ui-tooltip-content::after {
+  inset-inline-start: min(50%, 24px);
+}
+.ui-tooltip[data-align="end"] > .ui-tooltip-content::after {
+  inset-inline-start: auto;
+  inset-inline-end: min(50%, 24px);
+  transform: translateX(50%);
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-tooltip-content { transition: none; }
@@ -236,6 +259,10 @@ a.ui-button { text-decoration: none; }
 .ui-action-menu { position: relative; display: inline-flex; min-inline-size: 0; }
 .ui-action-menu-panel { position: fixed; z-index: 130; display: grid; padding: 5px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
 .ui-action-menu-panel > button { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; inline-size: 100%; border: 0; border-radius: var(--radius-sm); padding: 9px; color: var(--text); background: transparent; text-align: start; cursor: pointer; }
+/* Without an icon, the text used to auto-place into the fixed 22px icon
+ * column. On a phone that turned every label and description into a tall
+ * one-word strip beside an apparently empty menu. */
+.ui-action-menu-panel > .ui-action-menu-item-text-only { grid-template-columns: minmax(0, 1fr); }
 .ui-action-menu-panel > button:hover, .ui-action-menu-panel > button:focus-visible { outline: 0; background: var(--panel-raised); }
 .ui-action-menu-panel > button:focus-visible { box-shadow: inset 3px 0 0 var(--link); }
 [dir="rtl"] .ui-action-menu-panel > button:focus-visible { box-shadow: inset -3px 0 0 var(--link); }
@@ -493,6 +520,21 @@ a.ui-button { text-decoration: none; }
    could not be chosen at all. Both boxes have to let go for the one gesture,
    and both take it back the moment the list closes. */
 .ui-dialog:has(.search-select-popover) .ui-dialog-body { overflow: visible; }
+
+/* Long forms must keep the modal as their viewport while a menu is open.
+ *
+ * The general dialog rule above lets a short menu escape a shallow body. That
+ * is useful for compact pickers, but on Campaign creation it also releases the
+ * form's own several-screen intrinsic height: the modal jumps past the bottom
+ * of the viewport and fields appear behind the dropdown. Opted-in long forms
+ * retain their clip and scroll region. SearchSelect measures that region, flips
+ * above/below, and gives the option list its own scrollbar when space is tight. */
+.ui-dialog:has([data-contain-select-popovers]):has(.search-select-popover) {
+  overflow: hidden;
+}
+.ui-dialog:has([data-contain-select-popovers]):has(.search-select-popover) .ui-dialog-body {
+  overflow-y: auto;
+}
 
 /* Opens below by default and above when below would be clipped; the component
    measures the space against whatever ancestor would cut the list off and sets

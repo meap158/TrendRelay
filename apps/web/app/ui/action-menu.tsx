@@ -32,6 +32,7 @@ export function ActionMenu({
   label,
   icon,
   ariaLabel = label,
+  className,
   items,
   onSelect,
   disabled,
@@ -41,6 +42,7 @@ export function ActionMenu({
   label: string;
   icon?: ReactNode;
   ariaLabel?: string;
+  className?: string;
   items: readonly ActionMenuItem[];
   onSelect: (id: string) => void;
   disabled?: boolean;
@@ -105,7 +107,7 @@ export function ActionMenu({
   }
 
   return (
-    <div className="ui-action-menu" ref={wrapper}>
+    <div className={["ui-action-menu", className].filter(Boolean).join(" ")} ref={wrapper}>
       <button
         ref={trigger}
         type="button"
@@ -161,6 +163,7 @@ export function ActionMenu({
                 key={item.id}
                 ref={(node) => { itemRefs.current[index] = node; }}
                 type="button"
+                className={item.icon ? undefined : "ui-action-menu-item-text-only"}
                 role="menuitem"
                 aria-disabled={item.disabled || undefined}
                 title={detail}

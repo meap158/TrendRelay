@@ -1142,14 +1142,26 @@ nav strong { color: var(--text); }
 /* --- collapsed engine setup ------------------------------------------------- */
 /* Configured once, then in the way. A line is enough to say which engine is
  * live and how to change it, which gives the composer the top of the page. */
-.engine-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
-.engine-summary > div { display: grid; gap: 1px; margin-inline-end: auto; min-width: 0; }
+.engine-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.engine-summary-overview { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.engine-summary-copy { display: grid; min-width: 0; gap: 1px; }
 .engine-summary strong { font-size: 13px; font-weight: 500; }
 .engine-summary span { color: var(--muted); font-size: 11px; }
+.engine-summary-copy > strong, .engine-summary-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.engine-summary-action { justify-self: end; }
+.engine-summary-action .ui-button { box-shadow: 0 1px 2px rgb(20 35 50 / 14%); white-space: nowrap; }
+.engine-summary-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; }
 /* Several engines can carry one post, so the summary shows every connected
    mark. Overlapped slightly: they read as one group rather than a queue. */
 .engine-summary-marks { display: inline-flex; align-items: center; }
 .engine-summary-marks > * + * { margin-inline-start: -6px; }
+@media (max-width: 640px) {
+  .engine-summary { gap: 8px; padding: 8px 10px; }
+  .engine-summary-overview { gap: 8px; }
+  .engine-summary-marks { display: none; }
+  .engine-summary-links { flex-wrap: nowrap; overflow-x: auto; padding-block-end: 2px; scrollbar-width: thin; }
+  .engine-summary-links > * { flex: 0 0 auto; }
+}
 .section-heading-aside { display: flex; align-items: center; gap: 8px; }
 
 /* --- publishing job rows ---------------------------------------------------- */
@@ -1647,6 +1659,8 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
   .campaign-pipeline-thumb { grid-column: 2; justify-content: start; border-inline-end: 0; border-block-end: 1px solid var(--line); }
   .campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { inline-size: 86px; block-size: 58px; }
   .campaign-pipeline article { grid-column: 2; }
+  .campaign-pipeline-destination { flex-wrap: wrap; }
+  .campaign-pipeline-destination > .campaign-entry-actions { flex: 1 1 100%; justify-content: flex-end; }
   .campaign-affiliate-route { align-items: flex-start; }
   .campaign-pipeline-products li { max-inline-size: 100%; }
   .campaign-pipeline-products strong { max-inline-size: 180px; }
@@ -1767,3 +1781,11 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .tool-setting > small > a { color: var(--link); }
 .tool-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .tool-settings-actions > small { color: var(--muted); font-size: 11px; }
+
+/* The way to the rest of the notifications, at the end of the list it extends.
+   A row rather than a footer outside the list: it belongs to the sequence, and
+   screen readers meet it where the list stops. */
+.notification-more { display: grid; justify-items: center; gap: 3px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.notification-more button { border: 0; background: none; color: var(--link); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.notification-more button:hover { text-decoration: underline; }
+.notification-more small { color: var(--muted); font-size: 10px; }

@@ -13,8 +13,8 @@ export type SearchSelectOption = {
   disabled?: boolean;
 };
 
-/** Which side of the trigger the list opens on, and how tall it may be. */
-type Placement = { side: "below" | "above"; maxHeight: number };
+/** Which side of the trigger the list opens on, and how large it may be. */
+type Placement = { side: "below" | "above"; maxHeight: number; maxInlineSize: number };
 
 /**
  * The first ancestor that would clip the list, or the viewport.
@@ -22,9 +22,12 @@ type Placement = { side: "below" | "above"; maxHeight: number };
  * A modal panel hides its overflow and is transformed to centre itself, so the
  * list can escape it neither by overflow nor by `position: fixed`. Rather than
  * fight that, the list is measured against whatever would clip it and kept
- * inside.
+ * inside. Exported because the posting-preset menu on Campaigns hangs off the
+ * same question inside the workspace rail.
  */
-function clipBounds(node: HTMLElement | null): { top: number; bottom: number } {
+export function clipBounds(node: HTMLElement | null): {
+  top: number; bottom: number; left: number; right: number;
+} {
   for (let el = node?.parentElement; el; el = el.parentElement) {
     const style = getComputedStyle(el);
     const clips = `${style.overflow}${style.overflowY}`.includes("hidden")
@@ -32,10 +35,23 @@ function clipBounds(node: HTMLElement | null): { top: number; bottom: number } {
       || `${style.overflow}${style.overflowY}`.includes("scroll");
     if (clips) {
       const rect = el.getBoundingClientRect();
-      return { top: rect.top, bottom: rect.bottom };
+      // The scrollable region ends inside the border box: the box's own bars
+      // live between the padding edge and the border. Measuring to the border
+      // edge left the list that much wider than the space that was actually
+      // available - wide enough to turn the box's scrollbar sideways.
+      const bars = {
+        inline: el.offsetWidth - el.clientWidth,
+        block: el.offsetHeight - el.clientHeight,
+      };
+      return {
+        top: rect.top,
+        bottom: rect.bottom - bars.block,
+        left: rect.left,
+        right: rect.right - bars.inline,
+      };
     }
   }
-  return { top: 0, bottom: window.innerHeight };
+  return { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
 }
 
 /** A compact, searchable replacement for selects with long operational lists. */
@@ -92,7 +108,7 @@ export function SearchSelect({
    */
   const [active, setActive] = useState(0);
   const listNode = useRef<HTMLDivElement>(null);
-  const [placement, setPlacement] = useState<Placement>({ side: "below", maxHeight: 320 });
+  const [placement, setPlacement] = useState<Placement>({ side: "below", maxHeight: 320, maxInlineSize: 320 });
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const listId = useId();
@@ -190,18 +206,33 @@ export function SearchSelect({
     const side = preferredSide === "auto"
       ? below < 220 && above > below ? "above" : "below"
       : preferredSide;
-    // Never taller than the room that exists. The floor here was 140px,
-    // which in a short dialog handed the list more height than its clip
-    // allowed: the surplus rendered outside the scrollable dialog body,
-    // where the dialog own footer took the clicks. On the Publish page
-    // add-account dialog that left 57px of room for a 140px list, and two of
-    // the four engines could not be chosen at all - they were drawn past the
-    // clip, so a click at them landed on the footer behind.
-    //
-    // A cramped list that scrolls is usable. One that reaches past its clip
-    // is not, and it does not look broken either, which is worse: the options
-    // are visible, they simply do nothing.
-    setPlacement({ side, maxHeight: Math.max(0, Math.min(320, side === "above" ? above : below)) });
+    // The list hangs off the field's inline-start edge and grows toward the
+    // clip's far edge. Inside a narrow scrollbox - the campaign rail - that
+    // edge is close by, so the width stops at what remains rather than
+    // overflowing the box and turning its scrollbar sideways.
+    const rtl = getComputedStyle(anchor).direction === "rtl";
+    const inlineRoom = Math.min(
+      rtl ? rect.right - bounds.left : bounds.right - rect.left,
+      window.innerWidth - margin * 2,
+    );
+      setPlacement({
+        side,
+        // Never taller than the room that exists. The floor here was 140px,
+        // which in a short dialog handed the list more height than its clip
+        // allowed: the surplus rendered outside the scrollable dialog body,
+        // where the dialog's own footer took the clicks. On the Publish page's
+        // add-account dialog that left 57px of room for a 140px list, and two
+        // of the four engines could not be chosen at all - they were drawn
+        // past the clip, so a click at them landed on the footer behind.
+        //
+        // A cramped list that scrolls is usable. One that reaches past its
+        // clip is not, and it does not look broken either, which is worse:
+        // the options are visible, they simply do nothing.
+        maxHeight: Math.max(0, Math.min(320, side === "above" ? above : below)),
+        // Two pixels back from the edge, so a rounding remainder cannot be
+        // what tips the box into showing a sideways scrollbar.
+        maxInlineSize: Math.max(180, Math.floor(inlineRoom) - 2),
+      });
   }, [preferredSide]);
 
   useLayoutEffect(() => { if (open) place(); }, [open, place]);
@@ -245,7 +276,7 @@ export function SearchSelect({
         <div
           className="search-select-popover"
           data-side={placement.side}
-          style={{ maxHeight: placement.maxHeight }}
+          style={{ maxHeight: placement.maxHeight, maxInlineSize: placement.maxInlineSize }}
         >
           {searchable && (
             <input type="search" value={query} placeholder={searchPlaceholder}

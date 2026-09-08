@@ -15,6 +15,7 @@ import {
 } from "../lib/eta";
 import { Clock, Languages, Settings } from "lucide-react";
 import { notificationHref } from "../lib/job-links";
+import { listingBatchProgress } from "../lib/listing-batch-progress";
 
 import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
@@ -29,6 +30,11 @@ import { TimezonePicker } from "./ui/timezone-picker";
 import { useWorkspace } from "./workspace-provider";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
+
+//: How many notification rows appear at once, and how many each press adds.
+//: Fifteen fills the panel about twice over, so there is always something to
+//: scroll before there is something to press.
+const NOTIFICATION_PAGE = 15;
 const MAX_STORED_READ_KEYS = 300;
 /** Pointer travel before a press becomes a drag, so a click still clicks. */
 const DRAG_THRESHOLD_PX = 6;
@@ -250,6 +256,8 @@ function batchProgress(group: NotificationGroup): {
 } | null {
   const batch = batchOf(group.latest);
   if (!batch) return null;
+  const listingProgress = listingBatchProgress(group.latest.raw?.batch_summary, batch.total);
+  if (group.latest.category === "listing" && listingProgress && listingProgress.total > 1) return listingProgress;
   // A batch of one is a job. Marking it is still worth doing - the identity is
   // what keeps it from merging with the next single render of the same kind -
   // but "0 of 1 done" is progress chrome around something that has none to
@@ -384,6 +392,16 @@ export function GlobalNav() {
 
   const storageKey = user ? READ_NOTIFICATIONS_KEY + user.id : null;
   const groups = useMemo(() => groupNotifications(jobs), [jobs]);
+  /**
+   * How many rows are on screen, and how many more each press reveals.
+   *
+   * The list was cut at fifteen with nothing after it - no count, no control -
+   * so a workspace with seventy-three notifications looked like one with
+   * fifteen. Revealed in pages rather than all at once because each row draws
+   * badges, a thumbnail and a progress bar, and a drawer that renders hundreds
+   * of them on open is a drawer that stutters every time the bell is pressed.
+   */
+  const [shownGroups, setShownGroups] = useState(NOTIFICATION_PAGE);
   // Counted over groups, not jobs: the badge should say how many things need
   // attention, and one failure repeated thirty times is one thing.
   const unreadCount = readStateReady
@@ -420,6 +438,9 @@ export function GlobalNav() {
    */
   function openDrawer() {
     setStatusFilter("all");
+    // Back to the first page with the filter, for the same reason: the drawer
+    // is opened to see what is new, not to resume where it was left.
+    setShownGroups(NOTIFICATION_PAGE);
     setDrawerOpen(true);
   }
 
@@ -796,7 +817,13 @@ export function GlobalNav() {
                     tone: `chip-notification chip-${key}`,
                   }))}
                   selected={statusFilter}
-                  onSelect={(key) => setStatusFilter(key as NotificationFilter)}
+                  onSelect={(key) => {
+                    setStatusFilter(key as NotificationFilter);
+                    // A different filter is a different list, so it starts at
+                    // its own first page rather than inheriting how far the
+                    // last one had been opened up.
+                    setShownGroups(NOTIFICATION_PAGE);
+                  }}
                   ariaLabel={t("notifications.filterLabel")}
                 />
                 </div>
@@ -809,7 +836,7 @@ export function GlobalNav() {
               ) : (
                 <ol className="notification-list">
                   {cancelError && <li className="notification-error" role="alert">{cancelError}</li>}
-                  {visibleGroups.slice(0, 15).map((group) => {
+                  {visibleGroups.slice(0, shownGroups).map((group) => {
                     const job = group.latest;
                     const batch = batchProgress(group);
                     const destination = notificationHref(group.jobs, { title: job.title }) ?? job.href;
@@ -1007,6 +1034,28 @@ export function GlobalNav() {
                       </li>
                     );
                   })}
+                  {/* The rest of them, and how many there are. A list that
+                      simply stopped at fifteen made a workspace with
+                      seventy-three look like one with fifteen - the older
+                      notifications were not gone, there was just nothing
+                      saying so and no way to reach them. */}
+                  {visibleGroups.length > shownGroups && (
+                    <li className="notification-more">
+                      <button
+                        type="button"
+                        onClick={() => setShownGroups((current) => current + NOTIFICATION_PAGE)}
+                      >
+                        {t("notifications.showMore", {
+                          count: Math.min(
+                            NOTIFICATION_PAGE, visibleGroups.length - shownGroups,
+                          ),
+                        })}
+                      </button>
+                      <small>{t("notifications.showingCount", {
+                        shown: shownGroups, total: visibleGroups.length,
+                      })}</small>
+                    </li>
+                  )}
                 </ol>
               )}
             </section>

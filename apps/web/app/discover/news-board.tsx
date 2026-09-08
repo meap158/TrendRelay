@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, Cpu, Globe, Newspaper, Plus, RefreshCw, Search, Zap } from "lucide-react";
+import { AlignJustify, Building2, Check, Cpu, Globe, LayoutGrid, List, Newspaper, Plus, RefreshCw, Search, Zap } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import {
@@ -211,18 +211,18 @@ export function NewsBoard({
   // locale; the values are the API's desk names and never translate.
   const deskOptions = useMemo(
     () => [
-      { value: "all" as const, label: t("discover.news.deskAll"), icon: <Newspaper size={13} />, title: t("discover.news.deskAllTitle") },
-      { value: "general" as const, label: t("discover.news.deskWorld"), icon: <Globe size={13} />, title: t("discover.news.deskWorldTitle") },
-      { value: "business" as const, label: t("discover.news.deskBusiness"), icon: <Building2 size={13} />, title: t("discover.news.deskBusinessTitle") },
-      { value: "technology" as const, label: t("discover.news.deskTech"), icon: <Cpu size={13} />, title: t("discover.news.deskTechTitle") },
+      { value: "all" as const, label: t("discover.news.deskAll"), icon: <Newspaper size={13} aria-hidden="true" />, title: t("discover.news.deskAllTitle") },
+      { value: "general" as const, label: t("discover.news.deskWorld"), icon: <Globe size={13} aria-hidden="true" />, title: t("discover.news.deskWorldTitle") },
+      { value: "business" as const, label: t("discover.news.deskBusiness"), icon: <Building2 size={13} aria-hidden="true" />, title: t("discover.news.deskBusinessTitle") },
+      { value: "technology" as const, label: t("discover.news.deskTech"), icon: <Cpu size={13} aria-hidden="true" />, title: t("discover.news.deskTechTitle") },
     ],
     [t],
   );
   const densityOptions = useMemo(
     () => [
-      { value: "cards" as const, label: t("discover.news.densityCards"), title: t("discover.news.densityCardsTitle") },
-      { value: "rows" as const, label: t("discover.news.densityRows"), title: t("discover.news.densityRowsTitle") },
-      { value: "headlines" as const, label: t("discover.news.densityHeadlines"), title: t("discover.news.densityHeadlinesTitle") },
+      { value: "cards" as const, label: t("discover.news.densityCards"), icon: <LayoutGrid size={13} aria-hidden="true" />, title: t("discover.news.densityCardsTitle") },
+      { value: "rows" as const, label: t("discover.news.densityRows"), icon: <List size={13} aria-hidden="true" />, title: t("discover.news.densityRowsTitle") },
+      { value: "headlines" as const, label: t("discover.news.densityHeadlines"), icon: <AlignJustify size={13} aria-hidden="true" />, title: t("discover.news.densityHeadlinesTitle") },
     ],
     [t],
   );
@@ -303,10 +303,27 @@ export function NewsBoard({
   return (
     <div className="news-board">
       <div className="news-board-head">
-        <h2>
-          <Newspaper size={15} aria-hidden="true" />
-          {t("discover.news.heading")}
-        </h2>
+        <div className="news-board-title">
+          <h2>
+            <Newspaper size={15} aria-hidden="true" />
+            {t("discover.news.heading")}
+          </h2>
+          <Button
+            variant="quiet"
+            size="sm"
+            iconOnly
+            busy={loading}
+            spinsIcon
+            onClick={() => {
+              setRefreshing(true);
+              setReload((count) => count + 1);
+            }}
+            aria-label={t("discover.news.refresh")}
+            title={t("discover.news.refreshTitle")}
+          >
+            <RefreshCw size={13} aria-hidden="true" />
+          </Button>
+        </div>
         <div className="news-board-controls">
           {/* First, and narrow. It is the control somebody reaches for when
               they know what they are looking for, and the desks are what they
@@ -333,20 +350,6 @@ export function NewsBoard({
             onChange={setDensity}
             label={t("discover.news.densityLabel")}
           />
-          <Button
-            variant="quiet"
-            size="sm"
-            busy={loading}
-            spinsIcon
-            onClick={() => {
-              setRefreshing(true);
-              setReload((count) => count + 1);
-            }}
-            title={t("discover.news.refreshTitle")}
-          >
-            <RefreshCw size={13} aria-hidden="true" />
-            {t("discover.news.refresh")}
-          </Button>
         </div>
       </div>
 

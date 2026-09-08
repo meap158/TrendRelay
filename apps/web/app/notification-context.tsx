@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { PlatformIcon, type PublishingPlatform } from "./publishing-icons";
 import { useT } from "./i18n-provider";
+import { opaquePreviewUrl } from "../lib/media-preview";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -45,10 +46,12 @@ function JobThumbnail({
     const endpoint = assetId
       ? `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`
       : `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(mediaPath ?? "")}`;
-    apiFetch(endpoint)
-      .then((response) => response.ok ? response.blob() : Promise.reject(new Error("unavailable")))
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
+    // Asked opaque and retyped here, like every served byte in this app: an
+    // honest image/* on a plain GET is a file to a picture grabber.
+    apiFetch(opaquePreviewUrl(endpoint))
+      .then((response) => response.ok ? response.arrayBuffer() : Promise.reject(new Error("unavailable")))
+      .then((bytes) => {
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
         if (live) setSource(objectUrl);
         else URL.revokeObjectURL(objectUrl);
       })

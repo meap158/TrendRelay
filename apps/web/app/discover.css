@@ -327,14 +327,14 @@
  * everything else, so what it spends is spent by every section below it: at
  * "headlines" a shelf of six costs about a third of what it costs as cards. */
 .news-board { display: grid; gap: 10px; margin-bottom: 18px; }
-.news-board-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.news-board-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.news-board-title { display: flex; min-inline-size: 0; align-items: center; gap: 4px; }
 .news-board-head h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
 .news-board-head h2 svg { color: var(--link); }
-.news-board-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-/* Narrow on purpose. It sits in a row with two segmented controls and a
-   refresh, and a search box given its head takes the row - on a phone it
-   would push the desks onto a line of their own. Grows only where there is
-   room to grow into. */
+.news-board-controls { display: flex; min-inline-size: 0; max-inline-size: 100%; flex-wrap: nowrap; align-items: center; justify-self: end; justify-content: flex-end; gap: 6px; }
+/* Narrow on purpose. It sits in a row with two segmented controls, and a
+   search box given its head takes the row. Grows only where there is room to
+   grow into. */
 .news-search { display: flex; flex: 0 1 190px; min-inline-size: 118px; align-items: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0 7px; background: var(--panel); color: var(--muted); }
 .news-search input { inline-size: 100%; min-inline-size: 0; border: 0; padding: 5px 0; background: none; color: var(--text); font: inherit; font-size: 11px; }
 .news-search input:focus-visible { outline: none; }
@@ -395,6 +395,11 @@
   .news-meta { gap: 3px 7px; }
 }
 
+@media (max-width: 900px) {
+  .news-board-head { grid-template-columns: minmax(0, 1fr); }
+  .news-board-controls { inline-size: 100%; flex-wrap: wrap; justify-self: stretch; justify-content: flex-start; }
+}
+
 @media (max-width: 640px) {
   .dsc-view-nav { top: 49px; padding-inline: 8px; }
   .dsc-view-tab { padding-inline: 11px; }
@@ -417,6 +422,10 @@
   .dsc-card-footer { display: grid; grid-template-columns: minmax(0, 1fr); }
   .dsc-card-actions { width: 100%; min-width: 0; flex-wrap: wrap; }
   .dsc-card-actions > * { min-width: 0; }
+  .news-board-controls { gap: 4px; }
+  .news-search { flex: 1 1 100%; }
+  .news-board-controls > [role="group"] button { padding-inline: 6px; }
+  .news-board-controls > [role="group"] button span { display: none; }
 }
 
 @media (min-width: 370px) and (max-width: 640px) {
@@ -441,5 +450,4 @@
   .dsc-search-mode { max-width: 92px; padding-inline: 7px; }
   .dsc-pill-row { min-inline-size: 0; max-inline-size: 100%; }
   .news-board, .news-board-head, .news-board-controls { min-inline-size: 0; max-inline-size: 100%; }
-  .news-board-controls > [role="group"] button { padding-inline: 6px; }
 }

@@ -489,7 +489,7 @@ export default function ToolsPage() {
         setError("An owner workspace is required to connect Douyin.");
         return;
       }
-      if (!window.confirm("Open the dedicated Douyin login window and save the required downloader cookies locally?")) return;
+      if (!window.confirm("Open Douyin and save the browser session automatically? Login is optional.")) return;
       setBusy(`${setup.tool_id}-${action.id}`);
       setError(null);
       try {

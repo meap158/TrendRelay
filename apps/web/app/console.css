@@ -306,6 +306,22 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .job-error { color: var(--red); }
 .artifact-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--radius-sm); background: #fafafa; border: 1px solid var(--line); }
 .download-artifact-thumbnail { display: block; width: 42px; height: 42px; border-radius: 5px; object-fit: cover; background: var(--panel-raised); }
+.download-artifact-preview-trigger { display: block; width: 42px; height: 42px; border: 0; border-radius: 5px; padding: 0; background: transparent; cursor: zoom-in; }
+.download-artifact-preview-trigger:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+/* Portalled to the viewport because the desktop download queue scrolls inside
+   its card. A tooltip kept in the row is clipped by that scroll boundary. */
+.download-artifact-preview-tooltip { box-sizing: content-box; position: fixed; z-index: 180; display: grid; max-width: calc(100vw - 18px); max-height: calc(100vh - 18px); overflow: hidden; border: 1px solid rgb(255 255 255 / 22%); border-radius: var(--radius); background: #111923; box-shadow: 0 14px 38px rgb(17 31 44 / 30%); pointer-events: none; }
+.download-artifact-preview-media { display: grid; width: 100%; place-items: center; overflow: hidden; background: #111923; }
+/* The stage is already the still's measured aspect ratio, so cover fills the
+   rounded frame without cropping—matching the Campaigns thumbnail rule. */
+.download-artifact-preview-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.download-artifact-preview-meta { display: grid; min-width: 0; gap: 2px; border-top: 1px solid rgb(255 255 255 / 14%); padding: 7px 9px 8px; color: var(--on-ink); background: #18232e; text-align: start; }
+.download-artifact-preview-meta strong { display: -webkit-box; overflow: hidden; font-size: 11px; font-weight: 650; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.download-artifact-preview-meta small { overflow: hidden; color: rgb(255 255 255 / 66%); font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: none) {
+  .download-artifact-preview-trigger { cursor: pointer; }
+  .download-artifact-preview-tooltip { box-shadow: 0 8px 24px rgb(17 31 44 / 26%); }
+}
 /* A placeholder that looks placed rather than broken. The glyph is what
    says "a picture belongs here"; an empty dashed box says "a picture failed
    to arrive here", which was true for one of the three states and wrong for
@@ -850,6 +866,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .limit-presets button:hover:not(:disabled) { background: var(--panel-raised); }
 .limit-presets button:disabled { cursor: default; }
 .limit-presets button.selected { color: var(--on-ink); background: var(--link); }
+.limit-presets button.selected:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--link) 14%, var(--panel)); }
 .download-options > p { margin: 0 0 12px; color: var(--muted); font-size: 10px; }
 
 .download-submit-row { display: grid; gap: 8px; }
@@ -878,6 +895,18 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .queue-filters button:hover { color: var(--text); background: var(--panel-raised); }
 .queue-filters button.selected { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
 .queue-filters b { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 999px; color: var(--muted); background: var(--panel); font-size: 9px; }
+/* The same three pairs `.filter-chip` uses, because a count that stands for a
+   pile of rows should wear what those rows wear - green for what finished, red
+   for what needs somebody, and the progress bar's own blue for what is moving.
+   Written as tones on the badge rather than on the button: the filter itself is
+   chrome and stays quiet until it is the selected one.
+
+   No tone at zero, which the markup decides. A red nought is a warning about
+   nothing, and four permanently lit badges are a decoration rather than a
+   signal. */
+.queue-filters b[data-tone="running"] { color: var(--link); background: var(--link-bg); }
+.queue-filters b[data-tone="succeeded"] { color: var(--green); background: var(--green-dark); }
+.queue-filters b[data-tone="failed"] { color: var(--bad); background: var(--bad-bg); }
 
 /* Anchored to the top, where the first row of the list would have been.
    Equal padding above and below floated the message in the middle of the
@@ -895,18 +924,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .download-job-topline, .download-job-title { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .download-job-topline time { color: var(--muted); font-size: 10px; }
 .download-job-title > div { display: grid; gap: 4px; min-width: 0; }
-/* The same three pairs `.filter-chip` uses, because a count that stands for a
-   pile of rows should wear what those rows wear - green for what finished, red
-   for what needs somebody, and the progress bar's own blue for what is moving.
-   Written as tones on the badge rather than on the button: the filter itself is
-   chrome and stays quiet until it is the selected one.
-
-   No tone at zero, which the markup decides. A red nought is a warning about
-   nothing, and four permanently lit badges are a decoration rather than a
-   signal. */
-.queue-filters b[data-tone="running"] { color: var(--link); background: var(--link-bg); }
-.queue-filters b[data-tone="succeeded"] { color: var(--green); background: var(--green-dark); }
-.queue-filters b[data-tone="failed"] { color: var(--bad); background: var(--bad-bg); }
 .download-job-title strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .download-job-title span { color: var(--muted); font-size: 10px; }
 .download-job-title .ui-button { flex: 0 0 auto; }
@@ -932,12 +949,22 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    neutral - its numbers already say what is missing - and complete alone
    earns the green, so a finished profile is the one that stands out. */
 .download-coverage { display: flex; flex-wrap: wrap; gap: 4px; }
-.download-coverage > span { display: inline-flex; align-items: baseline; gap: 4px; max-inline-size: 260px; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.download-coverage > span b { font-variant-numeric: tabular-nums; }
-.download-coverage > span.coverage-complete { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); color: color-mix(in srgb, var(--green) 55%, var(--text)); }
+/* Both elements, one pill: a profile badge is a link to the profile and the
+   whole-batch badge is not a link to anything, and they must not read as two
+   different controls. */
+.download-coverage > :is(span, a) { display: inline-flex; align-items: baseline; gap: 4px; max-inline-size: 260px; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); font-size: 10px; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.download-coverage > :is(span, a) b { font-variant-numeric: tabular-nums; }
+.download-coverage > :is(span, a).coverage-complete { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); color: color-mix(in srgb, var(--green) 55%, var(--text)); }
+/* The link affordance, kept in the pill's own tone: the border firms up and
+   the name underlines, rather than the row sprouting blue. */
+.download-coverage > a:hover, .download-coverage > a:focus-visible { border-color: currentColor; text-decoration: underline; }
 /* The percentage rides each pill as its own segment - a hairline in the
    pill's own tone keeps counts and share readable at a glance apart. The
    whole-batch pill leads the row, set off by a faint fill in the same tone. */
+/* What the fraction counts. Quiet, because it is a unit rather than a value -
+   but present, because this badge sits beside a count of files and the two
+   were read as one number contradicting itself. */
+.download-coverage .coverage-unit { padding-inline: 4px 6px; opacity: .72; font-weight: 500; }
 .download-coverage .coverage-pct { padding-inline-start: 6px; border-inline-start: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-variant-numeric: tabular-nums; font-weight: 650; }
 .download-coverage > span.coverage-total { background: color-mix(in srgb, currentColor 8%, transparent); font-weight: 550; }
 /* Earlier runs of the same sources, folded into the batch's one row: a date
@@ -1044,6 +1071,16 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   text-decoration: none;
 }
 .download-job-actions a:hover { border-color: var(--link); color: var(--link); }
+.bookmarklet-help { display: grid; gap: 10px; color: var(--text); font-size: 13px; line-height: 1.45; }
+.bookmarklet-help p { margin: 0; }
+.bookmarklet-help ol { margin: 0; padding-inline-start: 20px; }
+.bookmarklet-help label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.bookmarklet-code { width: 100%; min-height: 112px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px; color: var(--text); background: var(--panel-raised); font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.bookmarklet-note { color: var(--muted); font-size: 11px; }
+.bookmarklet-help details > summary { cursor: pointer; color: var(--link); padding-block: 8px; }
+.bookmarklet-help details[open] > summary { margin-bottom: 6px; }
+.bookmarklet-links { min-height: 128px; font-size: 13px; }
+@media (max-width: 600px) { .bookmarklet-links { font-size: 16px; } }
 .queue-show-more {
   width: 100%;
   min-height: 34px;
@@ -2052,6 +2089,8 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .campaign-media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; }
 }
 @media (max-width: 600px) {
+  .campaign-entry-actions { flex-wrap: wrap; max-inline-size: 100%; }
+  .campaign-day-row > .campaign-entry-actions { flex: 1 1 100%; justify-content: flex-end; }
   .campaign-heading, .campaign-summary { display: grid; }
   .campaign-layout, .campaign-workspace, .campaign-summary, .autopilot,
   .campaign-one-off-handoff, .autopilot-run-row, .autopilot-delivery { min-inline-size: 0; }
@@ -2421,7 +2460,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    number reads as a second series. A quiet panel chip keeps grid lines from
    crossing the digits without giving each value button-like weight. */
 .campaign-trend-value { position: absolute; z-index: 2; inset-block-start: var(--trend-point-y); inset-inline-start: var(--trend-point-x); transform: translate(-50%, calc(-100% - 6px)); border-radius: 999px; padding: 1px 4px; color: var(--text); background: color-mix(in srgb, var(--panel) 88%, transparent); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
-.campaign-trend-value[data-stagger] { transform: translate(-50%, calc(-100% - 17px)); }
+.campaign-trend-value[data-lane="1"] { transform: translate(-50%, calc(-100% - 22px)); }
+.campaign-trend-value[data-lane="2"] { transform: translate(-50%, calc(-100% - 38px)); }
+.campaign-trend-value[data-lane="3"] { transform: translate(-50%, calc(-100% - 54px)); }
 .campaign-trend-value[data-below] { transform: translate(-50%, 6px); }
 
 .campaign-analytics-trend > span.campaign-trend-dates { display: flex; justify-content: space-between; margin-inline-start: 40px; color: var(--muted); font-size: 9px; }
@@ -2520,3 +2561,29 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .campaign-top-content > header label { justify-content: space-between; }
   .campaign-top-content > header .ui-select { min-inline-size: 0; inline-size: 55%; }
 }
+
+/* Why this account is posting without a link, under the control that chose it.
+   The badge above says "no link"; this says it was deliberate and that the
+   campaign's other accounts are unaffected. */
+.campaign-placement-note { display: block; margin-block-start: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+/* The wait that stands where the downloads list will be. Compact, because it
+   is inside the Step 2 card already - the full block brings its own panel, and
+   a panel inside a panel reads as a second card. Its height matches the empty
+   state it replaces, so settling into "no downloads yet" does not jump. */
+.download-wait { min-height: 168px; }
+
+/* A batch spanning two services, and the two ways out of it. The buttons sit
+   beside the explanation rather than under it: the callout is already a whole
+   row, and stacking them would spend a second one saying the same thing. */
+.download-conflict-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .download-conflict { flex-wrap: wrap; }
+  .download-conflict-actions { width: 100%; }
+}
+
+/* The tab's state and the one action on it, as a pair at the end of the
+   heading row. Grouped because the row is `space-between`: as separate
+   children the badge would sit in the middle of the row rather than beside
+   the link it belongs with. */
+.download-heading-state { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }

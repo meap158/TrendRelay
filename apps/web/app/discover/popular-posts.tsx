@@ -34,7 +34,7 @@ import {
   sourceFairPosts,
   type PopularPost,
 } from "../../lib/post-board";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { Select } from "../ui/select";
 import { useJobs } from "../jobs-provider";
 import { useLocale } from "../i18n-provider";
@@ -181,7 +181,14 @@ const S: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap",
   },
   metrics: { fontSize: "12px", color: "var(--muted)", margin: "3px 0 0" },
-  actions: { display: "flex", gap: "6px", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" },
+  actions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    flexShrink: 0,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
   empty: { fontSize: "13px", color: "var(--muted)", margin: "16px 0 0" },
   researchBoard: {
     marginTop: "16px",
@@ -424,7 +431,12 @@ export function PopularPosts({
                     <Button variant="quiet" size="sm" onClick={() => onResearch(post.topic)}>
                       <MessageCircle size={13} aria-hidden /> {t("discover.actions.searchThis")}
                     </Button>
-                    <a className="link-action" href={post.url} target="_blank" rel="noopener noreferrer">
+                    <a
+                      className={buttonClass({ variant: "link", size: "sm" })}
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       <ExternalLink size={13} aria-hidden /> Open post
                     </a>
                   </div>
@@ -558,7 +570,7 @@ export function PopularPosts({
                       </Button>
                       {link && (
                         <a
-                          className="link-action"
+                          className={buttonClass({ variant: "link", size: "sm" })}
                           href={link}
                           target="_blank"
                           rel="noopener noreferrer"
