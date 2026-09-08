@@ -29,6 +29,7 @@ import { ArrowDown, ArrowUp, Check, ChevronsUpDown, Search } from "lucide-react"
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
+import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "../attribution/format";
@@ -120,6 +121,8 @@ export function OfferPicker({
   const [filterFile, setFilterFile] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  /** One creator, the same axis the Attribution table filters on. */
+  const [filterCreator, setFilterCreator] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({
     // Opens on the rate, descending: the best-paying offer is what somebody
     // scanning this list is nearly always looking for.
@@ -143,7 +146,22 @@ export function OfferPicker({
     [all],
   );
   const hasImportDates = useMemo(() => all.some((row) => row.imported_at), [all]);
-  const filtered = Boolean(filterCampaign || filterFile || filterFrom || filterTo);
+  /** The creators present in these offers, most-stocked first. Built from the
+      rows for the same reason the batches are: a filter that can only empty
+      the list is not worth offering. */
+  const creatorNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of all) {
+      for (const creator of row.creators) {
+        counts.set(creator, (counts.get(creator) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  }, [all]);
+  const filtered = Boolean(
+    filterCampaign || filterFile || filterFrom || filterTo || filterCreator,
+  );
   const rows = useMemo(() => {
     const matching = all.filter((row) => offerMatches(row, {
       query,
@@ -151,10 +169,16 @@ export function OfferPicker({
       file: filterFile,
       from: filterFrom,
       to: filterTo,
+      creator: filterCreator,
+      // An offer carries no links, so it has no sub IDs of its own. The sub-ID
+      // filter is a product-grain question and lives on the Attribution table,
+      // where the links are.
+      subId: "",
     }, campaignsByOffer));
     return sortRows(matching, sort.direction, (row) => offerValue(row, sort.key));
   }, [
-    all, query, sort, filterCampaign, filterFile, filterFrom, filterTo, campaignsByOffer,
+    all, query, sort, filterCampaign, filterFile, filterFrom, filterTo, filterCreator,
+    campaignsByOffer,
   ]);
 
   function reorder(key: SortKey) {
@@ -206,7 +230,8 @@ export function OfferPicker({
         {/* Reusing Attribution's own filter classes rather than restyling them
             here: this is that toolbar, in a dialog, and two sets of rules for
             one row of controls is how they drift apart. */}
-        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates) && (
+        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates
+          || creatorNames.length > 0) && (
           <div className="product-filters">
             {campaigns.length > 0 && (
               <Select
@@ -233,6 +258,26 @@ export function OfferPicker({
                   <option key={name} value={name}>{name}</option>
                 ))}
               </Select>
+            )}
+            {/* The same control the Attribution table carries, reading the
+                same shared rules - a catalogue this size is filtered by the
+                name on the box as often as by the product's own. */}
+            {creatorNames.length > 0 && (
+              <span className="product-filter-creator">
+                <SearchSelect
+                  value={filterCreator}
+                  options={creatorNames.map(([name, count]) => ({
+                    value: name,
+                    label: name,
+                    description: `${count} ${count === 1 ? "offer" : "offers"}`,
+                  }))}
+                  onChange={setFilterCreator}
+                  placeholder={t("attribution.allCreators")}
+                  searchPlaceholder={t("attribution.searchCreators")}
+                  emptyLabel={t("attribution.noCreatorMatches")}
+                  ariaLabel={t("attribution.filterByCreator")}
+                />
+              </span>
             )}
             {hasImportDates && (
               <span className="product-filter-dates">
@@ -264,6 +309,7 @@ export function OfferPicker({
                   setFilterFile("");
                   setFilterFrom("");
                   setFilterTo("");
+                  setFilterCreator("");
                 }}
               >{t("attribution.clearFilters")}</Button>
             )}

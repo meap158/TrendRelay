@@ -247,3 +247,90 @@ test("creators order the column and a product without one is not dropped", () =>
   assert.equal(sorted[0].creators.length, 0);
   assert.deepEqual(sorted[1].creators, ["Zoe"]);
 });
+
+// --- filtering by creator, and by a sub ID from a payout report ---------------
+
+test("the creator filter narrows to one creator, where search would not", () => {
+  // The free-text box already searches the creator among everything else, which
+  // is right for a search box and wrong for "show me this shop": typing
+  // "TopGia" also keeps anything whose title happens to contain it.
+  const mine = product("p1", [offer("o1")], "Ceramic mug");
+  mine.creators = ["TopGia HCM"];
+  const theirs = product("p2", [offer("o2")], "TopGia branded tote");
+  theirs.creators = ["Laem.sg"];
+
+  assert.equal(productMatches(mine, filters({ creator: "TopGia HCM" })), true);
+  assert.equal(productMatches(theirs, filters({ creator: "TopGia HCM" })), false);
+  // The search box keeps both, which is the difference being drawn.
+  assert.equal(productMatches(theirs, filters({ query: "TopGia" })), true);
+});
+
+test("a product with several creators matches on any one of them", () => {
+  const row = product("p1", [offer("o1"), offer("o2")], "Two sellers");
+  row.creators = ["TopGia HCM", "Laem.sg"];
+
+  assert.equal(productMatches(row, filters({ creator: "Laem.sg" })), true);
+  assert.equal(productMatches(row, filters({ creator: "Someone else" })), false);
+});
+
+test("a sub ID from a payout report finds the product that earned it", () => {
+  // The workflow this exists for: a row in the network's own report shows
+  // `sub_id1=0968cda6328f`, and the question is which product it belongs to.
+  const row = product("p1", [offer("o1")], "Ceramic mug");
+  row.links = [{
+    id: "l1", code: "Yj96TNBNgvo", platform: "instagram",
+    destination_url: "https://shopee.vn/x", status: "active", expires_at: null,
+    sub_ids: { sub_id1: "0968cda6328f", sub_id4: "MyFirstCamp" },
+  }];
+
+  assert.equal(productMatches(row, filters({ subId: "0968cda6328f" })), true);
+  // Any slot, because which dimension a network puts where is not something
+  // the reader of a payout column knows.
+  assert.equal(productMatches(row, filters({ subId: "MyFirstCamp" })), true);
+  // The link's own code too: it is the value the other columns resolve from.
+  assert.equal(productMatches(row, filters({ subId: "Yj96TNBNgvo" })), true);
+  assert.equal(productMatches(row, filters({ subId: "somethingelse" })), false);
+});
+
+test("a sub ID matches as a fragment, and ignores case", () => {
+  // Pasted from a report, where the column may be truncated and the casing is
+  // whatever the network chose.
+  const row = product("p1", [offer("o1")], "Ceramic mug");
+  row.links = [{
+    id: "l1", code: "c", platform: "instagram", destination_url: "https://x",
+    status: "active", expires_at: null, sub_ids: { sub_id1: "0968cda6328f" },
+  }];
+
+  assert.equal(productMatches(row, filters({ subId: "0968cda" })), true);
+  assert.equal(productMatches(row, filters({ subId: "0968CDA6328F" })), true);
+  assert.equal(productMatches(row, filters({ subId: "  0968cda6328f  " })), true);
+});
+
+test("a product with no links cannot match a sub ID", () => {
+  const row = product("p1", [offer("o1")], "Never linked");
+
+  assert.equal(productMatches(row, filters({ subId: "0968cda6328f" })), false);
+  // And is untouched when no sub ID is being asked about.
+  assert.equal(productMatches(row, filters()), true);
+});
+
+test("a link with no sub IDs at all is not a match", () => {
+  // Older links, minted before the network's contract was known: the payload
+  // carries an empty map rather than nothing, and an empty map matches nothing.
+  const row = product("p1", [offer("o1")], "Untracked");
+  row.links = [{
+    id: "l1", code: "abc", platform: "instagram", destination_url: "https://x",
+    status: "active", expires_at: null, sub_ids: {},
+  }];
+
+  assert.equal(productMatches(row, filters({ subId: "0968cda6328f" })), false);
+});
+
+test("the picker filters offers by creator the same way the table does", () => {
+  // The reason these rules live in one file: a picker that disagrees with the
+  // table it sits beside is worse than one that does not filter at all.
+  const rows = catalogued();
+
+  assert.equal(offerMatches(rows[0], filters({ creator: "Đông Nhi" })), true);
+  assert.equal(offerMatches(rows[0], filters({ creator: "Somebody else" })), false);
+});

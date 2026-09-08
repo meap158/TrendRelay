@@ -181,6 +181,22 @@ def test_a_connection_id_resolves_to_its_engine_s_capabilities(two_logins) -> No
     assert publishing.resolve_provider(two_logins.id).id == "buffer"
 
 
+def test_a_second_zernio_still_posts_a_first_comment() -> None:
+    """The second Zernio connection was reported as an engine that cannot
+    post a first comment - which read as a fallback the operator never chose.
+    A login is not a capability: every connection of an engine answers the
+    same, and the predicate is asked with the id a destination stores."""
+    from trendrelay_api.integrations.publishing import first_comment_deliverable
+
+    second = connections.add(publishing.PROVIDERS, "zernio", "Second workspace")
+
+    assert first_comment_deliverable(second.id, "facebook") is True
+    assert first_comment_deliverable(second.id, "instagram") is True
+    assert first_comment_deliverable(second.id, "linkedin") is True
+    # Still the engine's own reach: no thread endpoint, so no reply networks.
+    assert first_comment_deliverable(second.id, "threads") is False
+
+
 def test_an_unknown_id_is_still_refused(two_logins) -> None:
     with pytest.raises(ValueError, match="Unknown publishing provider"):
         publishing.resolve_provider("buffer-that-was-deleted")

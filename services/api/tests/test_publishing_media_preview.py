@@ -9,6 +9,7 @@ every preview still went out as `video/mp4`.
 from __future__ import annotations
 
 import asyncio
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -158,3 +159,64 @@ def test_a_thumbnail_request_returns_the_library_still_not_the_video(
     assert response.headers["content-type"].startswith("image/jpeg")
     assert response.content == still.read_bytes()
     assert response.content != clip.read_bytes()
+
+
+def test_a_download_copy_finds_its_library_thumbnail_by_digest(
+    workspace, tmp_path
+) -> None:
+    workspace_id, _clip = workspace
+    download_copy = tmp_path / "downloaded.mp4"
+    download_copy.write_bytes(b"same clip, separate retained path")
+    library_copy = tmp_path / "library.mp4"
+    library_copy.write_bytes(download_copy.read_bytes())
+    still = tmp_path / "downloaded-thumbnail.jpg"
+    still.write_bytes(b"batch thumbnail")
+    digest = "a" * 64
+    with TestingSession() as session:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="Downloaded clip",
+            media_kind="video",
+            source_type="download",
+            original_path=str(library_copy),
+            original_sha256=digest,
+            mime_type="video/mp4",
+            size_bytes=library_copy.stat().st_size,
+            hashtags=[], engagement={}, has_audio=False,
+            created_by="owner-user",
+        )
+        session.add(asset)
+        session.flush()
+        session.add(MediaAssetVersion(
+            workspace_id=workspace_id, asset_id=asset.id,
+            version_kind="thumbnail", path=str(still), sha256="b" * 64,
+            mime_type="image/jpeg", size_bytes=still.stat().st_size, effect_ids=[],
+        ))
+        session.commit()
+
+    response = get(
+        f"/api/workspaces/{workspace_id}/publishing/media/preview"
+        f"?path={quote(str(download_copy))}&thumbnail=true&sha256={digest}"
+    )
+
+    assert response.status_code == 200
+    assert response.content == still.read_bytes()
+
+
+def test_an_opaque_request_for_a_picture_file_is_quiet_too(workspace) -> None:
+    """Stills travel under the same quiet type when asked to.
+
+    The fixture resolves any requested path to the same file, so asking for a
+    `.jpg` name is enough to send the type lookup down its picture branch -
+    which used to ignore `opaque` and answer every still as image/jpeg.
+    """
+    workspace_id, _clip = workspace
+
+    response = get(
+        f"/api/workspaces/{workspace_id}/publishing/media/preview"
+        + "?path=poster.jpg&opaque=true"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(publishing_api.OPAQUE_MEDIA_TYPE)
+    assert "image" not in response.headers["content-type"]

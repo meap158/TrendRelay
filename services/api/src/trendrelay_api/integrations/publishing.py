@@ -3068,9 +3068,10 @@ def _buffer_metrics(execution: Any) -> dict[str, float] | None:
     left = _buffer_requests_left()
     if left is not None and left <= BUFFER_METRICS_RESERVE:
         return None
+    identifier = _graphql_literal(post_ids[0])
     query = (
-        "query { post(input: { id: %s }) { id metricsUpdatedAt "
-        "metrics { type unit value } } }" % _graphql_literal(post_ids[0])
+        f"query {{ post(input: {{ id: {identifier} }}) {{ id metricsUpdatedAt "
+        "metrics { type unit value } } }"
     )
     try:
         payload = _buffer_graphql(query, timeout=30)
@@ -3445,10 +3446,11 @@ def _authenticate(provider: ProviderDefinition) -> dict[str, str]:
     without a second round trip.
 
     What comes back differs by engine, because what they publish about
-    themselves differs. Only Buffer names an email. The others are asked for the
-    most identifying thing they will give, and an engine that gives nothing
-    returns an empty mapping rather than a placeholder: a blank is honest, and
-    "Unknown account" beside two identical cards helps nobody.
+    themselves differs. Buffer names an email; Zernio may include its owner's
+    email in the user record. The others are asked for the most identifying
+    thing they will give, and an engine that gives nothing returns an empty
+    mapping rather than a placeholder: a blank is honest, and "Unknown account"
+    beside two identical cards helps nobody.
     """
     if provider.id == "bundle_social":
         # The documented entry point: no team ID needed, and a bad key answers 403.
@@ -3477,7 +3479,7 @@ def _authenticate(provider: ProviderDefinition) -> dict[str, str]:
 #: this is keyed by the key itself: replacing a credential misses the cache and
 #: re-reads, and a key left alone is never asked about twice. Without it the
 #: accounts list would pay an extra call per connection every time it loads -
-#: two for Zernio, which publishes no email and has to be asked twice.
+#: two for Zernio, whose owner identity is reached through two endpoints.
 _IDENTITIES: dict[tuple[str, str], dict[str, str]] = {}
 
 
@@ -3536,12 +3538,12 @@ def _identity(
 
 
 def _zernio_identity() -> dict[str, str]:
-    """Zernio's owner, which takes two hops and publishes no email.
+    """Zernio's owner identity, which takes two hops.
 
-    `/profiles` carries the `userId`, and the user record carries the name. Both
-    are best-effort on top of a probe that has already succeeded: a failure here
-    means the key works and the account is nameless, which must not be reported
-    as the key being bad.
+    `/profiles` carries the `userId`; the user record may carry email and name.
+    Both are best-effort on top of a probe that has already succeeded: a failure
+    here means the key works and the account is nameless, which must not be
+    reported as the key being bad.
     """
     try:
         profiles = (_zernio_request("GET", "/profiles", timeout=10) or {}).get("profiles") or []

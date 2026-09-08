@@ -6,7 +6,7 @@ import mimetypes
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
@@ -38,13 +38,14 @@ from trendrelay_api.integrations.publishing import (
     test_provider,
 )
 from trendrelay_api.integrations.publishing_matrix import capability_matrix
-from trendrelay_api.models import Workspace
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
 # The type media travels under when it must not look like media on the wire -
 # defined in media_serving so every router that serves bytes shares it, and
 # imported here (rather than reached through the module) because existing
 # tests read publishing_api.OPAQUE_MEDIA_TYPE directly.
 from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
+from trendrelay_api.models import Workspace
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
@@ -697,6 +698,7 @@ def preview_publishing_media(
     session: DatabaseSession,
     opaque: bool = False,
     thumbnail: bool = False,
+    sha256: str | None = Query(default=None, pattern=r"^[0-9a-fA-F]{64}$"),
 ) -> FileResponse:
     """Stream a file this workspace could publish, so it can be seen first.
 
@@ -736,6 +738,17 @@ def preview_publishing_media(
                 select(MediaAssetVersion.asset_id).where(
                     MediaAssetVersion.workspace_id == workspace_id,
                     MediaAssetVersion.path.in_(known_paths),
+                ).limit(1)
+            )
+        # Download artifacts are copied into the immutable Library, so their
+        # paths intentionally diverge. The job already records the content
+        # digest; use that indexed identity instead of hashing a video again
+        # for every row in an expanded batch.
+        if asset_id is None and sha256:
+            asset_id = session.scalar(
+                select(MediaAsset.id).where(
+                    MediaAsset.workspace_id == workspace_id,
+                    MediaAsset.original_sha256 == sha256.lower(),
                 ).limit(1)
             )
         still = session.scalar(

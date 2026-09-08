@@ -96,11 +96,36 @@ export type OfferFilters = {
   file: string;
   from: string;
   to: string;
+  /**
+   * One creator, exactly. Distinct from `query`, which already searches the
+   * creator among everything else: typing "TopGia" finds the shop's products
+   * *and* anything whose title happens to contain it, which is the right
+   * behaviour for a search box and the wrong one for "show me this shop".
+   */
+  creator: string;
+  /**
+   * A sub ID from the network's own report, matched anywhere it appears.
+   *
+   * Matched as a fragment rather than exactly, because this is the one filter
+   * whose input is pasted from somewhere else: a payout row shows a value and
+   * the question is which product earned it. Requiring the whole string would
+   * fail on a truncated column, and requiring the right slot would require
+   * knowing which dimension the network put where.
+   */
+  subId: string;
 };
 
 export const NO_OFFER_FILTERS: OfferFilters = {
-  query: "", campaign: "", file: "", from: "", to: "",
+  query: "", campaign: "", file: "", from: "", to: "", creator: "", subId: "",
 };
+
+/** Every sub ID on a product's links, lowercased once for matching. */
+function subIdValues(product: ProductRow): string[] {
+  return (product.links ?? []).flatMap((link) => [
+    link.code,
+    ...Object.values(link.sub_ids ?? {}),
+  ]).filter(Boolean).map((value) => String(value).toLowerCase());
+}
 
 /**
  * Whether one offer survives the picker's search and filters.
@@ -142,6 +167,14 @@ export function productMatches(
   if (filters.campaign && !product.offers.some(
     (offer) => (campaignsByOffer[offer.id] ?? []).includes(filters.campaign),
   )) return false;
+  // Exactly, and case-sensitively: the value comes from a list built out of
+  // these same rows, so a near-miss means the list is wrong rather than that
+  // the reader mistyped.
+  if (filters.creator && !product.creators.includes(filters.creator)) return false;
+  if (filters.subId) {
+    const wanted = filters.subId.trim().toLowerCase();
+    if (wanted && !subIdValues(product).some((value) => value.includes(wanted))) return false;
+  }
   if (filters.file && product.import_filename !== filters.file) return false;
   // Compared as dates rather than instants, exactly as `offerMatches` does,
   // so the two surfaces agree about what "imported that day" means.
@@ -155,6 +188,8 @@ export function offerMatches(
   row: OfferChoice,
   filters: OfferFilters,
   campaignsByOffer: Record<string, string[]> = {},
+  /** Products whose links carry the sub ID being filtered on. */
+  subIdProducts?: Set<string>,
 ): boolean {
   const needle = filters.query.trim().toLowerCase();
   if (needle) {
@@ -168,6 +203,12 @@ export function offerMatches(
   // on one of them, and that offer is the one worth showing.
   if (filters.campaign
     && !(campaignsByOffer[row.offer_id] ?? []).includes(filters.campaign)) return false;
+  if (filters.creator && !row.creators.includes(filters.creator)) return false;
+  // An offer row carries no links, so it has no sub IDs of its own. Rather
+  // than ignore the filter - which would show the picker offering rows the
+  // table has just hidden - the offers are narrowed to the products that do
+  // match, resolved by the caller that holds them.
+  if (filters.subId && !(subIdProducts?.has(row.product_id) ?? false)) return false;
   if (filters.file && row.import_filename !== filters.file) return false;
   // Compared as dates rather than instants, so a range reads inclusively at
   // both ends the way the two date controls look like it should. A row with no

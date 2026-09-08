@@ -19,7 +19,7 @@ import {
   type PublishingEngine,
   type PublishingProvider,
 } from "../publishing-icons";
-import { accountIdentity } from "../publishing-account";
+import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { SegmentedControl } from "../ui/segmented";
@@ -146,6 +146,8 @@ type EngineChannel = {
 type EnginePlan = { name: string | null; confidence: Confidence; note: string };
 type EngineReach = {
   allowances?: Allowance[];
+  /** Identity returned by this exact connection's credential probe. */
+  account?: EngineAccount;
   /** What is actually connected, as against what the engine supports. */
   channels?: EngineChannel[];
   plan?: EnginePlan;
@@ -210,11 +212,11 @@ type Provider = {
   /**
    * Whose login this is, as the engine reports it.
    *
-   * Only Buffer names an email; the rest give a name, an organisation or a
-   * project, and some give nothing. Absent entirely when the key was refused,
-   * because then there is no account to have.
+   * Buffer names an email; Zernio may return its owner's email and name, while
+   * other engines may give an organisation, a project, or nothing. Absent when
+   * the key was refused, because then there is no account to name.
    */
-  account?: { email?: string; name?: string; scope?: string };
+  account?: EngineAccount;
 };
 type MediaHosting = {
   label: string;
@@ -2306,55 +2308,61 @@ export default function PublishPage() {
         <WaitingBlock className="publish-engine-wait" message={t("common.loading")} />
       ) : !setupOpen && enginesConfigured ? (
         <div className="engine-summary">
-          <span className="engine-summary-marks">
-            {(switchedOnEngines.length ? switchedOnEngines : usableEngines).map((provider) => (
-              <ProviderMark key={provider.id} provider={provider.engine} size={22} />
-            ))}
-          </span>
-          <div>
-            {/* Discovery has not come back yet when keys exist but none is
-                proven; that is a wait, not "no engine switched on", which is
-                the answer to a decision nobody has made wrong. */}
-            <strong>{switchedOnEngines.length
-              ? engineNames(switchedOnEngines)
-              : usableEngines.length
-                ? t("publish.noEngineOn")
-                : t("common.loading")}</strong>
-            <span>
-              {/* Three different situations, not one. Nothing switched on is a
-                  switch to flip; switched on with no destinations is channels
-                  to connect at the engine. Collapsing them sent you to a
-                  control that was already in the right position. */}
-              {!switchedOnEngines.length
-                ? usableEngines.length
-                  ? t("publish.noEngineOnHelp")
-                  : t("common.loading")
-                : accounts.length
-                  ? t("publish.destinationsAcross", {
-                      destinations: accounts.length, engines: switchedOnEngines.length,
-                    })
-                  : connection?.next_step}
+          <div className="engine-summary-overview">
+            <span className="engine-summary-marks">
+              {(switchedOnEngines.length ? switchedOnEngines : usableEngines).map((provider) => (
+                <ProviderMark key={provider.id} provider={provider.engine} size={22} />
+              ))}
             </span>
+            <div className="engine-summary-copy">
+              {/* Discovery has not come back yet when keys exist but none is
+                  proven; that is a wait, not "no engine switched on", which is
+                  the answer to a decision nobody has made wrong. */}
+              <strong>{switchedOnEngines.length
+                ? engineNames(switchedOnEngines)
+                : usableEngines.length
+                  ? t("publish.noEngineOn")
+                  : t("common.loading")}</strong>
+              <span>
+                {/* Three different situations, not one. Nothing switched on is a
+                    switch to flip; switched on with no destinations is channels
+                    to connect at the engine. Collapsing them sent you to a
+                    control that was already in the right position. */}
+                {!switchedOnEngines.length
+                  ? usableEngines.length
+                    ? t("publish.noEngineOnHelp")
+                    : t("common.loading")
+                  : accounts.length
+                    ? t("publish.destinationsAcross", {
+                        destinations: accounts.length, engines: switchedOnEngines.length,
+                      })
+                    : connection?.next_step}
+              </span>
+            </div>
           </div>
-          {hosting?.required && !hosting.configured && (
-            <Badge tone="warn">{t("publish.mediaHostingNeeded")}</Badge>
-          )}
-          {usableEngines.map((provider) => (
-            <a
-              key={provider.id}
-              className={buttonClass({ variant: "quiet", size: "sm" })}
-              href={provider.dashboard_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >{provider.label}</a>
-          ))}
-          {/* The one control in this row that opens something rather than
-              leaving for a provider's dashboard, and it read as one more link
-              among them. The icon is what separates it at a glance. */}
-          <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
-            <ActionIcon name="setup" />
-            {t("publish.engineSetup")}
-          </Button>
+          {/* Configuration changes the page; provider links leave it. Keeping
+              setup in its own corner gives the primary action a stable place
+              instead of letting it wrap into a row of dashboard shortcuts. */}
+          <div className="engine-summary-action">
+            <Button variant="primary" size="sm" onClick={() => setSetupOpen(true)}>
+              <ActionIcon name="setup" />
+              {t("publish.engineSetup")}
+            </Button>
+          </div>
+          <div className="engine-summary-links" aria-label="Publishing engine dashboards">
+            {hosting?.required && !hosting.configured && (
+              <Badge tone="warn">{t("publish.mediaHostingNeeded")}</Badge>
+            )}
+            {usableEngines.map((provider) => (
+              <a
+                key={provider.id}
+                className={buttonClass({ variant: "quiet", size: "sm" })}
+                href={provider.dashboard_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >{provider.label}</a>
+            ))}
+          </div>
         </div>
       ) : (
       <section className="engine-setup" aria-labelledby="engine-setup-title">
@@ -2392,6 +2400,10 @@ export default function PublishPage() {
             const reach = engineReach.find((item) => item.id === provider.id);
             const channels = reach?.channels ?? [];
             const plan = reach?.plan;
+            // The all-engine account refresh probes every configured login and
+            // therefore has the freshest identity. The connection snapshot is
+            // still useful immediately and as a fallback on a failed refresh.
+            const loginIdentity = accountIdentity(reach, provider);
             return (
               <article
                 className={`engine-card engine-${status.state}`}
@@ -2433,7 +2445,7 @@ export default function PublishPage() {
                         tagline stays where nothing is known, so the line never
                         empties. */}
                     <span title={provider.tagline}>
-                      {accountIdentity(provider) ?? provider.tagline}
+                      {loginIdentity ?? provider.tagline}
                     </span>
                   </div>
                   {/* One word for the state, and the switch beside it, so

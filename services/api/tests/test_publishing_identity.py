@@ -56,12 +56,46 @@ def test_an_engine_that_names_nobody_reports_nothing() -> None:
 
 
 def test_an_email_is_preferred_and_a_name_is_kept_when_there_is_no_email() -> None:
-    # Only Buffer publishes an email; Zernio gives the owner's name and no more.
     assert publishing._identity(email="a@b.com", name="A", scope="account") == {
         "email": "a@b.com", "name": "A", "scope": "account",
     }
     assert publishing._identity(name="Long", scope="account") == {
         "name": "Long", "scope": "account",
+    }
+
+
+def test_zernio_reports_the_owner_email_when_its_user_record_includes_it(monkeypatch) -> None:
+    calls = []
+
+    def request(method, path, *, timeout):
+        calls.append((method, path, timeout))
+        if path == "/profiles":
+            return {"profiles": [{"userId": "user-7"}]}
+        if path == "/users/user-7":
+            return {"user": {"email": "owner@example.com", "name": "Owner"}}
+        raise AssertionError(f"unexpected Zernio request: {path}")
+
+    monkeypatch.setattr(publishing, "_zernio_request", request)
+
+    assert publishing._zernio_identity() == {
+        "email": "owner@example.com",
+        "name": "Owner",
+        "scope": "account",
+    }
+    assert [path for _, path, _ in calls] == ["/profiles", "/users/user-7"]
+
+
+def test_zernio_falls_back_to_the_owner_name_when_email_is_withheld(monkeypatch) -> None:
+    def request(method, path, *, timeout):
+        if path == "/profiles":
+            return {"profiles": [{"userId": "user-8"}]}
+        return {"name": "Studio account"}
+
+    monkeypatch.setattr(publishing, "_zernio_request", request)
+
+    assert publishing._zernio_identity() == {
+        "name": "Studio account",
+        "scope": "account",
     }
 
 

@@ -31,6 +31,7 @@ import { Check, Info, Link2, Link2Off, Minus } from "lucide-react";
 import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { PlatformIcon, type PublishingPlatform } from "../publishing-icons";
+import { apiBaseUrl } from "../../lib/api";
 
 type LinkPlacement = {
   id: string;
@@ -130,9 +131,15 @@ export function CapabilityMatrixButton({ workspaceId }: { workspaceId: string })
   useEffect(() => {
     // Read when it is first opened, not on page load: nobody pays for a table
     // they never ask for, and it cannot change while the page is up.
+    //
+    // The API lives on its own port, so the address must go through
+    // `apiBaseUrl` like every other call - a bare relative path would ask the
+    // Next.js server for it, which has no such route, and the table would
+    // always open on "Could not read the table (404)". Following the page's
+    // host is also what keeps this working from another device on the network.
     if (!open || matrix || !workspaceId) return;
     let cancelled = false;
-    fetch(`/api/workspaces/${workspaceId}/publishing/capabilities`)
+    fetch(`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/capabilities`)
       .then((response) => {
         if (!response.ok) throw new Error(`Could not read the table (${response.status}).`);
         return response.json();
@@ -334,7 +341,7 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
                     ? "Must be hosted publicly"
                     : "Uploads the file directly"}
                   {!engine.ingests_media_url && (
-                    <small>Cannot fetch a URL, so it always needs the file</small>
+                    <small className="capability-media-note">Cannot fetch a URL, so it always needs the file</small>
                   )}
                 </td>
                 <td className="capability-plan-cell">{(() => {
