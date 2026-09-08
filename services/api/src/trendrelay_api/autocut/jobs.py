@@ -12,6 +12,7 @@ render is reproducible and the worker never has to re-decide the cadence.
 from __future__ import annotations
 
 import hashlib
+import time
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,30 @@ def dimensions(aspect: str, *, preview: bool) -> tuple[int, int]:
     """The (width, height) for a canvas shape, full-size or preview."""
     full, prev = ASPECTS.get(aspect, ASPECTS[DEFAULT_ASPECT])
     return prev if preview else full
+
+
+#: Rendered files outlive the job that drew them: a preview is watched once,
+#: a full render is copied into the Library by ingest - so both are litter soon
+#: after. Prune on the next render rather than on a timer: bounded, with no
+#: process left running. A preview is gone within the hour; a render waits a
+#: day, comfortably past when its queued ingest has taken its own copy.
+PREVIEW_TTL_SECONDS = 60 * 60
+RENDER_TTL_SECONDS = 24 * 60 * 60
+
+
+def _prune_stale(root: Path, ttl_seconds: float) -> None:
+    """Delete rendered clips in ``root`` older than the ttl. Never raises -
+    cleanup is housekeeping and must not fail the render it runs before."""
+    try:
+        cutoff = time.time() - ttl_seconds
+        for path in root.glob("*.mp4"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def _ffmpeg() -> Path:
@@ -215,6 +240,10 @@ def run_render_job(
         plan = _plan_from_json(payload["plan"])
         workspace_id = payload["workspace_id"]
         is_preview = bool(payload.get("preview"))
+
+        # Sweep away what earlier renders left behind before drawing this one.
+        _prune_stale(PREVIEW_ROOT, PREVIEW_TTL_SECONDS)
+        _prune_stale(OUTPUT_ROOT, RENDER_TTL_SECONDS)
         with factory() as session:
             rows = session.scalars(
                 select(MediaAsset).where(
