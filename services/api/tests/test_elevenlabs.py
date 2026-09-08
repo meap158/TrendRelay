@@ -749,3 +749,88 @@ def test_adding_a_voice_asks_the_endpoint_that_exists(monkeypatch, saved_key) ->
     assert seen["method"] == "POST"
     assert seen["url"] == "https://api.elevenlabs.io/v1/voices/add/owner-1/voice-1"
     assert seen["body"] == {"new_name": "Ms.Thanh"}
+
+
+# --------------------------------------------------------------------------- #
+# The plan. What exists and what this key may have are different questions,
+# and answering the first as though it were the second is what put nineteen
+# unusable Add buttons in the picker.
+# --------------------------------------------------------------------------- #
+
+
+FREE = {"known": True, "tier": "free", "voice_limit": 3, "voice_slots_used": 0,
+        "voice_slots_left": 3}
+PAID = {"known": True, "tier": "creator", "voice_limit": 30, "voice_slots_used": 2,
+        "voice_slots_left": 28}
+UNKNOWN = {"known": False, "tier": "", "voice_limit": 0, "voice_slots_used": 0,
+           "voice_slots_left": 0}
+
+
+def shared(**kwargs) -> dict:
+    return {"free_users_allowed": False, "already_added": False, **kwargs}
+
+
+def test_the_free_tier_may_take_the_voices_that_say_it_may() -> None:
+    # Per voice, not per language: of thirty Vietnamese voices eleven are open.
+    assert elevenlabs.can_add(shared(free_users_allowed=True), FREE) == (True, "")
+
+
+def test_the_free_tier_is_refused_the_rest_before_the_button_is_pressed() -> None:
+    allowed, reason = elevenlabs.can_add(shared(), FREE)
+    assert allowed is False
+    assert "paid" in reason.lower()
+
+
+def test_a_paid_plan_may_take_a_voice_the_free_tier_cannot() -> None:
+    assert elevenlabs.can_add(shared(), PAID) == (True, "")
+
+
+def test_a_voice_already_on_the_key_is_not_offered_again() -> None:
+    # Otherwise a voice slot is spent finding out it was already spent.
+    allowed, reason = elevenlabs.can_add(shared(free_users_allowed=True, already_added=True), FREE)
+    assert allowed is False
+    assert "already" in reason.lower()
+
+
+def test_no_slots_left_is_its_own_refusal() -> None:
+    """Distinct from the plan refusing it, because the fix is different.
+
+    One is changed by paying, the other by removing a voice. A single "cannot
+    add that" for both sends somebody to the wrong page.
+    """
+    full = {**FREE, "voice_slots_used": 3, "voice_slots_left": 0}
+    allowed, reason = elevenlabs.can_add(shared(free_users_allowed=True), full)
+    assert allowed is False
+    assert "slot" in reason.lower()
+
+
+def test_an_unreadable_plan_lets_the_service_decide() -> None:
+    # Guessing a refusal on the operator's behalf is worse than letting
+    # ElevenLabs answer and reporting what it said.
+    assert elevenlabs.can_add(shared(), UNKNOWN) == (True, "")
+
+
+def test_the_voices_a_plan_can_take_come_first(monkeypatch, saved_key) -> None:
+    """The list is long and a picker shows the top of it.
+
+    Unsorted, the top was mostly voices this account may not add - which is how
+    the first two anybody clicked were both refusals.
+    """
+    monkeypatch.setattr(elevenlabs, "_request", lambda path: {"voices": [
+        {"voice_id": "1", "public_owner_id": "o", "name": "Zoe", "free_users_allowed": False},
+        {"voice_id": "2", "public_owner_id": "o", "name": "Minh", "free_users_allowed": False},
+        {"voice_id": "3", "public_owner_id": "o", "name": "Thanh", "free_users_allowed": True},
+        {"voice_id": "4", "public_owner_id": "o", "name": "Chi", "free_users_allowed": True},
+    ]})
+    order = [voice["name"] for voice in elevenlabs.shared_voices("vi")]
+    assert order == ["Chi", "Thanh", "Minh", "Zoe"]
+
+
+def test_a_plan_that_cannot_be_read_is_said_to_be_unknown_rather_than_empty(monkeypatch) -> None:
+    # A picker that cannot read the plan shows what it has and says it does not
+    # know the rest. It does not report a plan with no voice slots.
+    def refuse(path):
+        raise elevenlabs.ElevenLabsUnavailable("no key")
+
+    monkeypatch.setattr(elevenlabs, "_request", refuse)
+    assert elevenlabs.plan()["known"] is False

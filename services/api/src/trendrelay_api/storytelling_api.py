@@ -520,13 +520,28 @@ def shared_voices(
     answer. `/v2/voices` reports what is on the key, which for most accounts
     is the premade set - verified in English and a handful of others. Asking
     for a Vietnamese narration finds nothing there and reads as "Vietnamese is
-    not supported", when what is true is that twelve Vietnamese voices exist
+    not supported", when what is true is that thirty Vietnamese voices exist
     and none of them have been added to this account.
+
+    Answered with the plan, because "exists" and "can be had" are different
+    questions and this account can tell them apart: of those thirty, eleven
+    are open to the free tier. Without the plan the picker offers thirty Add
+    buttons of which nineteen cannot work, and the two somebody clicks first
+    are refusals.
     """
     from trendrelay_api.integrations import elevenlabs
 
     membership(session, workspace_id, user.id)
-    return {"voices": elevenlabs.shared_voices(language), "language": language}
+    subscription = elevenlabs.plan()
+    voices = []
+    for voice in elevenlabs.shared_voices(language):
+        allowed, reason = elevenlabs.can_add(voice, subscription)
+        # The verdict travels with the voice rather than being worked out
+        # again in the browser. There is one set of rules about what a plan
+        # allows, and a second copy of them in the interface would be the one
+        # that goes stale.
+        voices.append({**voice, "addable": allowed, "reason": reason})
+    return {"voices": voices, "language": language, "plan": subscription}
 
 
 class AddVoice(BaseModel):

@@ -421,11 +421,23 @@ def models() -> list[dict[str, Any]]:
 
 
 def voice_catalog() -> dict[str, Any]:
-    """One live picker payload: plan, voices and models from the same key."""
+    """One live picker payload: plan, voices and models from the same key.
+
+    The plan is here because it decides two things a picker has to say before
+    anything is spent: which shared voices may be added, and how many
+    characters are left to speak. It said "plan" in this line long before it
+    returned one.
+    """
     status = provider_status(probe=True)
     if not status["reachable"]:
-        return {"voices": [], "models": [], "status": status, "defaults": defaults()}
-    return {"voices": voices(), "models": models(), "status": status, "defaults": defaults()}
+        return {
+            "voices": [], "models": [], "status": status,
+            "defaults": defaults(), "plan": plan(),
+        }
+    return {
+        "voices": voices(), "models": models(), "status": status,
+        "defaults": defaults(), "plan": plan(),
+    }
 
 
 def transcribe(
@@ -752,7 +764,46 @@ def synthesise(
         ) from error
 
 
-def shared_voices(language: str, *, page_size: int = 20) -> list[dict[str, Any]]:
+def plan() -> dict[str, Any]:
+    """What this key's subscription allows, in the terms the picker needs.
+
+    Three of them, and they are not interchangeable. `tier` decides which
+    shared voices may be added at all - most of the library is closed to the
+    free tier, and the ones that are open say so per voice. `voice_limit` and
+    `voice_slots_used` decide whether there is anywhere to put one. And
+    `characters` is what a render will actually spend, which is the thing that
+    stops a narration halfway through rather than refusing it up front.
+
+    Never raises. A picker that cannot read the plan should show the voices it
+    already has and say it does not know the rest, not fail.
+    """
+    unknown = {
+        "known": False, "tier": "", "voice_limit": 0, "voice_slots_used": 0,
+        "voice_slots_left": 0, "characters_left": 0, "character_limit": 0,
+    }
+    try:
+        found = _request("/v1/user/subscription")
+    except ElevenLabsUnavailable:
+        return unknown
+    if not isinstance(found, dict):
+        return unknown
+    limit = int(found.get("voice_limit") or 0)
+    used = int(found.get("voice_slots_used") or 0)
+    characters = int(found.get("character_limit") or 0) - int(found.get("character_count") or 0)
+    return {
+        "known": True,
+        "tier": str(found.get("tier") or ""),
+        "voice_limit": limit,
+        "voice_slots_used": used,
+        # Never negative. A workspace whose plan shrank can hold more voices
+        # than the new plan allows, and "-2 slots left" is not a sentence.
+        "voice_slots_left": max(0, limit - used),
+        "characters_left": max(0, characters),
+        "character_limit": int(found.get("character_limit") or 0),
+    }
+
+
+def shared_voices(language: str, *, page_size: int = 30) -> list[dict[str, Any]]:
     """Voices in ElevenLabs' shared library that read this language.
 
     `/v2/voices` answers "what is on this key", and for most accounts that is
@@ -774,7 +825,7 @@ def shared_voices(language: str, *, page_size: int = 20) -> list[dict[str, Any]]
         # never a precondition for using the ones already there.
         return []
     found = payload.get("voices") if isinstance(payload, dict) else None
-    return [
+    voices = [
         {
             "voice_id": str(item.get("voice_id") or ""),
             "public_owner_id": str(item.get("public_owner_id") or ""),
@@ -783,10 +834,47 @@ def shared_voices(language: str, *, page_size: int = 20) -> list[dict[str, Any]]
             "description": str(item.get("description") or ""),
             "preview_url": str(item.get("preview_url") or ""),
             "language": str(item.get("language") or language),
+            # Whether the free tier may take this one. Most of the library
+            # may not be, and the difference is per voice rather than per
+            # language: of thirty Vietnamese voices, eleven are open.
+            "free_users_allowed": bool(item.get("free_users_allowed")),
+            # Already on this key. Offering "Add" for a voice the account has
+            # is how somebody spends a voice slot finding that out.
+            "already_added": bool(item.get("is_added_by_user")),
         }
         for item in (found or [])
         if isinstance(item, dict) and item.get("voice_id") and item.get("public_owner_id")
     ]
+    # The ones that can actually be taken first. The list is long, a picker
+    # shows the top of it, and an unsorted top was mostly voices this account
+    # is not allowed to add - which is how the first two anybody clicked were
+    # both refusals.
+    voices.sort(key=lambda voice: (not voice["free_users_allowed"], voice["name"].lower()))
+    return voices
+
+
+def can_add(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool, str]:
+    """Whether this key may take this voice, and what to say when it may not.
+
+    Three separate refusals, and telling them apart is the whole point: one is
+    permanent until the plan changes, one is fixed by removing a voice, and one
+    means the thing already happened. Offering the same "Add" button for all
+    three is how somebody clicks it twice and reads "Not Found" both times.
+
+    Unknown plan is permissive. If the subscription could not be read, the
+    honest answer is to let ElevenLabs refuse and report what it said, rather
+    than to guess a refusal on the operator's behalf.
+    """
+    if voice.get("already_added"):
+        return False, "Already on your key"
+    if not subscription.get("known"):
+        return True, ""
+    if subscription.get("tier") == "free" and not voice.get("free_users_allowed"):
+        return False, "Needs a paid ElevenLabs plan"
+    if subscription.get("voice_slots_left", 0) <= 0:
+        limit = subscription.get("voice_limit", 0)
+        return False, f"No voice slots left ({limit} on this plan)"
+    return True, ""
 
 
 def add_shared_voice(public_owner_id: str, voice_id: str, name: str) -> str:
@@ -819,6 +907,11 @@ def add_shared_voice(public_owner_id: str, voice_id: str, name: str) -> str:
             detail = error.read().decode("utf-8", "replace")[:200]
         except Exception:
             detail = ""
+        if error.code in (401, 403):
+            raise ElevenLabsUnavailable(
+                "Your ElevenLabs plan does not allow adding that voice. "
+                f"{detail}".strip()
+            ) from error
         raise ElevenLabsUnavailable(
             f"ElevenLabs would not add that voice (HTTP {error.code}). {detail}".strip()
         ) from error
