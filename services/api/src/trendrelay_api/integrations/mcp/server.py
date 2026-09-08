@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from trendrelay_api.integrations.mcp import (
     context,
+    drafts,
     intake,
     policy,
     products,
@@ -774,6 +775,107 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="list_creation_kinds",
+        description=(
+            "The kinds of video a creation draft can be - autocut (photos and "
+            "clips cut to a beat) and storytelling (a script narrated over "
+            "pictures). Read this before creating a draft, to know the kind and "
+            "what its spec holds."
+        ),
+    )
+    def list_creation_kinds() -> dict[str, Any]:
+        _guard("list_creation_kinds")
+        return drafts.list_kinds()
+
+    @server.tool(
+        name="list_creation_drafts",
+        description=(
+            "In-progress video drafts in this workspace, newest-edited first, so "
+            "a half-built AutoCut or Storytelling video from an earlier turn is "
+            "found again rather than lost. Optionally filter by kind or status; "
+            "pages with limit/offset. Use get_creation_draft for one in full."
+        ),
+    )
+    def list_creation_drafts(
+        kind: str | None = None,
+        status: str | None = None,
+        limit: Annotated[
+            int, Field(ge=1, le=drafts.MAX_PAGE, description="Drafts to return.")
+        ] = drafts.DEFAULT_PAGE,
+        offset: Annotated[
+            int, Field(ge=0, description="Zero-based position of the first draft.")
+        ] = 0,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_creation_drafts",
+            lambda s: drafts.list_drafts(
+                s, workspace_id, kind=kind, status=status, limit=limit, offset=offset
+            ),
+        )
+
+    @server.tool(
+        name="get_creation_draft",
+        description=(
+            "One draft in full - its kind, title, status and the whole editable "
+            "spec (the media, template and every look choice) - so it can be "
+            "continued. Use an id from list_creation_drafts or create_creation_draft."
+        ),
+    )
+    def get_creation_draft(draft_id: str) -> dict[str, Any]:
+        return _call(
+            "get_creation_draft", lambda s: drafts.get_draft(s, workspace_id, draft_id)
+        )
+
+    @server.tool(
+        name="create_creation_draft",
+        description=(
+            "Save a new video draft of a given kind (see list_creation_kinds) "
+            "from a spec. The spec is shape-checked for the kind and stored "
+            "normalised; it may be incomplete - completeness is only required at "
+            "render. Media is referenced by Library asset id (list_library_assets). "
+            "Returns the draft id to continue from."
+        ),
+    )
+    def create_creation_draft(
+        kind: str, spec: dict[str, Any], title: str | None = None
+    ) -> dict[str, Any]:
+        return _call(
+            "create_creation_draft",
+            lambda s: drafts.create_draft(s, workspace_id, kind=kind, title=title, spec=spec),
+        )
+
+    @server.tool(
+        name="update_creation_draft",
+        description=(
+            "Edit a draft's title and/or spec. The spec given replaces the stored "
+            "one and is re-checked for the kind. Use it to carry a draft toward "
+            "renderable - adding media, setting the template, writing the caption "
+            "or the script."
+        ),
+    )
+    def update_creation_draft(
+        draft_id: str, spec: dict[str, Any] | None = None, title: str | None = None
+    ) -> dict[str, Any]:
+        return _call(
+            "update_creation_draft",
+            lambda s: drafts.update_draft(s, workspace_id, draft_id, title=title, spec=spec),
+        )
+
+    @server.tool(
+        name="render_creation_draft",
+        description=(
+            "Render the draft to a finished video in the Library. Completeness is "
+            "enforced here: if the spec is missing pieces the reason says which. "
+            "Publishes nothing - the finished video is a Library asset a person "
+            "decides what to do with."
+        ),
+    )
+    def render_creation_draft(draft_id: str) -> dict[str, Any]:
+        return _call(
+            "render_creation_draft", lambda s: drafts.render_draft(s, workspace_id, draft_id)
+        )
+
+    @server.tool(
         name="get_import_status",
         description=(
             "How upload_media and upload_image imports are going. Pass every "
@@ -1067,6 +1169,13 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "create_posting_preset", "set_campaign_posting_times",
         "set_page_posting_times", "set_workspace_posting_times",
     ),
+    # Resumable video drafts - AutoCut and Storytelling - an assistant can pick
+    # up and carry on, then render to the Library. Its own group: it makes a
+    # video, not a post, and lands in the Library rather than a campaign.
+    "Creation drafts": (
+        "list_creation_kinds", "list_creation_drafts", "get_creation_draft",
+        "create_creation_draft", "update_creation_draft", "render_creation_draft",
+    ),
 }
 
 #: The tab where each group's work shows up in the app, so an operator can
@@ -1081,6 +1190,7 @@ CATEGORY_TABS: dict[str, str | None] = {
     "Media & posts": "Campaigns",
     "Products": "Campaigns",
     "Posting schedule": "Campaigns",
+    "Creation drafts": "Library",
 }
 TOOL_TAB_OVERRIDES: dict[str, str] = {
     "upload_image": "Library",

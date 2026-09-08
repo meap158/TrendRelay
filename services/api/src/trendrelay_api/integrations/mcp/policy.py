@@ -158,6 +158,23 @@ EXPOSURE: dict[str, Access] = {
     # state - so the pair with the media-less create is complete without a
     # way to change what a promoted post publishes.
     "set_post_media": Access.WORKSPACE_WRITE,
+    # --- Creation drafts: a video saved, edited, and rendered --------------
+    # Reading the kinds and the drafts is context like any other read.
+    "list_creation_kinds": Access.READ,
+    "list_creation_drafts": Access.READ,
+    "get_creation_draft": Access.READ,
+    # Saving and editing a draft is a workspace write of the same order as
+    # drafting a campaign post: it makes an editable spec exist and changes
+    # nothing outside the workspace. The spec is shape-checked before it stores.
+    "create_creation_draft": Access.WORKSPACE_WRITE,
+    "update_creation_draft": Access.WORKSPACE_WRITE,
+    # Rendering draws the draft into a video and files it in the Library through
+    # the same ingest an operator's import uses. It is allowed because it stays
+    # inside the workspace and publishes nothing - unlike a download it reaches
+    # no external site; unlike a publish it sends nowhere. The finished video is
+    # a Library asset, and what happens to it next is a person's decision on the
+    # campaign path, which MCP still refuses.
+    "render_creation_draft": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,
