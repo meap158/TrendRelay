@@ -29,6 +29,36 @@
       "runs": "network"
     },
     {
+      "id": "yt-dlp",
+      "name": "yt-dlp",
+      "repository": "https://github.com/yt-dlp/yt-dlp",
+      "revision": "2026.8.30.232658.dev0",
+      "version": "2026.8.30.232658.dev0",
+      "license": "Unlicense",
+      "license_url": "https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE",
+      "category": "Media acquisition",
+      "summary": "Media downloader covering TikTok and around a thousand other sites. Adopted for TikTok instead of writing an extractor: TikTok's playback URLs are signed and the signing changes, and yt-dlp already tracks that upstream.",
+      "capabilities": [
+        "TikTok video download",
+        "TikTok channel and collection batches",
+        "Incremental deduplication by download archive",
+        "Metadata sidecar for library ingest"
+      ],
+      "integration_status": "adapter-ready",
+      "commercial_use": "allowed",
+      "install_strategy": "pypi",
+      "distribution": "yt-dlp[default,curl-cffi]==2026.8.30.232658.dev0",
+      "minimum_version": "2026.08.30",
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": true,
+      "documentation": "docs/third-party/yt-dlp.md",
+      "surface": "download",
+      "runs": "network",
+      "install_requirement": "yt-dlp[default,curl-cffi]",
+      "runtime_path": ".tools/yt-dlp/runtime"
+    },
+    {
       "id": "news-feeds",
       "name": "Newsroom Feeds",
       "repository": "https://github.com/meap158/TrendRelay",
@@ -551,6 +581,33 @@
       "documentation": "docs/third-party/elevenlabs.md",
       "surface": "library",
       "runs": "network"
+    },
+    {
+      "id": "pexels",
+      "name": "Pexels",
+      "repository": "https://www.pexels.com",
+      "revision": "v1 photos, v1 videos",
+      "version": "current",
+      "license": "Pexels licence",
+      "license_url": "https://www.pexels.com/license/",
+      "category": "Stock media",
+      "summary": "Free stock photos and clips, searched by words and filed into the Library like any other media. Storytelling uses it for a script that has no pictures of its own.",
+      "capabilities": [
+        "Search photos and clips by words, in the shape the video is",
+        "Preview before anything is downloaded",
+        "Import through the Library's own ingest, hashed and de-duplicated",
+        "Photographer credit stored on the asset, as the licence asks"
+      ],
+      "integration_status": "key-and-quota",
+      "install_strategy": "hosted-api",
+      "install_allowed": false,
+      "activation_allowed": false,
+      "default_active": false,
+      "surface": "library",
+      "runs": "network",
+      "commercial_use": "allowed",
+      "documentation": "docs/third-party/pexels.md",
+      "block_reason": "Nothing to install: it is a hosted service and the API key is the switch."
     }
   ]
 }

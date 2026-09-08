@@ -275,11 +275,78 @@ class _ElevenLabs:
         return value
 
 
+#: Pexels needs one thing, and the whole card is that thing.
+PEXELS_FIELDS: tuple[dict[str, Any], ...] = (
+    {
+        "key": "PEXELS_API_KEY",
+        "label": "API key",
+        "kind": "text",
+        "secret": True,
+        "required": True,
+        "help": (
+            "Free, from pexels.com/api. Storytelling uses it to search stock "
+            "photos and clips for a script that has no pictures of its own."
+        ),
+        "help_url": "https://www.pexels.com/api/",
+    },
+)
+
+
+class _Pexels:
+    """One key, and the same three methods every other card offers."""
+
+    def fields(self) -> list[dict[str, Any]]:
+        from trendrelay_api.env_store import effective_value, masked_value
+
+        described: list[dict[str, Any]] = []
+        for field in PEXELS_FIELDS:
+            stored = (effective_value(field["key"]) or "").strip()
+            described.append({
+                **field,
+                "configured": bool(stored),
+                "value": "" if field["secret"] else stored,
+                "preview": masked_value(field["key"]) if stored else None,
+            })
+        return described
+
+    def save(self, values: dict[str, str]) -> list[str]:
+        from trendrelay_api.env_store import write_env_values
+
+        allowed = {field["key"] for field in PEXELS_FIELDS}
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise SettingsError(f"Not a Pexels setting: {unknown[0]}.")
+        cleaned: dict[str, str] = {}
+        for key, raw in values.items():
+            value = str(raw).strip()
+            # One token, long enough to be a key. Nothing more specific: the
+            # real check is the first search, which reports what Pexels said.
+            if value and (len(value) < 20 or any(ch.isspace() for ch in value)):
+                raise SettingsError(
+                    "That does not look like an API key. Copy the whole value "
+                    "from pexels.com/api."
+                )
+            cleaned[key] = value
+        return write_env_values(cleaned)
+
+    def reveal(self, key: str) -> str:
+        from trendrelay_api.env_store import effective_value
+
+        field = next((item for item in PEXELS_FIELDS if item["key"] == key), None)
+        if field is None or not field["secret"]:
+            raise SettingsError("That setting is not an exposable secret.")
+        value = (effective_value(key) or "").strip()
+        if not value:
+            raise SettingsError("No saved value is available for that secret.")
+        return value
+
+
 #: Tool id to its settings. A tool absent here has none, which is the honest
 #: answer for a model that is configured by being downloaded.
 PROVIDERS: dict[str, SettingsProvider] = {
     "mcp-server": _Tunnel(),
     "elevenlabs": _ElevenLabs(),
+    "pexels": _Pexels(),
 }
 
 

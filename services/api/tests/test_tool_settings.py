@@ -39,7 +39,36 @@ def test_a_tool_with_no_settings_says_so_rather_than_guessing() -> None:
 
 
 def test_the_tools_that_do_have_settings_are_the_ones_that_need_a_key() -> None:
-    assert set(tool_settings.PROVIDERS) == {"mcp-server", "elevenlabs"}
+    assert set(tool_settings.PROVIDERS) == {"mcp-server", "elevenlabs", "pexels"}
+
+
+def test_a_hosted_key_card_refuses_a_setting_that_is_not_its_own(env_file) -> None:
+    """Each card writes only the keys it declared.
+
+    The form and the writer read one list, so a field cannot be accepted by one
+    and refused by the other - and a request naming somebody else's key cannot
+    reach the env file through this card.
+    """
+    for tool_id, foreign in (("elevenlabs", "PEXELS_API_KEY"),
+                             ("pexels", "ELEVENLABS_API_KEY")):
+        try:
+            provider_for(tool_id).save({foreign: "x" * 40})
+        except tool_settings.SettingsError as error:
+            assert foreign in str(error)
+        else:
+            raise AssertionError(f"{tool_id} wrote {foreign}")
+
+
+def test_a_pexels_key_is_described_and_never_returned(env_file) -> None:
+    provider = provider_for("pexels")
+    provider.save({"PEXELS_API_KEY": "p" * 40})
+
+    field = provider.fields()[0]
+    assert field["configured"] is True
+    assert field["value"] == ""
+    assert field["preview"] and "p" * 40 not in field["preview"]
+    # And revealed only when the route has authorized it.
+    assert provider.reveal("PEXELS_API_KEY") == "p" * 40
 
 
 def test_a_key_can_be_saved_from_the_tool_that_needs_it(env_file) -> None:
