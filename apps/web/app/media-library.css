@@ -1217,7 +1217,7 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    once a video of that ratio loads. Sized from a definite height per shape
    (kept small for landscape so it fits the pane's width) with the width
    following the aspect-ratio, and centred so the column does not stretch it. */
-.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); }
+.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); container-type: size; }
 .autocut-video[data-aspect="square"] { aspect-ratio: 1 / 1; block-size: min(46vh, 340px); }
 .autocut-video[data-aspect="landscape"] { aspect-ratio: 16 / 9; block-size: min(28vh, 191px); }
 /* Two stacked layers, cross-faded: the shown one is opaque, the hidden one
@@ -1227,6 +1227,14 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-video video { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; object-fit: contain; opacity: 0; transition: opacity 200ms ease; pointer-events: none; }
 .autocut-video video.is-shown { opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) { .autocut-video video { transition: none; } }
+/* The live caption overlay: a stand-in for the burn the full render does,
+   sized in container units so it stays the same proportion of the frame the
+   burn is - weight, outline and placement to match. Never burned into the
+   preview, so editing the hook restyles this div instead of re-rendering. */
+.autocut-caption { position: absolute; inset-inline: 0; z-index: 1; padding-inline: 6cqw; text-align: center; pointer-events: none; }
+.autocut-caption-top { inset-block-start: 5cqh; }
+.autocut-caption-bottom { inset-block-end: 6cqh; }
+.autocut-caption span { font: 700 4.6cqh/1.15 Arial, Helvetica, sans-serif; color: var(--on-ink); -webkit-text-stroke: 0.5cqh var(--ink); paint-order: stroke fill; }
 .autocut-video-building { color: var(--on-ink); font-size: 12px; padding: 8px; text-align: center; }
 /* The reorder timeline: the chosen clips in sequence, dragged to rearrange -
    a numbered thumbnail per clip, videos marked, scrolling horizontally like

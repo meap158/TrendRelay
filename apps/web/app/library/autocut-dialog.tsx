@@ -301,11 +301,15 @@ export function AutoCutDialog({
     const stale = () => seq !== previewSeq.current;
     setPreviewState("building");
     try {
+      // The caption is not burned into the preview: it rides as a live HTML
+      // overlay instead (see the pane below), so editing the hook is instant -
+      // a keystroke restyles a div rather than re-rendering the whole montage.
+      // The full render still burns it into the file; the preview only stands
+      // in for it.
       const res = await apiFetch(`${base}/preview`, {
         method: "POST",
         body: JSON.stringify({
           asset_ids: order, template_id: templateId, music, speed, aspect, fill,
-          caption: caption.trim(), caption_position: captionPos,
         }),
       });
       const body = await res.json();
@@ -345,7 +349,9 @@ export function AutoCutDialog({
       setPreviewState("error");
       onError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [templateId, order, music, speed, aspect, fill, caption, captionPos, apiFetch, base, onError]);
+    // Caption and its position are deliberately absent: they change only the
+    // HTML overlay, never the rendered montage, so they must not rebuild it.
+  }, [templateId, order, music, speed, aspect, fill, apiFetch, base, onError]);
 
   // Preview on by default: it builds when the dialog opens and redraws
   // (debounced) whenever the template, music, speed or order changes - so the
@@ -728,6 +734,15 @@ export function AutoCutDialog({
               controls autoPlay loop playsInline
               onLoadedData={() => setVisible(1)}
             />
+            {/* The caption as a live overlay, not burned into the preview -
+                so editing it is instant. A stand-in for the burn the full
+                render does: same weight, outline and placement, close enough
+                to judge the hook by. */}
+            {caption.trim() && slots[visible] && (
+              <div className={`autocut-caption autocut-caption-${captionPos}`} aria-hidden="true">
+                <span>{caption.trim()}</span>
+              </div>
+            )}
             {previewState === "building" && slots[visible] && (
               <span className="autocut-video-updating">Updating…</span>
             )}
