@@ -1,5 +1,5 @@
 /**
- * Choosing the language, the model and the voice a narration is read in.
+ * Choosing the language, the model and the voice ElevenLabs speaks with.
  *
  * Three choices that look like one and are not, which is what made the picker
  * wrong in three different ways before this was written down.
@@ -16,9 +16,10 @@
  * other models on the same key do speak it. Sending the configured default
  * regardless is how a language the account can speak comes back refused.
  *
- * Kept out of the dialog because these are the rules with the edge cases in
+ * Kept out of the dialogs because these are the rules with the edge cases in
  * them, and a rule that can only be exercised by rendering a modal is a rule
- * nobody exercises.
+ * nobody exercises. Read by the Storytelling picker and by the voiceover
+ * editor, which asked the same question and got it wrong the same way.
  */
 
 /** A voice on the operator's own key. */
@@ -61,6 +62,7 @@ function speaks(model: Model | undefined, language: string): boolean {
  *
  * Sorted by the caller's own name for each code rather than by the code, so
  * the list reads alphabetically to a person rather than to a computer.
+ *
  */
 export function readableLanguages(models: Model[], name: (code: string) => string): string[] {
   const codes = new Set<string>();
@@ -96,9 +98,9 @@ export function openingLanguage(
  * With no language chosen there is nothing to check against, so everything is
  * "checked" and nothing is left over.
  */
-export function partitionVoices(
-  voices: Voice[], language: string,
-): { verified: Voice[]; others: Voice[] } {
+export function partitionVoices<T extends Voice>(
+  voices: T[], language: string,
+): { verified: T[]; others: T[] } {
   if (!language) return { verified: voices, others: [] };
   return {
     verified: voices.filter((voice) => (voice.languages ?? []).includes(language)),
@@ -115,16 +117,69 @@ export function partitionVoices(
  * list entirely - the model reads the language in any voice, nobody has just
  * checked how that one sounds doing it.
  */
-export function offeredVoices(
-  voices: Voice[], language: string, anyVoice: boolean,
-): Voice[] {
-  const { verified, others } = partitionVoices(voices, language);
-  const offered = !language || anyVoice ? [...verified, ...others] : verified;
-  // The ones that can actually be spoken with, first. Not filtered out: a
-  // voice somebody deliberately added to their account should not silently
-  // vanish from the list they added it for - it says why it cannot be used
-  // instead.
-  return [...offered.filter(usable), ...offered.filter((voice) => !usable(voice))];
+/** Usable voices first; the rest kept, marked, in their original order. */
+function speakableFirst<T extends Voice>(voices: T[]): T[] {
+  return [...voices.filter(usable), ...voices.filter((voice) => !usable(voice))];
+}
+
+/** What a language offers, and whether its filter had to be let go of. */
+export type Offering<T extends Voice = Voice> = {
+  voices: T[];
+  /**
+   * True when narrowing to the language left nothing that could be spoken
+   * with, so every usable voice is offered instead.
+   */
+  widened: boolean;
+};
+
+/**
+ * The voices to offer for a language, and never a dead end.
+ *
+ * Narrowing to the language is the point - a key with three hundred voices
+ * offers a handful in any one, and scrolling past the rest is the whole
+ * problem. But `verified_languages` is a quality label, not a capability: it
+ * says somebody checked how a voice sounds in a language, not that it is the
+ * only voice that can say it. A multilingual model reads any language it
+ * supports in any voice.
+ *
+ * So when the filter leaves nothing that can actually be used, it is let go of
+ * rather than honoured into a wall. That state is ordinary, not exotic: this
+ * key has one voice verified in Vietnamese, it is a library voice, and a free
+ * plan cannot narrate with library voices - so asking for Vietnamese offered
+ * exactly one voice and no way to use it, while twenty-one premade voices that
+ * read Vietnamese perfectly well sat one filter away.
+ *
+ * `widened` is returned rather than inferred so the interface can say why the
+ * list is not what was asked for. A list that quietly ignores the filter is
+ * its own kind of wrong.
+ */
+export function offerVoices<T extends Voice>(
+  voices: T[], language: string, anyVoice: boolean,
+): Offering<T> {
+  if (!language) return { voices: speakableFirst(voices), widened: false };
+  const { verified } = partitionVoices(voices, language);
+  if (!anyVoice && verified.some(usable)) {
+    return { voices: speakableFirst(verified), widened: false };
+  }
+  // Everything, because narrowing would leave nothing to speak with. Ordered
+  // so the list agrees with the choice made from it: usable before unusable,
+  // and checked in this language before not. A default that lands on the first
+  // voice somebody can actually use, sitting third in the list, reads as the
+  // wrong voice being chosen.
+  const checked = new Set(verified.map((voice) => voice.voice_id));
+  const rank = (voice: T) =>
+    (usable(voice) ? 0 : 2) + (checked.has(voice.voice_id) ? 0 : 1);
+  return {
+    voices: [...voices].sort((left, right) => rank(left) - rank(right)),
+    widened: !anyVoice,
+  };
+}
+
+/** The offered voices alone, for callers with nothing to say about widening. */
+export function offeredVoices<T extends Voice>(
+  voices: T[], language: string, anyVoice: boolean,
+): T[] {
+  return offerVoices(voices, language, anyVoice).voices;
 }
 
 /**

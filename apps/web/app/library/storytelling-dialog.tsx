@@ -37,14 +37,14 @@ import {
   blockedReason,
   effectiveVoice,
   modelFor,
-  offeredVoices,
+  offerVoices,
   openingLanguage,
   partitionVoices,
   readableLanguages,
   usable,
   type Model,
   type Voice,
-} from "../../lib/storytelling-voice";
+} from "../../lib/elevenlabs-voices";
 import { useLibraryAssets } from "../../lib/use-library-assets";
 import { usePersistedState } from "../ui/use-persisted-state";
 import { useLocale, useT } from "../i18n-provider";
@@ -356,8 +356,11 @@ export function StorytellingDialog({
   const { verified } = useMemo(
     () => partitionVoices(voices, language), [voices, language],
   );
-  const speakable = useMemo(
-    () => offeredVoices(voices, language, anyVoice), [voices, language, anyVoice],
+  // `widened` when narrowing to the language left nothing that can be spoken
+  // with. It is not an error state - it is how Vietnamese is narrated on this
+  // plan - so it is explained rather than blocked.
+  const { voices: speakable, widened } = useMemo(
+    () => offerVoices(voices, language, anyVoice), [voices, language, anyVoice],
   );
   const modelId = useMemo(
     () => modelFor(models, language, defaultModel), [models, language, defaultModel],
@@ -1141,10 +1144,15 @@ export function StorytellingDialog({
                 seventy-four. Asking for one of the other fifty-six emptied the
                 picker and read as "not supported", when what is true is that
                 the voices exist and are not in this account. */}
-            {language && !verified.length && (
+            {language && widened && (
               <div className="story-voices-missing">
                 <p className="story-note">
-                  No voice on this key is checked in {languageName(language)}.
+                  {verified.length
+                    ? `No voice checked in ${languageName(language)} can be used on this plan, `
+                      + "so every voice is offered instead."
+                    : `No voice on this key is checked in ${languageName(language)}, `
+                      + "so every voice is offered instead."}
+                  {" "}The multilingual model reads it in any of them.
                 </p>
                 {offers.length > 0 && (
                   <ul className="story-shared">
@@ -1205,7 +1213,7 @@ export function StorytellingDialog({
                     checked={anyVoice}
                     onChange={(event) => setAnyVoice(event.target.checked)}
                   />
-                  <span>Use a voice from another language</span>
+                  <span>Keep offering every voice</span>
                   <small>
                     {plan?.known && plan.tier === "free"
                       ? `The way to narrate ${languageName(language)} on the free plan: `

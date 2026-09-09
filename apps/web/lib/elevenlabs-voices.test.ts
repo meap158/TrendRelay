@@ -14,6 +14,7 @@ import {
   blockedReason,
   effectiveVoice,
   modelFor,
+  offerVoices,
   offeredVoices,
   openingLanguage,
   partitionVoices,
@@ -21,7 +22,7 @@ import {
   usable,
   type Model,
   type Voice,
-} from "./storytelling-voice.ts";
+} from "./elevenlabs-voices.ts";
 
 /** Names as the browser would give them, enough for ordering. */
 const NAMES: Record<string, string> = {
@@ -87,11 +88,15 @@ test("the escape offers the rest, with the checked ones still first", () => {
   );
 });
 
-test("a language with no voice of its own offers nothing rather than everything", () => {
-  // The honest empty. It is what makes the dialog say "no voice on this key is
-  // checked in Vietnamese" and offer the ones that could be added, instead of
-  // handing over an English voice as though it had answered.
-  assert.deepEqual(offeredVoices(VOICES, "ja", false), []);
+test("a language with no voice of its own offers the rest, and says so", () => {
+  // This used to answer with an empty list, on the grounds that an honest
+  // nothing beat handing over an English voice as though it had answered.
+  // It was neither honest nor nothing: the model reads the language in any of
+  // those voices, and an empty picker is a language that cannot be chosen at
+  // all. The saying-so is `widened`, which the interface prints.
+  const { voices, widened } = offerVoices(VOICES, "ja", false);
+  assert.equal(widened, true);
+  assert.equal(voices.length, VOICES.length);
 });
 
 test("the configured model is used whenever it can say the words", () => {
@@ -201,3 +206,43 @@ test("a plan that could not be read blocks nothing", () => {
   assert.equal(usable(unknown), true);
   assert.equal(blockedReason([unknown], "x"), "");
 });
+
+
+// --------------------------------------------------------------------------
+// Never narrowing to nothing usable.
+//
+// `verified_languages` is a quality label, not a capability. Filtering on it
+// alone closed the only door to Vietnamese on this key: the one voice checked
+// in it is a library voice, a free plan cannot speak with those, and the
+// twenty-one premade voices that read Vietnamese perfectly well were one
+// filter away.
+// --------------------------------------------------------------------------
+
+test("a language whose only checked voice is unusable offers the rest", () => {
+  const { voices, widened } = offerVoices([LIBRARY, PREMADE], "vi", false);
+  assert.equal(widened, true);
+  assert.ok(voices.some((voice) => voice.voice_id === "adam"));
+  assert.equal(voices[0].voice_id, "adam", "a usable voice leads");
+});
+
+test("the voice that could not be used is still listed, and still says why", () => {
+  // It is the one somebody deliberately added; it should not vanish.
+  const { voices } = offerVoices([LIBRARY, PREMADE], "vi", false);
+  assert.ok(voices.some((voice) => voice.voice_id === "chi"));
+  assert.equal(blockedReason(voices, "chi"), LIBRARY.unusable_reason);
+});
+
+test("the filter is kept whenever it leaves something usable", () => {
+  // Widening is the exception, not the rule - a key with three hundred voices
+  // offers a handful in any one language and that is the point of filtering.
+  const checked: Voice = { voice_id: "en1", name: "Ella", languages: ["en"] };
+  const { voices, widened } = offerVoices([checked, PREMADE, LIBRARY], "en", false);
+  assert.equal(widened, false);
+  assert.deepEqual(voices.map((voice) => voice.voice_id), ["en1", "adam"]);
+});
+
+test("nothing is blocked once the list has widened", () => {
+  const { voices } = offerVoices([LIBRARY, PREMADE], "vi", false);
+  assert.equal(blockedReason(voices, effectiveVoice(voices, "")), "");
+});
+
