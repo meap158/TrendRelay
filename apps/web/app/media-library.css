@@ -1194,8 +1194,9 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .autocut-controls label.autocut-field-wide { grid-column: 1 / -1; }
 .autocut-controls input[type="range"] { inline-size: 100%; }
-.autocut-music-row { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 12px; font-weight: 400; }
-.autocut-music-row small { color: var(--muted); }
+.autocut-music-row { display: flex; gap: 8px; align-items: center; min-inline-size: 0; color: var(--text); font-size: 12px; font-weight: 400; }
+.autocut-music-row > span:first-child { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autocut-music-row small { flex: none; color: var(--muted); }
 /* The canvas-shape picker: three ratios as a segmented control, the way an
    editor offers its output size. */
 .autocut-aspect { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px; }
@@ -1217,7 +1218,7 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    once a video of that ratio loads. Sized from a definite height per shape
    (kept small for landscape so it fits the pane's width) with the width
    following the aspect-ratio, and centred so the column does not stretch it. */
-.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); container-type: size; }
+.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); max-inline-size: 100%; container-type: size; }
 .autocut-video[data-aspect="square"] { aspect-ratio: 1 / 1; block-size: min(46vh, 340px); }
 .autocut-video[data-aspect="landscape"] { aspect-ratio: 16 / 9; block-size: min(28vh, 191px); }
 /* Two stacked layers, cross-faded: the shown one is opaque, the hidden one
@@ -1259,7 +1260,6 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 @media (max-width: 720px) {
   .autocut-layout { grid-template-columns: 1fr; }
 }
-.autocut-video { position: relative; }
 .autocut-video-updating { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; border-radius: 999px; padding: 2px 10px; background: color-mix(in srgb, var(--ink) 70%, transparent); color: var(--on-ink); font-size: 10px; }
 /* Add-clips: a toggle over the shared library browser, folded away until asked
    for so it never competes with the timeline it sits under. */
