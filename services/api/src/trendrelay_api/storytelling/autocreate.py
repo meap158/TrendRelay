@@ -28,7 +28,13 @@ from typing import Any
 from sqlalchemy import select
 
 from trendrelay_api.database import SessionFactory
-from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
+from trendrelay_api.jobs import (
+    claim_job,
+    complete_job,
+    create_job_record,
+    fail_job,
+    report_progress,
+)
 from trendrelay_api.models import utc_now
 from trendrelay_api.storytelling import autobroll, narration, script
 from trendrelay_api.storytelling import jobs as story_jobs
@@ -186,8 +192,10 @@ def run_autocreate_job(
 
         # One stock clip per sentence, searched on the words that sentence is
         # about. Best-effort: a sentence stock cannot fill stays with whatever
-        # the Library already holds.
+        # the Library already holds. Reported sentence by sentence, because a
+        # dozen downloads is the slow part and a still bell reads as a stall.
         queries = [autobroll.sentence_query(line) for line in lines]
+        report_progress(job_id, 0.05, "Reading the script", factory=factory)
         imported = autobroll.fill_from_stock(
             queries,
             workspace_id=workspace_id,
@@ -195,7 +203,12 @@ def run_autocreate_job(
             kind=payload.get("broll_kind", "video"),
             orientation=autobroll.orientation_for(payload.get("aspect", story_jobs.DEFAULT_ASPECT)),
             factory=factory,
+            progress=lambda done, total: report_progress(
+                job_id, 0.1 + 0.75 * (done / total if total else 1.0),
+                f"Finding b-roll ({done}/{total})", factory=factory,
+            ),
         )
+        report_progress(job_id, 0.9, "Arranging the shots", factory=factory)
 
         # The pool the matcher chooses from: the pictures somebody already
         # chose, then the stock this filled in, in sentence order, no repeats.

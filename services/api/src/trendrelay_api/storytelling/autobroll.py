@@ -102,6 +102,7 @@ def fill_from_stock(
     kind: str = "video",
     orientation: str = "",
     factory,
+    progress=None,
 ) -> dict[int, str]:
     """Import one stock clip for each sentence's query; return line -> asset id.
 
@@ -110,15 +111,21 @@ def fill_from_stock(
     not three downloads of it. Best-effort throughout: an unconfigured provider
     returns nothing at all, and any single search or download that fails simply
     leaves that sentence out of the result.
+
+    ``progress``, if given, is called ``(done, total)`` as each sentence is
+    handled, so a caller can report a long fill sentence by sentence.
     """
     from trendrelay_api.integrations import pexels
 
     if not pexels.provider_status().get("configured"):
         return {}
     search_kind = "video" if kind == "video" else "image"
+    total = len(queries)
     by_query: dict[str, str] = {}
     placed: dict[int, str] = {}
     for index, query in enumerate(queries):
+        if progress is not None:
+            progress(index, total)
         query = query.strip()
         if not query:
             continue
@@ -145,4 +152,6 @@ def fill_from_stock(
         if asset_id:
             by_query[query] = asset_id
             placed[index] = asset_id
+    if progress is not None:
+        progress(total, total)
     return placed
