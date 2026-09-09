@@ -213,10 +213,15 @@ export function StorytellingDialog({
   const [voiceId, setVoiceId] = useState("");
   /** Which language the script is read in. */
   const [language, setLanguage] = useState("");
-  /** Offer every voice regardless of what it is checked in. Off by default -
-      the voices of the chosen language are what was asked for - and reachable,
-      because a model reads a language in any voice. */
-  const [anyVoice, setAnyVoice] = useState(false);
+  /**
+   * Show voices from other languages as well as this one.
+   *
+   * Off by default: choosing a language narrows the picker to it, which is the
+   * point of choosing one. Forced on when narrowing would leave nothing that
+   * can be spoken with, and the control says so rather than sitting unchecked
+   * over a list that plainly is not narrowed.
+   */
+  const [showAll, setShowAll] = useState(false);
   const [shared, setShared] = useState<SharedVoice[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [adding, setAdding] = useState("");
@@ -364,7 +369,7 @@ export function StorytellingDialog({
   // with. It is not an error state - it is how Vietnamese is narrated on this
   // plan - so it is explained rather than blocked.
   const { voices: speakable, widened } = useMemo(
-    () => offerVoices(voices, language, anyVoice), [voices, language, anyVoice],
+    () => offerVoices(voices, language, showAll), [voices, language, showAll],
   );
   const modelId = useMemo(
     () => modelFor(models, language, defaultModel), [models, language, defaultModel],
@@ -1113,7 +1118,7 @@ export function StorytellingDialog({
             <label>Language
               <Select
                 value={language}
-                onChange={(event) => { setLanguage(event.target.value); setAnyVoice(false); }}
+                onChange={(event) => { setLanguage(event.target.value); setShowAll(false); }}
                 aria-label="The language the script is read in"
               >
                 <option value="">Any language</option>
@@ -1143,6 +1148,32 @@ export function StorytellingDialog({
                 ))}
               </Select>
             </label>
+            {/* Whether the picker is narrowed, said where the narrowing is.
+                Checked means "showing everything", always, so the box and the
+                list cannot disagree - it sat unchecked over an unnarrowed list
+                for every language whose only checked voice cannot be used,
+                which is the one case anybody needed it to explain.
+
+                Disabled when the narrowing is impossible rather than hidden:
+                the reason is worth reading even when there is nothing to
+                decide. */}
+            {language && (
+              <label className="story-toggle">
+                <input
+                  type="checkbox"
+                  checked={showAll || widened}
+                  disabled={widened}
+                  onChange={(event) => setShowAll(event.target.checked)}
+                />
+                <span>Show voices from other languages</span>
+                <small>
+                  {widened
+                    ? `No voice checked in ${languageName(language)} can be used on this plan, `
+                      + "so every voice is offered. The multilingual model reads it in any of them."
+                    : `Off, so only voices checked in ${languageName(language)} are offered.`}
+                </small>
+              </label>
+            )}
             {/* The dead end this used to be, and the two ways out of it. The
                 key's voices are checked in eighteen languages; the models read
                 seventy-four. Asking for one of the other fifty-six emptied the
@@ -1152,11 +1183,10 @@ export function StorytellingDialog({
               <div className="story-voices-missing">
                 <p className="story-note">
                   {verified.length
-                    ? `No voice checked in ${languageName(language)} can be used on this plan, `
-                      + "so every voice is offered instead."
-                    : `No voice on this key is checked in ${languageName(language)}, `
-                      + "so every voice is offered instead."}
-                  {" "}The multilingual model reads it in any of them.
+                    ? `The one voice checked in ${languageName(language)} cannot be used on `
+                      + "this plan. These can be added:"
+                    : `No voice on this key is checked in ${languageName(language)}. `
+                      + "These can be added:"}
                 </p>
                 {offers.length > 0 && (
                   <ul className="story-shared">
@@ -1211,23 +1241,6 @@ export function StorytellingDialog({
                       && ", and some of these need a paid plan"}
                   </p>
                 )}
-                <label className="story-toggle">
-                  <input
-                    type="checkbox"
-                    checked={anyVoice}
-                    onChange={(event) => setAnyVoice(event.target.checked)}
-                  />
-                  <span>Keep offering every voice</span>
-                  <small>
-                    {plan?.known && plan.tier === "free"
-                      ? `The way to narrate ${languageName(language)} on the free plan: `
-                        + "a premade voice, read by the multilingual model. Nobody has "
-                        + "checked how it sounds doing it, and it is the only thing this "
-                        + "plan can speak with."
-                      : `The model reads ${languageName(language)} in any voice; nobody `
-                        + "has checked how this one sounds doing it."}
-                  </small>
-                </label>
               </div>
             )}
             <label className="story-toggle">
