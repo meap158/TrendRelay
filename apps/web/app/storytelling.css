@@ -87,9 +87,9 @@
 .story-search input { min-inline-size: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
 
 .story-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-block-size: 190px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
-.story-tiles button { inline-size: 100%; display: grid; gap: 4px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
-.story-tiles button:hover { border-color: var(--link); }
-.story-tiles-broll button { padding: 0; overflow: hidden; }
+.story-tiles button:not(.story-tile-remove) { inline-size: 100%; display: grid; gap: 4px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
+.story-tiles button:not(.story-tile-remove):hover { border-color: var(--link); }
+.story-tiles-broll button:not(.story-tile-remove) { padding: 0; overflow: hidden; }
 .story-tiles-broll img { display: block; inline-size: 100%; block-size: 74px; object-fit: cover; }
 /* The credit, under every tile. The licence asks for it wherever the media is
    shown, and a picker is one of the places it is shown. */
@@ -123,17 +123,29 @@
    and the thumbnail is the whole content. */
 .story-tiles-picked { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); max-block-size: 220px; }
 .story-tiles-picked li { position: relative; }
-.story-tiles-picked button { padding: 0; overflow: hidden; }
+/* Every chosen picture the same size, whatever shape it is. The strip was
+   a row of different heights - a portrait clip letterboxed against a square
+   one - which reads as something being wrong with the pictures rather than
+   with the grid. */
+.story-tiles-picked button:not(.story-tile-remove) { block-size: 58px; padding: 0; overflow: hidden; }
+.story-tiles-picked button img, .story-tiles-picked button video { inline-size: 100%; block-size: 100%; object-fit: cover; }
 /* Ready to receive: a row is waiting for a picture, so every picture is a
    target rather than an ornament. */
 .story-tiles-picked button.story-assignable { border-color: var(--link); cursor: copy; }
-.story-tile-remove { position: absolute; inset-block-start: 2px; inset-inline-end: 2px; display: grid; place-items: center; inline-size: 18px; block-size: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text); background: var(--panel); font-size: 12px; line-height: 1; cursor: pointer; opacity: 0; }
+/* Twenty-four pixels because that is the smallest target WCAG 2.5.8 accepts,
+   and this one sits on top of the thing it deletes - a near miss here is a
+   deleted picture. Opaque, bordered and shadowed rather than tinted: it has to
+   stay legible over whatever photograph is behind it. */
+.story-tile-remove { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; z-index: 1; display: grid; place-items: center; inline-size: 24px; block-size: 24px; padding: 0; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text); background: var(--panel); box-shadow: var(--shadow-sm); font-size: 13px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 90ms ease; }
 .story-tiles-picked li:hover .story-tile-remove,
 .story-tile-remove:focus-visible { opacity: 1; }
 /* On touch there is no hover, so the remove control would be invisible and
    untappable - reveal it. */
 @media (hover: none) { .story-tile-remove { opacity: 1; } }
 .story-tile-remove:hover { border-color: var(--bad); color: var(--bad); }
+/* Focus has to show even when the pointer is elsewhere, or a keyboard lands on
+   a control nobody can see. */
+.story-tile-remove:focus-visible { opacity: 1; outline: 2px solid var(--link); outline-offset: 1px; }
 
 /* Browsing the Library from inside the dialog. The same filter strip every
    other picker carries, so the controls are where somebody already knows. */

@@ -1112,6 +1112,9 @@ export function StorytellingDialog({
                     type="button"
                     className="story-tile-remove"
                     aria-label={`Remove ${asset.title}`}
+                    // Icon-only and small, so the name is worth showing on
+                    // hover as well as to a screen reader.
+                    title={`Remove ${asset.title}`}
                     onClick={(event) => {
                       // onClick, not onPointerDown, so Enter/Space work too; the
                       // stop keeps it off the assign click on the tile beneath.
