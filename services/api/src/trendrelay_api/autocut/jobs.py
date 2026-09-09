@@ -49,10 +49,29 @@ ASPECTS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {
 }
 DEFAULT_ASPECT = "portrait"
 
+#: The ratio names the web controls carry, mapped to the canvas keys above.
+#: Both dialogs show a ratio, but AutoCut sends the shape key and Storytelling
+#: sends the ratio itself - so the ratio is resolved here rather than left to
+#: silently miss the table and fall back to portrait, which is the bug that
+#: rendered every "16:9" narration tall.
+_ASPECT_ALIASES = {"9:16": "portrait", "1:1": "square", "16:9": "landscape"}
+
+
+def canonical_aspect(aspect: str) -> str:
+    """The canvas key for a shape named either way - ``portrait`` or ``9:16``.
+
+    Unknown names resolve to the default rather than raising: aspect is a
+    presentation choice, and a frame drawn in the wrong shape is a better
+    failure than a render that does not happen at all.
+    """
+    if aspect in ASPECTS:
+        return aspect
+    return _ASPECT_ALIASES.get(aspect, DEFAULT_ASPECT)
+
 
 def dimensions(aspect: str, *, preview: bool) -> tuple[int, int]:
     """The (width, height) for a canvas shape, full-size or preview."""
-    full, prev = ASPECTS.get(aspect, ASPECTS[DEFAULT_ASPECT])
+    full, prev = ASPECTS[canonical_aspect(aspect)]
     return prev if preview else full
 
 
