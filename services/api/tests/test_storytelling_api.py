@@ -508,9 +508,10 @@ def test_an_arrangement_reaches_the_render_filtered_to_this_workspace(monkeypatc
 def test_each_offered_voice_says_whether_this_plan_can_take_it(monkeypatch) -> None:
     """The verdict travels with the voice, decided once on the server.
 
-    Nineteen of the thirty Vietnamese voices are closed to a free key. Sending
-    the list without saying which is how the picker grew nineteen Add buttons
-    that could not work.
+    On a free key that verdict is now "no" for the whole shared library: the
+    plan may add some of them and can narrate with none of them, so an Add
+    button is an offer that ends at a failed render. On a paid key the per
+    voice rules apply again.
     """
     from trendrelay_api.integrations import elevenlabs
 
@@ -534,7 +535,8 @@ def test_each_offered_voice_says_whether_this_plan_can_take_it(monkeypatch) -> N
     ).json()
 
     offered = {voice["name"]: voice for voice in body["voices"]}
-    assert offered["Ms.Thanh"]["addable"] is True
+    # Neither, on a free plan, and both for the same reason.
+    assert offered["Ms.Thanh"]["addable"] is False
     assert offered["Minh"]["addable"] is False
     assert "paid" in offered["Minh"]["reason"].lower()
     # And the plan itself, because "3 slots" is not guessable from a row of

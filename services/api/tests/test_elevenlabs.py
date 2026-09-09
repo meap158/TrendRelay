@@ -770,15 +770,18 @@ def shared(**kwargs) -> dict:
     return {"free_users_allowed": False, "already_added": False, **kwargs}
 
 
-def test_the_free_tier_may_take_the_voices_that_say_it_may() -> None:
-    # Per voice, not per language: of thirty Vietnamese voices eleven are open.
-    assert elevenlabs.can_add(shared(free_users_allowed=True), FREE) == (True, "")
+def test_the_free_tier_is_offered_no_library_voice_at_all() -> None:
+    """Even the ones whose own flag says a free user may add them.
 
-
-def test_the_free_tier_is_refused_the_rest_before_the_button_is_pressed() -> None:
-    allowed, reason = elevenlabs.can_add(shared(), FREE)
-    assert allowed is False
-    assert "paid" in reason.lower()
+    This began as "eleven of thirty Vietnamese voices are open to the free
+    tier", which is what `free_users_allowed` reports and is true of adding.
+    Speaking is a separate permission the flag says nothing about, and it is
+    refused for every one of them - so the offer was real and worthless.
+    """
+    for voice in (shared(free_users_allowed=True), shared()):
+        allowed, reason = elevenlabs.can_add(voice, FREE)
+        assert allowed is False
+        assert "paid" in reason.lower()
 
 
 def test_a_paid_plan_may_take_a_voice_the_free_tier_cannot() -> None:
@@ -798,7 +801,8 @@ def test_no_slots_left_is_its_own_refusal() -> None:
     One is changed by paying, the other by removing a voice. A single "cannot
     add that" for both sends somebody to the wrong page.
     """
-    full = {**FREE, "voice_slots_used": 3, "voice_slots_left": 0}
+    # On a paid plan, where the plan itself is not already the refusal.
+    full = {**PAID, "voice_slots_used": 30, "voice_slots_left": 0, "voice_limit": 30}
     allowed, reason = elevenlabs.can_add(shared(free_users_allowed=True), full)
     assert allowed is False
     assert "slot" in reason.lower()
@@ -859,3 +863,48 @@ def test_a_paid_plan_voice_fails_with_an_actionable_message(saved_key, monkeypat
     # The service's own reason is surfaced, but the raw code/JSON is not.
     assert "library voices via the API" in message
     assert "402" not in message and "payment_required" not in message
+
+
+# --------------------------------------------------------------------------- #
+# Speaking with a voice, which is not the same as having it.
+#
+# "Free users cannot use library voices via the API." A free key can hold a
+# Vietnamese voice from the shared library and be refused every time it
+# narrates - and `free_users_allowed` on the voice governs adding, not
+# speaking, so nothing on the voice itself says so.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_free_key_may_narrate_with_a_premade_voice() -> None:
+    assert elevenlabs.can_speak({"category": "premade"}, FREE) == (True, "")
+
+
+def test_a_free_key_may_not_narrate_with_a_library_voice() -> None:
+    # The render that failed: a professional voice, added successfully, refused
+    # at synthesis after the script was written and the job queued.
+    allowed, reason = elevenlabs.can_speak({"category": "professional"}, FREE)
+    assert allowed is False
+    assert "library voices" in reason
+
+
+def test_a_paid_key_may_narrate_with_any_of_them() -> None:
+    for category in ("premade", "professional", "cloned", "generated"):
+        assert elevenlabs.can_speak({"category": category}, PAID) == (True, "")
+
+
+def test_an_unreadable_plan_does_not_invent_a_refusal() -> None:
+    assert elevenlabs.can_speak({"category": "cloned"}, UNKNOWN) == (True, "")
+
+
+def test_a_free_plan_is_not_offered_library_voices_it_could_not_speak_with() -> None:
+    """Eleven of thirty Vietnamese voices say a free user may add them.
+
+    Every one of those is then refused at synthesis, so the offer was real and
+    the result of taking it was not. Withdrawing the offer is the honest move;
+    the alternative spends a voice slot to reach the same wall.
+    """
+    allowed, reason = elevenlabs.can_add(
+        {"free_users_allowed": True, "already_added": False}, FREE,
+    )
+    assert allowed is False
+    assert "narrate" in reason

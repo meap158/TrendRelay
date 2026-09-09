@@ -429,14 +429,22 @@ def voice_catalog() -> dict[str, Any]:
     returned one.
     """
     status = provider_status(probe=True)
+    subscription = plan()
     if not status["reachable"]:
         return {
             "voices": [], "models": [], "status": status,
-            "defaults": defaults(), "plan": plan(),
+            "defaults": defaults(), "plan": subscription,
         }
+    # Each voice says whether this plan can narrate with it. Decided here so
+    # the picker never offers one that a render would refuse - the failure
+    # otherwise arrives after the pictures are chosen and the script written.
+    marked = []
+    for voice in voices():
+        allowed, reason = can_speak(voice, subscription)
+        marked.append({**voice, "usable": allowed, "unusable_reason": reason})
     return {
-        "voices": voices(), "models": models(), "status": status,
-        "defaults": defaults(), "plan": plan(),
+        "voices": marked, "models": models(), "status": status,
+        "defaults": defaults(), "plan": subscription,
     }
 
 
@@ -871,6 +879,36 @@ def shared_voices(language: str, *, page_size: int = 30) -> list[dict[str, Any]]
     return voices
 
 
+#: The one voice category a free key may speak with through the API.
+#:
+#: Everything else - a voice added from the shared library, a clone, a
+#: professional voice - can sit in the account and be used on ElevenLabs' own
+#: site, and is refused here: "Free users cannot use library voices via the
+#: API." Adding one and finding out at render time is the trap this exists to
+#: close.
+FREE_TIER_CATEGORY = "premade"
+
+
+def can_speak(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool, str]:
+    """Whether this key may actually narrate with this voice.
+
+    Separate from having it. A free key can hold a Vietnamese voice from the
+    shared library and cannot speak a word with it, which is not a distinction
+    anything on the voice itself makes - `free_users_allowed` governs adding,
+    not speaking.
+
+    Unknown plan is permissive, as everywhere else here: let ElevenLabs answer
+    rather than guess a refusal on the operator's behalf.
+    """
+    if not subscription.get("known"):
+        return True, ""
+    if subscription.get("tier") != "free":
+        return True, ""
+    if (voice.get("category") or "") == FREE_TIER_CATEGORY:
+        return True, ""
+    return False, "The free plan cannot narrate with library voices"
+
+
 def can_add(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool, str]:
     """Whether this key may take this voice, and what to say when it may not.
 
@@ -887,8 +925,13 @@ def can_add(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool, 
         return False, "Already on your key"
     if not subscription.get("known"):
         return True, ""
-    if subscription.get("tier") == "free" and not voice.get("free_users_allowed"):
-        return False, "Needs a paid ElevenLabs plan"
+    if subscription.get("tier") == "free":
+        # Not "not allowed to add" - eleven of thirty Vietnamese voices say a
+        # free user may add them, and every one of them is then refused at
+        # synthesis. Adding it would spend a voice slot on something this app
+        # cannot speak with, so the offer is withdrawn rather than made and
+        # then broken.
+        return False, "Needs a paid plan to narrate with"
     if subscription.get("voice_slots_left", 0) <= 0:
         limit = subscription.get("voice_limit", 0)
         return False, f"No voice slots left ({limit} on this plan)"
