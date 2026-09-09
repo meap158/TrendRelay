@@ -179,3 +179,49 @@ test("a batch title loses its count on the way to Attribution", () => {
     "Shopee listings",
   );
 });
+
+
+// Jobs that make several entries at once, and jobs whose entry has not landed
+// yet. Both used to produce no link at all, which reads as a click that did
+// not register - the exact failure this file was written to prevent.
+
+test("a job that gathered several assets opens all of them", () => {
+  // Auto b-roll imports a set and reports `asset_ids`. Reading only the
+  // singular left its notification with nothing to open.
+  const href = notificationHref([{ result: { asset_ids: ["a1", "a2", "a3"] } }]);
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("assets"), "a1,a2,a3");
+});
+
+test("one asset in the plural field still opens directly on it", () => {
+  const href = notificationHref([{ result: { asset_ids: ["only"] } }]);
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("asset"), "only");
+  assert.equal(params.get("assets"), "only");
+});
+
+test("a render links by content hash while its entry is still being filed", () => {
+  /* A render files its output through the ingest queue, so when the render
+     finishes there is no asset id yet. The hash is what both ends share -
+     the same reason a downloaded file is linked by hash - so the link
+     resolves the moment the ingest lands, and keeps resolving after. */
+  const href = notificationHref(
+    [{ result: { asset_id: undefined, sha256: "abc123" } }],
+    { title: "Story video is ready" },
+  );
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("file"), "abc123");
+  assert.equal(params.get("notice"), "Story video is ready");
+});
+
+test("an asset id is preferred over the hash once there is one", () => {
+  const href = notificationHref([{ result: { asset_id: "asset_1", sha256: "abc123" } }]);
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("asset"), "asset_1");
+  assert.equal(params.get("file"), null);
+});
+
+test("a job with neither still falls through to its products", () => {
+  const href = notificationHref([{ productId: "prod_7" }]);
+  assert.match(href ?? "", /prod_7/);
+});

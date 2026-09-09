@@ -10,20 +10,56 @@
 
 /** The job shape these read, kept loose because five endpoints supply it. */
 export type JobRecord = {
-  result?: { asset_id?: string; source_path?: string; product_id?: string } | null;
-  payload?: { asset_id?: string; source_path?: string; product_id?: string } | null;
+  result?: {
+    asset_id?: string;
+    /** Jobs that make or gather several at once - auto b-roll imports a set. */
+    asset_ids?: string[];
+    sha256?: string;
+    source_path?: string;
+    product_id?: string;
+  } | null;
+  payload?: {
+    asset_id?: string;
+    asset_ids?: string[];
+    sha256?: string;
+    source_path?: string;
+    product_id?: string;
+  } | null;
   asset_id?: string;
   assetId?: string | null;
   productId?: string | null;
 };
 
+/**
+ * Every Library entry one job is about.
+ *
+ * A list rather than one id, because a job can be about several: auto b-roll
+ * imports a set and reports `asset_ids`. Reading only the singular meant that
+ * notification had nothing to open and its click did nothing at all - the
+ * quiet failure this file exists to prevent, in the file meant to prevent it.
+ */
+function assetIds(job: JobRecord | null | undefined): string[] {
+  const many = job?.result?.asset_ids ?? job?.payload?.asset_ids;
+  if (Array.isArray(many) && many.length) return many.filter(Boolean);
+  const one = job?.result?.asset_id ?? job?.payload?.asset_id ?? job?.asset_id ?? job?.assetId;
+  return one ? [one] : [];
+}
+
 function assetId(job: JobRecord | null | undefined): string | undefined {
-  return (
-    job?.result?.asset_id
-    ?? job?.payload?.asset_id
-    ?? job?.asset_id
-    ?? job?.assetId
-  ) || undefined;
+  return assetIds(job)[0];
+}
+
+/**
+ * The content hash of what a job produced, when it has not become an entry yet.
+ *
+ * A render files its output through the ingest queue, so at the moment the
+ * render finishes there is no asset id - the ingest has not run. The hash is
+ * the one thing both ends share, which is exactly why a downloaded file is
+ * linked by hash too: the Library finds the entry whenever it lands, and the
+ * link works before and after.
+ */
+function contentHash(job: JobRecord | null | undefined): string | undefined {
+  return (job?.result?.sha256 ?? job?.payload?.sha256) || undefined;
 }
 
 function productId(job: JobRecord | null | undefined): string | undefined {
@@ -105,12 +141,23 @@ export function notificationHref(
   jobs: JobRecord[],
   context: { title?: string } = {},
 ): string | undefined {
-  const ids = [...new Set(jobs.map(assetId).filter((id): id is string => Boolean(id)))];
+  const ids = [...new Set(jobs.flatMap(assetIds))];
   const fallback = ids.length === 0 && jobs.length === 1 ? assetHref(jobs[0]) : undefined;
-  // Nothing here made a Library entry, so the products are what this row is
-  // about. Checked after assets rather than before because a job carrying
-  // both belongs to the thing it produced.
-  if (ids.length === 0 && !fallback) return productsHref(jobs, context);
+  if (ids.length === 0 && !fallback) {
+    // Made something, but it is still on its way into the Library. By hash,
+    // which resolves the moment the ingest lands and keeps resolving after.
+    const hashes = [...new Set(jobs.map(contentHash).filter((v): v is string => Boolean(v)))];
+    if (hashes.length === 1) {
+      const params = new URLSearchParams({ file: hashes[0], from: "notifications" });
+      const notice = contextNotice(context.title);
+      if (notice) params.set("notice", notice);
+      return `/library?${params}`;
+    }
+    // Nothing here made a Library entry, so the products are what this row is
+    // about. Checked after assets rather than before because a job carrying
+    // both belongs to the thing it produced.
+    return productsHref(jobs, context);
+  }
   const [path, query = ""] = (fallback ?? "/library").split("?");
   const params = new URLSearchParams(query);
   if (ids.length === 1) {
