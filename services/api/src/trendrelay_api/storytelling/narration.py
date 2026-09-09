@@ -104,6 +104,51 @@ def from_alignment(
     return _monotonic(timed)
 
 
+def words_from_alignment(
+    lines: list[Line], alignment: dict[str, Any], *, offset: float = 0.0
+) -> list[tuple[int, int, str]]:
+    """Per-word timings from the synthesiser's character alignment.
+
+    The same no-guessing mapping the lines use, one level finer: a word's start
+    is its first character's start and its end is its last character's end. Used
+    to light each word as it is spoken - the karaoke caption look. Returns
+    ``(start_ms, end_ms, text)`` per word, in order, for the whole narration.
+    """
+    starts = [float(value) for value in alignment.get("character_start_times_seconds") or []]
+    ends = [float(value) for value in alignment.get("character_end_times_seconds") or []]
+    if not starts or not ends:
+        return []
+    out: list[tuple[int, int, str]] = []
+    for line in lines:
+        text = line.text
+        length = len(text)
+        cursor = 0
+        while cursor < length:
+            while cursor < length and text[cursor].isspace():
+                cursor += 1
+            if cursor >= length:
+                break
+            end = cursor
+            while end < length and not text[end].isspace():
+                end += 1
+            first = line.start + cursor
+            last = min(line.start + end, len(ends)) - 1
+            if first < len(starts) and last >= first:
+                start_s = starts[first] + offset
+                end_s = ends[last] + offset
+                if end_s > start_s:
+                    out.append((round(start_s * 1000), round(end_s * 1000), text[cursor:end]))
+            cursor = end
+    # Keep the run monotonic - a later word never starts before an earlier one
+    # ends - so the highlight moves forward and never flickers back.
+    fixed: list[tuple[int, int, str]] = []
+    for start_ms, end_ms, word in out:
+        if fixed and start_ms < fixed[-1][1]:
+            start_ms = fixed[-1][1]
+        fixed.append((start_ms, max(start_ms + 1, end_ms), word))
+    return fixed
+
+
 def from_words(lines: list[Line], words: list[dict[str, Any]]) -> list[TimedLine]:
     """Time the lines from a transcript's word timings.
 

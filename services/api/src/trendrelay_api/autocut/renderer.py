@@ -73,6 +73,13 @@ class RenderRequest:
     #: Supplying these replaces the hook caption rather than joining it: two
     #: sets of words on one frame is a subtitle fighting a title.
     cues: tuple[tuple[int, int, str], ...] = ()
+    #: The animated caption style, by subtitle-preset id ("word-pop", "karaoke",
+    #: "one-word", …). Empty is the plain built-in look. A word-highlight preset
+    #: needs per-word timings; ``caption_words`` supplies them.
+    caption_style: str = ""
+    #: Per-word timings, as (start_ms, end_ms, text), for a word-highlight style
+    #: - the pop/karaoke look that lights each word as it is spoken.
+    caption_words: tuple[tuple[int, int, str], ...] = ()
 
     @property
     def blurred(self) -> bool:
@@ -80,7 +87,7 @@ class RenderRequest:
 
     @property
     def captioned(self) -> bool:
-        return bool(self.cues) or bool(self.caption.strip())
+        return bool(self.cues) or bool(self.caption.strip()) or bool(self.caption_words)
 
 
 #: How hard the fill background is blurred. Enough that it reads as a wash of
@@ -191,10 +198,36 @@ def _caption_ass(request: RenderRequest) -> str:
     its proportion whether it is drawn into a full render or a half-size
     preview, a portrait or a square.
     """
-    from trendrelay_api.subtitle_formats import Style, to_ass
-    from trendrelay_api.subtitles import Cue
+    import dataclasses
+
+    from trendrelay_api.subtitle_formats import PRESETS, Style, to_ass
+    from trendrelay_api.subtitles import Cue, build_cues
 
     duration_ms = max(1, round(request.plan.duration * 1000))
+
+    # Animated word-highlight captions - the pop/karaoke look that lights each
+    # word as it is spoken. The style and its layout are a reviewed preset; the
+    # words are timed by the narration. Sizes in the preset are drawn for a
+    # 1080x1920 social frame, so they scale to this frame's height to keep their
+    # proportion in a preview, a square, or a portrait.
+    if request.caption_style in PRESETS and request.caption_words:
+        base_style, layout = PRESETS[request.caption_style]
+        scale = request.height / 1920
+        style = dataclasses.replace(
+            base_style,
+            size=max(14, round(base_style.size * scale)),
+            outline=round(base_style.outline * scale, 2),
+            shadow=round(base_style.shadow * scale, 2),
+            margin_v=max(10, round(base_style.margin_v * scale)),
+            margin_h=max(8, round(base_style.margin_h * scale)),
+        )
+        segments = [{"words": [
+            {"text": text, "start_ms": max(0, start_ms), "end_ms": max(start_ms + 1, end_ms)}
+            for (start_ms, end_ms, text) in request.caption_words if text.strip()
+        ]}]
+        cues = build_cues(segments, layout=layout)
+        return to_ass(cues, style, play_width=request.width, play_height=request.height)
+
     if request.cues:
         # One cue a sentence, each wrapped the same way the hook is - a
         # narration line is a sentence rather than a slogan, so it is the one

@@ -72,6 +72,7 @@ class StorySpec(BaseModel):
     aspect: str = "16:9"
     fill: str = Field(default="cover", pattern="^(cover|blur)$")
     subtitles: bool = True
+    caption_style: str = Field(default="", max_length=40)
 
 
 # --- media resolution ---------------------------------------------------------
@@ -161,6 +162,7 @@ def _render_story(
         aspect=spec.get("aspect", story_jobs.DEFAULT_ASPECT),
         fill=spec.get("fill", "cover"),
         subtitles=spec.get("subtitles", True),
+        caption_style=spec.get("caption_style", ""),
     )
 
 

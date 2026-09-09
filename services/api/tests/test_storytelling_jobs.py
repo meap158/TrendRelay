@@ -27,7 +27,7 @@ def test_a_render_with_no_model_named_uses_the_configured_default(monkeypatch, t
         })),
     )
 
-    timed, path = jobs._voice_from_synthesis(
+    timed, path, caption_words = jobs._voice_from_synthesis(
         "The house was empty. Nobody came.",
         voice_id="voice-1", model_id="", language_code=None,
         destination=tmp_path / "narration.mp3",
@@ -36,6 +36,9 @@ def test_a_render_with_no_model_named_uses_the_configured_default(monkeypatch, t
     assert seen["model_id"] == "eleven_multilingual_v2"
     assert path.read_bytes() == b"AUDIO"
     assert [line.text for line in timed] == ["The house was empty.", "Nobody came."]
+    # Per-word timings for the animated caption look, from the same alignment.
+    assert [word for _s, _e, word in caption_words][:3] == ["The", "house", "was"]
+    assert all(end > start for start, end, _w in caption_words)
 
 
 def test_a_named_model_and_language_reach_the_synthesiser(monkeypatch, tmp_path) -> None:

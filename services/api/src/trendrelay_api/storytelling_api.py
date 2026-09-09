@@ -75,6 +75,21 @@ def list_templates(
     return {"templates": [_template_view(item) for item in planner.TEMPLATES]}
 
 
+@router.get("/caption-styles")
+def list_caption_styles(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The caption looks on offer, from the shared caption catalogue - the plain
+    sentence subtitle and the animated word-highlight styles (word-pop, karaoke)
+    that light each word as it is spoken."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.captions import styles as caption_styles
+
+    return {"styles": caption_styles()}
+
+
 class ScriptRequest(BaseModel):
     body: str = Field(min_length=1, max_length=MAX_SCRIPT_CHARACTERS)
 
@@ -130,6 +145,9 @@ class RenderBody(ScriptRequest):
     aspect: str = story_jobs.DEFAULT_ASPECT
     fill: str = "cover"
     subtitles: bool = True
+    #: The animated caption look, by subtitle-preset id ("word-pop", "karaoke",
+    #: …). Empty is the plain sentence subtitle. Validated against the catalogue.
+    caption_style: str = Field(default="", max_length=40)
     title: str | None = None
 
 
@@ -183,6 +201,7 @@ def _queue(
             aspect=body.aspect,
             fill=body.fill,
             subtitles=body.subtitles,
+            caption_style=body.caption_style,
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

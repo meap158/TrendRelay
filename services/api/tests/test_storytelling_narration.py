@@ -182,3 +182,25 @@ def test_a_line_with_no_time_in_it_is_not_a_shot() -> None:
     source = "Hm. The house was empty."
     alignment = alignment_for(source, seconds_per_character=0.001)
     assert narration.from_alignment(script.split(source), alignment) == []
+
+
+def test_words_from_alignment_times_each_word_from_its_own_characters():
+    """The karaoke seam: per-word timings derived from the character alignment,
+    monotonic so the highlight only ever moves forward."""
+    from trendrelay_api.storytelling import narration, script
+
+    text = "Wait for the very end."
+    lines = script.split(narration.prepare(text))
+    n = len(text)
+    alignment = {
+        "character_start_times_seconds": [i * 0.1 for i in range(n)],
+        "character_end_times_seconds": [(i + 1) * 0.1 for i in range(n)],
+    }
+    words = narration.words_from_alignment(lines, alignment)
+    assert [word for _s, _e, word in words] == ["Wait", "for", "the", "very", "end."]
+    assert all(end > start for start, end, _w in words)
+    # Monotonic: no word starts before the previous one ends.
+    for earlier, later in zip(words, words[1:]):
+        assert later[0] >= earlier[1]
+    # No alignment, no words - it degrades to the sentence captions, never guesses.
+    assert narration.words_from_alignment(lines, {}) == []

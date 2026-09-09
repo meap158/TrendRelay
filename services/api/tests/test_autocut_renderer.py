@@ -135,6 +135,32 @@ def test_a_hook_caption_is_one_cue_held_over_the_whole_video() -> None:
     assert ass.count("Dialogue:") == 1
 
 
+def test_a_word_highlight_style_lights_each_word_in_small_cues() -> None:
+    """The animated karaoke look: a reviewed preset's style and layout, timed by
+    the narration's own words, chunked small with each word lit as it is said."""
+    from trendrelay_api.autocut.renderer import _caption_ass
+
+    plan = a_plan("steady-two", 2)
+    words = ((0, 400, "Wait"), (400, 800, "for"), (800, 1400, "the"),
+             (1400, 2000, "very"), (2000, 2600, "end"))
+    ass = _caption_ass(RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None, destination=Path("/out.mp4"),
+        caption_style="word-pop", caption_words=words,
+    ))
+    assert "WordPop" in ass                 # the chosen preset, not the plain hook
+    assert ass.count("Dialogue:") > 1       # chunked to a few words a cue, and lit per word
+    # A plain hook or unknown style ignores the words and draws nothing animated.
+    plain = _caption_ass(RenderRequest(
+        plan=plan,
+        image_paths={shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots},
+        audio_path=None, destination=Path("/out.mp4"),
+        caption="A hook", caption_words=words,
+    ))
+    assert "WordPop" not in plain and plain.count("Dialogue:") == 1
+
+
 def test_timed_cues_become_one_subtitle_each() -> None:
     """What a narration needs, and what one cue cannot express.
 

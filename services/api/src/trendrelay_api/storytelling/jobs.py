@@ -64,7 +64,7 @@ class NarrationUnavailable(RuntimeError):
 
 def _voice_from_synthesis(
     text: str, *, voice_id: str, model_id: str, language_code: str | None, destination: Path
-) -> tuple[list[narration.TimedLine], Path]:
+) -> tuple[list[narration.TimedLine], Path, list[tuple[int, int, str]]]:
     """Speak the script, and take the synthesiser's own timings with it."""
     from trendrelay_api.integrations import elevenlabs
 
@@ -89,11 +89,13 @@ def _voice_from_synthesis(
         raise NarrationUnavailable(
             "The voice came back without usable timings, so there is nothing to cut on."
         )
-    return timed, destination
+    # Per-word timings for the animated caption look, from the same alignment.
+    caption_words = narration.words_from_alignment(lines, alignment)
+    return timed, destination, caption_words
 
 
 def _voice_from_asset(asset_id: str, workspace_id: str, factory: Any) -> tuple[
-    list[narration.TimedLine], Path
+    list[narration.TimedLine], Path, list[tuple[int, int, str]]
 ]:
     """Use a recording somebody made, timed by its own reviewed transcript.
 
@@ -136,7 +138,15 @@ def _voice_from_asset(asset_id: str, workspace_id: str, factory: Any) -> tuple[
     timed = narration.from_words(script.split(heard), words)
     if not timed:
         raise NarrationUnavailable("Nothing in that recording could be timed to a sentence.")
-    return timed, path
+    # The transcript already carries per-word timings; use them for the animated
+    # caption look directly, in the order they were heard.
+    caption_words = [
+        (int(word["start_ms"]), int(word["end_ms"]), str(word.get("text") or "").strip())
+        for word in words
+        if word.get("start_ms") is not None and word.get("end_ms") is not None
+        and str(word.get("text") or "").strip()
+    ]
+    return timed, path, caption_words
 
 
 def enqueue_render(
@@ -157,6 +167,7 @@ def enqueue_render(
     aspect: str = DEFAULT_ASPECT,
     fill: str = "cover",
     subtitles: bool = True,
+    caption_style: str = "",
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
     """Queue one narrated video. The plan is built when the voice exists."""
@@ -195,6 +206,9 @@ def enqueue_render(
             "aspect": aspect,
             "fill": fill,
             "subtitles": subtitles,
+            # The animated caption look, by subtitle-preset id ("word-pop",
+            # "karaoke", …). Empty is the plain sentence subtitle.
+            "caption_style": caption_style,
             "preview": preview,
             "title": title or f"Storytelling - {story.name}",
         },
@@ -228,11 +242,11 @@ def run_render_job(
         root.mkdir(parents=True, exist_ok=True)
 
         if payload.get("narration_asset_id"):
-            timed, audio_path = _voice_from_asset(
+            timed, audio_path, caption_words = _voice_from_asset(
                 payload["narration_asset_id"], workspace_id, factory,
             )
         else:
-            timed, audio_path = _voice_from_synthesis(
+            timed, audio_path, caption_words = _voice_from_synthesis(
                 payload["body"],
                 voice_id=payload["voice_id"],
                 model_id=str(payload.get("model_id") or ""),
@@ -269,7 +283,18 @@ def run_render_job(
                 f"This script comes to {len(plan.shots)} shots, and one render can "
                 f"draw {MAX_SHOTS}. Split it into parts and make them separately."
             )
-        cues = tuple(planner.captions(timed)) if payload.get("subtitles", True) else ()
+        # Subtitles come in two forms. A style names an animated word-highlight
+        # preset (word-pop, karaoke): each word lights as it is spoken, timed by
+        # the narration itself. No style is the plain sentence subtitle, one cue
+        # a line. Word-highlight needs the per-word timings; if they are missing
+        # (a recording with none) it falls back to the sentence captions.
+        subtitles_on = payload.get("subtitles", True)
+        caption_style = payload.get("caption_style") or ""
+        use_word_highlight = bool(subtitles_on and caption_style and caption_words)
+        cues = (
+            () if not subtitles_on or use_word_highlight
+            else tuple(planner.captions(timed))
+        )
 
         destination = root / f"{job_id}.mp4"
         width, height = dimensions(payload.get("aspect", DEFAULT_ASPECT), preview=is_preview)
@@ -283,6 +308,8 @@ def run_render_job(
             preview=is_preview,
             fill=payload.get("fill", "cover"),
             cues=cues,
+            caption_style=caption_style if use_word_highlight else "",
+            caption_words=tuple(caption_words) if use_word_highlight else (),
         ))
 
         if is_preview:
