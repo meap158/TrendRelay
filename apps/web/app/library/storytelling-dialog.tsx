@@ -369,9 +369,16 @@ export function StorytellingDialog({
   // `widened` when narrowing to the language left nothing that can be spoken
   // with. It is not an error state - it is how Vietnamese is narrated on this
   // plan - so it is explained rather than blocked.
-  const { voices: speakable, widened } = useMemo(
+  const { voices: offeredAll, widened } = useMemo(
     () => offerVoices(voices, language, showAll), [voices, language, showAll],
   );
+  // Drop the voices this plan cannot narrate with: an option that can only fail
+  // is clutter, not a choice. Kept only as a last resort - if filtering would
+  // empty the picker - so it never becomes a dead box with nothing to pick.
+  const speakable = useMemo(() => {
+    const usableOnly = offeredAll.filter(usable);
+    return usableOnly.length ? usableOnly : offeredAll;
+  }, [offeredAll]);
   const modelId = useMemo(
     () => modelFor(models, language, defaultModel), [models, language, defaultModel],
   );
@@ -1143,10 +1150,13 @@ export function StorytellingDialog({
                   <option key={voice.voice_id} value={voice.voice_id}>
                     {[
                       voice.name,
-                      voice.accents?.[0],
-                      // Marked rather than hidden: a voice somebody added on
-                      // purpose should not vanish from the list they added it
-                      // for without saying why.
+                      // When the list has widened past the language's own
+                      // voices, say the voice reads it - the multilingual model
+                      // does - rather than showing an accent that reads as the
+                      // wrong language. Otherwise the accent is the useful note.
+                      widened && language ? `reads ${languageName(language)}` : voice.accents?.[0],
+                      // Only ever seen in the last-resort case above, where an
+                      // unusable voice is all there is; normally these are gone.
                       usable(voice) ? "" : "— needs a paid plan",
                     ].filter(Boolean).join(" · ")}
                   </option>
