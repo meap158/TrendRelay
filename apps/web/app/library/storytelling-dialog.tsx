@@ -120,9 +120,9 @@ function languageName(code: string): string {
 /** How the finished video is shaped. Wide leads because a narrated piece is
     watched on a wide screen; the short-form frame is offered beside it. */
 const ASPECTS = [
-  { value: "16:9", label: "Wide" },
-  { value: "9:16", label: "Tall" },
-  { value: "1:1", label: "Square" },
+  { value: "16:9", label: "16:9", title: "Wide (16:9)" },
+  { value: "9:16", label: "9:16", title: "Tall (9:16)" },
+  { value: "1:1", label: "1:1", title: "Square (1:1)" },
 ] as const;
 
 const SOURCES = [
