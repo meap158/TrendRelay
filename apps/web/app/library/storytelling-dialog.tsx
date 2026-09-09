@@ -243,6 +243,17 @@ export function StorytellingDialog({
   const [assignments, setAssignments] = useState<string[]>([]);
   const [why, setWhy] = useState<Record<number, string[]>>({});
   const [arranging, setArranging] = useState(false);
+  /** The exact script the current arrangement was built against. The map is one
+      picture per sentence *by position*, so a sentence added or removed shifts
+      every picture after it onto the wrong line - and the render would draw it
+      that way. When the script is edited past this, the arrangement is dropped
+      rather than silently desynced. Null means nothing is arranged to protect. */
+  const arrangedFor = useRef<string | null>(null);
+  /** The live script, for the by-hand placement handlers below: they are
+      memoised without `body`, so they read the current one here rather than the
+      one captured when they were made. */
+  const bodyRef = useRef(body);
+  useEffect(() => { bodyRef.current = body; });
   /** The row waiting to be given a picture, so a click in the strip lands
       somewhere specific instead of being a click on a picture. */
   const [focused, setFocused] = useState<number | null>(null);
@@ -436,6 +447,18 @@ export function StorytellingDialog({
     return () => window.clearTimeout(timer);
   }, [open, outline]);
 
+  // Drop the arrangement when the script is edited out from under it. Keyed on
+  // the script the arrangement was built for, not on the sentence list, so the
+  // arrangements that arrive with their own script - a resumed draft, a stock
+  // fill - are not mistaken for an edit and cleared the instant they load.
+  useEffect(() => {
+    if (arrangedFor.current !== null && body !== arrangedFor.current) {
+      arrangedFor.current = null;
+      setAssignments((current) => (current.some(Boolean) ? [] : current));
+      setWhy((current) => (Object.keys(current).length ? {} : current));
+    }
+  }, [body]);
+
   // Browse the workspace's photos and videos through the shared library loop
   // every other picker reads with (ADR 0025) - it owns the debounce, paging,
   // facets and stale-response guard. Audio is dropped on arrival: a narration
@@ -522,6 +545,7 @@ export function StorytellingDialog({
       const found: Suggestion[] = payload.assignments ?? [];
       setAssignments(fromSuggestions(found, payload.lines?.length ?? lines.length));
       setWhy(reasonsFrom(found));
+      arrangedFor.current = body;  // this arrangement belongs to this script
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That could not be arranged.");
     } finally {
@@ -535,6 +559,8 @@ export function StorytellingDialog({
     setAssignments((current) => assignPicture(current, line, assetId, lines.length));
     setWhy((current) => ({ ...current, [line]: [] }));
     setFocused(null);
+    // A by-hand placement is an arrangement too, so a later script edit clears it.
+    if (arrangedFor.current === null) arrangedFor.current = bodyRef.current;
   }, [lines.length]);
 
   /** Drag one row onto another to trade their pictures.
@@ -544,6 +570,7 @@ export function StorytellingDialog({
     if (from === to) return;
     setAssignments((current) => swapPictures(current, from, to, lines.length));
     setWhy((current) => ({ ...current, [from]: [], [to]: [] }));
+    if (arrangedFor.current === null) arrangedFor.current = bodyRef.current;
   }, [lines.length]);
 
   async function searchBroll() {
@@ -740,6 +767,7 @@ export function StorytellingDialog({
       }
       setPicked(rows.slice(0, MAX_PICTURES));
       setAssignments(Array.isArray(result.assignments) ? (result.assignments as string[]) : []);
+      arrangedFor.current = body;  // filled for this script; an edit still clears it
       const nextWhy: Record<number, string[]> = {};
       for (const [line, words] of Object.entries((result.reasons as Record<string, string[]>) ?? {})) {
         nextWhy[Number(line)] = words;
@@ -865,6 +893,9 @@ export function StorytellingDialog({
       }
       setPicked(rows.slice(0, MAX_PICTURES));
       setBody(spec.body ?? "");
+      // The restored arrangement belongs to the restored script, so the edit
+      // guard above lets it stand instead of clearing it as the body lands.
+      arrangedFor.current = spec.body ?? "";
       setAssignments(Array.isArray(spec.assignments) ? spec.assignments : []);
       setTemplateId(spec.template_id ?? "explainer");
       if (spec.voice_id) setVoiceId(spec.voice_id);
