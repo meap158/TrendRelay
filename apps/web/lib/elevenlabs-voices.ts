@@ -41,6 +41,18 @@ export type Voice = {
   unusable_reason?: string;
 };
 
+/**
+ * Voices that come from somewhere other than ElevenLabs, by their id.
+ *
+ * The picker asks one question - which voice reads this - and two services
+ * answer it. Everything about a plan, a model or a character budget belongs to
+ * one of them, so the few places that care ask here rather than growing a
+ * second field threaded through every payload.
+ */
+export function isExternal(voiceId: string): boolean {
+  return String(voiceId || "").startsWith("microsoft:");
+}
+
 /** Whether a voice may be narrated with. Unknown counts as yes. */
 export function usable(voice: Voice | undefined): boolean {
   return voice ? voice.usable !== false : false;

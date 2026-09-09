@@ -36,6 +36,7 @@ import {
 import {
   blockedReason,
   effectiveVoice,
+  isExternal,
   modelFor,
   offerVoices,
   openingLanguage,
@@ -975,7 +976,10 @@ export function StorytellingDialog({
    * synthesiser is sent.
    */
   const overBudget = Boolean(
-    plan?.known && plan.character_limit > 0 && body.length > plan.characters_left,
+    plan?.known && plan.character_limit > 0 && body.length > plan.characters_left
+    // A voice from another service spends nothing on this plan, so the
+    // allowance that would block it is not its allowance.
+    && !isExternal(effectiveVoiceId),
   );
 
   const byId = useMemo(() => new Map(picked.map((asset) => [asset.id, asset])), [picked]);
@@ -1000,7 +1004,8 @@ export function StorytellingDialog({
                 : !picked.length ? (effectiveVoiceId
                   ? "No pictures yet - add some, or Auto-create to find them from stock."
                   : "Add a picture for the narration to play over.")
-                  : language && !modelId ? "No model on this key reads that language."
+                  : language && !modelId && !isExternal(effectiveVoiceId)
+                    ? "No model on this key reads that language."
                     : overBudget ? "The script is longer than this plan has characters left."
                       : voiceBlocked ? `${voiceBlocked}. Pick a premade voice - the multilingual model reads this language in any of them.`
                         : !effectiveVoiceId ? "Choose a voice."
