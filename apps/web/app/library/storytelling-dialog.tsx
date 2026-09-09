@@ -265,6 +265,9 @@ export function StorytellingDialog({
   const [brollKind, setBrollKind] = useState("image");
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [searching, setSearching] = useState(false);
+  //: Stock tiles whose import is in flight, keyed "kind-id", so a tile spins
+  //  and refuses a second click while its download runs.
+  const [importing, setImporting] = useState<Record<string, boolean>>({});
 
   const base = workspaceId ? `/api/workspaces/${workspaceId}/storytelling` : "";
   const creationsBase = workspaceId ? `/api/workspaces/${workspaceId}/creations` : "";
@@ -285,7 +288,7 @@ export function StorytellingDialog({
   // resetting state on a prop change. An effect would paint one frame of the
   // last set's pictures first, and arriving at a shot list built from media
   // that is no longer chosen is worse than arriving at an empty one.
-  const selectionKey = assets.map((asset) => asset.id).join(",");
+  const selectionKey = useMemo(() => assets.map((asset) => asset.id).join(","), [assets]);
   const [pickedKey, setPickedKey] = useState(selectionKey);
   if (pickedKey !== selectionKey) {
     setPickedKey(selectionKey);
@@ -596,6 +599,11 @@ export function StorytellingDialog({
   }
 
   async function importTile(tile: Tile) {
+    const key = `${tile.kind}-${tile.id}`;
+    // A stock import is a download the click cannot see finish, so without a
+    // guard a second click filed the same clip twice. One import per tile.
+    if (importing[key]) return;
+    setImporting((current) => ({ ...current, [key]: true }));
     try {
       const response = await apiFetch(`${base}/broll/import`, {
         method: "POST",
@@ -609,6 +617,12 @@ export function StorytellingDialog({
       onQueued(`${tile.credit}. Pick it from the Library once it is filed.`);
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That could not be brought in.");
+    } finally {
+      setImporting((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
     }
   }
 
@@ -1255,7 +1269,9 @@ export function StorytellingDialog({
                 busy={autoBusy === "fill"}
                 disabled={!lines.length || brollReady === false || autoBusy !== ""}
                 onClick={() => void fillFromStock()}
-                title="Search stock for every sentence and arrange it for review"
+                title={brollReady === false && brollReason
+                  ? brollReason
+                  : "Search stock for every sentence and arrange it for review"}
               >
                 <ActionIcon name="search" />Fill from stock
               </Button>
@@ -1441,19 +1457,23 @@ export function StorytellingDialog({
                 </Button>
               </form>
               <ul className="story-tiles story-tiles-broll">
-                {tiles.map((tile) => (
-                  <li key={`${tile.kind}-${tile.id}`}>
-                    <button type="button" onClick={() => void importTile(tile)}
-                      title={`${tile.credit} - add to the Library`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={tile.preview_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                      {/* The credit is on the tile because the licence asks for
-                          it wherever the media is shown, and this is one of the
-                          places it is shown. */}
-                      <small>{tile.credit}</small>
-                    </button>
-                  </li>
-                ))}
+                {tiles.map((tile) => {
+                  const inFlight = Boolean(importing[`${tile.kind}-${tile.id}`]);
+                  return (
+                    <li key={`${tile.kind}-${tile.id}`}>
+                      <button type="button" onClick={() => void importTile(tile)}
+                        disabled={inFlight} aria-busy={inFlight}
+                        title={inFlight ? "Adding to the Library…" : `${tile.credit} - add to the Library`}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={tile.preview_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                        {/* The credit is on the tile because the licence asks for
+                            it wherever the media is shown, and this is one of the
+                            places it is shown. */}
+                        <small>{inFlight ? "Adding…" : tile.credit}</small>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </>
           )}
