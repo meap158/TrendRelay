@@ -220,6 +220,10 @@ export function StorytellingDialog({
   const [plan, setPlan] = useState<Plan | null>(null);
   const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
+  //: Which autonomous action is running, so its own button spins and the rest
+  //  hold still: "fill" is fill-from-stock-for-review, "create" is the one-step
+  //  build. Empty is neither.
+  const [autoBusy, setAutoBusy] = useState<"" | "fill" | "create">("");
 
   /** The pictures this video is made of, seeded from the Library selection and
       added to from either source without leaving the modal. */
@@ -667,6 +671,126 @@ export function StorytellingDialog({
     }
   }
 
+  /**
+   * The autonomous path, in two shapes.
+   *
+   * Both post to the one /autocreate endpoint, which fills a sentence's stock,
+   * arranges it with the same matcher, and - on the flag - renders. It is the
+   * manual flow with the human choices filled in, so nothing new is queued:
+   * the import is the Library's own ingest and the render is the same one
+   * "Make the video" queues. `fill` stops for review and loads the shots back
+   * into this dialog; `create` carries straight through and closes.
+   */
+  async function pollAutocreate(id: string): Promise<Record<string, unknown>> {
+    // It runs in the worker; wait for it with a short poll, the way the rest of
+    // the dialog waits on a job. Generous cap - a dozen downloads take a while.
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const res = await apiFetch(`${base}/autocreate/${id}`);
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.detail ?? "The build could not be read.");
+      if (payload.status === "succeeded") return payload;
+      if (payload.status === "failed" || payload.status === "cancelled") {
+        throw new Error(payload.error ?? "The build did not finish.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    throw new Error("The build is taking longer than expected; check the Library shortly.");
+  }
+
+  async function fillFromStock() {
+    if (!base || !lines.length) return;
+    setAutoBusy("fill");
+    try {
+      const response = await apiFetch(`${base}/autocreate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          body,
+          asset_ids: picked.map((asset) => asset.id),
+          voice_id: effectiveVoiceId || undefined,
+          aspect,
+          broll_kind: brollKind,
+          // Stop for review: fill and arrange, but do not render.
+          render: false,
+        }),
+      });
+      const queued = await response.json();
+      if (!response.ok) throw new Error(queued.detail ?? "That could not start.");
+      const result = await pollAutocreate(queued.id);
+      const ids = (result.asset_ids as string[]) ?? [];
+      let rows: StoryAsset[] = [];
+      if (ids.length) {
+        const assetsRes = await apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/assets?asset_ids=${ids.join(",")}`,
+        );
+        const assetsBody = await assetsRes.json();
+        const found = new Map<string, StoryAsset>(
+          (assetsBody.assets ?? []).map((asset: StoryAsset) => [asset.id, asset]),
+        );
+        // Keep the order the build settled on; drop any the fetch could not find.
+        rows = ids
+          .map((id) => found.get(id))
+          .filter((asset): asset is StoryAsset => Boolean(asset))
+          .map((asset) => ({
+            id: asset.id, title: asset.title, media_kind: asset.media_kind,
+            original_path: asset.original_path, duration_ms: asset.duration_ms ?? null,
+            width: asset.width ?? null, height: asset.height ?? null,
+            versions: (asset.versions ?? []).map((version) => ({ kind: version.kind })),
+          }));
+      }
+      setPicked(rows.slice(0, MAX_PICTURES));
+      setAssignments(Array.isArray(result.assignments) ? (result.assignments as string[]) : []);
+      const nextWhy: Record<number, string[]> = {};
+      for (const [line, words] of Object.entries((result.reasons as Record<string, string[]>) ?? {})) {
+        nextWhy[Number(line)] = words;
+      }
+      setWhy(nextWhy);
+      const imported = Number(result.imported ?? 0);
+      onQueued(
+        `Filled ${imported} clip${imported === 1 ? "" : "s"} from stock. `
+        + "Review the shots, then make the video when you're happy.",
+      );
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "That could not be filled.");
+    } finally {
+      setAutoBusy("");
+    }
+  }
+
+  async function autoCreate() {
+    if (!base) return;
+    setAutoBusy("create");
+    try {
+      const response = await apiFetch(`${base}/autocreate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          body,
+          asset_ids: picked.map((asset) => asset.id),
+          voice_id: effectiveVoiceId,
+          model_id: modelId || undefined,
+          language_code: language || undefined,
+          template_id: templateId,
+          aspect,
+          subtitles,
+          caption_style: captionStyle,
+          broll_kind: brollKind,
+          // Carry straight through to a queued render.
+          render: true,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail ?? "That could not be queued.");
+      onQueued("Finding b-roll for every sentence, then narrating and cutting it. It lands in your Library.");
+      setBody("");
+      onClose();
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "That could not be queued.");
+    } finally {
+      setAutoBusy("");
+    }
+  }
+
   // The current story as a storytelling draft spec - the same fields a render
   // takes, so a saved draft renders to exactly what the dialog would now.
   function draftSpec() {
@@ -834,6 +958,18 @@ export function StorytellingDialog({
             onClick={() => void saveDraft()}
           >{draftId ? "Update draft" : "Save draft"}</Button>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          {/* The one-step build: fill the pictures from stock and render, from
+              the script alone. No pictures required - finding them is the point
+              - but a voice still is, the same as any render. */}
+          <Button
+            variant="secondary"
+            busy={autoBusy === "create"}
+            disabled={!body.trim() || !lines.length || !effectiveVoiceId || overBudget || Boolean(voiceBlocked) || autoBusy !== "" || busy}
+            onClick={() => void autoCreate()}
+            title="Fill the pictures from stock and render, in one step"
+          >
+            <ActionIcon name="effects" />Auto-create
+          </Button>
           <Button variant="primary" disabled={!ready} busy={busy} onClick={() => void render()}>
             <ActionIcon name="play" />Make the video
           </Button>
@@ -1074,6 +1210,19 @@ export function StorytellingDialog({
                   label="Where to add pictures from"
                 />
               )}
+              {/* The autonomous fill: search stock for every sentence and
+                  arrange it, so a script with no pictures becomes a shot list
+                  to review rather than an empty set to fill by hand. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                busy={autoBusy === "fill"}
+                disabled={!lines.length || brollReady === false || autoBusy !== ""}
+                onClick={() => void fillFromStock()}
+                title="Search stock for every sentence and arrange it for review"
+              >
+                <ActionIcon name="effects" />Fill from stock
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
