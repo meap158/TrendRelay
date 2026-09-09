@@ -7,6 +7,8 @@ the spec to the feature's own enqueue. These tests drive the store directly.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -15,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from trendrelay_api import creation_drafts as drafts
 from trendrelay_api.creation_models import CreationDraft
 from trendrelay_api.media_models import MediaAsset
-from trendrelay_api.models import Base, UserProfile, Workspace
+from trendrelay_api.models import Base, UserProfile, Workspace, utc_now
 
 engine = create_engine(
     "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -206,3 +208,118 @@ def test_render_ingests_owned_media_and_substitutes_ids(session, monkeypatch, tm
     # The ingest is cached, so a re-render does not import the bytes again.
     media = drafts.list_media(session, "ws-1", view["id"])["media"][0]
     assert media["ingested_asset_id"] == "asset-owned"
+
+
+# --------------------------------------------------------------------------- #
+# What became of the render.
+#
+# `render_draft` moved a draft to *rendering* and recorded the job, and nothing
+# moved it out again: a finished video never became *rendered* or picked up its
+# asset, and a failed one could not be edited or tried again. A failed render
+# is exactly when the draft is wanted, and it was the one case where the draft
+# stopped being usable.
+# --------------------------------------------------------------------------- #
+
+
+def rendering(session, job_id: str = "job-1") -> CreationDraft:
+    """A draft mid-render, as `render_draft` leaves one."""
+    view = drafts.create_draft(
+        session, "ws-1", USER, kind="autocut", title="A cut",
+        spec={"asset_ids": ["asset-0", "asset-1"]},
+    )
+    draft = session.get(CreationDraft, view["id"])
+    draft.status = "rendering"
+    draft.render_job_id = job_id
+    session.commit()
+    return draft
+
+
+def job(monkeypatch, status: str, result: dict | None = None) -> None:
+    monkeypatch.setattr(
+        drafts, "get_job_record",
+        lambda job_id, **kwargs: {"id": job_id, "status": status, "result": result or {}},
+    )
+
+
+def test_a_finished_render_makes_the_draft_rendered_and_keeps_its_asset(
+    session, monkeypatch,
+) -> None:
+    draft = rendering(session)
+    job(monkeypatch, "succeeded", {"asset_id": "asset-new"})
+    settled = drafts.get_draft(session, "ws-1", draft.id)
+    assert settled.status == "rendered"
+    assert settled.asset_id == "asset-new"
+
+
+def test_a_failed_render_gives_the_draft_back(session, monkeypatch) -> None:
+    """The reported bug. A failure left the work in *rendering* for good.
+
+    Returned to *draft* rather than to a state of its own: the spec is intact
+    and editable and the point is to continue, which is what *draft* means.
+    """
+    draft = rendering(session)
+    job(monkeypatch, "failed")
+    settled = drafts.get_draft(session, "ws-1", draft.id)
+    assert settled.status == "draft"
+    # The attempt is still findable, so what went wrong can still be read.
+    assert settled.render_job_id == "job-1"
+
+
+def test_a_cancelled_render_gives_it_back_too(session, monkeypatch) -> None:
+    draft = rendering(session)
+    job(monkeypatch, "cancelled")
+    assert drafts.get_draft(session, "ws-1", draft.id).status == "draft"
+
+
+def test_a_render_still_running_is_left_alone(session, monkeypatch) -> None:
+    draft = rendering(session)
+    job(monkeypatch, "running")
+    assert drafts.get_draft(session, "ws-1", draft.id).status == "rendering"
+
+
+def test_a_job_that_cannot_be_found_yet_does_not_reopen_the_draft(
+    session, monkeypatch,
+) -> None:
+    """The race this must not lose.
+
+    The job store is read on its own connection, so a record written moments
+    ago in another transaction is not always visible. Treating that as "the
+    render is gone" hands the draft back while its render is still running,
+    and a second render can then be started over the first.
+    """
+    draft = rendering(session)
+
+    def missing(job_id, **kwargs):
+        raise FileNotFoundError(job_id)
+
+    monkeypatch.setattr(drafts, "get_job_record", missing)
+    assert drafts.get_draft(session, "ws-1", draft.id).status == "rendering"
+
+
+def test_a_render_whose_job_is_long_gone_is_eventually_given_back(
+    session, monkeypatch,
+) -> None:
+    # Ambiguous stops being ambiguous. No render takes six hours, so a draft
+    # still waiting on a job nobody can find has lost it - and staying stuck
+    # forever is the failure this whole reconciliation exists to end.
+    draft = rendering(session)
+    draft.updated_at = utc_now() - drafts.LOST_RENDER_AFTER - timedelta(minutes=1)
+    session.commit()
+
+    def missing(job_id, **kwargs):
+        raise FileNotFoundError(job_id)
+
+    monkeypatch.setattr(drafts, "get_job_record", missing)
+    assert drafts.get_draft(session, "ws-1", draft.id).status == "draft"
+
+
+def test_listing_settles_before_it_filters(session, monkeypatch) -> None:
+    """Otherwise the status being filtered on is the stale one.
+
+    A draft recorded as rendering whose job failed an hour ago would answer
+    the wrong query - absent from "draft", present in "rendering".
+    """
+    rendering(session)
+    job(monkeypatch, "failed")
+    assert drafts.list_drafts(session, "ws-1", status="rendering")["total"] == 0
+    assert drafts.list_drafts(session, "ws-1", status="draft")["total"] == 1

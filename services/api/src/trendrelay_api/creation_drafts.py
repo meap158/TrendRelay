@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from datetime import timedelta
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.creation_models import CreationDraft, CreationDraftMedia
+from trendrelay_api.jobs import get_job_record
 from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.models import utc_now
+
+#: How long a draft may sit in *rendering* pointing at a job nobody can find
+#: before the render is presumed lost and the draft becomes editable again.
+#:
+#: Generous on purpose. The cost of being early is a draft returned to the
+#: operator while its render is still going, and a second render started over
+#: the first; the cost of being late is a wait. No render takes six hours.
+LOST_RENDER_AFTER = timedelta(hours=6)
 
 #: Paging defaults, matching the other list surfaces (products, campaign posts).
 DEFAULT_PAGE = 50
@@ -418,11 +429,58 @@ def create_draft(
     return _view(draft)
 
 
+def settle(session: Session, draft: CreationDraft) -> CreationDraft:
+    """Tell a rendering draft what became of its render.
+
+    `render_draft` moves a draft to *rendering* and records the job. Nothing
+    moved it out again, so every draft that was ever rendered stayed
+    *rendering* for good - a finished video never became *rendered* and never
+    picked up its asset, and a failed one could not be edited or tried again.
+    A render that fails is exactly when the draft is wanted, and it was the one
+    case where the draft stopped being usable.
+
+    Read from the job rather than pushed by it. The render runs in the worker,
+    which would otherwise have to know what a draft is and write to it across
+    a process boundary; the job record already says what happened, so the draft
+    asks the next time anybody looks at it.
+
+    Failure returns it to *draft* rather than to a state of its own. The spec
+    is intact and editable and the point is to continue, which is what *draft*
+    means - and `render_job_id` stays behind so the attempt that failed is
+    still there to be read.
+    """
+    if draft.status != "rendering" or not draft.render_job_id:
+        return draft
+    try:
+        job = get_job_record(draft.render_job_id)
+    except FileNotFoundError:
+        # Ambiguous, so not acted on quickly. The job store is read on its own
+        # connection, and a record written moments ago inside another
+        # transaction is not always visible yet - treating that as "the render
+        # is gone" would return a draft to editable while its render is still
+        # running, and a second render could then be started over the first.
+        #
+        # Given long enough it stops being ambiguous: no render takes six
+        # hours, so a draft still waiting on a job nobody can find has lost it.
+        if draft.updated_at and utc_now() - draft.updated_at > LOST_RENDER_AFTER:
+            draft.status = "draft"
+            session.commit()
+        return draft
+    if job["status"] == "succeeded":
+        draft.status = "rendered"
+        draft.asset_id = (job.get("result") or {}).get("asset_id") or draft.asset_id
+        session.commit()
+    elif job["status"] in {"failed", "cancelled"}:
+        draft.status = "draft"
+        session.commit()
+    return draft
+
+
 def get_draft(session: Session, workspace_id: str, draft_id: str) -> CreationDraft:
     draft = session.get(CreationDraft, draft_id)
     if draft is None or draft.workspace_id != workspace_id:
         raise LookupError("Draft not found.")
-    return draft
+    return settle(session, draft)
 
 
 def list_drafts(
@@ -431,6 +489,17 @@ def list_drafts(
     limit: int = DEFAULT_PAGE, offset: int = 0,
 ) -> dict[str, Any]:
     """A page of drafts, newest-edited first - what a chooser or an agent reads."""
+    # Before the filter, not after: the status is what is being filtered on, so
+    # a draft still recorded as rendering when its job failed an hour ago would
+    # answer the wrong query - missing from "draft", present in "rendering".
+    # Bounded by how many renders are in flight, which is a handful.
+    for pending in session.scalars(
+        select(CreationDraft).where(
+            CreationDraft.workspace_id == workspace_id,
+            CreationDraft.status == "rendering",
+        )
+    ).all():
+        settle(session, pending)
     limit = max(1, min(limit, MAX_PAGE))
     offset = max(0, offset)
     where = [CreationDraft.workspace_id == workspace_id]
