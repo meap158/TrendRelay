@@ -940,7 +940,9 @@ export function StorytellingDialog({
           <span className="story-ready">
             {!body.trim() ? "Write the script."
               : !lines.length ? "Nothing in the script to read."
-                : !picked.length ? "Add a picture for the narration to play over."
+                : !picked.length ? (effectiveVoiceId
+                  ? "No pictures yet - add some, or Auto-create to find them from stock."
+                  : "Add a picture for the narration to play over.")
                   : language && !modelId ? "No model on this key reads that language."
                     : overBudget ? "The script is longer than this plan has characters left."
                       : voiceBlocked ? `${voiceBlocked}. Pick a premade voice - the multilingual model reads this language in any of them.`
@@ -964,7 +966,10 @@ export function StorytellingDialog({
           <Button
             variant="secondary"
             busy={autoBusy === "create"}
-            disabled={!body.trim() || !lines.length || !effectiveVoiceId || overBudget || Boolean(voiceBlocked) || autoBusy !== "" || busy}
+            // Needs a voice like any render; and something to show - either
+            // pictures already chosen or a stock provider to find them - so it
+            // is not offered when it could only fail.
+            disabled={!body.trim() || !lines.length || !effectiveVoiceId || overBudget || Boolean(voiceBlocked) || (brollReady === false && !picked.length) || autoBusy !== "" || busy}
             onClick={() => void autoCreate()}
             title="Fill the pictures from stock and render, in one step"
           >
@@ -1221,7 +1226,7 @@ export function StorytellingDialog({
                 onClick={() => void fillFromStock()}
                 title="Search stock for every sentence and arrange it for review"
               >
-                <ActionIcon name="effects" />Fill from stock
+                <ActionIcon name="search" />Fill from stock
               </Button>
               <Button
                 variant="secondary"
