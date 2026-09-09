@@ -500,6 +500,63 @@ def test_an_arrangement_reaches_the_render_filtered_to_this_workspace(monkeypatc
     assert seen[0]["assignments"] == ["", "mine", ""]
 
 
+def autocreate_kwargs(monkeypatch) -> list[dict]:
+    """Intercept the autonomous build the same way, for the same reason."""
+    seen: list[dict] = []
+    monkeypatch.setattr(
+        storytelling_api.story_autocreate, "enqueue_autocreate",
+        lambda ws, actor, **kwargs: seen.append(kwargs)
+        or {"id": "autocreate_abc", "status": "queued", "render": kwargs.get("render")},
+    )
+    return seen
+
+
+def test_autocreate_fills_gaps_and_carries_the_shape_and_mode(monkeypatch) -> None:
+    """The build takes the pictures already chosen, keeps only this workspace's,
+    and passes on the shape, the b-roll kind, and whether to render or review."""
+    mine, theirs = make_workspace(), make_workspace()
+    add_picture(mine, "mine")
+    add_picture(theirs, "theirs")
+    seen = autocreate_kwargs(monkeypatch)
+
+    answer = request(
+        "POST", f"/api/workspaces/{mine}/storytelling/autocreate",
+        json={
+            "body": SCRIPT, "asset_ids": ["mine", "theirs"], "voice_id": "voice-1",
+            "aspect": "9:16", "broll_kind": "video", "render": False,
+        },
+    )
+    assert answer.status_code == 202, answer.text
+    # A picture from another workspace never reaches the pool.
+    assert seen[0]["asset_ids"] == ["mine"]
+    assert seen[0]["aspect"] == "9:16"
+    assert seen[0]["broll_kind"] == "video"
+    assert seen[0]["render"] is False
+
+
+def test_autocreate_needs_no_pictures_to_start(monkeypatch) -> None:
+    # The whole point: a script alone is enough, because the pictures are what
+    # it goes and finds. A render with none is refused; this is not.
+    workspace_id = make_workspace()
+    seen = autocreate_kwargs(monkeypatch)
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/autocreate",
+        json={"body": SCRIPT, "voice_id": "voice-1", "render": True},
+    )
+    assert answer.status_code == 202, answer.text
+    assert seen[0]["asset_ids"] == []
+    assert seen[0]["render"] is True
+
+
+def test_autocreate_refuses_an_empty_script() -> None:
+    workspace_id = make_workspace()
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/autocreate",
+        json={"body": "   ", "voice_id": "voice-1"},
+    )
+    assert answer.status_code == 422
+
+
 # --------------------------------------------------------------------------- #
 # The shared-voice offer. What exists, and what this key may actually have.
 # --------------------------------------------------------------------------- #

@@ -222,6 +222,12 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         done: "Story video is ready",
         detail: "Narrated video",
       },
+      storytelling_autocreate: {
+        category: "render",
+        working: job?.payload?.render ? "Building your story" : "Finding b-roll",
+        done: job?.payload?.render ? "Story build queued the render" : "B-roll ready to review",
+        detail: "Auto b-roll",
+      },
     };
     const definition = definitions[job?.kind] ?? {
       category: "processing" as JobCategory,

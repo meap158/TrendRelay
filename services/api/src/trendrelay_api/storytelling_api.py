@@ -29,6 +29,7 @@ from trendrelay_api.foundation import audit, membership, require_role
 from trendrelay_api.jobs import get_job_record
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
+from trendrelay_api.storytelling import autocreate as story_autocreate
 from trendrelay_api.storytelling import jobs as story_jobs
 from trendrelay_api.storytelling import planner, script
 
@@ -254,15 +255,105 @@ def start_preview(
     return queued
 
 
-def _record(session: Session, workspace_id: str, job_id: str) -> dict[str, Any]:
+class AutocreateBody(RenderBody):
+    """A render request that fills its own pictures. Everything a render takes,
+    plus which kind of stock to reach for and whether to stop for review."""
+
+    #: "video" for moving b-roll, "image" for stills. Video is the default: a
+    #: narrated piece over motion reads as made, not as a slideshow.
+    broll_kind: str = Field(default="video", pattern="^(image|video)$")
+    #: True carries straight through to a queued render; false stops after
+    #: arranging and hands the shot list back for review.
+    render: bool = True
+
+
+@router.post("/autocreate", status_code=202)
+def start_autocreate(
+    workspace_id: str,
+    body: AutocreateBody,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Build the whole narration from the script: fill stock, arrange, render.
+
+    The pictures a caller already chose are kept and the gaps are filled from
+    stock; with none chosen, the stock is the whole set. `render` false stops
+    at the shot list for review, `render` true queues the video. Either way it
+    is the ordinary matcher and the ordinary render underneath - this only
+    supplies the choices a person would otherwise make by hand.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    try:
+        queued = story_autocreate.enqueue_autocreate(
+            workspace_id, user.id,
+            body=body.body,
+            # Filtered to this workspace's own visuals, so a named picture that
+            # is not ours never reaches the pool the matcher draws from.
+            asset_ids=_known_visuals(session, workspace_id, body.asset_ids),
+            voice_id=body.voice_id,
+            model_id=body.model_id,
+            language_code=body.language_code,
+            narration_asset_id=body.narration_asset_id,
+            template_id=body.template_id,
+            aspect=body.aspect,
+            fill=body.fill,
+            subtitles=body.subtitles,
+            caption_style=body.caption_style,
+            title=body.title,
+            broll_kind=body.broll_kind,
+            render=body.render,
+        )
+    except (KeyError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session, request, workspace_id, user.id,
+        "storytelling.autocreate_queued", "durable_job", queued["id"],
+        {"render": body.render, "broll_kind": body.broll_kind, "characters": len(body.body)},
+    )
+    session.commit()
+    return queued
+
+
+@router.get("/autocreate/{job_id}")
+def autocreate_status(
+    workspace_id: str,
+    job_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Where an autonomous build has got to, and the shot list it settled on.
+
+    The review surface polls this: on success it reads back the pool of
+    pictures and one assignment per sentence, loads them into the dialog, and
+    lets the person change what they disagree with before rendering.
+    """
+    membership(session, workspace_id, user.id)
+    record = _record(session, workspace_id, job_id, kind=story_autocreate.JOB_KIND)
+    result = record.get("result") or {}
+    return {
+        "id": job_id,
+        "status": record.get("status"),
+        "error": record.get("error"),
+        "asset_ids": result.get("asset_ids") or [],
+        "assignments": result.get("assignments") or [],
+        "reasons": result.get("reasons") or {},
+        "lines": result.get("lines") or [],
+        "imported": result.get("imported") or 0,
+        # Present only on a full build: the render it went on to queue.
+        "render_job_id": result.get("render_job_id"),
+    }
+
+
+def _record(
+    session: Session, workspace_id: str, job_id: str,
+    *, kind: str = story_jobs.JOB_KIND,
+) -> dict[str, Any]:
     try:
         record = get_job_record(job_id, session=session)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="Storytelling job not found.") from error
-    if (
-        record.get("workspace_id") != workspace_id
-        or record.get("kind") != story_jobs.JOB_KIND
-    ):
+    if record.get("workspace_id") != workspace_id or record.get("kind") != kind:
         raise HTTPException(status_code=404, detail="Storytelling job not found.")
     return record
 

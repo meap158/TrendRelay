@@ -41,6 +41,8 @@ from trendrelay_api.autocut.jobs import JOB_KIND as AUTOCUT_JOB_KIND  # noqa: E4
 from trendrelay_api.autocut.jobs import run_render_job as run_autocut_job  # noqa: E402
 from trendrelay_api.storytelling.jobs import JOB_KIND as STORY_JOB_KIND  # noqa: E402
 from trendrelay_api.storytelling.jobs import run_render_job as run_story_job  # noqa: E402
+from trendrelay_api.storytelling.autocreate import JOB_KIND as AUTOCREATE_JOB_KIND  # noqa: E402
+from trendrelay_api.storytelling.autocreate import run_autocreate_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
 from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND  # noqa: E402
 from trendrelay_api.caption_jobs import run_caption_job  # noqa: E402
@@ -91,6 +93,8 @@ JOB_KINDS = (
     ENRICHMENT_JOB_KIND,
     VOICE_JOB_KIND,
     AUTOCUT_JOB_KIND,
+    STORY_JOB_KIND,
+    AUTOCREATE_JOB_KIND,
 )
 
 
@@ -170,6 +174,7 @@ def process_available() -> int:
     voice_ids = recoverable_job_ids(VOICE_JOB_KIND)
     autocut_ids = recoverable_job_ids(AUTOCUT_JOB_KIND)
     story_ids = recoverable_job_ids(STORY_JOB_KIND)
+    autocreate_ids = recoverable_job_ids(AUTOCREATE_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -219,6 +224,14 @@ def process_available() -> int:
         story_ids, run_story_job, label="Storytelling render", workers=1,
         refill=lambda: recoverable_job_ids(STORY_JOB_KIND),
     )
+    # An autonomous build searches stock, imports it, arranges it, and then
+    # queues an ordinary storytelling render - which the lane above claims on
+    # the next pass. One at a time: it runs its own imports inline, and a burst
+    # of parallel Pexels fetches helps nobody.
+    run_job_batch(
+        autocreate_ids, run_autocreate_job, label="Storytelling auto-build", workers=1,
+        refill=lambda: recoverable_job_ids(AUTOCREATE_JOB_KIND),
+    )
     # ElevenLabs plans enforce their own concurrency limits. Two requests keep
     # ordinary plans moving without turning a large selection into a burst of
     # paid requests; deterministic job IDs still prevent duplicate billing.
@@ -255,6 +268,7 @@ def process_available() -> int:
         + len(voice_ids)
         + len(autocut_ids)
         + len(story_ids)
+        + len(autocreate_ids)
     )
 
 

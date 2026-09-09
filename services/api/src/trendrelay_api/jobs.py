@@ -126,6 +126,9 @@ ACTIVITY_PAYLOAD_FIELDS = (
     # hide it) and the template it used (so the card reads as more than "a
     # render"). Both small; the clip list is deliberately not carried.
     "preview", "template_name",
+    # The auto-build's mode: true went on to queue a render, false stopped at a
+    # shot list to review - so the card can say which happened.
+    "render",
 )
 
 #: The batch keys the drawer groups and counts by. Deliberately not the whole

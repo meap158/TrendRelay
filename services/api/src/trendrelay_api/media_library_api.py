@@ -542,6 +542,7 @@ def media_processing_jobs(
     from trendrelay_api.integrations.effect_render import JOB_KIND as EFFECT_JOB_KIND
     from trendrelay_api.jobs import list_job_records_for_kinds
     from trendrelay_api.media_ai import JOB_KIND as ENRICHMENT_JOB_KIND
+    from trendrelay_api.storytelling.autocreate import JOB_KIND as AUTOCREATE_JOB_KIND
     from trendrelay_api.storytelling.jobs import JOB_KIND as STORY_JOB_KIND
     from trendrelay_api.voice_jobs import JOB_KIND as VOICE_JOB_KIND
 
@@ -554,6 +555,9 @@ def media_processing_jobs(
         # tracks them like every other long asset job.
         AUTOCUT_JOB_KIND,
         STORY_JOB_KIND,
+        # The autonomous build, which fills a script's pictures and then queues
+        # one of the storytelling renders above - both show in the bell.
+        AUTOCREATE_JOB_KIND,
     }
     jobs = list_job_records_for_kinds(workspace_id, kinds, limit, session=session)
     # A preview is watched in its own dialog and pruned within the hour; only the
