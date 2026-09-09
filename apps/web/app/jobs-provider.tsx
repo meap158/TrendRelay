@@ -210,6 +210,18 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         done: "Voiceover ready",
         detail: "Voiceover",
       },
+      autocut_render: {
+        category: "render",
+        working: "Cutting your video",
+        done: "AutoCut is ready",
+        detail: job?.payload?.template_name ? `${job.payload.template_name} cut` : "Beat-cut video",
+      },
+      storytelling_render: {
+        category: "render",
+        working: "Narrating your story",
+        done: "Story video is ready",
+        detail: "Narrated video",
+      },
     };
     const definition = definitions[job?.kind] ?? {
       category: "processing" as JobCategory,

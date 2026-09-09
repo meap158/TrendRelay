@@ -122,6 +122,10 @@ def serialize_job(item: DurableJob) -> dict[str, Any]:
 ACTIVITY_PAYLOAD_FIELDS = (
     "asset_id", "effects", "action", "media_ms", "title", "created_at",
     "delivery", "translate_to", "modes",
+    # AutoCut/Storytelling: whether this is a throwaway preview (so the feed can
+    # hide it) and the template it used (so the card reads as more than "a
+    # render"). Both small; the clip list is deliberately not carried.
+    "preview", "template_name",
 )
 
 #: The batch keys the drawer groups and counts by. Deliberately not the whole

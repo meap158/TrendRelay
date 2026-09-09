@@ -537,10 +537,12 @@ def media_processing_jobs(
     associate work with a Library card without knowing which editor queued it.
     """
     membership(session, workspace_id, user.id)
+    from trendrelay_api.autocut.jobs import JOB_KIND as AUTOCUT_JOB_KIND
     from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND
     from trendrelay_api.integrations.effect_render import JOB_KIND as EFFECT_JOB_KIND
     from trendrelay_api.jobs import list_job_records_for_kinds
     from trendrelay_api.media_ai import JOB_KIND as ENRICHMENT_JOB_KIND
+    from trendrelay_api.storytelling.jobs import JOB_KIND as STORY_JOB_KIND
     from trendrelay_api.voice_jobs import JOB_KIND as VOICE_JOB_KIND
 
     kinds = {
@@ -548,8 +550,17 @@ def media_processing_jobs(
         CAPTION_JOB_KIND,
         ENRICHMENT_JOB_KIND,
         VOICE_JOB_KIND,
+        # AutoCut and Storytelling draw a video the same durable way; the bell
+        # tracks them like every other long asset job.
+        AUTOCUT_JOB_KIND,
+        STORY_JOB_KIND,
     }
-    return {"jobs": list_job_records_for_kinds(workspace_id, kinds, limit, session=session)}
+    jobs = list_job_records_for_kinds(workspace_id, kinds, limit, session=session)
+    # A preview is watched in its own dialog and pruned within the hour; only the
+    # full render, which lands in the Library, is worth a notification. Other
+    # kinds carry no `preview`, so they are kept.
+    jobs = [job for job in jobs if not (job.get("payload") or {}).get("preview")]
+    return {"jobs": jobs}
 
 
 @router.post("/imports", status_code=202)

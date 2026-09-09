@@ -1339,3 +1339,36 @@ def test_a_waiting_render_can_be_moved_to_the_front_of_the_queue(monkeypatch) ->
     finished = asyncio.run(request("POST", f"{base}/effects/jobs/edit_done/run-next"))
     assert finished.status_code == 409
     assert "waiting render" in finished.json()["detail"]
+
+
+def test_autocut_and_story_renders_appear_in_the_processing_feed_but_previews_do_not():
+    """The bell tracks AutoCut and Storytelling like every other asset job -
+    the full render, which lands in the Library, not the throwaway preview."""
+    from trendrelay_api.jobs import create_job_record
+
+    workspace_id = create_workspace()
+    create_job_record(
+        "autocut_full", workspace_id, "autocut_render",
+        {"workspace_id": workspace_id, "preview": False,
+         "template_name": "Breathe", "asset_ids": ["a", "b", "c"]},
+        factory=TestingSession,
+    )
+    create_job_record(
+        "autocut_prev", workspace_id, "autocut_render",
+        {"workspace_id": workspace_id, "preview": True, "asset_ids": ["a"]},
+        factory=TestingSession,
+    )
+    create_job_record(
+        "story_full", workspace_id, "storytelling_render",
+        {"workspace_id": workspace_id, "preview": False, "asset_ids": ["a", "b"]},
+        factory=TestingSession,
+    )
+
+    response = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/media/library/processing/jobs")
+    )
+    assert response.status_code == 200
+    ids = {job["id"] for job in response.json()["jobs"]}
+    assert "autocut_full" in ids
+    assert "story_full" in ids
+    assert "autocut_prev" not in ids  # a preview is watched in its dialog, not the bell
