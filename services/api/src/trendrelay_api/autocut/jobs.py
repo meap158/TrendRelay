@@ -262,6 +262,18 @@ def run_render_job(
         destination = root / f"{job_id}.mp4"
         audio_value = payload.get("audio_path")
         width, height = dimensions(payload.get("aspect", DEFAULT_ASPECT), preview=is_preview)
+        # Where to keep the cover-crop for each photo with an off-centre subject,
+        # so a face is not cropped out. Only for the cover fill; blur shows the
+        # whole photo. Best-effort - a photo with no face keeps the centred crop.
+        from trendrelay_api.autocut.reframe import focus_points
+        image_kinds = {shot.asset_id: shot.media_kind for shot in plan.shots}
+        focus = (
+            focus_points({
+                asset_id: path for asset_id, path in image_paths.items()
+                if image_kinds.get(asset_id) == "image"
+            })
+            if payload.get("fill", "cover") == "cover" else {}
+        )
         render(_ffmpeg(), RenderRequest(
             plan=plan,
             image_paths=image_paths,
@@ -273,6 +285,7 @@ def run_render_job(
             fill=payload.get("fill", "cover"),
             caption=payload.get("caption", ""),
             caption_position=payload.get("caption_position", "bottom"),
+            focus=focus,
         ))
 
         if is_preview:

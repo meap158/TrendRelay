@@ -298,6 +298,16 @@ def run_render_job(
 
         destination = root / f"{job_id}.mp4"
         width, height = dimensions(payload.get("aspect", DEFAULT_ASPECT), preview=is_preview)
+        # Keep the cover-crop on the subject of each photo, so a face is not
+        # cropped out - the same reframe AutoCut uses, only for the cover fill.
+        from trendrelay_api.autocut.reframe import focus_points
+        focus = (
+            focus_points({
+                asset_id: path for asset_id, path in paths.items()
+                if kinds.get(asset_id) == "image"
+            })
+            if payload.get("fill", "cover") == "cover" else {}
+        )
         render(_ffmpeg(), RenderRequest(
             plan=plan,
             image_paths=paths,
@@ -310,6 +320,7 @@ def run_render_job(
             cues=cues,
             caption_style=caption_style if use_word_highlight else "",
             caption_words=tuple(caption_words) if use_word_highlight else (),
+            focus=focus,
         ))
 
         if is_preview:

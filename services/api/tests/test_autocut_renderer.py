@@ -98,6 +98,27 @@ def test_a_caption_burns_on_last_and_reads_the_hook_text() -> None:
     assert "PlayResY: 1920" in ass  # scaled against the real frame height
 
 
+def test_a_focus_point_moves_the_cover_crop_off_centre() -> None:
+    """Auto-reframe: a photo with a subject to one side is cropped around it,
+    not the geometric centre - and no focus is the centred crop, byte for byte."""
+    plan = a_plan("steady-two", 2)
+    paths = {shot.asset_id: Path(f"/{shot.asset_id}.png") for shot in plan.shots}
+
+    centred = build_filtergraph(RenderRequest(
+        plan=plan, image_paths=paths, audio_path=None, destination=Path("/o.mp4"),
+    ))
+    assert "clip(in_w*0.5000" in centred and "clip(in_h*0.5000" in centred
+
+    reframed = build_filtergraph(RenderRequest(
+        plan=plan, image_paths=paths, audio_path=None, destination=Path("/o.mp4"),
+        focus={plan.shots[0].asset_id: (0.75, 0.3)},
+    ))
+    # The focused photo crops around (0.75, 0.3); the other stays centred.
+    assert "clip(in_w*0.7500-out_w/2,0,in_w-out_w)" in reframed
+    assert "clip(in_h*0.3000-out_h/2,0,in_h-out_h)" in reframed
+    assert "clip(in_w*0.5000" in reframed  # the second shot, untouched
+
+
 def test_a_hard_cut_template_concats_and_a_fade_template_xfades() -> None:
     # rapid-one and steady-two hard-cut (the references do at those cadences);
     # breathe is the confirmed dissolve.

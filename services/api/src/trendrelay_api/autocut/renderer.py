@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import tempfile
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from trendrelay_api.autocut.planner import CutPlan, Shot
@@ -57,6 +57,10 @@ class RenderRequest:
     #: whole clip inside, over a blurred, frame-filling copy of itself - the
     #: short-form look that keeps a landscape photo whole in a portrait video.
     fill: str = "cover"
+    #: Where to keep the cover-crop for a photo with a subject off-centre, as
+    #: asset_id -> (x, y) frame fractions (see ``reframe.focus_points``). Absent
+    #: means the geometric centre, which is the crop without this at all.
+    focus: dict[str, tuple[float, float]] = field(default_factory=dict)
     #: A hook line burned over the whole video, the way short-form leans on a
     #: caption to carry the opening. Empty draws none.
     caption: str = ""
@@ -95,7 +99,10 @@ class RenderRequest:
 FILL_BLUR_SIGMA = 24
 
 
-def _cover_and_move(shot: Shot, index: int, width: int, height: int, *, blurred: bool) -> str:
+def _cover_and_move(
+    shot: Shot, index: int, width: int, height: int,
+    *, blurred: bool, focus: tuple[float, float] = (0.5, 0.5),
+) -> str:
     """The filter chain for one clip: fit it to the canvas, and move a still.
 
     zoompan does the Ken Burns work on stills; a video carries its own motion.
@@ -122,10 +129,17 @@ def _cover_and_move(shot: Shot, index: int, width: int, height: int, *, blurred:
         if shot.media_kind == "video":
             return f"{src}{prep},{cover},setsar=1,format=yuv420p[v{index}]"
         # Oversize so zoompan has pixels to push into, then cover-crop by zoom.
+        # The crop keeps the subject, not the geometric centre: the scale is
+        # uniform, so a face at fraction (fx, fy) of the photo is still at that
+        # fraction of the scaled image, and the crop window is placed around it,
+        # clamped to stay inside. Default (0.5, 0.5) is the centred crop exactly.
         motion: Motion = shot.motion
+        focus_x, focus_y = focus
         scaled = (
             f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
             f"crop={width * 2}:{height * 2}"
+            f":x='clip(in_w*{focus_x:.4f}-out_w/2,0,in_w-out_w)'"
+            f":y='clip(in_h*{focus_y:.4f}-out_h/2,0,in_h-out_h)'"
         )
         zoompan = (
             f"zoompan=z='1+{motion.zoom:.4f}*on/{frames}'"
@@ -271,7 +285,10 @@ def build_filtergraph(request: RenderRequest, *, caption_file: str | None = None
     """
     shots = request.plan.shots
     per_shot = [
-        _cover_and_move(shot, index, request.width, request.height, blurred=request.blurred)
+        _cover_and_move(
+            shot, index, request.width, request.height, blurred=request.blurred,
+            focus=request.focus.get(shot.asset_id, (0.5, 0.5)),
+        )
         for index, shot in enumerate(shots)
     ]
     labels = [f"v{index}" for index in range(len(shots))]
