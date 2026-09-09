@@ -246,3 +246,27 @@ test("nothing is blocked once the list has widened", () => {
   assert.equal(blockedReason(voices, effectiveVoice(voices, "")), "");
 });
 
+
+// The dropdown's own order.
+
+test("the workspace's languages come before the rest", () => {
+  const name = (code: string) => ({ en: "English", vi: "Vietnamese", af: "Afrikaans" }[code] ?? code);
+  const models: Model[] = [{
+    model_id: "m",
+    languages: [
+      { language_id: "af", name: "Afrikaans" },
+      { language_id: "vi", name: "Vietnamese" },
+      { language_id: "en", name: "English" },
+    ],
+  }];
+  // Alphabetically Afrikaans leads; the workspace does not work in it.
+  assert.deepEqual(readableLanguages(models, name), ["af", "en", "vi"]);
+  assert.deepEqual(readableLanguages(models, name, ["en", "vi"]), ["en", "vi", "af"]);
+});
+
+test("a workspace language nothing can read is not offered", () => {
+  // Being the workspace's language does not make it speakable.
+  const name = (code: string) => code;
+  const models: Model[] = [{ model_id: "m", languages: [{ language_id: "en", name: "en" }] }];
+  assert.deepEqual(readableLanguages(models, name, ["en", "vi", "ja"]), ["en"]);
+});

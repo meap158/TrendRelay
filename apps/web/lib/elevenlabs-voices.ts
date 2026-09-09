@@ -63,13 +63,23 @@ function speaks(model: Model | undefined, language: string): boolean {
  * Sorted by the caller's own name for each code rather than by the code, so
  * the list reads alphabetically to a person rather than to a computer.
  *
+ * `preferred` comes first - the languages this workspace actually works in.
+ * The models read seventy-four and a workspace uses a handful of them, so the
+ * one being reached for is otherwise thirty rows down a list sorted for a
+ * stranger. Preferred codes no model can read are dropped rather than offered:
+ * being the workspace's language does not make it speakable.
  */
-export function readableLanguages(models: Model[], name: (code: string) => string): string[] {
+export function readableLanguages(
+  models: Model[], name: (code: string) => string, preferred: readonly string[] = [],
+): string[] {
   const codes = new Set<string>();
   for (const model of models) {
     for (const item of model.languages ?? []) codes.add(item.language_id);
   }
-  return [...codes].sort((left, right) => name(left).localeCompare(name(right)));
+  const byName = (left: string, right: string) => name(left).localeCompare(name(right));
+  const first = preferred.filter((code) => codes.has(code));
+  const rest = [...codes].filter((code) => !first.includes(code)).sort(byName);
+  return [...[...first].sort(byName), ...rest];
 }
 
 /**

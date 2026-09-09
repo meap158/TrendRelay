@@ -47,6 +47,7 @@ import {
 } from "../../lib/elevenlabs-voices";
 import { useLibraryAssets } from "../../lib/use-library-assets";
 import { usePersistedState } from "../ui/use-persisted-state";
+import { LOCALE_CODES } from "../../lib/i18n/locales";
 import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
@@ -350,8 +351,11 @@ export function StorytellingDialog({
   // like one, and each has an edge that made the picker wrong once. They live
   // in `lib/storytelling-voice`, where they can be exercised without rendering
   // a modal - see that file for what each rule is protecting against.
+  // The workspace's own languages first. The models read seventy-four; this
+  // workspace works in seven of them, and the one being reached for was
+  // otherwise thirty rows down a list alphabetised for a stranger.
   const languages = useMemo(
-    () => readableLanguages(models, languageName), [models],
+    () => readableLanguages(models, languageName, LOCALE_CODES), [models],
   );
   const { verified } = useMemo(
     () => partitionVoices(voices, language), [voices, language],
