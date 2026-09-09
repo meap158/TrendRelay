@@ -834,3 +834,28 @@ def test_a_plan_that_cannot_be_read_is_said_to_be_unknown_rather_than_empty(monk
 
     monkeypatch.setattr(elevenlabs, "_request", refuse)
     assert elevenlabs.plan()["known"] is False
+
+
+def test_a_paid_plan_voice_fails_with_an_actionable_message(saved_key, monkeypatch) -> None:
+    """A shared library voice on a free plan answers 402. The failure must say
+    what to do - pick a premade voice or upgrade - not dump the raw JSON."""
+    body = json.dumps({"detail": {
+        "type": "payment_required", "code": "paid_plan_required",
+        "message": "Free users cannot use library voices via the API. "
+                   "Please upgrade your subscription to use this voice.",
+    }}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.HTTPError(
+            request.full_url, 402, "Payment Required", {}, io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(elevenlabs.ElevenLabsUnavailable) as caught:
+        elevenlabs.synthesise_with_timings("hello", voice_id="lib-voice", model_id="m")
+    message = str(caught.value)
+    assert "paid ElevenLabs plan" in message
+    assert "premade voice" in message
+    # The service's own reason is surfaced, but the raw code/JSON is not.
+    assert "library voices via the API" in message
+    assert "402" not in message and "payment_required" not in message

@@ -681,6 +681,24 @@ def synthesise_with_timings(
                 "ElevenLabs is rate limiting this key. Nothing was generated; "
                 "wait before retrying."
             ) from error
+        if error.code == 402:
+            # A paid-plan gate, nothing generated. The common one is a shared
+            # library voice: a free plan may add it but not synthesise through
+            # the API with it. Say what to do rather than dumping the raw JSON -
+            # the operator picks another voice or upgrades, and neither is
+            # discoverable from "HTTP 402".
+            reason = ""
+            try:
+                parsed = json.loads(detail)
+                node = parsed.get("detail") if isinstance(parsed, dict) else None
+                reason = str((node or {}).get("message") or "").strip()
+            except (ValueError, AttributeError):
+                reason = ""
+            raise ElevenLabsUnavailable(
+                "This voice needs a paid ElevenLabs plan. "
+                + (reason or "A shared library voice cannot be used through the API on a free plan.")
+                + " Pick a premade voice, which works on the free plan, or upgrade to use this one."
+            ) from error
         raise ElevenLabsUnavailable(
             f"ElevenLabs answered HTTP {error.code}. {detail}".strip()
         ) from error
