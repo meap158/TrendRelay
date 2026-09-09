@@ -389,9 +389,13 @@ export function StorytellingDialog({
   }, [apiFetch, base, body]);
 
   useEffect(() => {
+    // Only while the dialog is open: the script is restored from localStorage
+    // on any library page load, and without this guard that alone would POST
+    // /outline for a dialog the operator never opened.
+    if (!open) return;
     const timer = window.setTimeout(() => void outline(), 400);
     return () => window.clearTimeout(timer);
-  }, [outline]);
+  }, [open, outline]);
 
   // Browse the workspace's photos and videos through the shared library loop
   // every other picker reads with (ADR 0025) - it owns the debounce, paging,
@@ -449,9 +453,19 @@ export function StorytellingDialog({
   // render would blank them anyway; doing it here is the difference between a
   // shot list that is true and one that only renders true.
   const removePicture = useCallback((assetId: string) => {
+    // Any sentence that opened on this picture loses its match reasons too, so
+    // the shot list does not keep showing "matched …" under a now-empty shot.
+    const affected = assignments.flatMap((id, line) => (id === assetId ? [line] : []));
     setPicked((current) => current.filter((item) => item.id !== assetId));
     setAssignments((current) => withoutPicture(current, assetId));
-  }, []);
+    if (affected.length) {
+      setWhy((reasons) => {
+        const next = { ...reasons };
+        for (const line of affected) delete next[line];
+        return next;
+      });
+    }
+  }, [assignments]);
 
   /** Ask which picture suits which sentence. Free and offline, and a
       suggestion: nothing is generated, and the answer is editable from here. */
@@ -1014,7 +1028,9 @@ export function StorytellingDialog({
                     type="button"
                     className="story-tile-remove"
                     aria-label={`Remove ${asset.title}`}
-                    onPointerDown={(event) => {
+                    onClick={(event) => {
+                      // onClick, not onPointerDown, so Enter/Space work too; the
+                      // stop keeps it off the assign click on the tile beneath.
                       event.stopPropagation(); removePicture(asset.id);
                     }}
                   >×</button>

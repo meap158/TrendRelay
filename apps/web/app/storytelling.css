@@ -121,7 +121,7 @@
 /* The set being built, above whichever source is open. Its own tighter tiles:
    these are pictures already chosen, so the name under them has done its work
    and the thumbnail is the whole content. */
-.story-tiles-picked { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); max-block-size: 128px; }
+.story-tiles-picked { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); max-block-size: 220px; }
 .story-tiles-picked li { position: relative; }
 .story-tiles-picked button { padding: 0; overflow: hidden; }
 /* Ready to receive: a row is waiting for a picture, so every picture is a
@@ -130,6 +130,9 @@
 .story-tile-remove { position: absolute; inset-block-start: 2px; inset-inline-end: 2px; display: grid; place-items: center; inline-size: 18px; block-size: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text); background: var(--panel); font-size: 12px; line-height: 1; cursor: pointer; opacity: 0; }
 .story-tiles-picked li:hover .story-tile-remove,
 .story-tile-remove:focus-visible { opacity: 1; }
+/* On touch there is no hover, so the remove control would be invisible and
+   untappable - reveal it. */
+@media (hover: none) { .story-tile-remove { opacity: 1; } }
 .story-tile-remove:hover { border-color: var(--bad); color: var(--bad); }
 
 /* Browsing the Library from inside the dialog. The same filter strip every
@@ -172,10 +175,12 @@
 /* The keyboard's way to do what the drag does. Sixteen pixels of column, which
    is what two stacked arrows need and less than a row of its own would cost.
    Shown on hover and whenever one is focused, so tabbing to it reveals it. */
-.story-shot-move { display: grid; gap: 1px; opacity: 0; }
+.story-shot-move { display: grid; gap: 2px; opacity: 0; }
 .story-shot:hover .story-shot-move,
 .story-shot-move:focus-within { opacity: 1; }
-.story-shot-move button { display: grid; place-items: center; inline-size: 16px; block-size: 13px; padding: 0; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); background: var(--panel); font-size: 8px; line-height: 1; cursor: pointer; }
+/* Reachable on touch, where there is no hover to reveal it and no drag. */
+@media (hover: none) { .story-shot-move { opacity: 1; } }
+.story-shot-move button { display: grid; place-items: center; inline-size: 22px; block-size: 20px; padding: 0; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); background: var(--panel); font-size: 9px; line-height: 1; cursor: pointer; }
 .story-shot-move button:hover:not(:disabled) { border-color: var(--link); color: var(--link); }
 .story-shot-move button:disabled { opacity: .35; cursor: default; }
 .story-shot.story-focused { border-color: var(--link); background: var(--link-bg); }
