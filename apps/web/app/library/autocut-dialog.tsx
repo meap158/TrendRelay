@@ -116,6 +116,7 @@ export function AutoCutDialog({
   onClose,
   onQueued,
   onError,
+  initialDraftId,
 }: {
   open: boolean;
   workspaceId: string;
@@ -125,6 +126,9 @@ export function AutoCutDialog({
   onClose: () => void;
   onQueued: (message: string) => void;
   onError: (message: string) => void;
+  /** Open straight onto a saved draft, resuming it - how the Library's Drafts
+      view reopens an unfinished AutoCut. */
+  initialDraftId?: string;
 }) {
   const [templates, setTemplates] = useState<TemplateView[]>([]);
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -501,6 +505,18 @@ export function AutoCutDialog({
       .catch(() => { /* a drafts list that will not load is not worth an error */ });
     return () => { live = false; };
   }, [open, apiFetch, creationsBase]);
+
+  // Open straight onto a saved draft when the Library's Drafts view asked for
+  // one - resumed once per open. resumeDraft sets state only after its fetch,
+  // so this is a data read, not a synchronous state write in an effect.
+  const resumedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) { resumedFor.current = null; return; }
+    if (initialDraftId && resumedFor.current !== initialDraftId) {
+      resumedFor.current = initialDraftId;
+      void resumeDraft(initialDraftId);
+    }
+  }, [open, initialDraftId, resumeDraft]);
 
   // Drag-to-reorder: the dragged clip drops before the one it is released on,
   // moving it in the order the plan and preview read from.
@@ -900,7 +916,7 @@ export function AutoCutDialog({
                   key={saved.id}
                   type="button"
                   aria-current={saved.id === draftId ? "true" : undefined}
-                  className={`autocut-draft-row${saved.id === draftId ? " is-current" : ""}`}
+                  className="autocut-draft-row"
                   onClick={() => void resumeDraft(saved.id)}
                 >
                   <span className="autocut-draft-title">{saved.title}</span>

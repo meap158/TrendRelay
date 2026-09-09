@@ -22,7 +22,7 @@
  * and the person fixing those two is faster than the person doing all twenty.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   assign as assignPicture,
@@ -160,6 +160,7 @@ export function StorytellingDialog({
   onClose,
   onQueued,
   onError,
+  initialDraftId,
 }: {
   open: boolean;
   workspaceId: string;
@@ -170,6 +171,9 @@ export function StorytellingDialog({
   onClose: () => void;
   onQueued: (text: string) => void;
   onError: (text: string) => void;
+  /** Open straight onto a saved draft, resuming it - how the Library's Drafts
+      view reopens an unfinished story. */
+  initialDraftId?: string;
 }) {
   const { locale } = useLocale();
   const t = useT();
@@ -749,6 +753,23 @@ export function StorytellingDialog({
     return () => { live = false; };
   }, [open, creationsBase, apiFetch]);
 
+  // Open straight onto a saved draft when the Library's Drafts view asked for
+  // one, resumed once per open. Called through a ref so this effect does not
+  // re-run on every render just because resumeDraft is a fresh function.
+  const resumeRef = useRef(resumeDraft);
+  useEffect(() => { resumeRef.current = resumeDraft; });
+  const resumedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      resumedFor.current = null;
+      return;
+    }
+    if (initialDraftId && resumedFor.current !== initialDraftId) {
+      resumedFor.current = initialDraftId;
+      void resumeRef.current(initialDraftId);
+    }
+  }, [open, initialDraftId]);
+
   /**
    * Whether the plan has the characters to read this script.
    *
@@ -811,7 +832,7 @@ export function StorytellingDialog({
                 key={saved.id}
                 type="button"
                 aria-current={saved.id === draftId ? "true" : undefined}
-                className={`story-draft-row${saved.id === draftId ? " is-current" : ""}`}
+                className="story-draft-row"
                 onClick={() => void resumeDraft(saved.id)}
               >
                 <span className="story-draft-title">{saved.title}</span>

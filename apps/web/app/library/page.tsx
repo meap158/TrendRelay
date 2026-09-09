@@ -1285,6 +1285,40 @@ function LibraryContent() {
   const [campaignPickerFor, setCampaignPickerFor] = useState<CampaignPickerSelection | null>(null);
   const [autoCutOpen, setAutoCutOpen] = useState(false);
   const [storytellingOpen, setStorytellingOpen] = useState(false);
+  // Unfinished AutoCut and Storytelling videos, shown as a Library chip so a
+  // half-built one is picked up again rather than lost. Library-only: it reads
+  // the creation-drafts store, not the media assets, so it never reaches the
+  // shared library picker that other tabs open.
+  type CreationDraftRow = {
+    id: string; kind: string; title: string; status: string;
+    summary: { clips?: number; pictures?: number; script_chars?: number };
+    updated_at: string | null;
+  };
+  const [creationDrafts, setCreationDrafts] = useState<CreationDraftRow[]>([]);
+  const [draftsView, setDraftsView] = useState(false);
+  const [resumeDraft, setResumeDraft] = useState<{ kind: string; id: string } | null>(null);
+  const refreshCreationDrafts = useCallback(() => {
+    if (!workspaceId) return;
+    void apiFetch(`/api/workspaces/${workspaceId}/creations?limit=100`)
+      .then((res) => res.json())
+      .then((body) => { if (Array.isArray(body.items)) setCreationDrafts(body.items); })
+      .catch(() => { /* the chip just shows nothing if the store cannot be read */ });
+  }, [workspaceId, apiFetch]);
+  useEffect(() => {
+    if (!workspaceId) return;
+    let live = true;
+    void apiFetch(`/api/workspaces/${workspaceId}/creations?limit=100`)
+      .then((res) => res.json())
+      .then((body) => { if (live && Array.isArray(body.items)) setCreationDrafts(body.items); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [workspaceId, apiFetch]);
+  // "Unfinished" is a draft still being built or one mid-render - a rendered one
+  // is already a video in the Library, not something to pick up.
+  const unfinishedDrafts = useMemo(
+    () => creationDrafts.filter((draft) => draft.status === "draft" || draft.status === "rendering"),
+    [creationDrafts],
+  );
   /** The machine reading open in the reader, or null. */
   const [readingDraft, setReadingDraft] = useState<ReadableTranscript | null>(null);
   const [effectsOpen, setEffectsOpen] = useState(false);
@@ -1982,10 +2016,13 @@ function LibraryContent() {
 
           <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
-              <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => patchFilters({ mediaKind: "" })}>{t("common.all")} <span>{mediaTotal}</span></button>
-              <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => patchFilters({ mediaKind: "video" })}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
-              <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => patchFilters({ mediaKind: "image" })}>{t("library.images")} <span>{mediaCount("image")}</span></button>
-              <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
+              <button type="button" className={!mediaKind && !draftsView ? "selected" : ""} aria-pressed={!mediaKind && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "" }); }}>{t("common.all")} <span>{mediaTotal}</span></button>
+              <button type="button" className={mediaKind === "video" && !draftsView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video" }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
+              <button type="button" className={mediaKind === "image" && !draftsView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image" }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
+              <button type="button" className={mediaKind === "audio" && !draftsView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio" }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
+              {unfinishedDrafts.length > 0 && (
+                <button type="button" className={draftsView ? "selected" : ""} aria-pressed={draftsView} onClick={() => setDraftsView(true)}>Drafts <span>{unfinishedDrafts.length}</span></button>
+              )}
             </div>
             <div className="library-arrange-controls">
               <label>{t("library.sortLabel")}
@@ -2151,6 +2188,35 @@ function LibraryContent() {
           </div>
           {initialAssetsPending ? (
             <WaitingBlock className="library-collection-wait" message={t("common.loading")} />
+          ) : draftsView ? (
+            <div className="library-collection library-grid library-drafts">
+              {unfinishedDrafts.length === 0 ? (
+                <p>No unfinished AutoCut or Storytelling videos - the ones you save appear here to pick up later.</p>
+              ) : unfinishedDrafts.map((draft) => (
+                <button
+                  key={draft.id}
+                  type="button"
+                  className="library-draft-card"
+                  onClick={() => {
+                    setResumeDraft({ kind: draft.kind, id: draft.id });
+                    if (draft.kind === "autocut") setAutoCutOpen(true);
+                    else setStorytellingOpen(true);
+                  }}
+                >
+                  <span className="library-draft-kind">
+                    {draft.kind === "autocut" ? "AutoCut" : "Storytelling"}
+                  </span>
+                  <strong className="library-draft-title">{draft.title}</strong>
+                  <small>
+                    {draft.status === "rendering"
+                      ? "rendering…"
+                      : draft.kind === "autocut"
+                        ? `${draft.summary?.clips ?? 0} clips`
+                        : `${draft.summary?.pictures ?? 0} pictures`}
+                  </small>
+                </button>
+              ))}
+            </div>
           ) : <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
             {groupBy === "none"
               ? assets.map(renderAsset)
@@ -2730,8 +2796,9 @@ function LibraryContent() {
           workspaceId={workspaceId}
           apiFetch={apiFetch}
           assets={selectedVisuals}
-          onClose={() => setStorytellingOpen(false)}
-          onQueued={(text) => succeed(text)}
+          initialDraftId={resumeDraft?.kind === "storytelling" ? resumeDraft.id : undefined}
+          onClose={() => { setStorytellingOpen(false); setResumeDraft(null); refreshCreationDrafts(); }}
+          onQueued={(text) => { succeed(text); refreshCreationDrafts(); }}
           onError={(text) => fail(text)}
         />
       )}
@@ -2741,8 +2808,9 @@ function LibraryContent() {
           workspaceId={workspaceId}
           apiFetch={apiFetch}
           assets={selectedVisuals}
-          onClose={() => setAutoCutOpen(false)}
-          onQueued={(text) => { succeed(text); setSelection(new Set()); }}
+          initialDraftId={resumeDraft?.kind === "autocut" ? resumeDraft.id : undefined}
+          onClose={() => { setAutoCutOpen(false); setResumeDraft(null); refreshCreationDrafts(); }}
+          onQueued={(text) => { succeed(text); setSelection(new Set()); refreshCreationDrafts(); }}
           onError={(text) => fail(text)}
         />
       )}
