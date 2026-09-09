@@ -137,6 +137,13 @@ export function AutoCutDialog({
   const [order, setOrder] = useState<string[]>([]);
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [planning, setPlanning] = useState(false);
+  //: Why the last plan attempt failed, if it did. Kept beside the disabled
+  //  render button so a failed /plan is a reason and a retry rather than a
+  //  toast that fades and a primary button that never lights.
+  const [planError, setPlanError] = useState("");
+  //: Bumped to ask for the plan again after a failure, without changing any of
+  //  the choices the plan is built from.
+  const [planNonce, setPlanNonce] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [previewState, setPreviewState] = useState<"idle" | "building" | "ready" | "error">("idle");
   // Two video layers, double-buffered: a new clip loads into the hidden slot
@@ -304,12 +311,15 @@ export function AutoCutDialog({
           if (!live) return;
           if (!ok) throw new Error(body?.detail ?? "Could not build the plan.");
           setPlan(body as PlanView);
+          setPlanError("");
         })
-        .catch((reason) => { if (live) onError(reason instanceof Error ? reason.message : String(reason)); })
+        .catch((reason) => {
+          if (live) setPlanError(reason instanceof Error ? reason.message : String(reason));
+        })
         .finally(() => { if (live) setPlanning(false); });
     }, 300);
     return () => { live = false; clearTimeout(run); };
-  }, [open, planKey, templateId, music, speed, order, apiFetch, base, onError]);
+  }, [open, planKey, templateId, music, speed, order, planNonce, apiFetch, base]);
 
   const chosen = useMemo(
     () => templates.find((template) => template.id === templateId) ?? null,
@@ -893,6 +903,16 @@ export function AutoCutDialog({
                     : plan.music_available ? "spaced to tempo" : "no music - even spacing"}
                 </span>
               </>
+            )}
+            {planError && !planning && (
+              // A failed plan is a reason and a way back, not a dead button and
+              // a toast that has already faded.
+              <span className="autocut-plan-error" role="alert">
+                {planError}
+                <Button variant="quiet" size="sm" onClick={() => setPlanNonce((current) => current + 1)}>
+                  <ActionIcon name="refresh" />Retry
+                </Button>
+              </span>
             )}
           </div>
           {/* Save the arrangement as a resumable draft, and reopen a saved one.

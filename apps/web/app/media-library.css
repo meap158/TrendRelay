@@ -1218,6 +1218,7 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-preview { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 12px; }
 .autocut-synced { color: var(--green); font-weight: 600; }
 .autocut-unsynced { color: var(--muted); }
+.autocut-plan-error { display: inline-flex; align-items: center; gap: 8px; flex-basis: 100%; color: var(--warn); }
 .autocut-actions { display: flex; justify-content: flex-end; gap: 8px; }
 /* The rendered preview, played inside the dialog before the real render is
    committed - a portrait clip sized to sit without dominating. */
