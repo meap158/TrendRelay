@@ -23,7 +23,7 @@ import {
   opaquePreviewUrl,
   useOpaqueMedia,
 } from "../../lib/media-preview";
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
@@ -131,7 +131,7 @@ export function useAssetPoster(
   return loaded && loaded.id === assetId ? loaded.url : "";
 }
 
-export function AssetThumbnail({
+function AssetThumbnailBase({
   asset,
   workspaceId,
   apiFetch,
@@ -237,6 +237,29 @@ export function AssetThumbnail({
     </span>
   );
 }
+
+/**
+ * Memoised on the fields it actually draws from, so it does not reconcile when a
+ * parent re-renders for an unrelated reason - a grid or a shot list of a hundred
+ * of these repainting on every keystroke elsewhere in the dialog. Callers hand a
+ * fresh `asset` object each render (a `forThumbnail` mapping), so a value compare
+ * is needed rather than the default reference one; `apiFetch` is a stable
+ * callback, so comparing it by reference is correct.
+ */
+export const AssetThumbnail = memo(AssetThumbnailBase, (a, b) => {
+  const x = a.asset, y = b.asset;
+  return (
+    a.workspaceId === b.workspaceId
+    && a.apiFetch === b.apiFetch
+    && a.hoverPreview === b.hoverPreview
+    && x.id === y.id
+    && x.duration_ms === y.duration_ms
+    && x.width === y.width
+    && x.height === y.height
+    && x.versions.length === y.versions.length
+    && x.versions.every((version, index) => version.kind === y.versions[index]?.kind)
+  );
+});
 
 /**
  * Pick a clip from the library instead of typing a path.
