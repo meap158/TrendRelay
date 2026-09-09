@@ -34,12 +34,14 @@ import {
   type Suggestion,
 } from "../../lib/storytelling-shots";
 import {
+  blockedReason,
   effectiveVoice,
   modelFor,
   offeredVoices,
   openingLanguage,
   partitionVoices,
   readableLanguages,
+  usable,
   type Model,
   type Voice,
 } from "../../lib/storytelling-voice";
@@ -344,6 +346,18 @@ export function StorytellingDialog({
   );
   const effectiveVoiceId = useMemo(
     () => effectiveVoice(speakable, voiceId), [speakable, voiceId],
+  );
+  /**
+   * Why the chosen voice cannot narrate, when the plan will not let it.
+   *
+   * Checked here rather than discovered at synthesis. A voice added from the
+   * shared library sits happily on a free key and is refused every time it is
+   * spoken with, so the failure used to arrive after the pictures were
+   * gathered, the script written and the job queued - and read as the story
+   * failing rather than as the voice never having been allowed.
+   */
+  const voiceBlocked = useMemo(
+    () => blockedReason(speakable, effectiveVoiceId), [speakable, effectiveVoiceId],
   );
 
   // Nothing on this key reads the chosen language, so ask what does. A read,
@@ -785,7 +799,8 @@ export function StorytellingDialog({
 
   const byId = useMemo(() => new Map(picked.map((asset) => [asset.id, asset])), [picked]);
   const ready = Boolean(
-    body.trim() && lines.length && picked.length && effectiveVoiceId && !busy && !overBudget,
+    body.trim() && lines.length && picked.length && effectiveVoiceId
+    && !busy && !overBudget && !voiceBlocked,
   );
   const short = lines.length > 0 && picked.length > 0 && picked.length < lines.length;
 
@@ -804,8 +819,9 @@ export function StorytellingDialog({
                 : !picked.length ? "Add a picture for the narration to play over."
                   : language && !modelId ? "No model on this key reads that language."
                     : overBudget ? "The script is longer than this plan has characters left."
-                      : !effectiveVoiceId ? "Choose a voice."
-                        : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
+                      : voiceBlocked ? `${voiceBlocked}. Pick a premade voice - the multilingual model reads this language in any of them.`
+                        : !effectiveVoiceId ? "Choose a voice."
+                          : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
           </span>
           {savedDrafts.length > 0 && (
             <Button variant="quiet" aria-expanded={draftsOpen} onClick={() => setDraftsOpen((v) => !v)}>
@@ -922,7 +938,14 @@ export function StorytellingDialog({
               >
                 {speakable.map((voice) => (
                   <option key={voice.voice_id} value={voice.voice_id}>
-                    {[voice.name, voice.accents?.[0]].filter(Boolean).join(" · ")}
+                    {[
+                      voice.name,
+                      voice.accents?.[0],
+                      // Marked rather than hidden: a voice somebody added on
+                      // purpose should not vanish from the list they added it
+                      // for without saying why.
+                      usable(voice) ? "" : "— needs a paid plan",
+                    ].filter(Boolean).join(" · ")}
                   </option>
                 ))}
               </Select>
@@ -998,8 +1021,13 @@ export function StorytellingDialog({
                   />
                   <span>Use a voice from another language</span>
                   <small>
-                    The model reads {languageName(language)} in any voice; nobody has
-                    checked how this one sounds doing it.
+                    {plan?.known && plan.tier === "free"
+                      ? `The way to narrate ${languageName(language)} on the free plan: `
+                        + "a premade voice, read by the multilingual model. Nobody has "
+                        + "checked how it sounds doing it, and it is the only thing this "
+                        + "plan can speak with."
+                      : `The model reads ${languageName(language)} in any voice; nobody `
+                        + "has checked how this one sounds doing it."}
                   </small>
                 </label>
               </div>

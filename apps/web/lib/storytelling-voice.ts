@@ -28,7 +28,22 @@ export type Voice = {
   /** Language ids somebody has checked this voice in. Not what it can say. */
   languages?: string[];
   accents?: string[];
+  /**
+   * Whether this plan may narrate with it, decided by the server.
+   *
+   * Having a voice and being allowed to speak with it are different things: a
+   * free key can hold a voice added from the shared library and is refused at
+   * synthesis every time. Absent means unknown, which is treated as usable -
+   * the same permissive default the server uses when it cannot read the plan.
+   */
+  usable?: boolean;
+  unusable_reason?: string;
 };
+
+/** Whether a voice may be narrated with. Unknown counts as yes. */
+export function usable(voice: Voice | undefined): boolean {
+  return voice ? voice.usable !== false : false;
+}
 
 /** A speech model, and the languages it can actually read. */
 export type Model = {
@@ -104,7 +119,12 @@ export function offeredVoices(
   voices: Voice[], language: string, anyVoice: boolean,
 ): Voice[] {
   const { verified, others } = partitionVoices(voices, language);
-  return !language || anyVoice ? [...verified, ...others] : verified;
+  const offered = !language || anyVoice ? [...verified, ...others] : verified;
+  // The ones that can actually be spoken with, first. Not filtered out: a
+  // voice somebody deliberately added to their account should not silently
+  // vanish from the list they added it for - it says why it cannot be used
+  // instead.
+  return [...offered.filter(usable), ...offered.filter((voice) => !usable(voice))];
 }
 
 /**
@@ -132,5 +152,21 @@ export function modelFor(models: Model[], language: string, configuredId: string
  */
 export function effectiveVoice(offered: Voice[], chosenId: string): string {
   if (chosenId && offered.some((voice) => voice.voice_id === chosenId)) return chosenId;
-  return offered[0]?.voice_id ?? "";
+  // Defaults to one that works. Falling back to the first of a list whose head
+  // is unusable would arm the render with a voice the plan refuses.
+  return (offered.find(usable) ?? offered[0])?.voice_id ?? "";
+}
+
+/**
+ * Why this narration cannot be made with the voice chosen, if it cannot.
+ *
+ * The check belongs before the render rather than inside its failure: a
+ * refusal at synthesis arrives after the pictures are gathered, the script is
+ * written and the job is queued, and reads as the story failing rather than as
+ * the voice never having been allowed.
+ */
+export function blockedReason(offered: Voice[], chosenId: string): string {
+  const voice = offered.find((item) => item.voice_id === chosenId);
+  if (!voice || usable(voice)) return "";
+  return voice.unusable_reason || "This plan cannot narrate with that voice";
 }

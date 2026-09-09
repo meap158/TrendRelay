@@ -11,12 +11,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  blockedReason,
   effectiveVoice,
   modelFor,
   offeredVoices,
   openingLanguage,
   partitionVoices,
   readableLanguages,
+  usable,
   type Model,
   type Voice,
 } from "./storytelling-voice.ts";
@@ -140,4 +142,62 @@ test("the chosen voice survives narrowing and widening again", () => {
 
 test("nothing on offer chooses nothing, rather than a voice that cannot be used", () => {
   assert.equal(effectiveVoice([], "a"), "");
+});
+
+
+// --------------------------------------------------------------------------
+// Having a voice and being allowed to speak with it.
+//
+// A free key can hold a voice added from the shared library and is refused
+// every time it narrates: "Free users cannot use library voices via the API."
+// These are about that refusal happening before a render rather than inside
+// one.
+// --------------------------------------------------------------------------
+
+const LIBRARY: Voice = {
+  voice_id: "chi", name: "Chi", languages: ["vi"],
+  usable: false, unusable_reason: "The free plan cannot narrate with library voices",
+};
+const PREMADE: Voice = { voice_id: "adam", name: "Adam", languages: ["en"] };
+
+test("a voice the plan cannot speak with is still listed, and marked", () => {
+  // Hidden, it would look like the voice somebody deliberately added had
+  // failed to arrive.
+  const offered = offeredVoices([LIBRARY, PREMADE], "", false);
+  assert.equal(offered.length, 2);
+  assert.ok(offered.some((voice) => voice.voice_id === "chi"));
+});
+
+test("the usable ones come first", () => {
+  assert.deepEqual(
+    offeredVoices([LIBRARY, PREMADE], "", false).map((v) => v.voice_id),
+    ["adam", "chi"],
+  );
+});
+
+test("the default lands on a voice that works", () => {
+  // Falling back to the head of the list would arm the render with a voice
+  // the plan refuses.
+  assert.equal(effectiveVoice([LIBRARY, PREMADE], ""), "adam");
+});
+
+test("choosing the unusable one is allowed, and reported", () => {
+  // It stays choosable so the reason can be shown against the choice, rather
+  // than the choice being silently ignored.
+  const offered = offeredVoices([LIBRARY, PREMADE], "", false);
+  assert.equal(effectiveVoice(offered, "chi"), "chi");
+  assert.match(blockedReason(offered, "chi"), /cannot narrate with library voices/);
+});
+
+test("nothing is blocked when the voice is fine", () => {
+  assert.equal(blockedReason([LIBRARY, PREMADE], "adam"), "");
+});
+
+test("a plan that could not be read blocks nothing", () => {
+  // `usable` absent means unknown, and unknown is permissive - the same
+  // default the server uses. Guessing a refusal is worse than letting
+  // ElevenLabs answer.
+  const unknown: Voice = { voice_id: "x", name: "X" };
+  assert.equal(usable(unknown), true);
+  assert.equal(blockedReason([unknown], "x"), "");
 });
