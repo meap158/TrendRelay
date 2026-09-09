@@ -144,7 +144,6 @@ export function AutoCutDialog({
   // blanks to black on a redraw. `visible` is which slot is on top.
   const [slots, setSlots] = useState<[string | null, string | null]>([null, null]);
   const [visible, setVisible] = useState<0 | 1>(0);
-  const hasPreview = slots[0] !== null || slots[1] !== null;
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [aspect, setAspect] = useState<"portrait" | "square" | "landscape">("portrait");
@@ -746,9 +745,12 @@ export function AutoCutDialog({
                       className="autocut-clip-remove"
                       aria-label={`Remove ${asset.title}`}
                       title="Remove from this video"
-                      // Draggable ancestors swallow a plain click on some
-                      // browsers; pointer-down fires it reliably.
-                      onPointerDown={(event) => { event.stopPropagation(); removeClip(assetId); }}
+                      draggable={false}
+                      // Keep the draggable clip from starting a drag on the
+                      // control, but remove on click - so Enter and Space work
+                      // too, which pointer-down alone never gave the keyboard.
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => { event.stopPropagation(); removeClip(assetId); }}
                     >×</button>
                   )}
                   <AssetThumbnail
