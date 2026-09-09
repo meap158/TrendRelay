@@ -176,3 +176,48 @@ def test_an_empty_listing_field_is_left_out_rather_than_matched_as_blank() -> No
         "tier_variations": [{"name": "Colour", "options": ["Red"]}],
     }))
     assert [label for label, _value, _weight in fields] == ["listing options"]
+
+
+def test_having_a_listing_is_not_itself_an_advantage() -> None:
+    """The failure a longer document invites, and why this one avoids it.
+
+    Reading listings gives some products a hundred times the text of others -
+    a name is sixty characters, a description fifteen hundred - and a ranking
+    that grew with the amount of text would promote whichever products had
+    been fetched. It is the problem BM25 spends its length-normalisation term
+    on.
+
+    It does not arise here because score comes from overlap with the post
+    rather than from the size of the document: text that says nothing about
+    this post contributes nothing, however much of it there is. Pinned so that
+    a future field added by summing rather than intersecting is caught.
+    """
+    bare = product("bare", "Silk pyjama set")
+    rich = product("rich", "Silk pyjama set", listing={
+        "categories": ["Automotive", "Car care", "Tyre polish"],
+        "attributes": [{"name": "Origin", "value": "Vietnam"}],
+        "description": "ships nationwide, warranty twelve months, free returns " * 20,
+    })
+    scored = score_offers(
+        [(offer("bare"), bare), (offer("rich"), rich)],
+        {"caption": (3.0, tokens("silk pyjamas for summer"))},
+        platforms={"tiktok"}, limit=2,
+    )
+    assert {match.score for match in scored} == {scored[0].score}, [
+        (match.product_id, match.score) for match in scored
+    ]
+
+
+def test_a_listing_that_is_on_topic_does_win() -> None:
+    # The other half of the same rule: text that speaks to the post counts.
+    bare = product("bare", "Cotton set")
+    rich = product("rich", "Cotton set", listing={
+        "categories": ["Women's Fashion", "Sleepwear", "Pyjamas"],
+    })
+    scored = score_offers(
+        [(offer("bare"), bare), (offer("rich"), rich)],
+        {"caption": (3.0, tokens("sleepwear pyjamas"))},
+        platforms={"tiktok"}, limit=2,
+    )
+    assert scored[0].product_id == "prod-rich"
+    assert scored[0].score > scored[1].score
