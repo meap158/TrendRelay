@@ -785,13 +785,12 @@ export function StorytellingDialog({
     >
       <div className="story-dialog">
         {draftsOpen && savedDrafts.length > 0 && (
-          <div className="story-drafts-list" role="listbox" aria-label="Saved stories">
+          <div className="story-drafts-list" role="list" aria-label="Saved stories">
             {savedDrafts.map((saved) => (
               <button
                 key={saved.id}
                 type="button"
-                role="option"
-                aria-selected={saved.id === draftId}
+                aria-current={saved.id === draftId ? "true" : undefined}
                 className={`story-draft-row${saved.id === draftId ? " is-current" : ""}`}
                 onClick={() => void resumeDraft(saved.id)}
               >

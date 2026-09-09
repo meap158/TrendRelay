@@ -894,13 +894,12 @@ export function AutoCutDialog({
             >{draftId ? "Update draft" : "Save draft"}</Button>
           </div>
           {draftsOpen && savedDrafts.length > 0 && (
-            <div className="autocut-drafts-list" role="listbox" aria-label="Saved drafts">
+            <div className="autocut-drafts-list" role="list" aria-label="Saved drafts">
               {savedDrafts.map((saved) => (
                 <button
                   key={saved.id}
                   type="button"
-                  role="option"
-                  aria-selected={saved.id === draftId}
+                  aria-current={saved.id === draftId ? "true" : undefined}
                   className={`autocut-draft-row${saved.id === draftId ? " is-current" : ""}`}
                   onClick={() => void resumeDraft(saved.id)}
                 >
