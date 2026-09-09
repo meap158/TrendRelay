@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { offerVoices } from "../../lib/elevenlabs-voices";
+
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
@@ -45,6 +47,10 @@ type Voice = {
   locales: string[];
   regions: string[];
   accents: string[];
+  /** Whether this plan may narrate with it, from the catalogue. Absent means
+      unknown, which counts as usable. */
+  usable?: boolean;
+  unusable_reason?: string;
   compatible_model_ids: string[];
   preview_url?: string | null;
 };
@@ -436,11 +442,26 @@ export function VoiceEditor({
     const names = new Intl.DisplayNames(["en"], { type: "region" });
     return Object.fromEntries(regions.map((region) => [region, names.of(region) ?? region]));
   }, [regions]);
+  /**
+   * Narrowing to a language, without narrowing to nothing usable.
+   *
+   * `verified_languages` says somebody checked how a voice sounds in a
+   * language, not that it is the only voice that can say it - a multilingual
+   * model reads any language it supports in any voice. Filtering on it alone
+   * emptied this list for every language nobody has checked a usable voice in,
+   * which on a free key includes Vietnamese: the one voice verified in it is a
+   * library voice, and a free plan cannot speak with those.
+   *
+   * The shared rule keeps the filter when it leaves something to use and lets
+   * it go when it does not, and says which it did.
+   */
+  const { voices: byLanguage, widened: languageWidened } = useMemo(
+    () => offerVoices(voices, languageFilter, false),
+    [voices, languageFilter],
+  );
   const filteredVoices = useMemo(
-    () => voices.filter((voice) =>
-      (!languageFilter || voice.languages.includes(languageFilter))
-      && (!regionFilter || voice.regions.includes(regionFilter))),
-    [voices, languageFilter, regionFilter],
+    () => byLanguage.filter((voice) => !regionFilter || voice.regions.includes(regionFilter)),
+    [byLanguage, regionFilter],
   );
   const voiceOptions = useMemo(() => filteredVoices.map((voice) => {
     const qualifiers = [
@@ -641,6 +662,16 @@ export function VoiceEditor({
                 <option value="">All languages</option>
                 {languages.map((language) => <option key={language} value={language}>{language}</option>)}
               </Select>
+              {/* Said, not silently done. A filter that quietly returns
+                  everything is its own kind of wrong - and this is the normal
+                  case for any language whose only checked voice is one the
+                  plan cannot speak with. */}
+              {languageWidened && (
+                <small className="voice-note">
+                  No voice checked in {languageFilter} can be used on this plan, so all are
+                  shown. The multilingual model reads it in any of them.
+                </small>
+              )}
             </label>
             <label className="voice-field">
               <span>Voice region</span>
