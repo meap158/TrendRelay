@@ -35,8 +35,20 @@ LEASE_SECONDS = 1800
 from trendrelay_api.tool_registry import PROJECT_ROOT  # noqa: E402
 
 AUDIO_ROOT = PROJECT_ROOT / ".data" / "autocut" / "audio"
-OUTPUT_ROOT = PROJECT_ROOT / ".data" / "autocut" / "renders"
-PREVIEW_ROOT = PROJECT_ROOT / ".data" / "autocut" / "previews"
+
+#: Where a finished render lands, and where a preview of one does.
+#:
+#: Under `.data/productions` because that is an approved media root, and a
+#: finished render has to be ingested into the Library through the same guard
+#: every other file passes. These sat in `.data/autocut/`, which is not
+#: approved, so every render this app ever made was refused at the last step
+#: with "Media must be inside an approved media root" - the video was built and
+#: then thrown away. Nothing had ever reached the Library from either feature.
+#:
+#: Named for what they hold rather than for AutoCut: Storytelling renders here
+#: too, through the same constants.
+OUTPUT_ROOT = PROJECT_ROOT / ".data" / "productions" / "renders"
+PREVIEW_ROOT = PROJECT_ROOT / ".data" / "productions" / "previews"
 
 #: The canvas shapes AutoCut renders to, each as (full, preview) dimensions.
 #: The plan is the same for all of them - cuts and timing do not depend on the

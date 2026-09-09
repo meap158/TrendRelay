@@ -61,3 +61,47 @@ def test_non_mp4_files_are_left_alone(tmp_path: Path) -> None:
 def test_a_missing_directory_is_not_an_error(tmp_path: Path) -> None:
     # The first render on a fresh checkout prunes before anything is written.
     _prune_stale(tmp_path / "never-made", ttl_seconds=3600)
+
+
+# --------------------------------------------------------------------------- #
+# Where a render is written, and whether the Library will take it back.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_render_lands_somewhere_the_library_will_accept_it() -> None:
+    """The last step of a render is ingest, and ingest checks the path.
+
+    `create_ingest_job` puts every file through `approved_source_path`, which
+    refuses anything outside the configured media roots. Renders were written
+    to `.data/autocut/`, which is not one of them, so every AutoCut and every
+    Storytelling render ever made was built and then refused at the last step
+    with "Media must be inside an approved media root". Nothing from either
+    feature had ever reached the Library.
+
+    Asserted against the same settings the ingest reads, so moving either the
+    roots or the render directory apart from the other fails here rather than
+    at the end of somebody's render.
+    """
+    from trendrelay_api.autocut.jobs import OUTPUT_ROOT, PREVIEW_ROOT
+    from trendrelay_api.config import get_settings
+    from trendrelay_api.tool_registry import PROJECT_ROOT
+
+    approved = [
+        (Path(root) if Path(root).is_absolute() else PROJECT_ROOT / root).resolve()
+        for root in get_settings().publishing_media_root_list
+    ]
+    for root in (OUTPUT_ROOT, PREVIEW_ROOT):
+        assert any(root.resolve().is_relative_to(item) for item in approved), (
+            f"{root} is outside the approved media roots "
+            f"{get_settings().publishing_media_root_list}; ingest would refuse it"
+        )
+
+
+def test_storytelling_writes_where_autocut_does() -> None:
+    # It imports the same constants rather than keeping its own, so the two
+    # cannot drift into one being ingestable and the other not.
+    from trendrelay_api.autocut import jobs as autocut
+    from trendrelay_api.storytelling import jobs as storytelling
+
+    assert storytelling.OUTPUT_ROOT == autocut.OUTPUT_ROOT
+    assert storytelling.PREVIEW_ROOT == autocut.PREVIEW_ROOT
