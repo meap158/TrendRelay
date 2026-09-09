@@ -315,6 +315,108 @@ def _restriction_penalty(restrictions: Iterable[str], platforms: set[str]) -> tu
     return penalty, reasons
 
 
+#: How much of a listing's own description is read.
+#:
+#: The distiller allows forty thousand characters; the real catalogue runs to a
+#: median of 1,443 and a maximum of 5,000, so this keeps almost every
+#: description whole and truncates the long tail. The tail is where the product
+#: blurb has finished and the shipping terms, warranty and shop policy begin -
+#: words shared by every listing in the shop, which cost tokenising and say
+#: nothing about which product suits which post.
+DESCRIPTION_CHARACTERS = 1_500
+
+#: What a fetched listing contributes, by field.
+#:
+#: The category breadcrumb carries the same weight as the curated category
+#: field because it *is* the category - and better, being three levels rather
+#: than one. That is not a theoretical improvement here: every product in this
+#: workspace has an empty `category` and an empty `brand`, so two of the five
+#: things the matcher scored on were blank for the whole catalogue while the
+#: listing held both. Brand matches the curated brand's weight for the same
+#: reason.
+#:
+#: Attributes and options are structured and specific - a material, a colour, a
+#: size - and rank above free text. The description is last: it is the longest
+#: and the least disciplined, and a listing that says "tiện lợi" is saying what
+#: every listing says.
+LISTING_WEIGHTS: dict[str, float] = {
+    "listing category": 5.0,
+    "listing brand": 2.0,
+    "listing attributes": 2.0,
+    "listing options": 1.5,
+    "listing description": 1.0,
+}
+
+
+def listing_fields(product: Any) -> list[tuple[str, str, float]]:
+    """What a product's fetched listing says about itself, ready to match.
+
+    Read from the Attribution tab's own fetch, so a product enriched there is
+    matched on everything that came back rather than on the four columns an
+    import happened to fill.
+
+    Commercial facts are deliberately absent. Discount, vouchers and price say
+    the offer is attractive; they say nothing about whether it suits the post,
+    and the score already has a commercial term that breaks relevance ties
+    without being allowed to create relevance. Mixing them in here would let a
+    voucher outrank the subject of the video.
+    """
+    listing = getattr(product, "listing", None)
+    if not isinstance(listing, dict):
+        return []
+
+    def text(value: Any) -> str:
+        return str(value or "").strip()
+
+    categories = " ".join(
+        text(item) for item in (listing.get("categories") or []) if text(item)
+    )
+    attributes = " ".join(
+        f"{text(entry.get('name'))} {text(entry.get('value'))}"
+        for entry in (listing.get("attributes") or [])
+        if isinstance(entry, dict)
+    )
+    options: list[str] = []
+    for tier in listing.get("tier_variations") or []:
+        if not isinstance(tier, dict):
+            continue
+        options.append(text(tier.get("name")))
+        options.extend(text(option) for option in (tier.get("options") or []))
+    options.extend(text(model) for model in (listing.get("models") or []))
+
+    found = {
+        "listing category": categories,
+        "listing brand": text(listing.get("brand")),
+        "listing attributes": attributes,
+        "listing options": " ".join(item for item in options if item),
+        "listing description": text(listing.get("description"))[:DESCRIPTION_CHARACTERS],
+    }
+    return [
+        (label, value, LISTING_WEIGHTS[label])
+        for label, value in found.items()
+        if value
+    ]
+
+
+def product_fields(offer: Any, product: Any) -> list[tuple[str, str, float]]:
+    """Everything matchable about one offer and its product, with its weight.
+
+    One list, read by the rarity pass and the scoring pass. They were separate
+    before and the fields nearly drifted the moment a sixth was added: a word
+    scored but not counted for rarity defaults to fully rare, so an unscored
+    rarity pass would have made every word of every listing description look
+    like the most distinguishing term in the catalogue.
+    """
+    return [
+        ("product name", str(product.name or ""), 5.0),
+        ("category", str(product.category or ""), 5.0),
+        ("brand", str(product.brand or ""), 2.0),
+        ("merchant", str(offer.merchant or ""), 1.0),
+        ("marketplace", str(product.marketplace or ""), 0.5),
+        *listing_fields(product),
+    ]
+
+
 def _informativeness(rows: Sequence[tuple[Any, Any]]) -> dict[str, float]:
     """How much each word narrows the field, from 1 down to 0.
 
@@ -347,10 +449,7 @@ def _informativeness(rows: Sequence[tuple[Any, Any]]) -> dict[str, float]:
     seen: dict[str, int] = {}
     for offer, product in rows:
         words: set[str] = set()
-        for value in (
-            product.name, product.category, product.brand,
-            offer.merchant, product.marketplace,
-        ):
+        for _label, value, _weight in product_fields(offer, product):
             words |= tokens(value)
         for word in words:
             seen[word] = seen.get(word, 0) + 1
@@ -385,13 +484,7 @@ def score_offers(
     matches: list[OfferMatch] = []
 
     for offer, product in rows:
-        fields = [
-            ("product name", product.name, 5.0),
-            ("category", product.category, 5.0),
-            ("brand", product.brand, 2.0),
-            ("merchant", offer.merchant, 1.0),
-            ("marketplace", product.marketplace, 0.5),
-        ]
+        fields = product_fields(offer, product)
         matched: set[str] = set()
         sources: set[str] = set()
         relevance = 0.0
