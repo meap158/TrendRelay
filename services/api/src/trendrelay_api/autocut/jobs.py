@@ -96,6 +96,18 @@ PREVIEW_TTL_SECONDS = 60 * 60
 RENDER_TTL_SECONDS = 24 * 60 * 60
 
 
+def _ingest_digest(ingest: dict[str, Any]) -> str | None:
+    """The content hash of the file an ingest was asked to take.
+
+    Two shapes, because `create_ingest_job` answers two ways: a file the
+    Library already holds comes back resolved, with the digest at the top; a
+    new one comes back as a queued job carrying it in the payload. Both are the
+    same hash of the same bytes.
+    """
+    queued = ingest.get("payload") if isinstance(ingest.get("payload"), dict) else {}
+    return ingest.get("sha256") or (queued or {}).get("source_sha256") or None
+
+
 def _prune_stale(root: Path, ttl_seconds: float) -> None:
     """Delete rendered clips in ``root`` older than the ttl. Never raises -
     cleanup is housekeeping and must not fail the render it runs before."""
@@ -341,7 +353,10 @@ def run_render_job(
         complete_job(
             job_id, worker_id,
             {"output_path": str(destination), "ingest_job_id": ingest.get("id"),
-             "asset_id": ingest.get("asset_id")},
+             "asset_id": ingest.get("asset_id"),
+             # Usually no asset id yet - the ingest is a queue. The hash is
+             # what the notification links by until the entry lands.
+             "sha256": _ingest_digest(ingest)},
             factory=factory,
         )
     except Exception as error:  # noqa: BLE001 - the reason belongs on the job

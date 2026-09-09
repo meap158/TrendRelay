@@ -28,6 +28,7 @@ from trendrelay_api.autocut.jobs import (
     PREVIEW_TTL_SECONDS,
     RENDER_TTL_SECONDS,
     _ffmpeg,
+    _ingest_digest,
     _plan_json,
     _prune_stale,
     dimensions,
@@ -346,6 +347,10 @@ def run_render_job(
                 "output_path": str(destination),
                 "ingest_job_id": ingest.get("id"),
                 "asset_id": ingest.get("asset_id"),
+                # The ingest is a queue, so there is usually no asset id yet -
+                # the hash is what the notification links by until there is,
+                # and it keeps working once the entry lands.
+                "sha256": _ingest_digest(ingest),
                 "plan": _plan_json(plan),
                 "lines": len(timed),
             },
