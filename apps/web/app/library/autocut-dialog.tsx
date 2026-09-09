@@ -177,7 +177,7 @@ export function AutoCutDialog({
   // reset state on a prop change, and it clears the last set's preview before
   // a frame paints, so reopening on new media never flashes the old clip or
   // its "updating" badge.
-  const selectionKey = assets.map((asset) => asset.id).join(",");
+  const selectionKey = useMemo(() => assets.map((asset) => asset.id).join(","), [assets]);
   const [orderKey, setOrderKey] = useState(selectionKey);
   // Bumped on every build start and on every reset. A build in flight when a
   // newer one begins, or when the selection changes, sees the number has moved
@@ -258,10 +258,13 @@ export function AutoCutDialog({
   useEffect(() => {
     if (layer0.current) layer0.current.muted = visible !== 0;
     if (layer1.current) layer1.current.muted = visible !== 1;
-    // Nudge the shown layer to keep playing after it unmutes, in case the
-    // browser would otherwise pause a track that began muted. Best-effort.
     const front = visible === 0 ? layer0.current : layer1.current;
+    const back = visible === 0 ? layer1.current : layer0.current;
+    // Nudge the shown layer to keep playing after it unmutes, and pause the
+    // hidden one - otherwise both layers decode and loop forever behind an
+    // opacity:0, two video decodes running at all times for no reason.
     front?.play?.().catch(() => {});
+    back?.pause?.();
   }, [visible, slots]);
 
   // Templates, ranked for this many clips, with the best pre-selected.
@@ -281,24 +284,28 @@ export function AutoCutDialog({
 
   const planKey = `${templateId}:${music}:${speed}:${order.join(",")}`;
 
-  // The plan preview, always what a render would produce right now.
+  // The plan preview, always what a render would produce right now. Debounced,
+  // so dragging the speed slider fires one POST when the value settles rather
+  // than one per step; planKey already folds in template/music/speed/order.
   useEffect(() => {
     if (!open || !templateId || !order.length) return;
     let live = true;
-    const timer = setTimeout(() => setPlanning(true), 0);
-    void apiFetch(`${base}/plan`, {
-      method: "POST",
-      body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed }),
-    })
-      .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
-      .then(({ ok, body }) => {
-        if (!live) return;
-        if (!ok) throw new Error(body?.detail ?? "Could not build the plan.");
-        setPlan(body as PlanView);
+    const run = setTimeout(() => {
+      setPlanning(true);
+      void apiFetch(`${base}/plan`, {
+        method: "POST",
+        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed }),
       })
-      .catch((reason) => { if (live) onError(reason instanceof Error ? reason.message : String(reason)); })
-      .finally(() => { if (live) setPlanning(false); });
-    return () => { live = false; clearTimeout(timer); };
+        .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
+        .then(({ ok, body }) => {
+          if (!live) return;
+          if (!ok) throw new Error(body?.detail ?? "Could not build the plan.");
+          setPlan(body as PlanView);
+        })
+        .catch((reason) => { if (live) onError(reason instanceof Error ? reason.message : String(reason)); })
+        .finally(() => { if (live) setPlanning(false); });
+    }, 300);
+    return () => { live = false; clearTimeout(run); };
   }, [open, planKey, templateId, music, speed, order, apiFetch, base, onError]);
 
   const chosen = useMemo(
