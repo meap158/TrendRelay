@@ -417,7 +417,30 @@ def product_fields(offer: Any, product: Any) -> list[tuple[str, str, float]]:
     ]
 
 
-def _informativeness(rows: Sequence[tuple[Any, Any]]) -> dict[str, float]:
+def tokenised(rows: Sequence[tuple[Any, Any]]) -> list[list[tuple[str, set[str], float]]]:
+    """Every candidate's matchable fields, tokenised once.
+
+    Both passes over the catalogue need the same words: rarity counts how many
+    products carry each, scoring asks which the post shares. They tokenised
+    separately until a listing's description joined the fields being read,
+    which turned sixty characters a product into fifteen hundred and made the
+    duplicated work the most expensive thing in a match - 215ms against 19ms
+    on the real catalogue of 495.
+    """
+    return [
+        [
+            (label, tokens(value), weight)
+            for label, value, weight in product_fields(offer, product)
+        ]
+        for offer, product in rows
+    ]
+
+
+#: One candidate's fields, each already tokenised: label, words, weight.
+Tokenised = Sequence[tuple[str, set[str], float]]
+
+
+def _informativeness(candidates: Sequence[Tokenised]) -> dict[str, float]:
     """How much each word narrows the field, from 1 down to 0.
 
     Matching used to count words: a product sharing four terms with the caption
@@ -443,14 +466,14 @@ def _informativeness(rows: Sequence[tuple[Any, Any]]) -> dict[str, float]:
     "áo" carries real meaning in a shop that sells three shirts and almost none
     in one that sells three hundred.
     """
-    total = len(rows)
+    total = len(candidates)
     if total < 2:
         return {}
     seen: dict[str, int] = {}
-    for offer, product in rows:
+    for fields in candidates:
         words: set[str] = set()
-        for _label, value, _weight in product_fields(offer, product):
-            words |= tokens(value)
+        for _label, field_tokens, _weight in fields:
+            words |= field_tokens
         for word in words:
             seen[word] = seen.get(word, 0) + 1
     scale = math.log1p(total)
@@ -480,17 +503,16 @@ def score_offers(
     and the one that drifts is the one nobody compares.
     """
     performance = performance or {}
-    rarity = _informativeness(rows)
+    candidates = tokenised(rows)
+    rarity = _informativeness(candidates)
     matches: list[OfferMatch] = []
 
-    for offer, product in rows:
-        fields = product_fields(offer, product)
+    for (offer, product), fields in zip(rows, candidates, strict=True):
         matched: set[str] = set()
         sources: set[str] = set()
         relevance = 0.0
         reason_scores: list[tuple[float, str]] = []
-        for field, value, field_weight in fields:
-            product_tokens = tokens(value)
+        for field, product_tokens, field_weight in fields:
             if not product_tokens:
                 continue
             for source, (source_weight, source_tokens) in context.items():

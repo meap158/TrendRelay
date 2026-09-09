@@ -17,7 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api.campaign_offer_matcher import _informativeness, tokens
+from trendrelay_api.campaign_offer_matcher import _informativeness, tokenised, tokens
 from trendrelay_api.media_models import MediaAsset, MediaTranscript
 from trendrelay_api.models import Base, UserProfile, Workspace
 from trendrelay_api.opportunity_models import Product, ProductOffer
@@ -171,10 +171,10 @@ def test_a_word_the_whole_catalogue_shares_is_worth_almost_nothing(session) -> N
     for index in range(12):
         offer(session, f"thing-{index}", f"Widget {index}", marketplace="shopee")
 
-    rarity = _informativeness(
+    rarity = _informativeness(tokenised(
         session.query(ProductOffer, Product)
         .filter(ProductOffer.product_id == Product.id).all()
-    )
+    ))
 
     assert rarity["shopee"] < 0.3, "a universal word kept most of its weight"
     assert rarity["widget"] < 0.3, "a word on every product kept most of its weight"
@@ -192,10 +192,10 @@ def test_a_common_word_is_damped_rather_than_erased(session) -> None:
     offer(session, "fan-a", "Desk fan blue")
     offer(session, "fan-b", "Desk fan red")
 
-    rarity = _informativeness(
+    rarity = _informativeness(tokenised(
         session.query(ProductOffer, Product)
         .filter(ProductOffer.product_id == Product.id).all()
-    )
+    ))
 
     assert 0 < rarity["desk"] < rarity["blue"], "a shared word was erased, not damped"
 

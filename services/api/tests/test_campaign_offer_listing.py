@@ -24,6 +24,7 @@ from trendrelay_api.campaign_offer_matcher import (
     _informativeness,
     listing_fields,
     score_offers,
+    tokenised,
     tokens,
 )
 
@@ -148,7 +149,7 @@ def test_listing_words_are_counted_for_rarity_as_well_as_scored() -> None:
     ]
     # One of them says something only it says.
     rows[0][1].listing["description"] += " thermoregulating"
-    rarity = _informativeness(rows)
+    rarity = _informativeness(tokenised(rows))
     # Relative, because the floor moves with the size of the catalogue: on six
     # products a universal word still scores 0.36, and on four hundred it does
     # not. What has to hold at every size is the ordering.
