@@ -217,3 +217,47 @@ def _monotonic(timed: list[TimedLine]) -> list[TimedLine]:
             line = TimedLine(text=line.text, start=start, end=line.end)
         fixed.append(line)
     return fixed
+
+
+def from_sentences(
+    lines: list[Line], spans: list[tuple[float, float, str]],
+) -> list[TimedLine]:
+    """Our sentences, timed by whatever the synthesiser called a sentence.
+
+    A service that reports sentence boundaries reports *its* sentences, and
+    they are not always ours: it may split on a semicolon we kept whole, or
+    keep an abbreviation we split. Taking its list as the shot list would give
+    a video a different number of shots than the outline promised while the
+    script was being written.
+
+    So the spans are consumed in order against our own lines, by length: each
+    of our lines takes whole spans until it has been covered, and is timed from
+    the first span's start to the last one's end. Order is the only thing both
+    sides are guaranteed to agree on - the same text, in the same sequence -
+    and it is enough.
+
+    A line that runs out of spans is dropped rather than guessed at. A shot
+    with an invented start is worse than one sentence fewer.
+    """
+    if not lines or not spans:
+        return []
+    remaining = list(spans)
+    timed: list[TimedLine] = []
+    for line in lines:
+        wanted = len("".join(line.text.split()))
+        if not wanted:
+            continue
+        taken: list[tuple[float, float, str]] = []
+        covered = 0
+        while remaining and covered < wanted:
+            span = remaining.pop(0)
+            taken.append(span)
+            covered += len("".join(span[2].split()))
+        if not taken:
+            break
+        start = min(span[0] for span in taken)
+        end = max(span[1] for span in taken)
+        if end - start < MIN_LINE_SECONDS:
+            continue
+        timed.append(TimedLine(text=line.text, start=start, end=end))
+    return _monotonic(timed)

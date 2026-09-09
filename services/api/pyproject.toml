@@ -20,6 +20,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Microsoft's neural voices, for narration in languages ElevenLabs' free tier
+# has no voice for - Vietnamese among them. No key, no account, and imported
+# lazily: without it the narrator simply offers fewer voices.
+#
+# Optional rather than required because it is a second speech provider, not the
+# one the app is built around, and because the endpoint it speaks to is Edge's
+# own read-aloud service - free and unofficial in equal measure.
+speech = [
+  "edge-tts>=7,<8",
+]
 # Only Studio's face blur needs these, and it imports them lazily, so a machine
 # that never blurs does not carry ~40MB of native wheels to boot the API.
 # Headless: the API never opens a window, and the GUI build pulls in GTK.
