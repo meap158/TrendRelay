@@ -880,20 +880,39 @@ def test_a_free_key_may_narrate_with_a_premade_voice() -> None:
 
 
 def test_a_free_key_may_not_narrate_with_a_library_voice() -> None:
-    # The render that failed: a professional voice, added successfully, refused
-    # at synthesis after the script was written and the job queued.
-    allowed, reason = elevenlabs.can_speak({"category": "professional"}, FREE)
+    # The render that failed: a voice taken from the shared library, added
+    # successfully, refused at synthesis after the script was written and the
+    # job queued.
+    allowed, reason = elevenlabs.can_speak(
+        {"category": "professional", "from_library": True}, FREE,
+    )
     assert allowed is False
     assert "library voices" in reason
 
 
+def test_a_free_key_may_narrate_with_a_voice_it_made_itself() -> None:
+    """Where the voice came from, not what it is called.
+
+    Voice Design output is categorised `generated` and belongs to the account
+    that made it, so the free tier may speak with it - and it is the one route
+    to a voice that actually sounds like the language being narrated. Refusing
+    everything that is not `premade` would have blocked exactly the voice
+    somebody designed to solve this.
+    """
+    assert elevenlabs.can_speak(
+        {"category": "generated", "from_library": False}, FREE,
+    ) == (True, "")
+
+
 def test_a_paid_key_may_narrate_with_any_of_them() -> None:
     for category in ("premade", "professional", "cloned", "generated"):
-        assert elevenlabs.can_speak({"category": category}, PAID) == (True, "")
+        assert elevenlabs.can_speak(
+            {"category": category, "from_library": True}, PAID,
+        ) == (True, "")
 
 
 def test_an_unreadable_plan_does_not_invent_a_refusal() -> None:
-    assert elevenlabs.can_speak({"category": "cloned"}, UNKNOWN) == (True, "")
+    assert elevenlabs.can_speak({"category": "cloned", "from_library": True}, UNKNOWN) == (True, "")
 
 
 def test_a_free_plan_is_not_offered_library_voices_it_could_not_speak_with() -> None:

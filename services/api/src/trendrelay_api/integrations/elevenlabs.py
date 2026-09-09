@@ -297,10 +297,19 @@ def _voice_view(item: dict[str, Any]) -> dict[str, Any]:
     preview = item.get("preview_url") or next(
         (row.get("preview_url") for row in languages if row.get("preview_url")), None
     )
+    # Whether this voice came from the shared Voice Library.
+    #
+    # `sharing` is present, with the id of whoever published it, on anything
+    # taken from the library and absent on everything else - the premade set,
+    # and a voice designed or cloned by this account. It is the distinction the
+    # free tier actually draws, and the category is not: a library voice
+    # arrives carrying whatever category its author gave it.
+    sharing = item.get("sharing") if isinstance(item.get("sharing"), dict) else None
     return {
         "voice_id": item.get("voice_id"),
         "name": item.get("name") or "Unnamed voice",
         "category": item.get("category"),
+        "from_library": bool(sharing and sharing.get("public_owner_id")),
         "description": item.get("description"),
         "labels": labels,
         "languages": sorted({str(row.get("language")) for row in languages if row.get("language")}),
@@ -879,23 +888,21 @@ def shared_voices(language: str, *, page_size: int = 30) -> list[dict[str, Any]]
     return voices
 
 
-#: The one voice category a free key may speak with through the API.
-#:
-#: Everything else - a voice added from the shared library, a clone, a
-#: professional voice - can sit in the account and be used on ElevenLabs' own
-#: site, and is refused here: "Free users cannot use library voices via the
-#: API." Adding one and finding out at render time is the trap this exists to
-#: close.
-FREE_TIER_CATEGORY = "premade"
-
-
 def can_speak(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool, str]:
     """Whether this key may actually narrate with this voice.
 
-    Separate from having it. A free key can hold a Vietnamese voice from the
-    shared library and cannot speak a word with it, which is not a distinction
-    anything on the voice itself makes - `free_users_allowed` governs adding,
-    not speaking.
+    Separate from having it. A free key can hold a voice from the shared Voice
+    Library and cannot speak a word with it: "Free users cannot use library
+    voices via the API." It still works on ElevenLabs' own site, which is why
+    the restriction reads as a bug in this app rather than a fact about the
+    plan.
+
+    The line is *where the voice came from*, not what it is called. A voice
+    this account owns - the premade set, or one it designed itself - is
+    usable; one taken from the library is not, whatever category its author
+    filed it under. Keying on the category instead would refuse a voice
+    somebody designed for exactly this purpose, since Voice Design output is
+    categorised `generated` and is theirs.
 
     Unknown plan is permissive, as everywhere else here: let ElevenLabs answer
     rather than guess a refusal on the operator's behalf.
@@ -904,9 +911,9 @@ def can_speak(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool
         return True, ""
     if subscription.get("tier") != "free":
         return True, ""
-    if (voice.get("category") or "") == FREE_TIER_CATEGORY:
-        return True, ""
-    return False, "The free plan cannot narrate with library voices"
+    if voice.get("from_library"):
+        return False, "The free plan cannot narrate with library voices"
+    return True, ""
 
 
 def can_add(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool, str]:
