@@ -288,7 +288,11 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
             "-map", f"{len(shots)}:a",
             # End with the video, however long the track is.
             "-shortest",
-            "-c:a", "aac", "-b:a", "160k",
+            # Resample to 48 kHz. The template tracks are 96 kHz (they were
+            # pulled from source videos at that rate), and a browser <video>
+            # cannot decode AAC above 48 kHz - it stalls at readyState 0 with no
+            # error, which left both the preview and the Library playback black.
+            "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
         ]
 
     def _encode(graph: str, cwd: Path | None, scratch: Path):
@@ -307,12 +311,13 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
         script = scratch / "filtergraph.txt"
         script.write_text(graph, encoding="utf-8")
         after = ["-filter_complex_script", str(script), "-map", "[vout]", *audio_tail]
-        after += ["-r", str(FPS), "-pix_fmt", "yuv420p"]
-        # A full render is streamed from the Library, so its moov atom goes up
-        # front; a preview is fetched whole as a blob and never streamed, so it
-        # skips that second rewrite pass and finishes sooner.
-        if not request.preview:
-            after += ["-movflags", "+faststart"]
+        # moov atom up front (faststart) for both the full render and the
+        # preview. A browser <video> stalls at readyState 0 on a moov-at-end
+        # MP4 even when the whole file is already in a blob - so the preview
+        # needs faststart as much as the streamed Library render does. The
+        # rewrite is a few milliseconds on a half-size clip; skipping it left
+        # the preview pane black.
+        after += ["-r", str(FPS), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
         return encode_h264(
             ffmpeg, before, after, request.destination,
             # A preview is watched once and discarded, so speed beats quality:

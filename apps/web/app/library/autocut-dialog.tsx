@@ -341,9 +341,14 @@ export function AutoCutDialog({
       }
       const clip = await apiFetch(`${base}/preview/${jobId}/video`);
       if (!clip.ok) throw new Error("The preview clip could not be loaded.");
-      const blob = await clip.blob();
+      // Re-type the bytes as MP4. They arrive under an opaque content type (so
+      // the app never serves a bare video URL), and a <video> element will not
+      // decode a blob whose type it does not recognise - it stalls at
+      // readyState 0 with no error, leaving the pane black. The bytes are an
+      // MP4; saying so is what lets the element play them.
+      const raw = await clip.blob();
       if (stale()) return;  // a newer build took over while this drew
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(new Blob([raw], { type: "video/mp4" }));
       // Into the hidden slot. Its <video> loads it and, on its first decoded
       // frame, cross-fades itself in (see onLoadedData) - so the shown clip
       // stays put until the new one is actually ready to paint. The displaced
