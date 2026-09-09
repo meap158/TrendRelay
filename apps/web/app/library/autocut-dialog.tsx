@@ -723,7 +723,7 @@ export function AutoCutDialog({
               and dropped to remove. A number, a hold in seconds, and a
               video marker per clip, so the sequence reads like an editor
               track - and a line marks where a dragged clip will land. */}
-          <div className="autocut-timeline" aria-label="Clip order">
+          <div className="autocut-timeline" role="list" aria-label="Clip order">
             {order.map((assetId, index) => {
               const asset = assetById.get(assetId);
               if (!asset) return null;
@@ -731,6 +731,26 @@ export function AutoCutDialog({
               return (
                 <div
                   key={assetId}
+                  role="listitem"
+                  // Focusable and reorderable by keyboard, not only by drag:
+                  // Alt+Arrow moves a clip along the strip, and focus follows it
+                  // so the same clip can be walked several places in a row.
+                  tabIndex={0}
+                  data-clip-index={index}
+                  aria-label={`Clip ${index + 1} of ${order.length}: ${asset.title}. Alt with left or right arrow to move.`}
+                  aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+                  onKeyDown={(event) => {
+                    if (!event.altKey) return;
+                    const to = event.key === "ArrowLeft" ? index - 1
+                      : event.key === "ArrowRight" ? index + 1 : index;
+                    if (to === index || to < 0 || to >= order.length) return;
+                    event.preventDefault();
+                    const timeline = event.currentTarget.parentElement;
+                    moveClip(index, to);
+                    requestAnimationFrame(() => {
+                      timeline?.querySelector<HTMLElement>(`[data-clip-index="${to}"]`)?.focus();
+                    });
+                  }}
                   className={[
                     "autocut-clip",
                     dragIndex === index ? "dragging" : "",
