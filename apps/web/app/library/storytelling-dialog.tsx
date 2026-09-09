@@ -193,6 +193,12 @@ export function StorytellingDialog({
   const [templateId, setTemplateId] = useState("explainer");
   const [aspect, setAspect] = useState<string>("16:9");
   const [subtitles, setSubtitles] = useState(true);
+  //: The caption look - "" is the plain sentence subtitle; a preset id is an
+  //  animated word-highlight style that lights each word as it is spoken.
+  const [captionStyle, setCaptionStyle] = useState("");
+  const [captionStyles, setCaptionStyles] = useState<
+    { id: string; label: string; summary: string; needs_word_timings: boolean }[]
+  >([]);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   /** The model configured in Tools, which wins whenever it can say the words. */
@@ -304,6 +310,17 @@ export function StorytellingDialog({
     })();
     return () => { cancelled = true; };
   }, [apiFetch, base, open, workspaceId, locale]);
+
+  // The caption looks on offer, from the shared caption catalogue.
+  useEffect(() => {
+    if (!open || !base) return;
+    let live = true;
+    void apiFetch(`${base}/caption-styles`)
+      .then((res) => res.json())
+      .then((data) => { if (live && Array.isArray(data.styles)) setCaptionStyles(data.styles); })
+      .catch(() => { /* the plain subtitle is always available even if this fails */ });
+    return () => { live = false; };
+  }, [open, base, apiFetch]);
 
   // Which language, which model and which voice are three choices that look
   // like one, and each has an edge that made the picker wrong once. They live
@@ -615,6 +632,7 @@ export function StorytellingDialog({
           language_code: language || undefined,
           aspect,
           subtitles,
+          caption_style: captionStyle,
         }),
       });
       const payload = await response.json();
@@ -644,6 +662,7 @@ export function StorytellingDialog({
       language_code: language || undefined,
       aspect,
       subtitles,
+      caption_style: captionStyle,
     };
   }
 
@@ -710,6 +729,7 @@ export function StorytellingDialog({
       setLanguage(spec.language_code ?? "");
       setAspect(spec.aspect ?? "16:9");
       setSubtitles(spec.subtitles !== false);
+      setCaptionStyle(spec.caption_style ?? "");
       setDraftId(id);
       setDraftsOpen(false);
     } catch (reason) {
@@ -972,6 +992,22 @@ export function StorytellingDialog({
               <span>Burn in subtitles</span>
               <small>The script&apos;s own words, so nothing is transcribed back.</small>
             </label>
+            {subtitles && captionStyles.length > 0 && (
+              <label>Caption style
+                <Select
+                  value={captionStyle}
+                  onChange={(event) => setCaptionStyle(event.target.value)}
+                  aria-label="The caption look"
+                >
+                  <option value="">Plain subtitle</option>
+                  {captionStyles.map((style) => (
+                    <option key={style.id} value={style.id}>
+                      {style.label}{style.needs_word_timings ? " · animated" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
           </div>
         </section>
 
