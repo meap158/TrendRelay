@@ -241,6 +241,13 @@ def test_voice_catalog_uses_the_paginated_v2_api_and_keeps_locale_metadata(
     saved_key,
     monkeypatch,
 ) -> None:
+    # This one is about the key's own voices. The catalogue also offers
+    # Microsoft's, which are three hundred rows and a network call away, so
+    # they are stood down here rather than asserted around - the merge has its
+    # own test.
+    from trendrelay_api.integrations import microsoft_tts
+
+    monkeypatch.setattr(microsoft_tts, "voices", list)
     requests: list[urllib.request.Request] = []
 
     def fake_urlopen(request, timeout=None):
@@ -927,3 +934,41 @@ def test_a_free_plan_is_not_offered_library_voices_it_could_not_speak_with() -> 
     )
     assert allowed is False
     assert "narrate" in reason
+
+
+def test_the_catalogue_offers_the_free_voices_beside_the_key_s_own(monkeypatch) -> None:
+    """One picker, one question, two services answering it.
+
+    ElevenLabs' free tier ships nothing verified in Vietnamese and will not let
+    an account design a voice through the API, so a workspace that runs in
+    Vietnamese had a language it could not narrate in. Microsoft publishes two
+    Vietnamese neural voices and asks for no key.
+    """
+    from trendrelay_api.integrations import microsoft_tts
+
+    monkeypatch.setattr(elevenlabs, "provider_status", lambda probe=True: {"reachable": False})
+    monkeypatch.setattr(elevenlabs, "plan", dict)
+    monkeypatch.setattr(microsoft_tts, "voices", lambda: [
+        {"voice_id": "microsoft:vi-VN-HoaiMyNeural", "name": "HoaiMy",
+         "languages": ["vi"], "from_library": False},
+    ])
+    catalog = elevenlabs.voice_catalog()
+    offered = catalog["voices"]
+    assert [voice["voice_id"] for voice in offered] == ["microsoft:vi-VN-HoaiMyNeural"]
+    # Usable outright: there is no subscription to check, which for a language
+    # the key has no voice in is the whole point of them being here.
+    assert offered[0]["usable"] is True
+    assert offered[0]["unusable_reason"] == ""
+
+
+def test_a_free_voice_is_offered_even_when_elevenlabs_cannot_be_reached(monkeypatch) -> None:
+    # An unreachable key used to mean an empty picker. It now means a picker
+    # with whatever needs no key.
+    from trendrelay_api.integrations import microsoft_tts
+
+    monkeypatch.setattr(elevenlabs, "provider_status", lambda probe=True: {"reachable": False})
+    monkeypatch.setattr(elevenlabs, "plan", dict)
+    monkeypatch.setattr(microsoft_tts, "voices", lambda: [
+        {"voice_id": "microsoft:x", "name": "X", "languages": ["vi"], "from_library": False},
+    ])
+    assert len(elevenlabs.voice_catalog()["voices"]) == 1

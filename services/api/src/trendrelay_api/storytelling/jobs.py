@@ -66,8 +66,30 @@ class NarrationUnavailable(RuntimeError):
 def _voice_from_synthesis(
     text: str, *, voice_id: str, model_id: str, language_code: str | None, destination: Path
 ) -> tuple[list[narration.TimedLine], Path, list[tuple[int, int, str]]]:
-    """Speak the script, and take the synthesiser's own timings with it."""
-    from trendrelay_api.integrations import elevenlabs
+    """Speak the script, and take the synthesiser's own timings with it.
+
+    Two services can answer, and the voice says which: a Microsoft voice
+    carries its own prefix, everything else is ElevenLabs. Dispatching on the
+    id rather than on a separate field means a saved draft, a queued job and a
+    retried render all name the service the same way the picker did, without
+    a second thing to keep in step.
+    """
+    from trendrelay_api.integrations import elevenlabs, microsoft_tts
+
+    if microsoft_tts.is_microsoft(voice_id):
+        audio, spans = microsoft_tts.synthesise(text, voice_id=voice_id)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(audio)
+        lines = script.split(narration.prepare(text))
+        timed = narration.from_sentences(lines, spans)
+        if not timed:
+            raise NarrationUnavailable(
+                "The voice came back without usable timings, so there is nothing to cut on."
+            )
+        # Sentence timings, so a caption is a sentence rather than a word
+        # lighting up. The look is poorer; the alternative was no voice that
+        # speaks this language at all.
+        return timed, destination, []
 
     # The operator's configured default when the caller named no model.
     #

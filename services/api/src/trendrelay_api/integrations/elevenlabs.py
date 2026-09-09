@@ -429,6 +429,27 @@ def models() -> list[dict[str, Any]]:
     return ordered
 
 
+def _free_voices() -> list[dict[str, Any]]:
+    """Voices from the other service, in this one's shape.
+
+    Offered beside the key's own because the picker asks one question - which
+    voice reads this - and the answer should not depend on which company
+    happens to provide it. They carry `usable` outright: there is no
+    subscription to check, which for a language this key has no voice in is
+    the whole point of them being here.
+
+    This module owning the merge is the small ugliness. The alternative is a
+    third module both of these import, for one list concatenation, and every
+    caller of `voice_catalog` learning that voices now arrive from two places.
+    """
+    from trendrelay_api.integrations import microsoft_tts
+
+    return [
+        {**voice, "usable": True, "unusable_reason": ""}
+        for voice in microsoft_tts.voices()
+    ]
+
+
 def voice_catalog() -> dict[str, Any]:
     """One live picker payload: plan, voices and models from the same key.
 
@@ -440,8 +461,11 @@ def voice_catalog() -> dict[str, Any]:
     status = provider_status(probe=True)
     subscription = plan()
     if not status["reachable"]:
+        # Not empty: the voices that need no key do not need this one either,
+        # and an unconfigured or unreachable ElevenLabs used to mean a picker
+        # with nothing in it at all.
         return {
-            "voices": [], "models": [], "status": status,
+            "voices": _free_voices(), "models": [], "status": status,
             "defaults": defaults(), "plan": subscription,
         }
     # Each voice says whether this plan can narrate with it. Decided here so
@@ -452,7 +476,7 @@ def voice_catalog() -> dict[str, Any]:
         allowed, reason = can_speak(voice, subscription)
         marked.append({**voice, "usable": allowed, "unusable_reason": reason})
     return {
-        "voices": marked, "models": models(), "status": status,
+        "voices": [*marked, *_free_voices()], "models": models(), "status": status,
         "defaults": defaults(), "plan": subscription,
     }
 
