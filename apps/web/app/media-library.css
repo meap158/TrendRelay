@@ -1216,7 +1216,12 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-music-row small { flex: none; color: var(--muted); }
 /* The canvas-shape picker: three ratios as a segmented control, the way an
    editor offers its output size. */
-.autocut-aspect { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px; }
+/* Hugging its buttons, not its column.
+   `inline-flex` says so and is overruled: the label around it is a grid, and a
+   grid item stretches unless told otherwise - so the outline ran the full half
+   of the row with a third of it empty, which read as a control missing its
+   fourth option. */
+.autocut-aspect { display: inline-flex; inline-size: fit-content; justify-self: start; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px; }
 /* Inline-flex so a shape can sit beside its ratio. The row of fill modes
    shares this class and carries no icon, which costs it nothing. */
 .autocut-aspect button { display: inline-flex; gap: 5px; align-items: center; border: 0; border-radius: calc(var(--radius-sm) - 2px); padding: 4px 10px; color: var(--muted); background: none; font-size: 11px; font-weight: 600; cursor: pointer; }
