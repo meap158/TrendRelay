@@ -1251,7 +1251,7 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    an editor's track. */
 .autocut-timeline { display: flex; gap: 6px; overflow-x: auto; padding-block: 4px; }
 .autocut-clip { position: relative; flex: none; inline-size: 52px; cursor: grab; }
-.autocut-clip.dragging { opacity: 0.4; }
+.autocut-clip.autocut-dragging { opacity: 0.4; }
 /* Where a dragged clip will land: a bright rule on the leading edge, the way
    an editor shows an insertion point. */
 .autocut-clip.drop-target { box-shadow: inset 3px 0 0 var(--link); }

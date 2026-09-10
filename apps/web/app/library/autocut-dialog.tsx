@@ -760,7 +760,11 @@ export function AutoCutDialog({
                   }}
                   className={[
                     "autocut-clip",
-                    dragIndex === index ? "dragging" : "",
+                    // Own drag-state token, not the bare `dragging` that ui.css
+                    // also uses - so a third component adding `.dragging` can
+                    // never restyle a clip mid-drag. Storytelling did the same
+                    // with `story-held`.
+                    dragIndex === index ? "autocut-dragging" : "",
                     dropIndex === index && dragIndex !== index ? "drop-target" : "",
                   ].filter(Boolean).join(" ")}
                   draggable
