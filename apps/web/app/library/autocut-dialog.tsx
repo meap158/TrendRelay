@@ -619,10 +619,16 @@ export function AutoCutDialog({
                   {template.match === 1 && <em className="autocut-best">best fit</em>}
                 </strong>
                 <small>{template.description}</small>
-                <RhythmHint cadence={template.cadence} bpm={template.designed_bpm} />
-                <span className="autocut-template-meta">
-                  {template.transition} · {template.designed_bpm} BPM
-                  {!template.music_available && <em title="No music file for this template yet"> · silent</em>}
+                {/* The rhythm and the words for it on one line. They were
+                    stacked, which spent a row of every card on eight pixels
+                    of bar - and the presets are a scrolling list beside a
+                    preview that is short of exactly this height. */}
+                <span className="autocut-template-foot">
+                  <RhythmHint cadence={template.cadence} bpm={template.designed_bpm} />
+                  <span className="autocut-template-meta">
+                    {template.transition} · {template.designed_bpm} BPM
+                    {!template.music_available && <em title="No music file for this template yet"> · silent</em>}
+                  </span>
                 </span>
               </button>
             ))}

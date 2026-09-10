@@ -1193,14 +1193,19 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    The presets inside carry their own outlines, so without a container edge
    the list had no boundary of its own - a row half-scrolled at the bottom
    read as a card that had been cut off rather than as more to scroll to. */
-.autocut-templates { display: grid; gap: 8px; max-block-size: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; background: var(--panel-raised); }
-.autocut-template { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); text-align: start; cursor: pointer; }
+.autocut-templates { display: grid; gap: 6px; max-block-size: 196px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px; background: var(--panel-raised); }
+.autocut-template { display: grid; gap: 2px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); text-align: start; cursor: pointer; }
 .autocut-template:hover { border-color: var(--link); }
 .autocut-template.selected { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); background: var(--panel-raised); }
-.autocut-template strong { display: flex; gap: 8px; align-items: baseline; color: var(--text); font-size: 13px; }
+.autocut-template strong { display: flex; gap: 8px; align-items: baseline; color: var(--text); font-size: 12px; }
 .autocut-best { border-radius: 999px; padding: 0 7px; background: var(--green-dark); color: var(--green); font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; }
-.autocut-template small { color: var(--muted); font-size: 11px; line-height: 1.4; }
-.autocut-template-meta { color: var(--muted); font-size: 10px; }
+/* Two lines at most. Every description is one sentence, and the two that run
+   long were setting the height of every card in the list. */
+.autocut-template small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+/* The bar takes the room left over; the words it describes keep theirs. */
+.autocut-template-foot { display: flex; gap: 8px; align-items: center; min-inline-size: 0; }
+.autocut-template-foot .autocut-rhythm { flex: 1 1 auto; min-inline-size: 0; margin-block: 0; }
+.autocut-template-meta { flex: 0 0 auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
 .autocut-template-meta em { color: var(--warn); font-style: normal; }
 .autocut-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .autocut-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
@@ -1233,9 +1238,13 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    once a video of that ratio loads. Sized from a definite height per shape
    (kept small for landscape so it fits the pane's width) with the width
    following the aspect-ratio, and centred so the column does not stretch it. */
-.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(46vh, 600px); max-inline-size: 100%; container-type: size; }
-.autocut-video[data-aspect="square"] { aspect-ratio: 1 / 1; block-size: min(46vh, 340px); }
-.autocut-video[data-aspect="landscape"] { aspect-ratio: 16 / 9; block-size: min(28vh, 191px); }
+/* Taller than it was, by the height the preset list gave back. The preview is
+   the one thing in this dialog being judged, and it was bound by this cap
+   rather than by the room available - measured at 421px against a column with
+   space for more. */
+.autocut-video { position: relative; display: grid; place-items: center; justify-self: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ink); aspect-ratio: 9 / 16; block-size: min(53vh, 640px); max-inline-size: 100%; container-type: size; }
+.autocut-video[data-aspect="square"] { aspect-ratio: 1 / 1; block-size: min(53vh, 380px); }
+.autocut-video[data-aspect="landscape"] { aspect-ratio: 16 / 9; block-size: min(32vh, 215px); }
 /* Two stacked layers, cross-faded: the shown one is opaque, the hidden one
    sits at zero opacity waiting for the next clip, so a redraw never flashes
    black between clips. Contained, so a layer's own ratio is never cropped even
