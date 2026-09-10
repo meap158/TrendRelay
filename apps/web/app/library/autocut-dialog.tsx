@@ -7,6 +7,7 @@ import { Dialog } from "../ui/dialog";
 import { ActionIcon } from "../ui/action-icons";
 import { AssetFilters } from "../ui/asset-filters";
 import { useLibraryAssets } from "../../lib/use-library-assets";
+import { AspectIcon } from "../ui/aspect-icon";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
 
@@ -646,21 +647,28 @@ export function AutoCutDialog({
               />
             </label>
             <label>
-              <span>Shape</span>
-              <span className="autocut-aspect" role="radiogroup" aria-label="Video shape">
+              <span>Aspect ratio</span>
+              <span className="autocut-aspect" role="radiogroup" aria-label="The aspect ratio of the finished video">
                 {([
-                  ["portrait", "9:16"],
-                  ["square", "1:1"],
-                  ["landscape", "16:9"],
-                ] as const).map(([value, label]) => (
+                  ["portrait", "9:16", "Portrait (9:16)"],
+                  ["square", "1:1", "Square (1:1)"],
+                  ["landscape", "16:9", "Landscape (16:9)"],
+                ] as const).map(([value, label, name]) => (
                   <button
                     key={value}
                     type="button"
                     role="radio"
                     aria-checked={aspect === value}
+                    aria-label={name}
+                    title={name}
                     className={aspect === value ? "selected" : ""}
                     onClick={() => setAspect(value)}
-                  >{label}</button>
+                  >
+                    {/* The shape beside the ratio. "16:9" and "9:16" are two
+                        characters apart and mean opposite things, in a row of
+                        other numbers. */}
+                    <AspectIcon ratio={label} size={13} />{label}
+                  </button>
                 ))}
               </span>
             </label>

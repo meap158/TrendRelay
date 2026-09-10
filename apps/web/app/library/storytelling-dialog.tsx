@@ -53,6 +53,7 @@ import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
 import { ActionIcon } from "../ui/action-icons";
+import { AspectIcon } from "../ui/aspect-icon";
 import { AssetFilters } from "../ui/asset-filters";
 import { Badge } from "../ui/primitives";
 import { Button } from "../ui/button";
@@ -130,9 +131,9 @@ function languageName(code: string): string {
 /** How the finished video is shaped. Wide leads because a narrated piece is
     watched on a wide screen; the short-form frame is offered beside it. */
 const ASPECTS = [
-  { value: "16:9", label: "16:9", title: "Wide (16:9)" },
-  { value: "9:16", label: "9:16", title: "Tall (9:16)" },
-  { value: "1:1", label: "1:1", title: "Square (1:1)" },
+  { value: "16:9", label: "16:9", title: "Landscape (16:9)", icon: <AspectIcon ratio="16:9" /> },
+  { value: "9:16", label: "9:16", title: "Portrait (9:16)", icon: <AspectIcon ratio="9:16" /> },
+  { value: "1:1", label: "1:1", title: "Square (1:1)", icon: <AspectIcon ratio="1:1" /> },
 ] as const;
 
 const SOURCES = [
@@ -1144,12 +1145,12 @@ export function StorytellingDialog({
             ))}
           </div>
           <div className="story-shape">
-            <label>Shape
+            <label>Aspect ratio
               <SegmentedControl
                 value={aspect}
                 onChange={setAspect}
                 options={ASPECTS}
-                label="The shape of the finished video"
+                label="The aspect ratio of the finished video"
               />
             </label>
             {/* Before the voice, because it decides which voices there are. */}
