@@ -43,6 +43,19 @@ TICKS_PER_SECOND = 10_000_000
 #: does not hold a worker open all day.
 TIMEOUT_SECONDS = 300
 
+#: How many times to ask before giving up, and how long to wait between.
+#:
+#: This endpoint intermittently completes a stream having sent no audio -
+#: "No audio was received", the failure edge-tts reports for it. It is not
+#: about the text: the same script succeeds on the next attempt, which is how
+#: it was found. Once is unlucky, three times is the service being down.
+#:
+#: Retried here rather than left to the job's own retry, which would re-run the
+#: whole render - the pictures, the filtergraph, the ffmpeg pass - to recover
+#: from a socket that hiccuped.
+ATTEMPTS = 3
+BACKOFF_SECONDS = (0.5, 1.5)
+
 
 #: How long the voice list is kept before asking again.
 #:
@@ -50,6 +63,16 @@ TIMEOUT_SECONDS = 300
 #: is three hundred voices that change perhaps monthly. Asking each time put a
 #: network round trip in front of a picker that has one already.
 VOICE_CACHE_SECONDS = 3600
+
+#: How long an *empty* answer is kept, which is a different question.
+#:
+#: A failed listing was being remembered as confidently as a good one, so a
+#: single blip took these voices out of the picker for the next hour - and the
+#: blip is not hypothetical, this endpoint drops requests often enough that
+#: synthesis retries three times. Long enough that a picker opening in a loop
+#: does not hammer a service that is down; short enough that the next attempt
+#: is soon.
+EMPTY_CACHE_SECONDS = 60
 
 _VOICE_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
@@ -104,15 +127,18 @@ def voices() -> list[dict[str, Any]]:
     if not available():
         return []
     cached = _VOICE_CACHE.get("all")
-    if cached and time.monotonic() - cached[0] < VOICE_CACHE_SECONDS:
-        return cached[1]
+    if cached:
+        age = time.monotonic() - cached[0]
+        if age < (VOICE_CACHE_SECONDS if cached[1] else EMPTY_CACHE_SECONDS):
+            return cached[1]
     try:
         import edge_tts
 
         found = asyncio.run(edge_tts.list_voices())
     except Exception:
-        # Remembered as empty for a moment as well, so a picker opening in a
-        # loop against an unreachable service does not retry on every render.
+        # Remembered briefly, so a picker opening in a loop does not hammer a
+        # service that is down - but only briefly, because a blip must not
+        # take these voices out of the picker for the rest of the hour.
         _VOICE_CACHE["all"] = (time.monotonic(), [])
         return []
     rows: list[dict[str, Any]] = []
@@ -185,14 +211,22 @@ def synthesise(text: str, *, voice_id: str) -> tuple[bytes, list[tuple[float, fl
                 spans.append((start, start + length, str(chunk.get("text") or "")))
         return bytes(audio), spans
 
-    try:
-        audio, spans = asyncio.run(asyncio.wait_for(run(), TIMEOUT_SECONDS))
-    except TimeoutError as error:
-        raise MicrosoftVoiceUnavailable("The voice took too long to answer.") from error
-    except Exception as error:  # noqa: BLE001 - one unavailable, however it failed
-        raise MicrosoftVoiceUnavailable(
-            f"Microsoft's voices could not be reached. {error}"[:300]
-        ) from error
-    if not audio:
-        raise MicrosoftVoiceUnavailable("The voice answered with no audio.")
-    return audio, spans
+    last: Exception | None = None
+    for attempt in range(ATTEMPTS):
+        try:
+            audio, spans = asyncio.run(asyncio.wait_for(run(), TIMEOUT_SECONDS))
+        except TimeoutError as error:
+            # Not retried: it answered slowly rather than not at all, and
+            # three more five-minute waits help nobody.
+            raise MicrosoftVoiceUnavailable("The voice took too long to answer.") from error
+        except Exception as error:  # noqa: BLE001 - one unavailable, however it failed
+            last = error
+        else:
+            if audio:
+                return audio, spans
+            last = MicrosoftVoiceUnavailable("The voice answered with no audio.")
+        if attempt < len(BACKOFF_SECONDS):
+            time.sleep(BACKOFF_SECONDS[attempt])
+    raise MicrosoftVoiceUnavailable(
+        f"Microsoft's voices could not be reached after {ATTEMPTS} attempts. {last}"[:300]
+    ) from last
