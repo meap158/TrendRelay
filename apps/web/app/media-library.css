@@ -1189,7 +1189,11 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 /* The template chooser: a column of clearly different rhythms, the auto-match
    pre-selected and marked, so the choice reads as a suggestion to accept or
    change - not a blank field to fill. */
-.autocut-templates { display: grid; gap: 8px; max-block-size: 240px; overflow-y: auto; }
+/* A bordered box, because it is a scrolling list and was not drawn as one.
+   The presets inside carry their own outlines, so without a container edge
+   the list had no boundary of its own - a row half-scrolled at the bottom
+   read as a card that had been cut off rather than as more to scroll to. */
+.autocut-templates { display: grid; gap: 8px; max-block-size: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; background: var(--panel-raised); }
 .autocut-template { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); text-align: start; cursor: pointer; }
 .autocut-template:hover { border-color: var(--link); }
 .autocut-template.selected { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); background: var(--panel-raised); }

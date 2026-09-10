@@ -839,7 +839,11 @@ export function AutoCutDialog({
                 aria-expanded={browsing}
                 disabled={full && !browsing}
                 onClick={() => setBrowsing((current) => !current)}
-              >{browsing ? "Done adding" : "Add clips from Library"}</Button>
+                // "Clips" named one of the two kinds this takes. AutoCut cuts
+                // photos as readily as video - the selection action that opens
+                // it says "photos and videos" - and the browser behind this
+                // button has always kept both. Only the label was narrow.
+              >{browsing ? "Done adding" : "Add photos or videos"}</Button>
               {full && <small className="autocut-note">Forty clips is the most one AutoCut takes.</small>}
             </div>
             {browsing && (
