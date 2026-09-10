@@ -375,6 +375,12 @@ export function StorytellingDialog({
   const languages = useMemo(
     () => readableLanguages(models, languageName, LOCALE_CODES), [models],
   );
+  /** How many of those lead because this workspace works in them - the
+      count `readableLanguages` puts first, and so where the line goes. */
+  const workspaceLanguages = useMemo(
+    () => languages.filter((code) => (LOCALE_CODES as readonly string[]).includes(code)).length,
+    [languages],
+  );
   const { verified } = useMemo(
     () => partitionVoices(voices, language), [voices, language],
   );
@@ -1161,8 +1167,16 @@ export function StorytellingDialog({
                 aria-label="The language the script is read in"
               >
                 <option value="">Any language</option>
-                {languages.map((code) => (
-                  <option key={code} value={code}>{languageName(code)}</option>
+                {languages.map((code, index) => (
+                  <option
+                    key={code}
+                    value={code}
+                    // A line under the last one this workspace works in.
+                    // Seven of them lead a list of seventy-four, and without
+                    // a break the eighth reads as the eighth favourite
+                    // rather than the first of the rest.
+                    data-separator-after={index === workspaceLanguages - 1 || undefined}
+                  >{languageName(code)}</option>
                 ))}
               </Select>
             </label>

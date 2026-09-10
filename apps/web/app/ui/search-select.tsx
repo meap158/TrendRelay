@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { comboboxIntent } from "../../lib/combobox-keys";
@@ -11,6 +11,15 @@ export type SearchSelectOption = {
   description?: string;
   keywords?: string;
   disabled?: boolean;
+  /**
+   * Draw a line under this row, marking the end of a group.
+   *
+   * A rule rather than a heading: the groups here are "the ones you work in"
+   * and "everything else", and the second needs no name. Ignored while the
+   * list is being searched, where the order is the match's and a boundary
+   * from the unfiltered order would fall in an arbitrary place.
+   */
+  separatorAfter?: boolean;
 };
 
 /** Which side of the trigger the list opens on, and how large it may be. */
@@ -293,7 +302,8 @@ export function SearchSelect({
           )}
           <div id={listId} className={`search-select-list${dense ? " dense" : ""}`} role="listbox" ref={listNode}>
             {rows.map((row, index) => (
-              <button type="button" role="option" key={row.value || "__clear"}
+              <Fragment key={row.value || "__clear"}>
+              <button type="button" role="option"
                 id={`${listId}-${index}`}
                 // Selected is what the field holds; active is where the
                 // keyboard is. They are different states and look different.
@@ -309,6 +319,13 @@ export function SearchSelect({
                 <strong>{row.label}</strong>
                 {"description" in row && row.description && <small>{row.description}</small>}
               </button>
+              {/* Only in the list's own order. While searching, the rows are
+                  the matches' and a boundary drawn from the unfiltered order
+                  would sit in an arbitrary place. */}
+              {row.separatorAfter && !query.trim() && index < rows.length - 1 && (
+                <div className="search-select-divider" role="presentation" />
+              )}
+              </Fragment>
             ))}
             {!visible.length && <p className="search-select-empty">{emptyLabel}</p>}
           </div>

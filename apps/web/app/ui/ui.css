@@ -571,6 +571,10 @@ a.ui-button { text-decoration: none; }
    offsets or counts stays readable down the list. */
 .search-select-list.dense button { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px; }
 .search-select-list.dense small { justify-self: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The end of a group of options, as a rule rather than a heading. The groups
+   it separates are "the ones this workspace works in" and everything else,
+   and the second needs no name. */
+.search-select-divider { block-size: 1px; margin: 4px 6px; background: var(--line); }
 .search-select-empty { margin: 0; padding: 12px 8px; color: var(--muted); font-size: 12px; text-align: center; }
 
 /* Filter chips: a horizontally scrolled row of the states a list already

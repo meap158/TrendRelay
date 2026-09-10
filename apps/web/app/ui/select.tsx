@@ -81,6 +81,12 @@ export function Select({
       value: String(option.props.value ?? label),
       label,
       disabled: Boolean(option.props.disabled),
+      // A plain `<option>` cannot say "group ends here", and `<optgroup>` is
+      // not an answer: the styled list cannot draw one, which is why these
+      // are flat in the first place. A data attribute carries it across.
+      separatorAfter: Boolean(
+        (option.props as Record<string, unknown>)["data-separator-after"],
+      ),
     };
   }), [children]);
   const controlled = value !== undefined;
