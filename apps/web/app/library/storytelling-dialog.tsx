@@ -1014,7 +1014,7 @@ export function StorytellingDialog({
                   : language && !modelId && !isExternal(effectiveVoiceId)
                     ? "No model on this key reads that language."
                     : overBudget ? "The script is longer than this plan has characters left."
-                      : voiceBlocked ? `${voiceBlocked}. Pick a premade voice - the multilingual model reads this language in any of them.`
+                      : voiceBlocked ? `${voiceBlocked}. Any other voice in the list will read it.`
                         : !effectiveVoiceId ? "Choose a voice."
                           : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
           </span>

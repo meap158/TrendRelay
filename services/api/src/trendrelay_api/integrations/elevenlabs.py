@@ -916,10 +916,19 @@ def can_speak(voice: dict[str, Any], subscription: dict[str, Any]) -> tuple[bool
     """Whether this key may actually narrate with this voice.
 
     Separate from having it. A free key can hold a voice from the shared Voice
-    Library and cannot speak a word with it: "Free users cannot use library
-    voices via the API." It still works on ElevenLabs' own site, which is why
-    the restriction reads as a bug in this app rather than a fact about the
-    plan.
+    Library and cannot speak a word with it. Their words, verbatim, on
+    `POST /v1/text-to-speech/{id}`:
+
+        HTTP 402 paid_plan_required
+        "Free users cannot use library voices via the API. Please upgrade
+         your subscription to use this voice."
+
+    The same voice works on ElevenLabs' own site, which is why the refusal
+    reads as a bug here rather than a fact about the plan. There is no parity
+    to reach: it was tested against a voice whose own `free_users_allowed`
+    flag is true, with both `eleven_multilingual_v2` and `eleven_flash_v2_5`,
+    and refused both times. That flag governs adding a voice to a library, not
+    speaking with it.
 
     The line is *where the voice came from*, not what it is called. A voice
     this account owns - the premade set, or one it designed itself - is
