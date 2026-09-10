@@ -1271,6 +1271,20 @@ function LibraryContent() {
     () => notificationScopeProgress(notificationJobs, notificationAssetIds, notificationTitle),
     [notificationAssetIds, notificationJobs, notificationTitle],
   );
+  // Jobs indexed by the asset they belong to, built once per jobs change.
+  // The grid re-renders on every poll tick, and each thumbnail used to
+  // re-filter the whole jobs list for its own - O(assets x jobs), tens of
+  // thousands of iterations a tick on a full library. Now each reads its bucket.
+  const jobsByAsset = useMemo(() => {
+    const map = new Map<string, typeof notificationJobs>();
+    for (const job of notificationJobs) {
+      if (!job.assetId) continue;
+      const bucket = map.get(job.assetId);
+      if (bucket) bucket.push(job);
+      else map.set(job.assetId, [job]);
+    }
+    return map;
+  }, [notificationJobs]);
   const previousMediaJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -1650,7 +1664,8 @@ function LibraryContent() {
   function renderAsset(asset: Asset) {
     const mediaActivity = thumbnailMediaActivity(
       t,
-      notificationJobs,
+      // This asset's jobs only, from the prebuilt index - not the whole list.
+      jobsByAsset.get(asset.id) ?? [],
       asset.id,
       cancellingEffectJobId,
     );
