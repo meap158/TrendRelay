@@ -112,10 +112,16 @@ type Tile = {
 };
 /** A language code as a reader would recognise it, falling back to the code.
     `Intl.DisplayNames` is in every browser this runs in and knows far more
-    languages than a table here would. */
+    languages than a table here would. Built once and reused: it is called in
+    the language and voice option maps and as `readableLanguages`' sort
+    comparator, so a fresh instance per call was many allocations per render. */
+let _languageDisplay: Intl.DisplayNames | null = null;
 function languageName(code: string): string {
   try {
-    return new Intl.DisplayNames(undefined, { type: "language" }).of(code) ?? code;
+    if (!_languageDisplay) {
+      _languageDisplay = new Intl.DisplayNames(undefined, { type: "language" });
+    }
+    return _languageDisplay.of(code) ?? code;
   } catch {
     return code;
   }
@@ -256,6 +262,11 @@ export function StorytellingDialog({
       that way. When the script is edited past this, the arrangement is dropped
       rather than silently desynced. Null means nothing is arranged to protect. */
   const arrangedFor = useRef<string | null>(null);
+  /** Whether the dialog is still open, read by the background polls so they
+      stop the moment it closes instead of running their full three minutes and
+      then setting state on a dialog nobody is looking at. */
+  const openRef = useRef(open);
+  useEffect(() => { openRef.current = open; }, [open]);
   /** The live script, for the by-hand placement handlers below: they are
       memoised without `body`, so they read the current one here rather than the
       one captured when they were made. */
@@ -742,10 +753,13 @@ export function StorytellingDialog({
    * "Make the video" queues. `fill` stops for review and loads the shots back
    * into this dialog; `create` carries straight through and closes.
    */
-  async function pollAutocreate(id: string): Promise<Record<string, unknown>> {
+  async function pollAutocreate(id: string): Promise<Record<string, unknown> | null> {
     // It runs in the worker; wait for it with a short poll, the way the rest of
     // the dialog waits on a job. Generous cap - a dozen downloads take a while.
     for (let attempt = 0; attempt < 120; attempt += 1) {
+      // Give up the moment the dialog is closed: a poll that ran on for three
+      // minutes after the operator left, then set state, is pure waste.
+      if (!openRef.current) return null;
       const res = await apiFetch(`${base}/autocreate/${id}`);
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.detail ?? "The build could not be read.");
@@ -778,6 +792,7 @@ export function StorytellingDialog({
       const queued = await response.json();
       if (!response.ok) throw new Error(queued.detail ?? "That could not start.");
       const result = await pollAutocreate(queued.id);
+      if (!result || !openRef.current) return;  // dialog closed while it ran
       const ids = (result.asset_ids as string[]) ?? [];
       let rows: StoryAsset[] = [];
       if (ids.length) {
@@ -1281,6 +1296,18 @@ export function StorytellingDialog({
                     </option>
                   ))}
                 </Select>
+                {/* An animated caption lights up a word at a time, and a
+                    voice from another service reports sentences rather than
+                    words. The renderer already falls back to plain subtitles
+                    on its own; saying so is the difference between choosing
+                    that and discovering it in the finished video. */}
+                {isExternal(effectiveVoiceId)
+                  && captionStyles.find((style) => style.id === captionStyle)?.needs_word_timings && (
+                  <small className="story-note">
+                    This voice times sentences, not words, so the captions will be
+                    plain. An ElevenLabs voice animates them.
+                  </small>
+                )}
               </label>
             )}
           </div>
