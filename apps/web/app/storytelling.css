@@ -66,13 +66,21 @@
    Only the segmented control moves: the trigger's 36 is the app's own size, and
    the native select beside it is the hidden accessibility layer, which is what
    the guard on this stopped me dressing. */
-.story-shape .ui-segmented { min-block-size: 36px; }
+.story-shape .ui-segmented { block-size: 36px; }
 /* Filling the cell it was given. Sized to its own three words it left a third
    of its column empty beside it, so a row of three controls read as two and a
    half - the gap that made this row look unfinished. */
 .story-shape .ui-segmented { inline-size: 100%; }
 .story-shape .ui-segmented button { flex: 1 1 0; }
-.story-shape .ui-segmented button { min-block-size: 34px; }
+/* Exactly the select's height, not a minimum near it. `min-block-size: 34px`
+   on the buttons plus the strip's own padding and border came to 40 against
+   the trigger's 36, so the one control with a picture in it sat four pixels
+   taller and carried its caption four pixels higher than the two beside it. */
+.story-shape .ui-segmented button { min-block-size: 0; block-size: 100%; }
+/* Tighter than the default strip, because these buttons carry an icon *and* a
+   label. At the shared padding the three of them measured 190px inside a
+   167px column and spilled into the language field next to it. */
+.story-shape .ui-segmented button { gap: 4px; padding-inline: 6px; }
 .story-shape > label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 600; }
 .story-toggle { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: center; cursor: pointer; }
 .story-toggle input { grid-row: span 2; margin: 0; cursor: pointer; }
