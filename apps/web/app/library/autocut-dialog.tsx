@@ -398,6 +398,13 @@ export function AutoCutDialog({
     return () => clearTimeout(timer);
   }, [open, buildPreview, templateId, order.length]);
 
+  // Stop a preview still polling when the dialog closes. Bumping the sequence
+  // makes any in-flight build see itself superseded (stale) and bail, instead
+  // of polling /jobs for up to two minutes behind a dialog nobody has open.
+  useEffect(() => {
+    if (!open) previewSeq.current += 1;
+  }, [open]);
+
   const render = useCallback(async () => {
     if (!templateId) return;
     setRendering(true);
