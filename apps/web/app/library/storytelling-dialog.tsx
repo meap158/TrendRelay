@@ -1183,7 +1183,8 @@ export function StorytellingDialog({
                       widened && language ? `reads ${languageName(language)}` : voice.accents?.[0],
                       // Only ever seen in the last-resort case above, where an
                       // unusable voice is all there is; normally these are gone.
-                      usable(voice) ? "" : "— needs a paid plan",
+                      // No leading dash - the " · " separator already divides it.
+                      usable(voice) ? "" : "needs a paid plan",
                     ].filter(Boolean).join(" · ")}
                   </option>
                 ))}
