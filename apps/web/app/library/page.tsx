@@ -1494,23 +1494,35 @@ function LibraryContent() {
       the one asset being previewed - browsing and selecting are different jobs. */
   // Scoped to what is on screen, so an id left over from another filter can
   // never be acted on - and comes back if that filter is restored.
-  const selectionList = assets.filter((asset) => selection.has(asset.id));
+  // The selection derived once per assets/selection change, not on every
+  // render (the page re-renders on every 2.5s poll tick and keystroke). This
+  // also stabilises the array handed to the creation dialogs as their `assets`.
+  const selectionList = useMemo(
+    () => assets.filter((asset) => selection.has(asset.id)),
+    [assets, selection],
+  );
   const allLoadedSelected = assets.length > 0 && selectionList.length === assets.length;
   const deleteAction = bulkActions.find((action) => action.id === "delete");
   // Face blur used to be a separate bulk tool. It now lives in the same
   // stackable editor as every other effect; keeping both buttons would restore
   // the special tier this workflow removes.
   const visibleBulkActions = bulkActions.filter((action) => action.id !== "face_blur");
-  const selectionTargets: LibrarySelectionTarget[] = selectionList.map((asset) => ({
-    id: asset.id,
-    title: asset.title,
-    mediaKind: asset.media_kind,
-  }));
+  const selectionTargets: LibrarySelectionTarget[] = useMemo(
+    () => selectionList.map((asset) => ({
+      id: asset.id,
+      title: asset.title,
+      mediaKind: asset.media_kind,
+    })),
+    [selectionList],
+  );
   // AutoCut cuts photos and videos together; the button appears once the
   // selection holds enough visuals, and it hands the assets over in order so
   // the dialog can show and rearrange them on a timeline.
-  const selectedVisuals = selectionList.filter(
-    (asset) => asset.media_kind === "image" || asset.media_kind === "video",
+  const selectedVisuals = useMemo(
+    () => selectionList.filter(
+      (asset) => asset.media_kind === "image" || asset.media_kind === "video",
+    ),
+    [selectionList],
   );
   const selectionActionItems: ActionMenuItem[] = LIBRARY_SELECTION_ACTIONS.map((action) => {
     const state = selectionActionState(action, selectionTargets);
