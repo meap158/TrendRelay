@@ -4,7 +4,7 @@ import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderC
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
@@ -54,8 +54,11 @@ const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.Cap
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
 const CampaignPicker = dynamic(() => import("./campaign-picker").then((m) => m.CampaignPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
-const AutoCutDialog = dynamic(() => import("./autocut-dialog").then((m) => m.AutoCutDialog), { ssr: false });
-const StorytellingDialog = dynamic(() => import("./storytelling-dialog").then((m) => m.StorytellingDialog), { ssr: false });
+// Memoised: both are handed stable props (a memoised assets array, useCallback
+// handlers), so the library's 2.5s poll re-render does not reconcile the whole
+// dialog subtree while one is open. A prop that actually changes still re-renders.
+const AutoCutDialog = memo(dynamic(() => import("./autocut-dialog").then((m) => m.AutoCutDialog), { ssr: false }));
+const StorytellingDialog = memo(dynamic(() => import("./storytelling-dialog").then((m) => m.StorytellingDialog), { ssr: false }));
 /** AutoCut cuts pictures, so its minimum is a couple; a single image is not a
     montage. Matched to the API, which filters non-images out server-side. */
 const AUTOCUT_MIN_IMAGES = 2;
@@ -1318,6 +1321,21 @@ function LibraryContent() {
       .then((body) => { if (Array.isArray(body.items)) setCreationDrafts(body.items); })
       .catch(() => { /* the chip just shows nothing if the store cannot be read */ });
   }, [workspaceId, apiFetch]);
+  // Stable handlers for the creation dialogs, so their memoised components skip
+  // the library poll's re-renders. succeed/refreshCreationDrafts and the state
+  // setters are all stable, so these change identity only when they must.
+  const closeStorytelling = useCallback(() => {
+    setStorytellingOpen(false); setResumeDraft(null); refreshCreationDrafts();
+  }, [refreshCreationDrafts]);
+  const queuedStorytelling = useCallback((text: string) => {
+    succeed(text); refreshCreationDrafts();
+  }, [succeed, refreshCreationDrafts]);
+  const closeAutoCut = useCallback(() => {
+    setAutoCutOpen(false); setResumeDraft(null); refreshCreationDrafts();
+  }, [refreshCreationDrafts]);
+  const queuedAutoCut = useCallback((text: string) => {
+    succeed(text); setSelection(new Set()); refreshCreationDrafts();
+  }, [succeed, refreshCreationDrafts]);
   useEffect(() => {
     if (!workspaceId) return;
     let live = true;
@@ -2824,9 +2842,9 @@ function LibraryContent() {
           apiFetch={apiFetch}
           assets={selectedVisuals}
           initialDraftId={resumeDraft?.kind === "storytelling" ? resumeDraft.id : undefined}
-          onClose={() => { setStorytellingOpen(false); setResumeDraft(null); refreshCreationDrafts(); }}
-          onQueued={(text) => { succeed(text); refreshCreationDrafts(); }}
-          onError={(text) => fail(text)}
+          onClose={closeStorytelling}
+          onQueued={queuedStorytelling}
+          onError={fail}
         />
       )}
       {workspaceId && (
@@ -2836,9 +2854,9 @@ function LibraryContent() {
           apiFetch={apiFetch}
           assets={selectedVisuals}
           initialDraftId={resumeDraft?.kind === "autocut" ? resumeDraft.id : undefined}
-          onClose={() => { setAutoCutOpen(false); setResumeDraft(null); refreshCreationDrafts(); }}
-          onQueued={(text) => { succeed(text); setSelection(new Set()); refreshCreationDrafts(); }}
-          onError={(text) => fail(text)}
+          onClose={closeAutoCut}
+          onQueued={queuedAutoCut}
+          onError={fail}
         />
       )}
       {workspaceId && selected && (
