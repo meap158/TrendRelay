@@ -1033,17 +1033,14 @@ export function StorytellingDialog({
                         : !effectiveVoiceId ? "Choose a voice."
                           : `${lines.length} ${lines.length === 1 ? "sentence" : "sentences"} over ${picked.length} ${picked.length === 1 ? "picture" : "pictures"}.`}
           </span>
-          {savedDrafts.length > 0 && (
-            <Button variant="quiet" aria-expanded={draftsOpen} onClick={() => setDraftsOpen((v) => !v)}>
-              {draftsOpen ? "Hide saved" : `Saved · ${savedDrafts.length}`}
-            </Button>
-          )}
+          {/* Draft controls live in a body bar (below), not here: the footer
+              is for the decision - cancel, or make the video - and AutoCut
+              keeps its drafts in the body the same way. */}
           <Button
-            variant="secondary" busy={savingDraft}
-            disabled={savingDraft || (!body.trim() && !picked.length)}
-            onClick={() => void saveDraft()}
-          >{draftId ? "Update draft" : "Save draft"}</Button>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            variant="quiet"
+            disabled={busy || autoBusy !== ""}
+            onClick={onClose}
+          >Cancel</Button>
           {/* The one-step build: fill the pictures from stock and render, from
               the script alone. No pictures required - finding them is the point
               - but a voice still is, the same as any render. */}
@@ -1066,6 +1063,20 @@ export function StorytellingDialog({
       }
     >
       <div className="story-dialog">
+        {/* Save the story to continue later, and reopen a saved one - in the
+            body, so the footer stays the decision. Mirrors AutoCut's bar. */}
+        <div className="story-drafts-bar">
+          {savedDrafts.length > 0 && (
+            <Button variant="quiet" size="sm" aria-expanded={draftsOpen} onClick={() => setDraftsOpen((v) => !v)}>
+              {draftsOpen ? "Hide saved" : `Saved drafts · ${savedDrafts.length}`}
+            </Button>
+          )}
+          <Button
+            variant="secondary" size="sm" busy={savingDraft}
+            disabled={savingDraft || (!body.trim() && !picked.length)}
+            onClick={() => void saveDraft()}
+          >{draftId ? "Update draft" : "Save draft"}</Button>
+        </div>
         {draftsOpen && savedDrafts.length > 0 && (
           <div className="story-drafts-list" role="list" aria-label="Saved stories">
             {savedDrafts.map((saved) => (
