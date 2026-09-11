@@ -708,7 +708,7 @@ function DouyinMark() {
   );
 }
 
-function Thumbnail({
+const Thumbnail = memo(function Thumbnail({
   asset,
   workspaceId,
   apiFetch,
@@ -787,7 +787,30 @@ function Thumbnail({
       )}
     </div>
   );
-}
+}, (a, b) => {
+  // Re-render only when something the tile actually draws changes - not on
+  // every 2.5s poll that hands back a fresh but identical asset object. The
+  // asset is compared by value and the media-activity by the exact fields it
+  // renders, so a processing badge can never be left stale.
+  if (a.workspaceId !== b.workspaceId || a.apiFetch !== b.apiFetch) return false;
+  const x = a.asset, y = b.asset;
+  if (
+    x.id !== y.id
+    || x.title !== y.title
+    || x.media_kind !== y.media_kind
+    || x.duration_ms !== y.duration_ms
+    || x.versions.length !== y.versions.length
+    || !x.versions.every((version, index) => version.kind === y.versions[index]?.kind)
+  ) return false;
+  const p = a.mediaActivity ?? null;
+  const q = b.mediaActivity ?? null;
+  if (p === q) return true;          // both absent
+  if (!p || !q) return false;        // one gained/lost an activity
+  return p.label === q.label
+    && p.detail === q.detail
+    && p.progress === q.progress
+    && p.stalled === q.stalled;
+});
 
 function previewBlob(contentBase64: string, mimeType: string): Blob {
   const binary = window.atob(contentBase64);
