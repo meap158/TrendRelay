@@ -332,9 +332,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // branches below - loopback, desktop bridge, Supabase - get the path
       // each of them expects.
       const path = apiPath(target);
+      const hasCustomBody =
+        (typeof FormData !== "undefined" && init.body instanceof FormData) ||
+        (typeof Blob !== "undefined" && init.body instanceof Blob) ||
+        (typeof ArrayBuffer !== "undefined" && init.body instanceof ArrayBuffer);
       if (localUser) {
         const headers = new Headers(init.headers);
-        if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+        if (init.body && !hasCustomBody && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
         return fetch(`${apiBaseUrl()}${path}`, { ...init, headers, cache: "no-store" });
       }
       const bridge = window.trendrelayDesktop;
@@ -357,7 +361,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error || !data.session) throw new Error("Sign in to continue.");
       const headers = new Headers(init.headers);
       headers.set("Authorization", `Bearer ${data.session.access_token}`);
-      if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+      if (init.body && !hasCustomBody && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
       return fetch(`${apiBaseUrl()}${path}`, { ...init, headers, cache: "no-store" });
     },
     [client, localUser],

@@ -15,7 +15,7 @@ TrendRelay is a local-first Windows workspace. Discover consolidates topics, pos
 - **Resume interrupted work** after session expiry, provider errors, or an application restart.
 - **Keep source provenance** so every Library item can lead back to the Douyin URL that produced it.
 - **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
-- **Review media locally** using thumbnails, filters, gallery/list views, an in-page player, and **Import a local file**.
+- **Review media locally** using thumbnails, filters, gallery/list views, an in-page player, and **Import media** (drag-and-drop upload, file/folder picker, or local path batch import).
 - **Transcribe and translate locally** with faster-whisper speech drafts and Argos caption language packs; machine text stays separate until it is reviewed.
 - **Generate governed voiceovers** from reviewed transcripts with optional ElevenLabs setup, live free/paid allowance, regional voice search, current models, and per-take voice controls before a metered job is queued.
 - **Apply non-destructive effects and clip ranges** to one item or a campaign-sized selection while keeping every original immutable.
@@ -45,7 +45,7 @@ Provider-heavy boards mount only when their view is open. Optional keys (YouTube
 2. Choose the download options. Profiles default to **Published posts / all videos**.
 3. Start the batch and follow the live counts. Completed batches link through to Library, campaign planning, and Publish.
 4. Use **Connect Douyin** the first time, and **Refresh session** if Douyin interrupts a long run, then resume the same link.
-5. Open **Library** to search, filter, preview, import a local file, and revisit the original source.
+5. Open **Library** to search, filter, preview, import local media (single or batch), and revisit the original source.
 
 ![TrendRelay Library showing downloaded video thumbnails and preview](docs/assets/trendrelay-library.png)
 

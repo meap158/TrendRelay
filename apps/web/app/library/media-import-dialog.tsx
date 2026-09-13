@@ -160,10 +160,20 @@ export function MediaImportDialog({
     let errorCount = 0;
 
     for (let i = 0; i < stagedFiles.length; i++) {
-      setUploadIndex(i + 1);
       const item = stagedFiles[i];
+      // Skip files already successfully queued or stored
+      if (item.status === "queued") {
+        queuedCount++;
+        continue;
+      }
+      if (item.status === "duplicate") {
+        duplicateCount++;
+        continue;
+      }
+
+      setUploadIndex(i + 1);
       setStagedFiles((prev) =>
-        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" } : f)),
+        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading", error: undefined } : f)),
       );
 
       try {
@@ -179,7 +189,17 @@ export function MediaImportDialog({
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail || `Upload failed (${res.status})`);
+          let errorMsg = `Upload failed (${res.status})`;
+          if (typeof body.detail === "string") {
+            errorMsg = body.detail;
+          } else if (Array.isArray(body.detail)) {
+            errorMsg = body.detail
+              .map((d: Record<string, unknown>) => (typeof d === "object" && d ? String(d.msg || d.detail || JSON.stringify(d)) : String(d)))
+              .join("; ");
+          } else if (body.detail && typeof body.detail === "object") {
+            errorMsg = JSON.stringify(body.detail);
+          }
+          throw new Error(errorMsg);
         }
 
         const data = await res.json();
@@ -314,6 +334,8 @@ export function MediaImportDialog({
               <ActionIcon name="add" />
               {isProcessing
                 ? `Importing (${uploadIndex}/${stagedFiles.length})…`
+                : stagedFiles.some((f) => f.status === "error")
+                ? `Retry ${stagedFiles.filter((f) => f.status !== "queued" && f.status !== "duplicate").length} ${stagedFiles.filter((f) => f.status !== "queued" && f.status !== "duplicate").length === 1 ? "file" : "files"}`
                 : stagedFiles.length
                 ? `Import ${stagedFiles.length} ${stagedFiles.length === 1 ? "file" : "files"}`
                 : "Select files to import"}
@@ -384,7 +406,7 @@ export function MediaImportDialog({
           <div className="library-import-upload-pane">
             {/* Drag and Drop Zone */}
             <div
-              className={`library-dropzone ${isDragging ? "dragging" : ""}`}
+              className={`library-dropzone ${isDragging ? "dropzone-dragging" : ""}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}

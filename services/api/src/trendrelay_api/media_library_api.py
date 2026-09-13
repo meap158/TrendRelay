@@ -31,7 +31,12 @@ from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api import bulk_actions
-from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
+from trendrelay_api.auth import (
+    CurrentUser,
+    client_is_local_operator,
+    current_user,
+    require_governed_assurance,
+)
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.integrations import openverse_music
@@ -649,7 +654,7 @@ async def upload_import_asset(
     confirm_external_action: Annotated[bool, Form()] = True,
 ) -> dict[str, Any]:
     host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "testclient"}:
+    if host not in {"127.0.0.1", "::1", "testclient"} and not client_is_local_operator(host):
         raise HTTPException(status_code=403, detail="Local media import is loopback-only.")
     require_role(
         membership(session, workspace_id, user.id),
@@ -706,6 +711,10 @@ async def upload_import_asset(
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
+    if bool(job.get("duplicate")):
+        with suppress(OSError):
+            candidate.unlink(missing_ok=True)
+
     audit(
         session,
         request,
@@ -728,7 +737,7 @@ def batch_import_assets(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "testclient"}:
+    if host not in {"127.0.0.1", "::1", "testclient"} and not client_is_local_operator(host):
         raise HTTPException(status_code=403, detail="Local media import is loopback-only.")
     require_role(
         membership(session, workspace_id, user.id),
