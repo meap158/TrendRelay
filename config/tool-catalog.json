@@ -470,6 +470,35 @@
       "runs": "local"
     },
     {
+      "id": "editly",
+      "name": "editly",
+      "repository": "https://github.com/mifi/editly",
+      "revision": "v0.14.2",
+      "version": "0.14.2",
+      "license": "MIT",
+      "license_url": "https://github.com/mifi/editly/blob/master/LICENSE",
+      "category": "Video editing",
+      "summary": "Declarative Node.js video editor: Ken Burns on stills, GL shader transitions, text layers and audio mixing. Studied as a reference for Storytelling and AutoCut rendering rather than adopted; the techniques worth having are reachable in the renderer's own ffmpeg.",
+      "capabilities": [
+        "Ken Burns zoom and pan on stills",
+        "Eased GL shader transitions",
+        "Audio crossfades with curves",
+        "Multi-track audio mixing and normalisation"
+      ],
+      "integration_status": "evaluated-not-adapted",
+      "commercial_use": "allowed",
+      "install_strategy": "source-checkout",
+      "install_allowed": false,
+      "activation_allowed": false,
+      "default_active": false,
+      "root_path": ".tools/catalog/editly",
+      "source_path": ".tools/catalog/editly/source",
+      "block_reason": "Kept as a reference, not installed. Its rendering needs native builds (headless-gl and canvas) that fail on this machine, it has had no stable release since 2022, and Storytelling already renders through one ffmpeg path that a second renderer would fork. Docs lists the techniques worth porting.",
+      "documentation": "docs/third-party/editly.md",
+      "surface": "library",
+      "runs": "local"
+    },
+    {
       "id": "insightface",
       "name": "InsightFace",
       "repository": "https://github.com/deepinsight/insightface",
