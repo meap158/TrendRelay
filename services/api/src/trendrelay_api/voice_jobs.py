@@ -173,26 +173,36 @@ def queue(
             allow_draft=bool(request.get("allow_draft", False)),
         )
 
+    from trendrelay_api.integrations import microsoft_tts
+
     configured = elevenlabs.defaults()
     voice_id = str(request.get("voice_id") or configured.get("voice_id") or "").strip()
     if not voice_id:
         raise ValueError("Choose a voice before generating.")
-    model_id = str(request.get("model_id") or configured["model_id"])
 
-    # Looked up whichever way the model was arrived at. This used to run only
-    # when the request named one, so falling back to the configured default
-    # left the model unknown - and an unknown model means no per-request
-    # character ceiling and a cost multiplier silently treated as 1. The
-    # guards were switched off by the ordinary case rather than the odd one.
-    selected_model = next(
-        (item for item in elevenlabs.models() if item["model_id"] == model_id), None
-    )
-    if selected_model is None and request.get("model_id"):
-        raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
+    is_ms = microsoft_tts.is_microsoft(voice_id)
+    if is_ms:
+        if not microsoft_tts.available():
+            raise ValueError("Microsoft Text-to-Speech is not available.")
+        model_id = str(request.get("model_id") or "microsoft-edge")
+        cost = 0
+    else:
+        model_id = str(request.get("model_id") or configured["model_id"])
 
-    # Before the job exists, so a refusal is a sentence with a number in it
-    # rather than a failed row somebody finds later.
-    cost = elevenlabs.check_allowance(script, model=selected_model)
+        # Looked up whichever way the model was arrived at. This used to run only
+        # when the request named one, so falling back to the configured default
+        # left the model unknown - and an unknown model means no per-request
+        # character ceiling and a cost multiplier silently treated as 1. The
+        # guards were switched off by the ordinary case rather than the odd one.
+        selected_model = next(
+            (item for item in elevenlabs.models() if item["model_id"] == model_id), None
+        )
+        if selected_model is None and request.get("model_id"):
+            raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
+
+        # Before the job exists, so a refusal is a sentence with a number in it
+        # rather than a failed row somebody finds later.
+        cost = elevenlabs.check_allowance(script, model=selected_model)
 
     voice_settings = request.get("voice_settings") or configured["voice_settings"]
     language_code = request.get("language_code") or configured.get("language_code") or language
@@ -244,7 +254,19 @@ def run_voice_job(
     factory = factory or JOB_SESSION_FACTORY
     claimed = claim_job(job_id, worker_id, lease_seconds=900, factory=factory)
     payload = dict(claimed["payload"])
-    speak = generate or elevenlabs.synthesise
+    voice_id = payload.get("voice_id", "")
+    from trendrelay_api.integrations import microsoft_tts
+
+    if generate:
+        speak = generate
+    elif microsoft_tts.is_microsoft(voice_id):
+        def _speak_ms(text: str, **_kwargs: Any) -> bytes:
+            audio, _ = microsoft_tts.synthesise(text, voice_id=voice_id)
+            return audio
+
+        speak = _speak_ms
+    else:
+        speak = elevenlabs.synthesise
     try:
         report_progress(job_id, 0.1, "Generating speech", factory=factory)
         audio = speak(
@@ -255,14 +277,17 @@ def run_voice_job(
             voice_settings=payload.get("voice_settings"),
         )
         if not audio:
-            raise RuntimeError("ElevenLabs returned no audio.")
+            service = "Microsoft TTS" if microsoft_tts.is_microsoft(voice_id) else "ElevenLabs"
+            raise RuntimeError(f"{service} returned no audio.")
 
         report_progress(job_id, 0.8, "Filing the voiceover", factory=factory)
         destination = VOICE_ROOT / payload["workspace_id"]
         destination.mkdir(parents=True, exist_ok=True)
         # Named for the voice as well as the asset, so two takes of the same
         # clip sit beside each other and read as what they are.
-        path = destination / f"{payload['asset_id']}.{payload['voice_id']}.mp3"
+        # Safe on Windows: colons in voice_ids (e.g. microsoft:...) are replaced.
+        safe_voice_id = payload["voice_id"].replace(":", "_")
+        path = destination / f"{payload['asset_id']}.{safe_voice_id}.mp3"
         path.write_bytes(audio)
         version_id = _record_version(
             payload["workspace_id"], payload["asset_id"], path, factory=factory
@@ -284,7 +309,7 @@ def run_voice_job(
                     "The speech was generated and filed, but the original clip "
                     "could not be found to put it on."
                 )
-            output = destination / f"{payload['asset_id']}.{payload['voice_id']}.mp4"
+            output = destination / f"{payload['asset_id']}.{safe_voice_id}.mp4"
             mux(source, path, output)
             voiced_path = str(output)
             voiced_id = _record_version(

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { isExternal } from "../../lib/elevenlabs-voices";
 import { useT } from "../i18n-provider";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -152,8 +153,9 @@ export function BulkVoiceEditor({
       { value: "both" as const, label: t("library.voiceDeliveryBoth") },
     ] : []),
   ];
-  const overAllowance = data?.remaining != null && characters > data.remaining;
-  const unavailable = data && (!data.configured || !data.reachable);
+  const isMicrosoft = isExternal(voiceId);
+  const overAllowance = !isMicrosoft && data?.remaining != null && characters > data.remaining;
+  const unavailable = !isMicrosoft && data && (!data.configured || !data.reachable);
 
   async function generate() {
     setQueueing(true);
@@ -176,6 +178,7 @@ export function BulkVoiceEditor({
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 voice_id: voiceId,
+                model_id: isMicrosoft ? "microsoft-edge" : undefined,
                 deliver,
                 transcript_id: active!.id,
                 allow_draft: allowDrafts,
@@ -283,12 +286,14 @@ export function BulkVoiceEditor({
           {!allVideo && <small>{t("library.voiceBatchAudioOnly")}</small>}
         </div>
         <p className={`voice-cost${overAllowance ? " problem" : ""}`}>
-          <strong>{data.remaining != null
-            ? t("library.voiceAllowance", {
-                characters: characters.toLocaleString(),
-                remaining: data.remaining.toLocaleString(),
-              })
-            : characters.toLocaleString()}</strong>
+          <strong>{isMicrosoft
+            ? `${characters.toLocaleString()} characters · Included (Microsoft Edge TTS)`
+            : data.remaining != null
+              ? t("library.voiceAllowance", {
+                  characters: characters.toLocaleString(),
+                  remaining: data.remaining.toLocaleString(),
+                })
+              : characters.toLocaleString()}</strong>
         </p>
       </>}
     </Dialog>

@@ -4131,10 +4131,10 @@ class VoicePreviewRequest(BaseModel):
     """A short, explicitly requested, metered audition of the current controls."""
 
     voice_id: str = Field(min_length=1, max_length=64)
-    model_id: str = Field(min_length=1, max_length=64)
+    model_id: str | None = Field(default=None, max_length=64)
     text: str = Field(min_length=1, max_length=300)
     language_code: str | None = Field(default=None, max_length=16)
-    voice_settings: VoiceSettings
+    voice_settings: VoiceSettings | None = None
 
 
 @router.post("/voice/preview")
@@ -4151,11 +4151,29 @@ def preview_voice(
     The 300-character cap keeps an audition an audition and bounds its charge.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "analyst"})
-    from trendrelay_api.integrations import elevenlabs
+    from trendrelay_api.integrations import elevenlabs, microsoft_tts
+
+    if microsoft_tts.is_microsoft(body.voice_id):
+        if not microsoft_tts.available():
+            raise HTTPException(
+                status_code=409, detail="Microsoft Text-to-Speech is not available."
+            )
+        try:
+            audio, _ = microsoft_tts.synthesise(body.text, voice_id=body.voice_id)
+        except microsoft_tts.MicrosoftVoiceUnavailable as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {
+            "mime_type": "audio/mpeg",
+            "content_base64": base64.b64encode(audio).decode("ascii"),
+            "characters": 0,
+        }
 
     try:
+        model_id = body.model_id or str(elevenlabs.defaults().get("model_id") or "")
         selected_model = next(
-            (item for item in elevenlabs.models() if item["model_id"] == body.model_id), None
+            (item for item in elevenlabs.models() if item["model_id"] == model_id), None
         )
         if selected_model is None:
             raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
@@ -4163,9 +4181,9 @@ def preview_voice(
         audio = elevenlabs.synthesise(
             body.text,
             voice_id=body.voice_id,
-            model_id=body.model_id,
+            model_id=model_id,
             language_code=body.language_code,
-            voice_settings=body.voice_settings.model_dump(),
+            voice_settings=body.voice_settings.model_dump() if body.voice_settings else None,
         )
     except elevenlabs.AllowanceExceeded as error:
         raise HTTPException(status_code=402, detail=str(error)) from error
@@ -4202,6 +4220,7 @@ def generate_voiceover(
     )
     item = _asset_record(session, workspace_id, asset_id)
     from trendrelay_api.integrations.elevenlabs import AllowanceExceeded, ElevenLabsUnavailable
+    from trendrelay_api.integrations.microsoft_tts import MicrosoftVoiceUnavailable
     from trendrelay_api.voice_jobs import queue as queue_voice
 
     try:
@@ -4213,9 +4232,9 @@ def generate_voiceover(
         )
     except AllowanceExceeded as error:
         # Its own status: this is not a malformed request and not a broken
-        # service. There is simply not enough allowance left to pay for it.
+        # service. There is practical limit: not enough allowance left to pay for it.
         raise HTTPException(status_code=402, detail=str(error)) from error
-    except ElevenLabsUnavailable as error:
+    except (ElevenLabsUnavailable, MicrosoftVoiceUnavailable) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

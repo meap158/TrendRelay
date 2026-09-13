@@ -2,7 +2,40 @@
 
 Last updated: 2026-09-14
 
-## Feature: Media Tag Category Coloring by Class, 2026-09-14
+## Fix: Microsoft TTS vs ElevenLabs Voice ID Mismatch (`microsoft:...`), 2026-09-14
+
+- **Context & Request**:
+  - Runtime HTTP 400 error from ElevenLabs API:
+    `ElevenLabs answered HTTP 400. {"detail":{"type":"invalid_request","code":"bad_request","message":"An invalid ID has been received: 'microsoft:vi-VN-NamMinhNeural'. Make sure to provide a correct one.","status":"invalid_uid","request_id":"..."}}`
+  - User asked if there was a mismatch between ElevenLabs and Microsoft TTS when using Vietnamese neural voice `microsoft:vi-VN-NamMinhNeural`.
+- **Root Cause**:
+  1. The voice catalog merges ElevenLabs voices and Microsoft Edge TTS voices (prefixed with `microsoft:`, e.g. `microsoft:vi-VN-NamMinhNeural`).
+  2. While `storytelling/jobs.py` dispatched Microsoft voices to `microsoft_tts.synthesise`, the single/bulk voiceover pipeline (`run_voice_job` in `voice_jobs.py`), the queueing logic (`queue_voice_job`), and the voice audition endpoint (`POST /voice/preview` in `media_library_api.py`) assumed all voices were ElevenLabs voices and sent the voice ID to `https://api.elevenlabs.io/v1/text-to-speech/{voice_id}`.
+  3. Windows filename collision: `run_voice_job` saved audio as `{asset_id}.{voice_id}.mp3`, which on Windows attempted to write a file containing a colon (`:`), failing on Windows filesystems.
+  4. In frontend dialogs (`voice-editor.tsx` and `bulk-voice-editor.tsx`), selecting a Microsoft voice checked ElevenLabs character balances (`tooLong`, `overAllowance`) and expected ElevenLabs model selections.
+- **Changes**:
+  - `services/api/src/trendrelay_api/integrations/elevenlabs.py`:
+    - `synthesise` and `synthesise_with_timings` now check `microsoft_tts.is_microsoft(voice_id)` and delegate to `microsoft_tts.synthesise`, providing defensive routing against any caller passing Microsoft voice IDs to ElevenLabs.
+  - `services/api/src/trendrelay_api/integrations/microsoft_tts.py`:
+    - `short_name`: safely strips `PREFIX` only if present.
+  - `services/api/src/trendrelay_api/voice_jobs.py`:
+    - `queue_voice_job`: checks `is_microsoft(voice_id)`; bypasses ElevenLabs model validation and character allowance checks; sets `cost = 0` and `model_id = "microsoft-edge"`.
+    - `run_voice_job`: generates audio via `microsoft_tts.synthesise` when `is_microsoft(voice_id)` is True; replaces colons in filenames (`safe_voice_id = payload["voice_id"].replace(":", "_")`) for Windows compatibility.
+  - `services/api/src/trendrelay_api/media_library_api.py`:
+    - `VoicePreviewRequest`: makes `model_id` and `voice_settings` optional for Microsoft voices.
+    - `preview_voice`: generates preview audio via `microsoft_tts.synthesise` returning `characters: 0`.
+    - `generate_voiceover`: catches `MicrosoftVoiceUnavailable` alongside `ElevenLabsUnavailable`.
+  - `apps/web/app/library/voice-editor.tsx` & `apps/web/app/library/bulk-voice-editor.tsx`:
+    - Check `isExternal(voiceId)` to identify Microsoft Edge TTS voices.
+    - Omit ElevenLabs character balance checks (`tooLong`, `overAllowance`, `unavailable`).
+    - Display clear badges/notes that Microsoft Edge TTS is free and included (0 credits billed).
+    - Supply `model_id: "microsoft-edge"` when generating or previewing.
+  - Tests:
+    - Added unit tests in `test_voice_jobs.py`, `test_elevenlabs.py`, and `test_media_transcription_api.py`.
+- **Verification**:
+  - Pytest: 132/132 voice and media library tests passed.
+  - Typecheck: `npx tsc --noEmit` passed with 0 errors.
+  - Web unit tests: `npm test` 504/504 tests passed.
 
 - **Context & Request**:
   - Tags on media cards and the detail pane (e.g., `Cover text`, `Transcript draft`, `On-screen text draft`) were previously all rendered with the same blue color (`#1a56c4` on `var(--link-bg)`).

@@ -104,7 +104,8 @@ def is_microsoft(voice_id: str) -> bool:
 
 def short_name(voice_id: str) -> str:
     """The service's own name for a voice, from our prefixed id."""
-    return str(voice_id or "")[len(PREFIX):]
+    raw = str(voice_id or "")
+    return raw[len(PREFIX):] if raw.startswith(PREFIX) else raw
 
 
 def _language_of(locale: str) -> str:

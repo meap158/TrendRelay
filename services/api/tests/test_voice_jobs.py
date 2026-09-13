@@ -572,3 +572,36 @@ def test_the_default_model_is_costed_and_bounded_like_a_chosen_one(monkeypatch) 
 
     assert seen["model"] is not None, "the default model was costed as though unknown"
     assert seen["model"]["model_id"] == "eleven_multilingual_v2"
+
+
+def test_microsoft_voice_queues_with_zero_cost_and_no_elevenlabs_model() -> None:
+    item = asset()
+    job = queue(item, voice_id="microsoft:vi-VN-NamMinhNeural")
+
+    assert job["payload"]["voice_id"] == "microsoft:vi-VN-NamMinhNeural"
+    assert job["payload"]["model_id"] == "microsoft-edge"
+    assert job["payload"]["characters"] == 0
+
+
+def test_microsoft_voice_runs_and_sanitizes_filename(monkeypatch) -> None:
+    from trendrelay_api.integrations import microsoft_tts
+
+    monkeypatch.setattr(
+        microsoft_tts,
+        "synthesise",
+        lambda text, voice_id: (b"ID3fake-ms-audio", [(0.0, 1.0, "The")]),
+    )
+
+    item = asset()
+    job = queue(item, voice_id="microsoft:vi-VN-NamMinhNeural")
+    done = voice_jobs.run_voice_job(job["id"], factory=TestingSession)
+
+    assert done["status"] == "succeeded"
+    assert done["result"]["characters"] == 0
+
+    # Ensure no illegal colon characters were written to the filesystem on Windows
+    filed_files = list(voice_jobs.VOICE_ROOT.rglob("*.mp3"))
+    assert len(filed_files) >= 1
+    for f in filed_files:
+        assert ":" not in f.name
+        assert "microsoft_vi-VN-NamMinhNeural" in f.name

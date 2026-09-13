@@ -683,6 +683,12 @@ def synthesise_with_timings(
     allowance. The timings come back in the same response rather than costing
     anything more.
     """
+    from trendrelay_api.integrations import microsoft_tts
+
+    if microsoft_tts.is_microsoft(voice_id):
+        audio, spans = microsoft_tts.synthesise(text, voice_id=voice_id)
+        return audio, {"spans": spans}
+
     key = api_key()
     if not key:
         raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
@@ -774,6 +780,12 @@ def synthesise(
     rather than here, where it would be a second call on every generation and a
     surprise at the end of a queue.
     """
+    from trendrelay_api.integrations import microsoft_tts
+
+    if microsoft_tts.is_microsoft(voice_id):
+        audio, _ = microsoft_tts.synthesise(text, voice_id=voice_id)
+        return audio
+
     key = api_key()
     if not key:
         raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")

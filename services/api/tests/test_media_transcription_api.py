@@ -532,6 +532,40 @@ def test_voice_preview_is_short_metered_and_returned_as_authenticated_json(
     assert seen["voice_settings"]["speed"] == 1.05
 
 
+def test_microsoft_voice_preview_generates_free_audio(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.integrations import microsoft_tts
+
+    workspace_id, _ = workspace_with_asset(tmp_path, monkeypatch)
+    seen: dict[str, Any] = {}
+
+    def mock_synthesise(text, voice_id):
+        seen["text"] = text
+        seen["voice_id"] = voice_id
+        return b"ID3-ms-preview", [(0.0, 1.0, "Xin")]
+
+    monkeypatch.setattr(microsoft_tts, "available", lambda: True)
+    monkeypatch.setattr(microsoft_tts, "synthesise", mock_synthesise)
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/voice/preview",
+            json={
+                "voice_id": "microsoft:vi-VN-NamMinhNeural",
+                "text": "Xin chào",
+            },
+        )
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["mime_type"] == "audio/mpeg"
+    assert payload["characters"] == 0
+    assert payload["content_base64"] == "SUQzLW1zLXByZXZpZXc="
+    assert seen["voice_id"] == "microsoft:vi-VN-NamMinhNeural"
+    assert seen["text"] == "Xin chào"
+
+
 def test_a_reviewed_transcript_is_not_replaced_by_a_machine_one(tmp_path, monkeypatch) -> None:
     """Both are kept. The reviewed one is the answer; the draft is a candidate."""
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)

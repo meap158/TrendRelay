@@ -972,3 +972,32 @@ def test_a_free_voice_is_offered_even_when_elevenlabs_cannot_be_reached(monkeypa
         {"voice_id": "microsoft:x", "name": "X", "languages": ["vi"], "from_library": False},
     ])
     assert len(elevenlabs.voice_catalog()["voices"]) == 1
+
+
+def test_synthesise_delegates_to_microsoft_tts_for_microsoft_voice(monkeypatch) -> None:
+    from trendrelay_api.integrations import microsoft_tts
+
+    monkeypatch.setattr(
+        microsoft_tts,
+        "synthesise",
+        lambda text, voice_id: (b"ms-audio-bytes", [(0.0, 1.0, "hello")]),
+    )
+
+    audio = elevenlabs.synthesise("Xin chao", voice_id="microsoft:vi-VN-NamMinhNeural")
+    assert audio == b"ms-audio-bytes"
+
+
+def test_synthesise_with_timings_delegates_to_microsoft_tts_for_microsoft_voice(monkeypatch) -> None:
+    from trendrelay_api.integrations import microsoft_tts
+
+    monkeypatch.setattr(
+        microsoft_tts,
+        "synthesise",
+        lambda text, voice_id: (b"ms-audio-bytes", [(0.0, 1.0, "hello")]),
+    )
+
+    audio, alignment = elevenlabs.synthesise_with_timings(
+        "Xin chao", voice_id="microsoft:vi-VN-NamMinhNeural"
+    )
+    assert audio == b"ms-audio-bytes"
+    assert alignment == {"spans": [(0.0, 1.0, "hello")]}

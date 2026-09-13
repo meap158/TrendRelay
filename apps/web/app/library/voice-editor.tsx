@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { offerVoices } from "../../lib/elevenlabs-voices";
+import { isExternal, offerVoices } from "../../lib/elevenlabs-voices";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -426,6 +426,7 @@ export function VoiceEditor({
   const characters = scripts.reduce((sum, text) => sum + billable(text), 0);
   const largestScript = scripts.reduce((largest, text) => Math.max(largest, billable(text)), 0);
   const selectedVoice = voices.find((voice) => voice.voice_id === voiceId) ?? null;
+  const isMicrosoft = isExternal(voiceId);
   const selectedModel = models.find((model) => model.model_id === modelId) ?? null;
   /**
    * The transcript's language, and whether the chosen model can say it.
@@ -502,10 +503,10 @@ export function VoiceEditor({
   const effectiveRequestLimit = requestLimit ?? selectedModel?.maximum_text_length ?? null;
   // Known and short is the only state worth blocking on. An unknown allowance
   // must not read as an empty account: a flaky status call is not a refusal.
-  const tooLong = remaining !== null && estimatedCredits > remaining;
-  const exceedsRequest = effectiveRequestLimit !== null
+  const tooLong = !isMicrosoft && remaining !== null && estimatedCredits > remaining;
+  const exceedsRequest = !isMicrosoft && effectiveRequestLimit !== null
     && effectiveRequestLimit !== undefined && largestScript > effectiveRequestLimit;
-  const ready = Boolean(voiceId) && Boolean(modelId) && characters > 0
+  const ready = Boolean(voiceId) && (isMicrosoft || Boolean(modelId)) && characters > 0
     && !tooLong && !exceedsRequest && canEdit;
 
   async function generate() {
@@ -528,7 +529,7 @@ export function VoiceEditor({
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 voice_id: voiceId,
-                model_id: modelId,
+                model_id: isMicrosoft ? "microsoft-edge" : modelId,
                 ...(languageCode ? { language_code: languageCode } : {}),
                 voice_settings: voiceSettings,
                 deliver,
@@ -591,7 +592,7 @@ export function VoiceEditor({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             voice_id: voiceId,
-            model_id: modelId,
+            model_id: isMicrosoft ? "microsoft-edge" : modelId,
             text: previewText,
             ...(languageCode ? { language_code: languageCode } : {}),
             voice_settings: voiceSettings,
@@ -738,51 +739,63 @@ export function VoiceEditor({
             {selectedVoice?.description && <small>{selectedVoice.description}</small>}
           </div>
 
-          <div className="voice-filter-grid">
-            <label className="voice-field">
-              <span>Model</span>
-              <Select value={modelId} onChange={(event) => {
-                const next = event.target.value;
-                setModelId(next);
-                const supported = models.find((model) => model.model_id === next)?.languages ?? [];
-                if (languageCode && !supported.some((item) => item.language_id === languageCode)) {
-                  setLanguageCode("");
-                }
-              }}>
-                {models.length === 0 && <option value="">No TTS models available</option>}
-                {models.map((model) => (
-                  <option key={model.model_id} value={model.model_id}>{model.name}</option>
-                ))}
-              </Select>
-              {selectedModel?.description && <small>{selectedModel.description}</small>}
-            </label>
-            <label className="voice-field">
-              <span>Spoken language</span>
-              <Select value={languageCode} onChange={(event) => setLanguageCode(event.target.value)}>
-                <option value="">Detect from text</option>
-                {(selectedModel?.languages ?? []).map((language) => (
-                  <option key={language.language_id} value={language.language_id}>
-                    {language.name} · {language.language_id}
-                  </option>
-                ))}
-              </Select>
-              <small>Restricts normalization where the selected model supports it.</small>
-              {/* Said here because the select cannot: a language the model
-                  does not speak is simply absent from it, which reads as the
-                  product not supporting the language at all. */}
-              {!modelSpeaksScript && (
-                <small className="voice-language-gap">
-                  {modelsThatSpeakScript.length
-                    ? `${selectedModel?.name ?? "This model"} does not speak `
-                      + `${transcript?.language}. These do: `
-                      + `${modelsThatSpeakScript.map((model) => model.name).join(", ")}.`
-                    : `No model on this key speaks ${transcript?.language}. `
-                      + "Leave the language on “Detect from text”, or type a script "
-                      + "in a language one of them speaks."}
+          {isMicrosoft ? (
+            <div className="voice-field">
+              <span>Voice engine</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
+                <Badge tone="good">Microsoft Edge TTS</Badge>
+                <small style={{ color: "var(--muted)" }}>
+                  Neural voice · Free &amp; included (no ElevenLabs character allowance used)
                 </small>
-              )}
-            </label>
-          </div>
+              </div>
+            </div>
+          ) : (
+            <div className="voice-filter-grid">
+              <label className="voice-field">
+                <span>Model</span>
+                <Select value={modelId} onChange={(event) => {
+                  const next = event.target.value;
+                  setModelId(next);
+                  const supported = models.find((model) => model.model_id === next)?.languages ?? [];
+                  if (languageCode && !supported.some((item) => item.language_id === languageCode)) {
+                    setLanguageCode("");
+                  }
+                }}>
+                  {models.length === 0 && <option value="">No TTS models available</option>}
+                  {models.map((model) => (
+                    <option key={model.model_id} value={model.model_id}>{model.name}</option>
+                  ))}
+                </Select>
+                {selectedModel?.description && <small>{selectedModel.description}</small>}
+              </label>
+              <label className="voice-field">
+                <span>Spoken language</span>
+                <Select value={languageCode} onChange={(event) => setLanguageCode(event.target.value)}>
+                  <option value="">Detect from text</option>
+                  {(selectedModel?.languages ?? []).map((language) => (
+                    <option key={language.language_id} value={language.language_id}>
+                      {language.name} · {language.language_id}
+                    </option>
+                  ))}
+                </Select>
+                <small>Restricts normalization where the selected model supports it.</small>
+                {/* Said here because the select cannot: a language the model
+                    does not speak is simply absent from it, which reads as the
+                    product not supporting the language at all. */}
+                {!modelSpeaksScript && (
+                  <small className="voice-language-gap">
+                    {modelsThatSpeakScript.length
+                      ? `${selectedModel?.name ?? "This model"} does not speak `
+                        + `${transcript?.language}. These do: `
+                        + `${modelsThatSpeakScript.map((model) => model.name).join(", ")}.`
+                      : `No model on this key speaks ${transcript?.language}. `
+                        + "Leave the language on “Detect from text”, or type a script "
+                        + "in a language one of them speaks."}
+                  </small>
+                )}
+              </label>
+            </div>
+          )}
 
           {/* Which reading is spoken. Shown only when there is a choice: a
               clip read once has nothing to pick, and the control would be a
@@ -918,11 +931,13 @@ export function VoiceEditor({
             <Button
               variant="secondary"
               busy={previewing}
-              disabled={!voiceId || !modelId || previewing || !canEdit}
+              disabled={!voiceId || (!isMicrosoft && !modelId) || previewing || !canEdit}
               onClick={() => void previewVoice()}
             >Preview voice</Button>
             <span>
-              Uses up to 300 characters from this script with the selected model and controls.
+              {isMicrosoft
+                ? "Generates a free preview using Microsoft Edge Neural Voice."
+                : "Uses up to 300 characters from this script with the selected model and controls."}
             </span>
             {previewUrl && (
               <audio controls autoPlay preload="metadata" src={previewUrl}>
@@ -934,27 +949,34 @@ export function VoiceEditor({
           {/* The cost, beside what is left to spend. This is the whole reason
               the refusal lives at the queue rather than in the worker: at this
               moment it is still a number somebody can act on. */}
-          <p className={`voice-cost${tooLong || exceedsRequest ? " problem" : ""}`}>
-            <strong>{characters.toLocaleString()} characters</strong>
-            {selectedModel && selectedModel.character_cost_multiplier !== 1
-              ? ` · about ${estimatedCredits.toLocaleString()} credits`
-              : ""}
-            {remaining === null
-              ? " · allowance unknown"
-              : ` · ${remaining.toLocaleString()} left on the ${status?.tier ?? "current"} plan`}
-            {status?.next_reset_unix
-              ? ` · resets ${new Date(status.next_reset_unix * 1000).toLocaleDateString()}`
-              : ""}
-            {tooLong && (
-              <>
-                {" "}— {(estimatedCredits - remaining!).toLocaleString()} more than the plan has.
-                Shorten the script, or top up the plan.
-              </>
-            )}
-            {exceedsRequest && effectiveRequestLimit && (
-              <> — This model accepts {effectiveRequestLimit.toLocaleString()} characters per request on this plan.</>
-            )}
-          </p>
+          {isMicrosoft ? (
+            <p className="voice-cost">
+              <strong>{characters.toLocaleString()} characters</strong>
+              {" · Free with Microsoft Edge TTS (0 credits used)"}
+            </p>
+          ) : (
+            <p className={`voice-cost${tooLong || exceedsRequest ? " problem" : ""}`}>
+              <strong>{characters.toLocaleString()} characters</strong>
+              {selectedModel && selectedModel.character_cost_multiplier !== 1
+                ? ` · about ${estimatedCredits.toLocaleString()} credits`
+                : ""}
+              {remaining === null
+                ? " · allowance unknown"
+                : ` · ${remaining.toLocaleString()} left on the ${status?.tier ?? "current"} plan`}
+              {status?.next_reset_unix
+                ? ` · resets ${new Date(status.next_reset_unix * 1000).toLocaleDateString()}`
+                : ""}
+              {tooLong && (
+                <>
+                  {" "}— {(estimatedCredits - remaining!).toLocaleString()} more than the plan has.
+                  Shorten the script, or top up the plan.
+                </>
+              )}
+              {exceedsRequest && effectiveRequestLimit && (
+                <> — This model accepts {effectiveRequestLimit.toLocaleString()} characters per request on this plan.</>
+              )}
+            </p>
+          )}
 
           {job && (
             <p className="voice-note" aria-live="polite">
