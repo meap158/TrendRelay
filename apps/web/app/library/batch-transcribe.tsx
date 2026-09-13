@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Info } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
+import { Tooltip } from "../ui/tooltip";
 import { useLocale } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
 import { transcriptionLanguageOptions } from "../../lib/transcription-languages";
@@ -47,6 +49,21 @@ const MODE_LABEL: Record<Mode, string> = {
   speech: "Transcribe speech",
   ocr: "Read on-screen text",
   vision: "Recognise what it shows",
+};
+
+const MODE_DESCRIPTION: Record<Mode, string> = {
+  speech: (
+    "Transcribes spoken audio into timestamped text drafts using local Whisper AI (faster-whisper). " +
+    "Best for spoken dialogue, voiceovers, and commentary."
+  ),
+  ocr: (
+    "Detects and reads on-screen text, titles, stickers, prices, and burned-in subtitles " +
+    "directly off video frames and images using local RapidOCR."
+  ),
+  vision: (
+    "Recognises visual subjects, products, scenes, and actions across video frames using local " +
+    "CLIP AI, generating searchable visual tags."
+  ),
 };
 
 /** What each reading needs to exist at all. */
@@ -204,25 +221,28 @@ export function BatchTranscribe({
     >
       <div className="batch-transcribe-modes">
         {(["speech", "ocr", "vision"] as Mode[]).map((mode) => (
-          <label key={mode} className="batch-transcribe-mode">
-            <input
-              type="checkbox"
-              checked={chosen[mode]}
-              disabled={reach[mode] === 0}
-              onChange={(event) => setChosen(
-                (current) => ({ ...current, [mode]: event.target.checked }),
-              )}
-            />
-            <span>
-              <strong>{MODE_LABEL[mode]}</strong>
-              {/* The count for this selection, not a general claim about the
-                  mode. A checkbox reading "0 of 40" explains itself; one that
-                  is simply greyed out does not. */}
-              <small>{reach[mode] === 0
-                ? "nothing in this selection can be read this way"
-                : `${reach[mode]} of ${targets.length} selected`}</small>
-            </span>
-          </label>
+          <Tooltip key={mode} side="bottom" content={MODE_DESCRIPTION[mode]}>
+            <label className="batch-transcribe-mode" title={MODE_DESCRIPTION[mode]}>
+              <input
+                type="checkbox"
+                checked={chosen[mode]}
+                disabled={reach[mode] === 0}
+                onChange={(event) => setChosen(
+                  (current) => ({ ...current, [mode]: event.target.checked }),
+                )}
+              />
+              <span>
+                <strong>{MODE_LABEL[mode]}</strong>
+                {/* The count for this selection, not a general claim about the
+                    mode. A checkbox reading "0 of 40" explains itself; one that
+                    is simply greyed out does not. */}
+                <small>{reach[mode] === 0
+                  ? "nothing in this selection can be read this way"
+                  : `${reach[mode]} of ${targets.length} selected`}</small>
+              </span>
+              <Info className="batch-transcribe-mode-info" size={14} aria-hidden="true" />
+            </label>
+          </Tooltip>
         ))}
       </div>
 

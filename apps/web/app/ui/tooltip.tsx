@@ -22,9 +22,13 @@ type TooltipTriggerProps = {
  */
 export function Tooltip({
   content,
+  side = "top",
+  className,
   children,
 }: {
   content: string;
+  side?: "top" | "bottom";
+  className?: string;
   children: ReactElement<TooltipTriggerProps>;
 }) {
   const id = useId();
@@ -34,11 +38,11 @@ export function Tooltip({
   const placeInsideViewport = () => {
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return;
-    // The surface is at most 260px wide. Near either viewport edge, anchor it
+    // The surface is at most 260px-360px wide. Near either viewport edge, anchor it
     // to the trigger's near edge rather than centring it beyond the document
     // and creating a horizontal scrollbar. Recomputed when it is opened so it
     // also follows responsive reflow and keyboard focus.
-    const half = Math.min(130, Math.max(0, (window.innerWidth - 24) / 2));
+    const half = Math.min(160, Math.max(0, (window.innerWidth - 24) / 2));
     setAlignment(rect.left + rect.width / 2 < half + 12
       ? "start"
       : window.innerWidth - (rect.left + rect.width / 2) < half + 12
@@ -54,8 +58,9 @@ export function Tooltip({
 
   return (
     <span
-      className="ui-tooltip"
+      className={className ? `ui-tooltip ${className}` : "ui-tooltip"}
       data-align={alignment}
+      data-side={side}
       ref={wrapperRef}
       onFocusCapture={placeInsideViewport}
       onPointerEnter={placeInsideViewport}

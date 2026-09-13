@@ -249,6 +249,31 @@ a.ui-button { text-decoration: none; }
   inset-inline-end: min(50%, 24px);
   transform: translateX(50%);
 }
+.ui-tooltip[data-side="bottom"] > .ui-tooltip-content {
+  inset-block-end: auto;
+  inset-block-start: calc(100% + 8px);
+  transform: translate(-50%, -2px);
+}
+.ui-tooltip[data-side="bottom"] > .ui-tooltip-content::after {
+  inset-block-start: auto;
+  inset-block-end: 100%;
+  border-block-start-color: transparent;
+  border-block-end-color: var(--text);
+}
+.ui-tooltip[data-side="bottom"]:hover > .ui-tooltip-content,
+.ui-tooltip[data-side="bottom"]:focus-within > .ui-tooltip-content {
+  transform: translate(-50%, 0);
+}
+.ui-tooltip[data-side="bottom"][data-align="start"] > .ui-tooltip-content,
+.ui-tooltip[data-side="bottom"][data-align="end"] > .ui-tooltip-content {
+  transform: translate(0, -2px);
+}
+.ui-tooltip[data-side="bottom"][data-align="start"]:hover > .ui-tooltip-content,
+.ui-tooltip[data-side="bottom"][data-align="start"]:focus-within > .ui-tooltip-content,
+.ui-tooltip[data-side="bottom"][data-align="end"]:hover > .ui-tooltip-content,
+.ui-tooltip[data-side="bottom"][data-align="end"]:focus-within > .ui-tooltip-content {
+  transform: translate(0, 0);
+}
 @media (prefers-reduced-motion: reduce) {
   .ui-tooltip-content { transition: none; }
 }

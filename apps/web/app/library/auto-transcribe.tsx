@@ -199,7 +199,7 @@ export function AutoTranscribe({
         <span className="auto-transcribe-label">Read it automatically</span>
         <span className="auto-transcribe-modes">
           {speechPossible && (
-            <label>
+            <label title="Transcribes spoken audio into timestamped text drafts using local Whisper AI (faster-whisper)">
               <input
                 type="checkbox"
                 checked={modes.speech}
@@ -210,7 +210,7 @@ export function AutoTranscribe({
             </label>
           )}
           {ocrPossible && (
-            <label>
+            <label title="Detects and reads on-screen text, titles, stickers, and burned-in subtitles directly off frames using local RapidOCR">
               <input
                 type="checkbox"
                 checked={modes.ocr}
@@ -221,7 +221,7 @@ export function AutoTranscribe({
             </label>
           )}
           {visionPossible && (
-            <label>
+            <label title="Recognises visual subjects, products, scenes, and actions across video frames using local CLIP AI">
               <input
                 type="checkbox"
                 checked={modes.vision}

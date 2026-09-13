@@ -7,6 +7,16 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Batch transcribe mode explanations on hover (2026-09-14)
+
+In the Media Library "Transcribe" batch dialog (`BatchTranscribe`), each of the three reading modes
+("Transcribe speech", "Read on-screen text", "Recognise what it shows") now features a rich hover
+tooltip (`Tooltip side="bottom"`), a subtle info icon (`Info`) on the right of each card that
+highlights on hover, and native `title` fallbacks explaining what the mode does:
+- Speech: Faster-whisper audio soundtrack speech-to-text into timestamped drafts.
+- OCR: RapidOCR visual frame scanning for titles, prices, stickers, and burned-in text.
+- Vision: Local CLIP AI recognition across video frames for subjects, products, scenes, and actions.
+
 ## Optional supplementary first comments via MCP for organic destinations (2026-09-14)
 
 When campaign destination link placement is set to "No affiliate link" (`link_placement: "none"`),
