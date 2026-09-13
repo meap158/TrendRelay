@@ -63,3 +63,44 @@ creates, then updates the same one) and reopen a saved draft from a list, pullin
 its spec and its media (fetched by id, so it resumes even when the dialog opened
 on a different selection). The drafts system is complete end-to-end — web, HTTP
 and MCP — for both kinds.
+
+## A render from the dialog is still the draft's render
+
+The dialogs render through their feature's own routes (`/autocut/render`,
+`/storytelling/render`, `/storytelling/autocreate`), not through
+`/creations/{id}/render` — the auto-build has no draft route at all. Until
+2026-09-13 that meant a reopened draft never entered *rendering*, never settled,
+and was still offered under Drafts after its video was in the Library.
+
+Those routes now accept `draft_id`. The draft is looked up before anything is
+queued (a missing one is a 404 and nothing is queued), and the queued job is
+handed to `creation_drafts.begin_render`, which is what `render_draft` does for
+its own renders. A preview, and a build that stops for review, mark nothing:
+neither makes a video. The dialogs send the draft they reopened and forget it
+once the render is queued, so the next thing saved is a new draft.
+
+`settle` then follows what it was given. A build that finished by queueing a
+render is followed to that render (the draft's `render_job_id` moves with it).
+A render that finished by queueing the ingest is not *rendered* until the
+ingest has filed the video — *rendered* means in the Library, and the asset the
+draft carries does not exist before that. An ingest the Library refused gives
+the draft back, like a failed render. The Library page re-reads its drafts
+whenever a job settles, so the Drafts chip loses a finished draft without a
+reload.
+
+## What a draft, and a video, is called
+
+`creation_titles` names a video for what it is about rather than for the
+pacing that drew it: a narration for its first sentence (split the way the
+render splits it, cut at a word past sixty characters), a cut for the first of
+its clips with a name to lend and how many more there are (a clip titled by a
+platform's id is passed over for one with words). A typed name always wins;
+the template's name is the last resort, for a cut whose clips have no names.
+
+Drafts take the same names through each adapter's `name`, and only read
+"Untitled story" / "Untitled cut" while the spec is about nothing. A name the
+server gave follows the spec as it is edited — `update_draft` tells a given
+name from a typed one by whether the old title is what the old spec would have
+been given — so a draft saved before its script was written is renamed once
+the script is there. The Storytelling dialog therefore sends no title of its
+own; the AutoCut dialog sends one only when somebody typed it.
