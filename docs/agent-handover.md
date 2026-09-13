@@ -7,6 +7,17 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Fix: Asset transcripts parsing in BulkVoiceEditor and VoiceEditor (2026-09-14)
+
+Even after enabling "Allow machine drafts", the Voiceover dialog previously showed
+"24 items have no transcript and will be skipped" because `GET /assets/{asset_id}`
+returns `{ "asset": { "transcripts": [...] } }`, whereas `bulk-voice-editor.tsx` and
+`voice-editor.tsx` were expecting `payload.transcripts`.
+Fixed by:
+- Updating `GET /assets/{asset_id}` to include `"transcripts": view.get("transcripts", [])`
+  alongside `"asset"`.
+- Updating both editors to safely extract `payload.asset?.transcripts ?? payload.transcripts ?? []`.
+
 ## Option to allow machine draft transcripts in Voiceover dialog (2026-09-14)
 
 In the Media Library Voiceover dialog (`BulkVoiceEditor` and `VoiceEditor` in batch mode),

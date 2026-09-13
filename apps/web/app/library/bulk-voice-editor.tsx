@@ -88,9 +88,14 @@ export function BulkVoiceEditor({
           `/api/workspaces/${workspaceId}/media/library/assets/${target.id}`,
           { signal: controller.signal },
         );
-        const payload = await response.json() as { transcripts?: Transcript[]; detail?: string };
+        const payload = await response.json() as {
+          asset?: { transcripts?: Transcript[] };
+          transcripts?: Transcript[];
+          detail?: string;
+        };
         if (!response.ok) throw new Error(payload.detail ?? t("library.actionCouldNotStart"));
-        const speech = (payload.transcripts ?? []).filter(
+        const allTranscripts = payload.asset?.transcripts ?? payload.transcripts ?? [];
+        const speech = allTranscripts.filter(
           (item) => item.kind === "speech" && (item.text ?? "").trim(),
         );
         const transcript = speech.find((item) => item.status === "reviewed") ?? null;

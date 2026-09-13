@@ -2,6 +2,26 @@
 
 Last updated: 2026-09-14
 
+## Fix: Asset Transcripts Parsing in BulkVoiceEditor and VoiceEditor, 2026-09-14
+
+- **Context & Request**:
+  - Even after enabling "Allow machine drafts", the Voiceover dialog still showed "24 items have no transcript and will be skipped" and "Generate for 0", despite the cards clearly having `Transcript draft` badges.
+  - Root cause:
+    - `GET /api/workspaces/{workspace_id}/media/library/assets/{asset_id}` returned `{"asset": {"id": ..., "transcripts": [...]}}`.
+    - `bulk-voice-editor.tsx` and `voice-editor.tsx` were expecting `payload.transcripts` directly (`(payload.transcripts ?? [])`), which evaluated to `undefined` / empty array.
+- **Changes**:
+  - `services/api/src/trendrelay_api/media_library_api.py`:
+    - Updated `get_asset` to return `{"asset": view, "transcripts": view.get("transcripts", [])}` so both top-level and nested access work.
+  - `apps/web/app/library/bulk-voice-editor.tsx`:
+    - Safely extract transcripts using `payload.asset?.transcripts ?? payload.transcripts ?? []`.
+  - `apps/web/app/library/voice-editor.tsx`:
+    - Safely extract transcripts using `payload.asset?.transcripts ?? payload.transcripts ?? []`.
+- **Verification**:
+  - Backend: 48/48 tests passed (`pytest services/api/tests/test_voice_jobs.py services/api/tests/test_media_library_api.py`).
+  - Web unit tests: 504/504 passed (`npm --prefix apps/web test`).
+  - Typecheck: passed (`npm --prefix apps/web run typecheck`).
+  - Lint: passed (`npm --prefix apps/web run lint`).
+
 ## Option to Allow Machine Draft Transcripts in Voiceover Dialog, 2026-09-14
 
 - **Context & Request**:

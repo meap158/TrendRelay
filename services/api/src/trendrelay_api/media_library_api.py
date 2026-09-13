@@ -1533,7 +1533,8 @@ def get_asset(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
-    return {"asset": _asset_view(session, _asset_record(session, workspace_id, asset_id))}
+    view = _asset_view(session, _asset_record(session, workspace_id, asset_id))
+    return {"asset": view, "transcripts": view.get("transcripts", [])}
 
 
 @router.get("/assets/{asset_id}/content/{version_kind}")

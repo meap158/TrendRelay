@@ -237,7 +237,11 @@ export function VoiceEditor({
           .then(async (response) => ({
             target,
             response,
-            payload: (await response.json()) as { transcripts?: Transcript[]; detail?: string },
+            payload: (await response.json()) as {
+              asset?: { transcripts?: Transcript[] };
+              transcripts?: Transcript[];
+              detail?: string;
+            },
           })),
       )),
     ])
@@ -251,7 +255,8 @@ export function VoiceEditor({
         }
         const preparedTargets = assetResponses.map(({ target, response, payload }) => {
           if (!response.ok) throw new Error(payload.detail ?? `${target.title} could not be read.`);
-          const speech = (payload.transcripts ?? []).filter(
+          const allTranscripts = payload.asset?.transcripts ?? payload.transcripts ?? [];
+          const speech = allTranscripts.filter(
             (item) => item.kind === "speech" && (item.text ?? "").trim(),
           );
           // Reviewed is still the only thing voiced without being asked. The
