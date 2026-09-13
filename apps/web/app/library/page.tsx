@@ -1520,6 +1520,26 @@ function LibraryContent() {
     setFilters({});
   }
 
+  /** Hide a draft from the pick-up list. Kept on the record, not deleted. */
+  async function archiveDraft(draftId: string) {
+    setBusy(`archive-${draftId}`);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/creations/${draftId}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.detail ?? "That draft could not be put away.");
+      }
+      setCreationDrafts((current) => current.filter((draft) => draft.id !== draftId));
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "That draft could not be put away.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   function clearNotificationView() {
     const url = new URL(window.location.href);
     url.searchParams.delete("asset");
@@ -2266,28 +2286,41 @@ function LibraryContent() {
               {unfinishedDrafts.length === 0 ? (
                 <p>No unfinished AutoCut or Storytelling videos - the ones you save appear here to pick up later.</p>
               ) : unfinishedDrafts.map((draft) => (
-                <button
-                  key={draft.id}
-                  type="button"
-                  className="library-draft-card"
-                  onClick={() => {
-                    setResumeDraft({ kind: draft.kind, id: draft.id });
-                    if (draft.kind === "autocut") setAutoCutOpen(true);
-                    else setStorytellingOpen(true);
-                  }}
-                >
-                  <span className="library-draft-kind">
-                    {draft.kind === "autocut" ? "AutoCut" : "Storytelling"}
-                  </span>
-                  <strong className="library-draft-title">{draft.title}</strong>
-                  <small>
-                    {draft.status === "rendering"
-                      ? "rendering…"
-                      : draft.kind === "autocut"
-                        ? `${draft.summary?.clips ?? 0} clips`
-                        : `${draft.summary?.pictures ?? 0} pictures`}
-                  </small>
-                </button>
+                <div key={draft.id} className="library-draft-card">
+                  <button
+                    type="button"
+                    className="library-draft-open"
+                    onClick={() => {
+                      setResumeDraft({ kind: draft.kind, id: draft.id });
+                      if (draft.kind === "autocut") setAutoCutOpen(true);
+                      else setStorytellingOpen(true);
+                    }}
+                  >
+                    <span className="library-draft-kind">
+                      {draft.kind === "autocut" ? "AutoCut" : "Storytelling"}
+                    </span>
+                    <strong className="library-draft-title">{draft.title}</strong>
+                    <small>
+                      {draft.status === "rendering"
+                        ? "rendering…"
+                        : draft.kind === "autocut"
+                          ? `${draft.summary?.clips ?? 0} clips`
+                          : `${draft.summary?.pictures ?? 0} pictures`}
+                    </small>
+                  </button>
+                  {/* A draft nobody is going to finish had no way out of this
+                      list: the only thing to do with one was reopen it. Put
+                      away rather than deleted - it stays on the record and can
+                      be brought back - so no confirmation stands in the way. */}
+                  {draft.status !== "rendering" && (
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      busy={busy === `archive-${draft.id}`}
+                      onClick={() => void archiveDraft(draft.id)}
+                    >Put away</Button>
+                  )}
+                </div>
               ))}
             </div>
           ) : <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>

@@ -290,8 +290,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* The Drafts view: unfinished AutoCut/Storytelling videos to pick up later.
    Library-only; the shared picker never renders this. */
 .library-drafts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-.library-draft-card { display: grid; gap: 6px; align-content: start; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
+.library-draft-card { display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 .library-draft-card:hover { border-color: var(--link); background: var(--panel-raised); }
+.library-draft-open { display: grid; gap: 6px; align-content: start; min-width: 0; border: 0; padding: 12px 14px 8px; color: var(--text); background: transparent; text-align: start; font: inherit; cursor: pointer; }
+.library-draft-card > .ui-button { justify-self: start; margin: 0 10px 8px; }
 .library-draft-kind { justify-self: start; border-radius: 999px; padding: 1px 8px; background: color-mix(in srgb, var(--link) 16%, transparent); color: var(--link); font-size: 10px; font-weight: 700; }
 .library-draft-title { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .library-draft-card small { color: var(--muted); font-size: 11px; }
