@@ -392,6 +392,8 @@ export const ja: Messages = {
     voiceBatchAudioOnly: "録音には置き換える映像がないため、混在した選択では音声のみを返します。",
     voiceAllowance: "{characters} 文字 · 残り {remaining}",
     empty: "条件に合うメディアはまだありません。",
+    importMedia: "メディアを読み込む",
+    importMediaDescription: "1つまたは複数のメディアファイルをライブラリに読み込みます。",
     importLocal: "ローカルファイルを読み込む",
     filePath: "ファイルパス",
     platform: "プラットフォーム",

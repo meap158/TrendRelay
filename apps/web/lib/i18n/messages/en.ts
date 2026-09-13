@@ -398,6 +398,8 @@ export const en = {
     voiceBatchAudioOnly: "A mixed selection returns audio only because recordings have no picture to replace.",
     voiceAllowance: "{characters} characters · {remaining} left",
     empty: "No matching media yet.",
+    importMedia: "Import media",
+    importMediaDescription: "Import single or batch media files into your Library.",
     importLocal: "Import a local file",
     filePath: "File path",
     platform: "Platform",

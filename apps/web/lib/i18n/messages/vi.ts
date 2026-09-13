@@ -394,6 +394,8 @@ export const vi: Messages = {
     voiceBatchAudioOnly: "Lựa chọn hỗn hợp chỉ trả về âm thanh vì bản ghi không có hình ảnh để thay thế.",
     voiceAllowance: "{characters} ký tự · còn {remaining}",
     empty: "Chưa có nội dung nào phù hợp.",
+    importMedia: "Nhập tệp phương tiện",
+    importMediaDescription: "Nhập một hoặc nhiều tệp phương tiện vào Thư viện của bạn.",
     importLocal: "Nhập tệp từ máy",
     filePath: "Đường dẫn tệp",
     platform: "Nền tảng",

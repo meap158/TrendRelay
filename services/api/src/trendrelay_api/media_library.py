@@ -52,7 +52,7 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def approved_source_path(value: str) -> Path:
+def approved_media_path(value: str, allow_dir: bool = False) -> Path:
     candidate = Path(value)
     if not candidate.is_absolute():
         candidate = PROJECT_ROOT / candidate
@@ -69,9 +69,15 @@ def approved_source_path(value: str) -> Path:
             "Media must be inside an approved media root: "
             + ", ".join(get_settings().publishing_media_root_list)
         )
+    if allow_dir and resolved.is_dir():
+        return resolved
     if not resolved.is_file() or resolved.suffix.lower() not in SAFE_SUFFIXES:
         raise ValueError("Media type is not supported by the library.")
     return resolved
+
+
+def approved_source_path(value: str) -> Path:
+    return approved_media_path(value, allow_dir=False)
 
 
 def _media_kind(path: Path) -> str:

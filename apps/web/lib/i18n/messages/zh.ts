@@ -386,6 +386,8 @@ export const zh: Messages = {
     voiceBatchAudioOnly: "混合选择仅返回音频，因为录音没有可替换的画面。",
     voiceAllowance: "{characters} 个字符 · 剩余 {remaining}",
     empty: "暂无匹配的素材。",
+    importMedia: "导入媒体",
+    importMediaDescription: "将单个或批量本地媒体文件导入媒体库。",
     importLocal: "导入本地文件",
     filePath: "文件路径",
     platform: "平台",

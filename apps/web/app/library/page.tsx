@@ -68,6 +68,7 @@ const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.Effec
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
 const TranscriptDraft = dynamic(() => import("./auto-transcribe").then((m) => m.TranscriptDraft), { ssr: false });
 const TranscriptReader = dynamic(() => import("./transcript-reader").then((m) => m.TranscriptReader), { ssr: false });
+const MediaImportDialog = dynamic(() => import("./media-import-dialog").then((m) => m.MediaImportDialog), { ssr: false });
 const TranscriptionSwitch = dynamic(() => import("./transcription-setup").then((m) => m.TranscriptionSwitch), { ssr: false });
 
 type ViewMode = "gallery" | "list";
@@ -1325,6 +1326,7 @@ function LibraryContent() {
   const [campaignPickerFor, setCampaignPickerFor] = useState<CampaignPickerSelection | null>(null);
   const [autoCutOpen, setAutoCutOpen] = useState(false);
   const [storytellingOpen, setStorytellingOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   // Unfinished AutoCut and Storytelling videos, shown as a Library chip so a
   // half-built one is picked up again rather than lost. Library-only: it reads
   // the creation-drafts store, not the media assets, so it never reaches the
@@ -1861,44 +1863,6 @@ function LibraryContent() {
     }
   }
 
-  async function importMedia(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy("import");
-    fail("");
-    setMessage("");
-    const form = new FormData(event.currentTarget);
-    try {
-      const body = await json<{ job: Job }>(
-        await apiFetch(`/api/workspaces/${workspaceId}/media/library/imports`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: form.get("path"),
-            title: form.get("title"),
-            source_url: form.get("source_url") || null,
-            platform: form.get("platform") || null,
-            creator: form.get("creator") || null,
-            published_at: form.get("published_at") || null,
-            caption: form.get("caption") || null,
-            engagement: Object.fromEntries(
-              ["likes", "comments", "shares"]
-                .map((name) => [name, Number(form.get(name))])
-                .filter(([, value]) => Number.isFinite(value) && Number(value) >= 0),
-            ),
-            hashtags: String(form.get("hashtags") ?? "").split(",").map((item) => item.trim()).filter(Boolean),
-            confirm_external_action: true,
-          }),
-        }),
-      );
-      setMessage(body.job.asset_id ? "That file is already safely stored." : "Import queued. Derivatives will appear automatically.");
-      await refresh();
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Import failed.");
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function enrich(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
@@ -2102,10 +2066,25 @@ function LibraryContent() {
               </Button>
             </div>
           )}
-          <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
-            <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
-            <Button type="submit"><ActionIcon name="search" />{t("common.search")}</Button>
-          </form>
+          <div className="library-search-row">
+            <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
+              <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
+              <Button type="submit"><ActionIcon name="search" />{t("common.search")}</Button>
+            </form>
+            {canImport && (
+              <span className="library-import-btn-wrap">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setImportOpen(true)}
+                  title={t("library.importMediaDescription")}
+                >
+                  <ActionIcon name="add" />
+                  <span className="import-label">{t("library.importMedia")}</span>
+                </Button>
+              </span>
+            )}
+          </div>
 
           <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
@@ -2334,31 +2313,23 @@ function LibraryContent() {
                   </div>
                 </section>
               ))}
-            {!assets.length && <p>{t("library.empty")}</p>}
+            {!assets.length && (
+              <div className="library-empty-state">
+                <p>{t("library.empty")}</p>
+                {canImport && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setImportOpen(true)}
+                  >
+                    <ActionIcon name="add" />
+                    {t("library.importMedia")}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>}
-          {canImport && (
-            <details className="library-import">
-              <summary>{t("library.importLocal")}</summary>
-              <form onSubmit={importMedia}>
-                <label>{t("library.filePath")}<input name="path" required placeholder="S:\Media\clip.mp4" /></label>
-                <label>{t("library.sortTitle")}<input name="title" required /></label>
-                <div className="library-form-row">
-                  <label>{t("library.platform")}<input name="platform" placeholder="douyin" /></label>
-                  <label>{t("library.creator")}<input name="creator" /></label>
-                  <label>{t("library.publishedAt")}<input name="published_at" type="datetime-local" /></label>
-                </div>
-                <label>{t("library.sourceUrl")}<input name="source_url" type="url" /></label>
-                <label>{t("library.caption")}<textarea name="caption" rows={2} /></label>
-                <label>{t("library.hashtags")}<input name="hashtags" placeholder="coffee, travel" /></label>
-                <div className="library-form-row">
-                  <label>{t("library.likes")}<input name="likes" type="number" min={0} /></label>
-                  <label>{t("library.comments")}<input name="comments" type="number" min={0} /></label>
-                  <label>{t("library.shares")}<input name="shares" type="number" min={0} /></label>
-                </div>
-                <Button type="submit" variant="primary" busy={busy === "import"}>{busy === "import" ? "Queuing" : "Import safely"}</Button>
-              </form>
-            </details>
-          )}
 
           {!!jobs.length && (
             <div className="library-jobs">
@@ -2947,6 +2918,18 @@ function LibraryContent() {
           canApprove={canApprove}
           apiFetch={apiFetch}
           onClose={() => setEditorOpen(false)}
+        />
+      )}
+      {workspaceId && (
+        <MediaImportDialog
+          open={importOpen}
+          workspaceId={workspaceId}
+          apiFetch={apiFetch}
+          onClose={() => setImportOpen(false)}
+          onImportQueued={(msg) => {
+            succeed(msg);
+            void refresh();
+          }}
         />
       )}
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />

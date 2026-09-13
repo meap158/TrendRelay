@@ -399,6 +399,8 @@ export const fr: Messages = {
     voiceBatchAudioOnly: "Une sélection mixte renvoie uniquement l'audio, car un enregistrement n'a pas d'image à remplacer.",
     voiceAllowance: "{characters} caractères · {remaining} restants",
     empty: "Aucun média correspondant pour le moment.",
+    importMedia: "Importer des médias",
+    importMediaDescription: "Importer des fichiers multimédias individuels ou par lot dans votre bibliothèque.",
     importLocal: "Importer un fichier local",
     filePath: "Chemin du fichier",
     platform: "Plateforme",

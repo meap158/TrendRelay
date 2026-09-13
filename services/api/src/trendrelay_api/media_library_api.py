@@ -18,6 +18,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
     Query,
     Request,
@@ -38,6 +39,9 @@ from trendrelay_api.media_library import (
     FFMPEG,
     FFPROBE,
     PROJECT_ROOT,
+    SAFE_SUFFIXES,
+    approved_media_path,
+    approved_source_path,
     create_ingest_job,
     list_ingest_jobs,
 )
@@ -144,6 +148,12 @@ class LibraryImport(BaseModel):
             if item and item.casefold() not in {current.casefold() for current in result}:
                 result.append(item[:80])
         return result
+
+
+class BatchImportRequest(BaseModel):
+    paths: list[str] = Field(default_factory=list)
+    folder_path: str | None = None
+    confirm_external_action: bool = False
 
 
 class Enrichment(BaseModel):
@@ -621,6 +631,175 @@ def import_asset(
         {"duplicate": bool(job.get("duplicate"))},
     )
     return {"job": job}
+
+
+@router.post("/imports/upload", status_code=202)
+async def upload_import_asset(
+    workspace_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    file: Annotated[UploadFile, File()],
+    title: Annotated[str | None, Form()] = None,
+    source_type: Annotated[str, Form()] = "manual-upload",
+    source_url: Annotated[str | None, Form()] = None,
+    platform: Annotated[str | None, Form()] = None,
+    creator: Annotated[str | None, Form()] = None,
+    caption: Annotated[str | None, Form()] = None,
+    confirm_external_action: Annotated[bool, Form()] = True,
+) -> dict[str, Any]:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(status_code=403, detail="Local media import is loopback-only.")
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "approver"},
+    )
+    if not confirm_external_action:
+        raise HTTPException(status_code=400, detail="Media import requires confirmation.")
+    ensure_profile(session, user)
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SAFE_SUFFIXES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported media extension '{suffix}'. Supported: {', '.join(sorted(SAFE_SUFFIXES))}",
+        )
+
+    upload_dir = (PROJECT_ROOT / ".data" / "downloads" / "manual").resolve()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = re.sub(r"[^\w\-.]", "_", file.filename or "media")
+    stem = Path(safe_name).stem
+    candidate = upload_dir / f"{stem}{suffix}"
+
+    counter = 1
+    while candidate.exists():
+        candidate = upload_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    temp_target = candidate.with_suffix(f"{candidate.suffix}.tmp")
+    try:
+        with temp_target.open("wb") as dest:
+            while chunk := await file.read(1024 * 1024):
+                dest.write(chunk)
+        temp_target.replace(candidate)
+    except Exception as err:
+        temp_target.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {err}")
+
+    asset_title = (title or "").strip() or Path(file.filename or "Media").stem
+    try:
+        job = create_ingest_job(
+            workspace_id=workspace_id,
+            actor_user_id=user.id,
+            path=str(candidate),
+            title=asset_title,
+            source_type=source_type,
+            source_url=source_url,
+            platform=platform,
+            creator=creator,
+            caption=caption,
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media_library.import_queued",
+        "media_asset",
+        job.get("asset_id") or job.get("id") or "duplicate",
+        {"duplicate": bool(job.get("duplicate")), "upload": True},
+    )
+    return {"job": job}
+
+
+@router.post("/imports/batch", status_code=202)
+def batch_import_assets(
+    workspace_id: str,
+    body: BatchImportRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(status_code=403, detail="Local media import is loopback-only.")
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "approver"},
+    )
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Media import requires confirmation.")
+    ensure_profile(session, user)
+
+    collected_paths: list[Path] = []
+    errors: list[str] = []
+
+    if body.folder_path:
+        folder_clean = body.folder_path.strip()
+        if folder_clean:
+            try:
+                folder = approved_media_path(folder_clean, allow_dir=True)
+                if folder.is_dir():
+                    for item in folder.rglob("*"):
+                        if item.is_file() and item.suffix.lower() in SAFE_SUFFIXES:
+                            collected_paths.append(item)
+                elif folder.is_file() and folder.suffix.lower() in SAFE_SUFFIXES:
+                    collected_paths.append(folder)
+            except Exception as e:
+                errors.append(f"Folder '{folder_clean}': {e}")
+
+    for p in body.paths:
+        p_clean = p.strip()
+        if not p_clean:
+            continue
+        try:
+            resolved = approved_media_path(p_clean, allow_dir=True)
+            if resolved.is_dir():
+                for item in resolved.rglob("*"):
+                    if item.is_file() and item.suffix.lower() in SAFE_SUFFIXES:
+                        collected_paths.append(item)
+            elif resolved.is_file() and resolved.suffix.lower() in SAFE_SUFFIXES:
+                collected_paths.append(resolved)
+        except Exception as e:
+            errors.append(f"'{p_clean}': {e}")
+
+    unique_paths = list(dict.fromkeys(collected_paths))
+    jobs: list[dict[str, Any]] = []
+    for media_path in unique_paths:
+        try:
+            job = create_ingest_job(
+                workspace_id=workspace_id,
+                actor_user_id=user.id,
+                path=str(media_path),
+                title=media_path.stem,
+                source_type="manual-batch-import",
+            )
+            jobs.append(job)
+        except Exception as e:
+            errors.append(f"{media_path.name}: {e}")
+
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media_library.batch_imports_queued",
+        "media_asset",
+        "batch",
+        {"queued_count": len(jobs), "error_count": len(errors)},
+    )
+    return {
+        "queued": jobs,
+        "queued_count": len(jobs),
+        "errors": errors,
+    }
 
 
 #: Where music fetched on demand is saved before the Library ingests it. Inside

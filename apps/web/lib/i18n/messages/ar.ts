@@ -392,6 +392,8 @@ export const ar: Messages = {
     voiceBatchAudioOnly: "يعيد التحديد المختلط الصوت فقط لأن التسجيل لا يحتوي على صورة لاستبدالها.",
     voiceAllowance: "{characters} حرفًا · المتبقي {remaining}",
     empty: "لا توجد وسائط مطابقة بعد.",
+    importMedia: "استيراد وسائط",
+    importMediaDescription: "استيراد ملفات وسائط فردية أو مجمعة إلى المكتبة.",
     importLocal: "استيراد ملف من الجهاز",
     filePath: "مسار الملف",
     platform: "المنصة",

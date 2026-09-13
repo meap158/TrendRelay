@@ -1400,3 +1400,88 @@ def test_autocut_and_story_renders_appear_in_the_processing_feed_but_previews_do
     assert "autocut_full" in ids
     assert "story_full" in ids
     assert "autocut_prev" not in ids  # a preview is watched in its dialog, not the bell
+
+
+def test_upload_media_import(tmp_path: Path, monkeypatch) -> None:
+    manual_dir = tmp_path / "manual"
+    manual_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        media_library_api,
+        "PROJECT_ROOT",
+        tmp_path,
+    )
+    monkeypatch.setattr(
+        media_library,
+        "get_settings",
+        lambda: SimpleNamespace(publishing_media_root_list=[str(tmp_path)]),
+    )
+    monkeypatch.setattr(
+        media_library_api,
+        "create_ingest_job",
+        media_library.create_ingest_job,
+    )
+    workspace_id = create_workspace()
+
+    # Successful upload
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/imports/upload",
+            files={"file": ("sample_clip.mp4", b"video-upload-content", "video/mp4")},
+            data={"title": "Uploaded Clip", "confirm_external_action": "true"},
+        )
+    )
+    assert response.status_code == 202, response.text
+    job = response.json()["job"]
+    assert job["status"] == "queued"
+    assert job["payload"]["title"] == "Uploaded Clip"
+
+    # Reject unsupported extension
+    bad_res = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/imports/upload",
+            files={"file": ("malicious.exe", b"exe-content", "application/octet-stream")},
+            data={"confirm_external_action": "true"},
+        )
+    )
+    assert bad_res.status_code == 422
+
+
+def test_batch_media_import(tmp_path: Path, monkeypatch) -> None:
+    folder = tmp_path / "batch_folder"
+    folder.mkdir()
+    file1 = folder / "clip1.mp4"
+    file1.write_bytes(b"content1")
+    file2 = folder / "clip2.jpg"
+    file2.write_bytes(b"content2")
+    file3 = tmp_path / "standalone.png"
+    file3.write_bytes(b"content3")
+
+    monkeypatch.setattr(
+        media_library,
+        "get_settings",
+        lambda: SimpleNamespace(publishing_media_root_list=[str(tmp_path)]),
+    )
+    monkeypatch.setattr(
+        media_library_api,
+        "create_ingest_job",
+        media_library.create_ingest_job,
+    )
+    workspace_id = create_workspace()
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/imports/batch",
+            json={
+                "folder_path": str(folder),
+                "paths": [str(file3)],
+                "confirm_external_action": True,
+            },
+        )
+    )
+    assert response.status_code == 202, response.text
+    payload = response.json()
+    assert payload["queued_count"] == 3
+    assert len(payload["errors"]) == 0

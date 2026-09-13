@@ -397,6 +397,8 @@ export const ru: Messages = {
     voiceBatchAudioOnly: "Смешанная выборка возвращает только аудио: у записи нет изображения для замены.",
     voiceAllowance: "{characters} символов · осталось {remaining}",
     empty: "Подходящих материалов пока нет.",
+    importMedia: "Импортировать медиа",
+    importMediaDescription: "Импорт одного или нескольких медиафайлов в медиатеку.",
     importLocal: "Импортировать локальный файл",
     filePath: "Путь к файлу",
     platform: "Платформа",
