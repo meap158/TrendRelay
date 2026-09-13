@@ -401,6 +401,8 @@ export const vi: Messages = {
     empty: "Chưa có nội dung nào phù hợp.",
     importMedia: "Nhập tệp phương tiện",
     importMediaDescription: "Nhập một hoặc nhiều tệp phương tiện vào Thư viện của bạn.",
+    dropToImport: "Thả để thêm vào Thư viện của bạn",
+    dropToImportHint: "Video, hình ảnh và âm thanh nhập cùng lúc",
     importLocal: "Nhập tệp từ máy",
     filePath: "Đường dẫn tệp",
     platform: "Nền tảng",

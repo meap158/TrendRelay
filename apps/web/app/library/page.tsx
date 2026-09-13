@@ -1382,6 +1382,10 @@ function LibraryContent() {
   const [autoCutOpen, setAutoCutOpen] = useState(false);
   const [storytellingOpen, setStorytellingOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // Files dragged onto the Library from the desktop. Handed to the import
+  // dialog, which stages and uploads them the same way picked files go.
+  const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
+  const [dropTargetActive, setDropTargetActive] = useState(false);
   // Unfinished AutoCut and Storytelling videos, shown as a Library chip so a
   // half-built one is picked up again rather than lost. Library-only: it reads
   // the creation-drafts store, not the media assets, so it never reaches the
@@ -1890,6 +1894,70 @@ function LibraryContent() {
     return () => window.clearInterval(timer);
   }, [jobs, refresh]);
 
+  /**
+   * Files dragged from the desktop onto the Library.
+   *
+   * The dialog has always had a drop zone, which meant opening the dialog to
+   * reach it: the gesture that carries the files already had nowhere to land
+   * until a dialog was in front of it. Dropping on the Library is the same
+   * import, so it opens that dialog with the files already staged rather than
+   * uploading behind it - a file that fails is then named where it can be
+   * retried, instead of failing into a toast.
+   *
+   * On window rather than the layout element because a drag that leaves the
+   * page must still cancel the overlay, and because the browser navigates away
+   * to any file dropped on a document that did not preventDefault - a dropped
+   * video replacing the app is the failure this stops even when it is refused.
+   *
+   * Nothing is taken from a workspace the reader cannot import to, and nothing
+   * while the dialog is already open: it has its own drop zone, and its
+   * handlers stop the event before it reaches here.
+   */
+  useEffect(() => {
+    if (!canImport) return;
+    // Driven by dragover rather than counting dragenter against dragleave,
+    // which the pointer fires again for every element it crosses: those have
+    // to balance exactly or the overlay is left covering the page after the
+    // drag is over. dragover repeats while the drag is alive and stops when it
+    // is not, so the overlay expires on its own and cannot get stuck.
+    let expiry: number | undefined;
+    const carriesFiles = (event: DragEvent) =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+    const clear = () => {
+      window.clearTimeout(expiry);
+      expiry = undefined;
+      setDropTargetActive(false);
+    };
+
+    const over = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      setDropTargetActive(true);
+      window.clearTimeout(expiry);
+      expiry = window.setTimeout(clear, 250);
+    };
+
+    const drop = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      clear();
+      const files = Array.from(event.dataTransfer?.files ?? []);
+      if (!files.length) return;
+      setDroppedFiles(files);
+      setImportOpen(true);
+    };
+
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.clearTimeout(expiry);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  }, [canImport]);
+
   async function syncDownloads() {
     setBusy("sync");
     fail("");
@@ -2045,6 +2113,19 @@ function LibraryContent() {
 
   return (
     <main className="library-page">
+      {/* What the drag is over. Announced rather than only drawn, and never a
+          target of its own: it lets every event through to the page beneath,
+          so it can tell the reader where the files will land without being the
+          thing that catches them. */}
+      {dropTargetActive && (
+        <div className="library-drop-veil" role="status" aria-live="polite">
+          <div className="library-drop-card">
+            <ActionIcon name="upload" size={26} />
+            <strong>{t("library.dropToImport")}</strong>
+            <small>{t("library.dropToImportHint")}</small>
+          </div>
+        </div>
+      )}
       <WorkspaceSectionNav area="library" />
       <div className="page-sticky-shell library-sticky-header">
         <header className="library-heading">
@@ -2983,7 +3064,8 @@ function LibraryContent() {
           open={importOpen}
           workspaceId={workspaceId}
           apiFetch={apiFetch}
-          onClose={() => setImportOpen(false)}
+          droppedFiles={droppedFiles}
+          onClose={() => { setImportOpen(false); setDroppedFiles(undefined); }}
           onItemQueued={() => {
             void refresh();
             void refreshGlobalJobs();

@@ -399,6 +399,8 @@ export const ar: Messages = {
     empty: "لا توجد وسائط مطابقة بعد.",
     importMedia: "استيراد وسائط",
     importMediaDescription: "استيراد ملفات وسائط فردية أو مجمعة إلى المكتبة.",
+    dropToImport: "أفلت الملفات لإضافتها إلى مكتبتك",
+    dropToImportHint: "يمكن استيراد الفيديو والصور والصوت معًا",
     importLocal: "استيراد ملف من الجهاز",
     filePath: "مسار الملف",
     platform: "المنصة",

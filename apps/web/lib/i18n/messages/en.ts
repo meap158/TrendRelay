@@ -405,6 +405,8 @@ export const en = {
     empty: "No matching media yet.",
     importMedia: "Import media",
     importMediaDescription: "Import single or batch media files into your Library.",
+    dropToImport: "Drop to add to your Library",
+    dropToImportHint: "Videos, images and audio import together",
     importLocal: "Import a local file",
     filePath: "File path",
     platform: "Platform",

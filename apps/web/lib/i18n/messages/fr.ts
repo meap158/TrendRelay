@@ -406,6 +406,8 @@ export const fr: Messages = {
     empty: "Aucun média correspondant pour le moment.",
     importMedia: "Importer des médias",
     importMediaDescription: "Importer des fichiers multimédias individuels ou par lot dans votre bibliothèque.",
+    dropToImport: "Déposez pour ajouter à votre bibliothèque",
+    dropToImportHint: "Vidéos, images et audio s'importent ensemble",
     importLocal: "Importer un fichier local",
     filePath: "Chemin du fichier",
     platform: "Plateforme",

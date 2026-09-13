@@ -399,6 +399,8 @@ export const ja: Messages = {
     empty: "条件に合うメディアはまだありません。",
     importMedia: "メディアを読み込む",
     importMediaDescription: "1つまたは複数のメディアファイルをライブラリに読み込みます。",
+    dropToImport: "ドロップしてライブラリに追加",
+    dropToImportHint: "動画・画像・音声はまとめて読み込めます",
     importLocal: "ローカルファイルを読み込む",
     filePath: "ファイルパス",
     platform: "プラットフォーム",

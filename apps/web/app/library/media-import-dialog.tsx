@@ -12,7 +12,7 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { DragEvent, ChangeEvent } from "react";
 
 import { Button } from "../ui/button";
@@ -55,6 +55,7 @@ export function MediaImportDialog({
   apiFetch,
   onItemQueued,
   onImportQueued,
+  droppedFiles,
 }: {
   open: boolean;
   onClose: () => void;
@@ -62,6 +63,14 @@ export function MediaImportDialog({
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   onItemQueued?: () => void;
   onImportQueued?: (message: string) => void;
+  /**
+   * Files dropped on the Library itself, already chosen before this opened.
+   *
+   * They stage and upload here rather than through an uploader of their own:
+   * dropping and picking are the same import, and a second path would mean a
+   * second set of per-file states, retries and batch cards to keep in step.
+   */
+  droppedFiles?: File[];
 }) {
   const t = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +83,11 @@ export function MediaImportDialog({
   const [uploadIndex, setUploadIndex] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A drop has already made the choice a picked selection still has to make,
+  // so it starts itself rather than staging behind an Import press. The list
+  // is still what is on screen while it runs, which is where a file that fails
+  // is named and retried.
+  const staged = useRef<File[] | undefined>(undefined);
   const textareaId = useId();
 
   function resetState() {
@@ -83,6 +97,7 @@ export function MediaImportDialog({
     setUploadIndex(0);
     setStatusMessage(null);
     setErrorMessage(null);
+    staged.current = undefined;
   }
 
   function handleClose() {
@@ -91,7 +106,7 @@ export function MediaImportDialog({
     onClose();
   }
 
-  function addFiles(newFiles: FileList | File[]) {
+  function toStaged(newFiles: FileList | File[]): StagedFile[] {
     const validFiles: StagedFile[] = [];
     for (let i = 0; i < newFiles.length; i++) {
       const file = newFiles[i];
@@ -104,6 +119,11 @@ export function MediaImportDialog({
         status: "idle",
       });
     }
+    return validFiles;
+  }
+
+  function addFiles(newFiles: FileList | File[]) {
+    const validFiles = toStaged(newFiles);
     if (validFiles.length > 0) {
       setStagedFiles((prev) => [...prev, ...validFiles]);
       setErrorMessage(null);
@@ -151,8 +171,20 @@ export function MediaImportDialog({
 
   const totalBytes = stagedFiles.reduce((acc, item) => acc + item.file.size, 0);
 
-  async function handleUploadSubmit() {
-    if (!stagedFiles.length || isProcessing) return;
+  function handleUploadSubmit() {
+    return runUpload(stagedFiles);
+  }
+
+  /**
+   * Upload one list of staged files, in order.
+   *
+   * Takes the list rather than reading it back from state so a drop can start
+   * the moment it lands, before the render that shows it has happened. Rows
+   * are addressed by id for the same reason: the list being uploaded is not
+   * always the whole list on screen.
+   */
+  async function runUpload(uploading: StagedFile[]) {
+    if (!uploading.length || isProcessing) return;
     setIsProcessing(true);
     setErrorMessage(null);
     setStatusMessage(null);
@@ -162,7 +194,7 @@ export function MediaImportDialog({
     let errorCount = 0;
 
     const batchId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const batchTotal = stagedFiles.length;
+    const batchTotal = uploading.length;
     let lastNotifyTime = 0;
 
     const notifyQueued = (force = false) => {
@@ -173,8 +205,8 @@ export function MediaImportDialog({
       }
     };
 
-    for (let i = 0; i < stagedFiles.length; i++) {
-      const item = stagedFiles[i];
+    for (let i = 0; i < uploading.length; i++) {
+      const item = uploading[i];
       // Skip files already successfully queued or stored
       if (item.status === "queued") {
         queuedCount++;
@@ -187,7 +219,7 @@ export function MediaImportDialog({
 
       setUploadIndex(i + 1);
       setStagedFiles((prev) =>
-        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading", error: undefined } : f)),
+        prev.map((f) => (f.id === item.id ? { ...f, status: "uploading", error: undefined } : f)),
       );
 
       try {
@@ -226,8 +258,8 @@ export function MediaImportDialog({
         else queuedCount++;
 
         setStagedFiles((prev) =>
-          prev.map((f, idx) =>
-            idx === i ? { ...f, status: isDuplicate ? "duplicate" : "queued" } : f,
+          prev.map((f) =>
+            f.id === item.id ? { ...f, status: isDuplicate ? "duplicate" : "queued" } : f,
           ),
         );
         notifyQueued();
@@ -235,7 +267,7 @@ export function MediaImportDialog({
         errorCount++;
         const msg = err instanceof Error ? err.message : "Upload failed";
         setStagedFiles((prev) =>
-          prev.map((f, idx) => (idx === i ? { ...f, status: "error", error: msg } : f)),
+          prev.map((f) => (f.id === item.id ? { ...f, status: "error", error: msg } : f)),
         );
       }
     }
@@ -260,6 +292,27 @@ export function MediaImportDialog({
       setErrorMessage(`Failed to import files. ${finalSummary}`);
     }
   }
+
+  // A drop is compared by identity rather than by contents: the Library hands
+  // over a fresh array each time, so a re-render cannot stage the same drop
+  // twice, while dropping the same files again is a second import.
+  //
+  // The staging and the start belong to the drop rather than to this render,
+  // which is why they happen in a microtask: the list they act on is the one
+  // built here, not one read back out of state that has not settled yet.
+  useEffect(() => {
+    if (!open || !droppedFiles?.length || staged.current === droppedFiles) return;
+    staged.current = droppedFiles;
+    const arriving = toStaged(droppedFiles);
+    if (!arriving.length) return;
+    queueMicrotask(() => {
+      setActiveTab("upload");
+      setErrorMessage(null);
+      setStagedFiles((prev) => [...prev, ...arriving]);
+      void runUpload(arriving);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the drop
+  }, [open, droppedFiles]);
 
   async function handlePathsSubmit() {
     const rawLines = localPathsText

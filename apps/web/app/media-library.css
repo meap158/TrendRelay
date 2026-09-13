@@ -1415,6 +1415,40 @@ button.music-picker-row:hover { border-color: var(--link); }
   height: 34px;
 }
 
+/* What a drag carrying files sees before it lets go. `pointer-events: none`
+   is what makes it a sign rather than a target: the drop is handled on the
+   window, and a veil that caught the event itself would sit between the files
+   and the page they were aimed at. */
+.library-drop-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(15 23 42 / 34%);
+  pointer-events: none;
+}
+.library-drop-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: 380px;
+  padding: 28px 34px;
+  border: 2px dashed var(--link);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  text-align: center;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 22%);
+}
+.library-drop-card strong { font-size: 15px; }
+.library-drop-card small { color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .library-drop-veil { animation: library-drop-in 0.12s ease-out; }
+  @keyframes library-drop-in { from { opacity: 0; } to { opacity: 1; } }
+}
+
 /* Empty state */
 .library-empty-state {
   display: flex;
