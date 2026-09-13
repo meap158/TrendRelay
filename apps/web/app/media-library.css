@@ -129,6 +129,7 @@
 .library-summary h2 { margin: 4px 0 8px; font-size: 20px; }
 .library-summary p { color: var(--muted); line-height: 1.5; }
 .library-summary small { color: var(--muted); }
+.library-detail-empty { place-items: center; min-height: 180px; text-align: center; }
 .library-actions { display: flex; flex-wrap: wrap; gap: 7px; align-content: start; min-width: 0; max-width: none; }
 .library-actions p { margin: 0; padding: 9px; border: 1px solid #ead9a2; border-radius: var(--radius-sm); background: var(--warn-bg); font-size: 11px; }
 .library-actions a:hover { border-color: var(--link); color: var(--link); }

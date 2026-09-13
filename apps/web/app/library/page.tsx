@@ -2734,7 +2734,7 @@ function LibraryContent() {
                 </article>
               )}
             </>
-          ) : <article className="library-summary"><p>{t("library.selectToBegin")}</p></article>}
+          ) : <article className="library-summary library-detail-empty"><p>{t("library.selectToBegin")}</p></article>}
         </section>
       </section>
       {workspaceId && selected && (
