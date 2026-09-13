@@ -33,9 +33,11 @@ from trendrelay_api import bulk_actions
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
+from trendrelay_api.integrations import openverse_music
 from trendrelay_api.media_library import (
     FFMPEG,
     FFPROBE,
+    PROJECT_ROOT,
     create_ingest_job,
     list_ingest_jobs,
 )
@@ -303,6 +305,9 @@ def _asset_view(
         "video_codec": item.video_codec,
         "audio_codec": item.audio_codec,
         "has_audio": item.has_audio,
+        "license": item.license,
+        "license_url": item.license_url,
+        "attribution": item.attribution,
         "collected_at": item.collected_at,
         "versions": [
             {
@@ -616,6 +621,100 @@ def import_asset(
         {"duplicate": bool(job.get("duplicate"))},
     )
     return {"job": job}
+
+
+#: Where music fetched on demand is saved before the Library ingests it. Inside
+#: `.data/downloads`, so it passes the same approved-root check as any import.
+MUSIC_DOWNLOAD_ROOT = PROJECT_ROOT / ".data" / "downloads" / "music"
+
+
+class MusicImport(BaseModel):
+    """A track to add, named by id alone.
+
+    No title, creator or licence is accepted from the browser: all three are
+    read back from Openverse, so a request cannot relabel a CC BY track as CC0
+    and skip the credit it owes.
+    """
+
+    track_id: str = Field(min_length=36, max_length=36)
+    confirm_external_action: bool = False
+
+
+@router.get("/music/search")
+def search_music(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+    page: Annotated[int, Query(ge=1, le=50)] = 1,
+) -> dict[str, Any]:
+    """Music that may be published from this workspace: CC0 and CC BY only."""
+    membership(session, workspace_id, user.id)
+    try:
+        return openverse_music.search(q, page=page)
+    except openverse_music.MusicUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/music/imports", status_code=202)
+def import_music(
+    workspace_id: str,
+    body: MusicImport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "approver"},
+    )
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Adding music requires confirmation.")
+    ensure_profile(session, user)
+    try:
+        found = openverse_music.track(body.track_id)
+        saved = openverse_music.download(found, MUSIC_DOWNLOAD_ROOT / workspace_id)
+        job = create_ingest_job(
+            workspace_id=workspace_id,
+            actor_user_id=user.id,
+            path=str(saved),
+            title=found.title,
+            source_type="openverse-music",
+            source_url=found.landing_url,
+            platform=found.source,
+            creator=found.creator,
+            hashtags=list(found.genres),
+            audio_identifier=f"openverse:{found.id}",
+            license=found.licence,
+            license_url=found.licence_url,
+            attribution=found.credit,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except openverse_music.MusicUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        # LicenceRefused is a ValueError: a real track this workspace may not use.
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media_library.music_import_queued",
+        "media_asset",
+        job.get("asset_id") or job.get("id") or "duplicate",
+        {
+            "track_id": found.id,
+            "license": found.licence,
+            "duplicate": bool(job.get("duplicate")),
+        },
+    )
+    return {"job": job, "track": found.payload()}
 
 
 class AssetFilter(BaseModel):
