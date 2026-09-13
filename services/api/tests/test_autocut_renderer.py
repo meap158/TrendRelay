@@ -235,3 +235,65 @@ def test_cues_alone_are_enough_to_burn_subtitles() -> None:
         cues=((0, 2000, "Said aloud."),),
     )
     assert request.captioned is True
+
+
+# --- a music bed under a voice --------------------------------------------------
+
+
+def test_a_music_bed_is_ducked_under_the_voice_and_ends_with_the_video() -> None:
+    """The second audio input is not a second track laid alongside the first.
+
+    It is turned down, compressed with the voice as its sidechain so it drops
+    under every word, faded out at the end, and trimmed to the plan - the voice
+    is padded to the same length, so the mix's clock is the video's, whatever
+    the track's length (the input is looped on the command line).
+    """
+    from trendrelay_api.autocut.renderer import build_audio_graph
+
+    plan = a_plan("breathe", 3)
+    request = request_for(plan)
+    graph = build_audio_graph(request, voice_input=3, music_input=4)
+    chain = graph.split(";")
+
+    # The voice: the input after the pictures, padded and trimmed to the plan,
+    # split so one copy is heard and one drives the ducking.
+    assert chain[0].startswith("[3:a]")
+    assert f"apad=whole_dur={plan.duration:.4f}" in chain[0]
+    assert f"atrim=duration={plan.duration:.4f}" in chain[0]
+    assert chain[0].endswith("asplit=2[voice][ducker]")
+    # The bed: quieter, trimmed to the same length, faded out over the end.
+    assert chain[1].startswith("[4:a]")
+    assert "volume=0.25" in chain[1]
+    assert f"atrim=duration={plan.duration:.4f}" in chain[1]
+    assert f"afade=t=out:st={plan.duration - 1.5:.4f}:d=1.5[bed]" in chain[1]
+    # The duck: the bed is the compressed input, the voice the sidechain.
+    assert chain[2].startswith("[bed][ducker]sidechaincompress=")
+    assert chain[2].endswith("[ducked]")
+    # The mix ends with the voice (the padded one, so with the video) and is
+    # not halved, which amix does by default.
+    assert chain[3] == (
+        "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+    )
+
+
+def test_the_mix_joins_the_video_graph_and_a_single_track_leaves_it_alone() -> None:
+    from trendrelay_api.autocut.renderer import build_audio_graph
+
+    plan = a_plan("punch", 2)
+    request = request_for(plan)
+    alone = build_filtergraph(request)
+    assert alone.endswith("[vout]")
+    mixed = build_filtergraph(
+        request, audio_graph=build_audio_graph(request, voice_input=2, music_input=3),
+    )
+    # The video half is untouched; the mix is appended after it and ends on
+    # the label the encoder maps.
+    assert mixed.startswith(alone + ";")
+    assert mixed.endswith("[aout]")
+    # A caption and a bed together: the subtitle burn still closes the video
+    # half, and the audio follows.
+    captioned = build_filtergraph(
+        request, caption_file="caption.ass",
+        audio_graph=build_audio_graph(request, voice_input=2, music_input=3),
+    )
+    assert "subtitles=caption.ass[vout];[2:a]" in captioned

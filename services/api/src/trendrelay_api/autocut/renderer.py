@@ -4,7 +4,8 @@ The planner decides *what* happens when; this draws it. One ffmpeg graph per
 render: each picture becomes a moving clip (the template's Ken Burns push
 over its shot's duration), the clips are joined by the shot's transition
 (hard cut, crossfade, whip, zoom), and the chosen track is laid under the
-whole thing, trimmed to the video's length. Encoding goes through the shared
+whole thing, trimmed to the video's length. A narration can carry a music bed
+as well, mixed under the voice and ducked while it speaks. Encoding goes through the shared
 `encode_h264`, so AutoCut gets the same hardware-then-software fallback every
 other render here uses.
 
@@ -45,6 +46,11 @@ class RenderRequest:
     #: without a track, and the interface says when there is none.
     audio_path: Path | None
     destination: Path
+    #: A music bed laid under ``audio_path`` when that is a voice. Ducked while
+    #: the voice speaks, held to the video's length and faded out at its end.
+    #: None keeps the one-track render every montage is. Given without a voice
+    #: it simply *is* the track, so a caller need not know which it has.
+    music_path: Path | None = None
     width: int = FRAME_W
     height: int = FRAME_H
     #: A preview trades pixels for speed: half the frame and the fastest
@@ -97,6 +103,22 @@ class RenderRequest:
 #: How hard the fill background is blurred. Enough that it reads as a wash of
 #: the clip's colour rather than a second, competing picture.
 FILL_BLUR_SIGMA = 24
+
+#: How loud a music bed sits under a voice before any ducking, as a gain.
+#: About -12 dB: a track mastered to be listened to on its own, brought down
+#: to where a narration reads over it without effort.
+MUSIC_BED_GAIN = 0.25
+#: The ducking. The bed is compressed with the voice as the sidechain, so it
+#: drops the moment a word starts and comes back in the pauses: the threshold
+#: is where the voice counts as speaking, the ratio how far the bed drops, the
+#: attack and release (milliseconds) how fast it goes and how gently it returns.
+MUSIC_DUCK_THRESHOLD = 0.02
+MUSIC_DUCK_RATIO = 8
+MUSIC_DUCK_ATTACK_MS = 20
+MUSIC_DUCK_RELEASE_MS = 400
+#: The bed fades out over the video's last moments rather than being cut off
+#: with the picture.
+MUSIC_FADE_SECONDS = 1.5
 
 
 def _cover_and_move(
@@ -276,12 +298,52 @@ def _caption_ass(request: RenderRequest) -> str:
     return to_ass(cues, style, play_width=request.width, play_height=request.height)
 
 
-def build_filtergraph(request: RenderRequest, *, caption_file: str | None = None) -> str:
+def build_audio_graph(request: RenderRequest, *, voice_input: int, music_input: int) -> str:
+    """The mix of a voice over a music bed, tagged [aout]. Pure, so it is testable.
+
+    ``voice_input`` and ``music_input`` are ffmpeg input indexes - the two
+    audio files come after every picture on the command line.
+
+    Both streams are brought to 48 kHz stereo first, so the compressor and the
+    mixer see one format. The voice is padded and trimmed to the plan's length,
+    which makes it the clock: the mix ends when the video does, however long
+    the track is (the music input is looped, so a short track fills a long
+    video too). The bed is turned down, faded out at the end, and compressed
+    with the voice as its sidechain - the standard duck, so the music breathes
+    in the pauses and gets out of the way of every word. ``normalize=0`` keeps
+    the mixer from halving both, which is what it does by default and would
+    have made a two-track render quieter than a one-track one.
+    """
+    duration = request.plan.duration
+    fade_start = max(0.0, duration - MUSIC_FADE_SECONDS)
+    voice = (
+        f"[{voice_input}:a]aresample=48000,aformat=channel_layouts=stereo,"
+        f"apad=whole_dur={duration:.4f},atrim=duration={duration:.4f},asplit=2[voice][ducker]"
+    )
+    bed = (
+        f"[{music_input}:a]aresample=48000,aformat=channel_layouts=stereo,"
+        f"atrim=duration={duration:.4f},volume={MUSIC_BED_GAIN},"
+        f"afade=t=out:st={fade_start:.4f}:d={MUSIC_FADE_SECONDS}[bed]"
+    )
+    duck = (
+        f"[bed][ducker]sidechaincompress=threshold={MUSIC_DUCK_THRESHOLD}"
+        f":ratio={MUSIC_DUCK_RATIO}:attack={MUSIC_DUCK_ATTACK_MS}"
+        f":release={MUSIC_DUCK_RELEASE_MS}[ducked]"
+    )
+    mix = "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+    return ";".join([voice, bed, duck, mix])
+
+
+def build_filtergraph(
+    request: RenderRequest, *, caption_file: str | None = None, audio_graph: str = "",
+) -> str:
     """The full -filter_complex string for this plan. Pure, so it is testable.
 
     When ``caption_file`` is given (a bare filename resolved from ffmpeg's own
     working directory), the hook caption is burned onto the finished montage as
-    the last step before the encoder maps it.
+    the last step before the encoder maps it. ``audio_graph`` is the voice-over-
+    music mix from ``build_audio_graph``, joined on when there is one; a single
+    track needs no filter and is mapped straight from its input.
     """
     shots = request.plan.shots
     per_shot = [
@@ -298,7 +360,8 @@ def build_filtergraph(request: RenderRequest, *, caption_file: str | None = None
     # The final video stream is tagged [vout] for the encoder to map. A caption
     # is drawn on last, so it sits over every clip and transition.
     last = f"subtitles={caption_file}" if caption_file else "copy"
-    return f"{graph};[{final}]{last}[vout]"
+    video = f"{graph};[{final}]{last}[vout]"
+    return f"{video};{audio_graph}" if audio_graph else video
 
 
 def render(ffmpeg: Path, request: RenderRequest) -> Path:
@@ -330,12 +393,29 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
 
     before = [str(ffmpeg), "-hide_banner", "-nostdin", "-y", *inputs]
 
-    audio = request.audio_path
+    # The sound. One file is mapped straight through; a voice with a bed under
+    # it goes through the mix graph. A bed named without a voice is the one
+    # file - the caller need not know which it has.
+    voice = request.audio_path if request.audio_path and request.audio_path.is_file() else None
+    bed = request.music_path if request.music_path and request.music_path.is_file() else None
+    if voice is None and bed is not None:
+        voice, bed = bed, None
     audio_tail: list[str] = []
-    if audio is not None and audio.is_file():
-        before += ["-i", str(audio)]
+    audio_graph = ""
+    if voice is not None:
+        before += ["-i", str(voice)]
+        if bed is not None:
+            # Looped, so a short track fills a long narration; the mix graph
+            # trims it to the video's length.
+            before += ["-stream_loop", "-1", "-i", str(bed)]
+            audio_graph = build_audio_graph(
+                request, voice_input=len(shots), music_input=len(shots) + 1,
+            )
+            audio_map = ["-map", "[aout]"]
+        else:
+            audio_map = ["-map", f"{len(shots)}:a"]
         audio_tail = [
-            "-map", f"{len(shots)}:a",
+            *audio_map,
             # End with the video, however long the track is.
             "-shortest",
             # Resample to 48 kHz. The template tracks are 96 kHz (they were
@@ -390,10 +470,11 @@ def render(ffmpeg: Path, request: RenderRequest) -> Path:
             # and ffmpeg is run from inside it, leaving the filter a bare
             # filename. The same trick the app's subtitle burn-in uses.
             (work / "caption.ass").write_text(_caption_ass(request), encoding="utf-8")
-            graph = build_filtergraph(request, caption_file="caption.ass")
+            graph = build_filtergraph(request, caption_file="caption.ass", audio_graph=audio_graph)
             completed, _profile = _encode(graph, work, work)
         else:
-            completed, _profile = _encode(build_filtergraph(request), None, work)
+            graph = build_filtergraph(request, audio_graph=audio_graph)
+            completed, _profile = _encode(graph, None, work)
 
     if completed.returncode != 0 or not request.destination.is_file():
         stderr = (completed.stderr or b"")
