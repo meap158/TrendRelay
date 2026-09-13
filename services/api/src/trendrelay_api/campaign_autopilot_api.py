@@ -33,7 +33,11 @@ from trendrelay_api.campaign_autopilot import (
     resolve_placement,
 )
 from trendrelay_api.campaign_runner import held_posts
-from trendrelay_api.campaign_scheduler import campaign_status, plan_campaign
+from trendrelay_api.campaign_scheduler import (
+    RENDERED_MEDIA_KINDS,
+    campaign_status,
+    plan_campaign,
+)
 from trendrelay_api.foundation import (
     AuthenticatedUser,
     DatabaseSession,
@@ -497,7 +501,81 @@ def _destination_view(
     }
 
 
-def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
+LibraryCut = tuple[MediaAsset, MediaAssetVersion | None]
+
+
+def _library_cuts(
+    session: Session, workspace_id: str, items: list[CampaignQueueItem],
+) -> dict[str, LibraryCut]:
+    """The Library asset behind each queued post, and the cut a post of it publishes.
+
+    The same rule as `resolve_frozen_media`, which is what the scheduler
+    commits a post to: the newest rendered cut (`RENDERED_MEDIA_KINDS`), else
+    the original. Read here so the queue can say which one, and with which
+    effects, rather than describing the path stored at import - the planner
+    re-resolves that path anyway, so a description of it could name a cut the
+    post will not carry. A captioned cut is deliberately not a rendered kind
+    (the Library's preview switch says why), so it is never named as the cut a
+    post carries.
+
+    Two queries for the whole page, keyed by asset id. An item with no Library
+    identity, or whose asset has gone, is absent from the map.
+    """
+    asset_ids = sorted({item.asset_id for item in items if item.asset_id})
+    if not asset_ids:
+        return {}
+    assets = {
+        asset.id: asset
+        for asset in session.scalars(select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id.in_(asset_ids),
+        )).all()
+    }
+    newest: dict[str, MediaAssetVersion] = {}
+    for version in session.scalars(
+        select(MediaAssetVersion)
+        .where(
+            MediaAssetVersion.workspace_id == workspace_id,
+            MediaAssetVersion.asset_id.in_(asset_ids),
+            MediaAssetVersion.version_kind.in_(RENDERED_MEDIA_KINDS),
+        )
+        .order_by(MediaAssetVersion.created_at.desc())
+    ).all():
+        newest.setdefault(version.asset_id, version)
+    return {asset_id: (asset, newest.get(asset_id)) for asset_id, asset in assets.items()}
+
+
+def _media_version_view(cut: MediaAssetVersion | None) -> dict[str, Any]:
+    """What the post's video is: the original file, or a rendered cut and its effects.
+
+    Effect names come from the registry, resolved now rather than stored, the
+    way the Library's own cards resolve them (`_named_effects`); the interface
+    translates them by id. `original` is said outright rather than left to be
+    inferred from a null id, because "no effects" and "the unedited file" are
+    the same fact and the badge that states it should not have to guess.
+    """
+    from trendrelay_api.media_library_api import _named_effects
+
+    if cut is None:
+        return {"id": None, "kind": "original", "original": True, "effects": []}
+    return {
+        "id": cut.id,
+        "kind": cut.version_kind,
+        "original": False,
+        "effects": _named_effects(cut.effect_ids),
+    }
+
+
+def _queue_view(item: CampaignQueueItem, *, library: LibraryCut | None = None) -> dict[str, Any]:
+    """One queue item as the interface reads it.
+
+    `library` is the item's asset and the cut it publishes, from
+    `_library_cuts`; None for an item with no Library identity. Only a video
+    post names its cut - effects render cuts of a video, and a carousel's
+    stills are chosen as they are.
+    """
+    asset, cut = library if library else (None, None)
+    carries_video = bool(item.video_path) and not item.image_paths and not item.text_only
     return {
         "id": item.id,
         "asset_id": item.asset_id,
@@ -537,7 +615,20 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "times_posted": item.times_posted,
         "last_posted_at": item.last_posted_at,
         "last_posted_by_destination": dict(item.last_posted_by_destination or {}),
+        # The cut this post publishes and the effects on it, and the tags the
+        # video arrived with - so the editor can show what the post is made
+        # of, and offer the tags, without a second read of the Library.
+        "media_version": _media_version_view(cut) if asset and carries_video else None,
+        "asset_hashtags": list(asset.hashtags or []) if asset else [],
     }
+
+
+def _queue_views(
+    session: Session, items: list[CampaignQueueItem], workspace_id: str,
+) -> list[dict[str, Any]]:
+    """The whole queue, with each item's Library cut read in two queries, not two each."""
+    cuts = _library_cuts(session, workspace_id, items)
+    return [_queue_view(item, library=cuts.get(item.asset_id or "")) for item in items]
 
 
 def _validated_post_type_overrides(
@@ -657,7 +748,7 @@ def read_autopilot(
             _destination_view(session, item, campaign_preset_id=autopilot.posting_preset_id)
             for item in destinations
         ],
-        "queue": [_queue_view(item) for item in queue],
+        "queue": _queue_views(session, queue, workspace_id),
     }
 
 
@@ -1193,7 +1284,7 @@ def add_queue_item(
     item = create_queue_item(
         session, workspace_id, campaign_id, body, created_by=user.id
     )
-    return {"item": _queue_view(item)}
+    return {"item": _queue_views(session, [item], workspace_id)[0]}
 
 
 @router.post("/{campaign_id}/queue/assets", status_code=201)
@@ -1251,7 +1342,10 @@ def add_queue_assets(
         .where(
             MediaAssetVersion.workspace_id == workspace_id,
             MediaAssetVersion.asset_id.in_(requested),
-            MediaAssetVersion.version_kind.in_(("blurred", "edited")),
+            # The kinds the scheduler publishes, and no others: a captioned
+            # cut is not one of them, and an item pointed at one would be
+            # re-resolved to the original at planning anyway.
+            MediaAssetVersion.version_kind.in_(RENDERED_MEDIA_KINDS),
         )
         .order_by(MediaAssetVersion.created_at)
     ).all():
@@ -1277,7 +1371,7 @@ def add_queue_assets(
             post_type_overrides={},
             title=asset.title[:200],
             body=PLACEHOLDER_BODY,
-            hashtags=[],
+            hashtags=list(asset.hashtags or []),
             first_comment=None,
             thread=[],
             topic=None,
@@ -1491,7 +1585,10 @@ def assign_queue_item_slot(
             session, request, workspace_id, user.id,
             "campaign.queue_item_slot_released", "campaign_queue_item", item.id, {},
         )
-        return {"item": _queue_view(item), "pinned": None}
+        return {
+            "item": _queue_views(session, [item], workspace_id)[0],
+            "pinned": None,
+        }
 
     if body.day is None and body.at is None:
         raise HTTPException(
@@ -1516,7 +1613,10 @@ def assign_queue_item_slot(
         "campaign.queue_item_slot_pinned", "campaign_queue_item", item.id,
         {"at": chosen["at"].isoformat(), "destination_id": chosen["destination_id"]},
     )
-    return {"item": _queue_view(item), "pinned": _slot_view(chosen)}
+    return {
+        "item": _queue_views(session, [item], workspace_id)[0],
+        "pinned": _slot_view(chosen),
+    }
 
 
 @router.patch("/{campaign_id}/queue/{item_id}")
@@ -1547,7 +1647,7 @@ def update_queue_item(
                 "campaign.queue_item_approved", "campaign_queue_item", item.id, {},
             )
     apply_queue_item_edits(session, workspace_id, campaign_id, item, body)
-    return {"item": _queue_view(item)}
+    return {"item": _queue_views(session, [item], workspace_id)[0]}
 
 
 def apply_queue_item_edits(

@@ -2580,3 +2580,112 @@ def test_a_time_that_is_not_a_posting_slot_is_refused(workspace) -> None:
 
     assert refused.status_code == 409
     assert "not one of this campaign's posting slots" in refused.json()["detail"]
+
+
+# --- what a post from the Library carries with it ------------------------------------
+
+
+def _video(workspace: str, asset_id: str, *, hashtags: list[str], digest: str) -> None:
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id=asset_id, workspace_id=workspace, title=asset_id, media_kind="video",
+            source_type="upload", hashtags=hashtags,
+            original_path=rf"S:\media\{asset_id}.mp4", original_sha256=digest * 64,
+            mime_type="video/mp4", size_bytes=25, created_by="owner-user",
+        ))
+
+
+def _cut(workspace: str, asset_id: str, kind: str, *, effects: list[str], digest: str) -> None:
+    with TestingSession.begin() as session:
+        session.add(MediaAssetVersion(
+            id=f"{asset_id}-{kind}", workspace_id=workspace, asset_id=asset_id,
+            version_kind=kind, path=rf"S:\media\{asset_id}-{kind}.mp4", sha256=digest * 64,
+            mime_type="video/mp4", size_bytes=22, effect_ids=effects,
+        ))
+
+
+def test_a_post_from_the_library_carries_its_hashtags_and_names_its_cut(workspace) -> None:
+    """Two things the import used to drop on the floor.
+
+    The tags a video arrived with from its network are the post's starting
+    hashtags, and stay offered beside the field afterwards. And the queue says
+    which cut of the video a post publishes and what was done to it - the
+    newest rendered cut with its effects, else the original - by the same rule
+    the scheduler freezes a post with, so the badge and the delivery agree.
+    """
+    campaign_id = campaign(workspace)
+    _video(workspace, "tagged", hashtags=["fitness", "workout"], digest="d")
+    _cut(workspace, "tagged", "edited", effects=["face_blur"], digest="e")
+    _video(workspace, "plain", hashtags=[], digest="f")
+
+    added = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/assets",
+        json={"asset_ids": ["tagged", "plain"]},
+    )
+    assert added.status_code == 201, added.text
+
+    queue = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+    ).json()["queue"]
+    by_asset = {item["asset_id"]: item for item in queue}
+
+    tagged = by_asset["tagged"]
+    assert tagged["hashtags"] == ["fitness", "workout"]
+    assert tagged["asset_hashtags"] == ["fitness", "workout"]
+    assert tagged["video_path"].endswith("tagged-edited.mp4")
+    assert tagged["media_version"]["original"] is False
+    assert tagged["media_version"]["kind"] == "edited"
+    assert tagged["media_version"]["id"] == "tagged-edited"
+    assert [effect["id"] for effect in tagged["media_version"]["effects"]] == ["face_blur"]
+    # Named from the registry, so the interface has a word and not an id.
+    assert tagged["media_version"]["effects"][0]["label"]
+
+    plain = by_asset["plain"]
+    assert plain["hashtags"] == []
+    assert plain["asset_hashtags"] == []
+    assert plain["media_version"] == {
+        "id": None, "kind": "original", "original": True, "effects": [],
+    }
+
+    # The single-item reads answer the same way as the page, so an edit does
+    # not make the badges disappear until the next reload.
+    edited = request(
+        "PATCH", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{tagged['id']}",
+        json={"body": "Real copy."},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["item"]["media_version"] == tagged["media_version"]
+    assert edited.json()["item"]["asset_hashtags"] == ["fitness", "workout"]
+
+
+def test_a_captioned_cut_is_not_the_cut_a_post_carries(workspace) -> None:
+    """Captions are deliberately outside the rendered kinds the scheduler
+    publishes, so a video with only a captioned cut posts as its original -
+    and the import and the badge both say so, rather than naming a cut the
+    planner would re-resolve away."""
+    campaign_id = campaign(workspace)
+    _video(workspace, "subtitled", hashtags=[], digest="a")
+    _cut(workspace, "subtitled", "captioned", effects=[], digest="b")
+
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/assets",
+        json={"asset_ids": ["subtitled"]},
+    )
+    queue = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+    ).json()["queue"]
+    item = next(entry for entry in queue if entry["asset_id"] == "subtitled")
+    assert item["video_path"].endswith("subtitled.mp4")
+    assert item["media_version"]["original"] is True
+
+
+def test_a_post_with_no_library_identity_names_no_cut(workspace) -> None:
+    campaign_id = campaign(workspace)
+    made = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    )
+    assert made.status_code == 201, made.text
+    assert made.json()["item"]["media_version"] is None
+    assert made.json()["item"]["asset_hashtags"] == []
+
