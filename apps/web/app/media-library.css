@@ -1238,6 +1238,45 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .autocut-unsynced { color: var(--muted); }
 .autocut-plan-error { display: inline-flex; align-items: center; gap: 8px; flex-basis: 100%; color: var(--warn); }
 .autocut-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* A field that holds a control rather than an input - the music picker - so it
+   is not a <label>, whose click would send focus to the first thing inside. */
+.autocut-controls .autocut-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+
+/* The music picker: the chosen track on one row, and behind a button the two
+   lists it can be chosen from - the Library's own audio and a search of what
+   may be added to it. Shared by AutoCut and Storytelling, so it lives with the
+   Library's stylesheet rather than either dialog's. */
+.music-picker { display: grid; gap: 6px; min-inline-size: 0; color: var(--text); font-size: 12px; font-weight: 400; }
+.music-picker-current { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-inline-size: 0; }
+.music-picker-choice { display: grid; gap: 2px; min-inline-size: 0; }
+.music-picker-choice strong { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.music-picker-by { color: var(--muted); }
+.music-picker-empty { color: var(--muted); }
+.music-picker-actions { display: flex; flex: none; gap: 4px; }
+.music-picker-hint { color: var(--muted); font-size: 10px; font-weight: 400; }
+.music-picker-panel { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--panel-raised); }
+.music-picker-search { inline-size: 100%; min-inline-size: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
+.music-picker-search::placeholder { color: var(--muted); }
+.music-picker-find { display: flex; gap: 6px; align-items: center; }
+.music-picker-note { margin: 0; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
+.music-picker-list { display: grid; gap: 4px; max-block-size: 220px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.music-picker-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; inline-size: 100%; min-inline-size: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 9px; color: var(--text); background: var(--panel); font: inherit; text-align: start; }
+button.music-picker-row { cursor: pointer; }
+button.music-picker-row:hover { border-color: var(--link); }
+.music-picker-list li.selected .music-picker-row { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.music-picker-name { display: grid; gap: 2px; min-inline-size: 0; }
+.music-picker-name strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.music-picker-name small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+/* The licence badge and what follows from it, kept on one line. */
+.music-terms { display: flex; gap: 6px; align-items: center; min-inline-size: 0; color: var(--muted); font-size: 10px; font-weight: 400; white-space: nowrap; }
+.music-terms span { overflow: hidden; text-overflow: ellipsis; }
+/* A found track: name, a player, and the button that brings it in. The player
+   is the browser's own, sized so three fit a row on the narrow dialog. */
+.music-picker-found { flex-wrap: wrap; }
+.music-picker-found audio { block-size: 28px; inline-size: 180px; flex: none; }
+@media (max-width: 640px) {
+  .music-picker-found audio { inline-size: 100%; }
+}
 /* The rendered preview, played inside the dialog before the real render is
    committed - a portrait clip sized to sit without dominating. */
 /* The pane itself takes the chosen canvas shape, so the preview is the right

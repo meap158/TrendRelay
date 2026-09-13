@@ -8,8 +8,11 @@ import { ActionIcon } from "../ui/action-icons";
 import { AssetFilters } from "../ui/asset-filters";
 import { useLibraryAssets } from "../../lib/use-library-assets";
 import { AspectIcon } from "../ui/aspect-icon";
+import { useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
+import { MusicPicker, loadMusicChoice } from "./music-picker";
+import type { MusicChoice } from "./music-picker";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -131,9 +134,14 @@ export function AutoCutDialog({
       view reopens an unfinished AutoCut. */
   initialDraftId?: string;
 }) {
+  const t = useT();
   const [templates, setTemplates] = useState<TemplateView[]>([]);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [music, setMusic] = useState<string | null>(null);
+  //: A Library track chosen over the template's file - one added from the
+  //  music search, say. The beats are read from it, and the credit it
+  //  carries goes onto the finished video. Null cuts to the template's track.
+  const [musicAsset, setMusicAsset] = useState<MusicChoice | null>(null);
   const [speed, setSpeed] = useState(1);
   const [order, setOrder] = useState<string[]>([]);
   const [plan, setPlan] = useState<PlanView | null>(null);
@@ -293,7 +301,8 @@ export function AutoCutDialog({
     return () => { live = false; };
   }, [open, order.length, apiFetch, base, onError]);
 
-  const planKey = `${templateId}:${music}:${speed}:${order.join(",")}`;
+  const musicAssetId = musicAsset?.id ?? null;
+  const planKey = `${templateId}:${music}:${musicAssetId}:${speed}:${order.join(",")}`;
 
   // The plan preview, always what a render would produce right now. Debounced,
   // so dragging the speed slider fires one POST when the value settles rather
@@ -305,7 +314,9 @@ export function AutoCutDialog({
       setPlanning(true);
       void apiFetch(`${base}/plan`, {
         method: "POST",
-        body: JSON.stringify({ asset_ids: order, template_id: templateId, music, speed }),
+        body: JSON.stringify({
+          asset_ids: order, template_id: templateId, music, music_asset_id: musicAssetId, speed,
+        }),
       })
         .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
         .then(({ ok, body }) => {
@@ -320,7 +331,7 @@ export function AutoCutDialog({
         .finally(() => { if (live) setPlanning(false); });
     }, 300);
     return () => { live = false; clearTimeout(run); };
-  }, [open, planKey, templateId, music, speed, order, planNonce, apiFetch, base]);
+  }, [open, planKey, templateId, music, musicAssetId, speed, order, planNonce, apiFetch, base]);
 
   const chosen = useMemo(
     () => templates.find((template) => template.id === templateId) ?? null,
@@ -341,7 +352,8 @@ export function AutoCutDialog({
       const res = await apiFetch(`${base}/preview`, {
         method: "POST",
         body: JSON.stringify({
-          asset_ids: order, template_id: templateId, music, speed, aspect, fill,
+          asset_ids: order, template_id: templateId, music, music_asset_id: musicAssetId,
+          speed, aspect, fill,
         }),
       });
       const body = await res.json();
@@ -388,7 +400,7 @@ export function AutoCutDialog({
     }
     // Caption and its position are deliberately absent: they change only the
     // HTML overlay, never the rendered montage, so they must not rebuild it.
-  }, [templateId, order, music, speed, aspect, fill, apiFetch, base, onError]);
+  }, [templateId, order, music, musicAssetId, speed, aspect, fill, apiFetch, base, onError]);
 
   // Preview on by default: it builds when the dialog opens and redraws
   // (debounced) whenever the template, music, speed or order changes - so the
@@ -413,7 +425,8 @@ export function AutoCutDialog({
       const res = await apiFetch(`${base}/render`, {
         method: "POST",
         body: JSON.stringify({
-          asset_ids: order, template_id: templateId, music, speed, aspect, fill,
+          asset_ids: order, template_id: templateId, music, music_asset_id: musicAssetId,
+          speed, aspect, fill,
           caption: caption.trim(), caption_position: captionPos,
           title: title.trim() || undefined,
           // The draft this is the render of, so it stops being offered to
@@ -432,13 +445,13 @@ export function AutoCutDialog({
     } finally {
       setRendering(false);
     }
-  }, [templateId, order, music, speed, aspect, fill, caption, captionPos, title, draftId, apiFetch, base, onQueued, onError, onClose]);
+  }, [templateId, order, music, musicAssetId, speed, aspect, fill, caption, captionPos, title, draftId, apiFetch, base, onQueued, onError, onClose]);
 
   // The current arrangement as an AutoCut draft spec.
   const draftSpec = useCallback(() => ({
-    asset_ids: order, template_id: templateId, music, speed, aspect, fill,
+    asset_ids: order, template_id: templateId, music, music_asset_id: musicAssetId, speed, aspect, fill,
     caption: caption.trim(), caption_position: captionPos,
-  }), [order, templateId, music, speed, aspect, fill, caption, captionPos]);
+  }), [order, templateId, music, musicAssetId, speed, aspect, fill, caption, captionPos]);
 
   // Save (or re-save) this arrangement as a resumable draft, so closing the
   // dialog no longer loses it. A first save creates; later saves update the
@@ -502,6 +515,9 @@ export function AutoCutDialog({
       setOrder(ids.filter((assetId) => present.has(assetId)));
       setTemplateId(spec.template_id ?? null);
       setMusic(spec.music ?? null);
+      // By id, from the Library: a track that has left it since is simply
+      // not chosen, and the cut falls back to the template's own.
+      setMusicAsset(await loadMusicChoice(apiFetch, workspaceId, spec.music_asset_id));
       setSpeed(typeof spec.speed === "number" ? spec.speed : 1);
       setAspect(spec.aspect ?? "portrait");
       setFill(spec.fill ?? "cover");
@@ -640,15 +656,23 @@ export function AutoCutDialog({
           </div>
 
           <div className="autocut-controls">
-            <label>
+            {/* A div, not a label: the picker holds buttons and inputs of its
+                own, and a label's click would send focus to the first of them. */}
+            <div className="autocut-field autocut-field-wide">
               <span>Music</span>
-              <span className="autocut-music-row">
-                <span>{music ?? chosen?.music ?? "—"}</span>
-                {music
-                  ? <Button variant="quiet" size="sm" onClick={() => setMusic(null)}>Use template default</Button>
-                  : <small>travels with the template</small>}
-              </span>
-            </label>
+              <MusicPicker
+                workspaceId={workspaceId}
+                apiFetch={apiFetch}
+                value={musicAsset}
+                onChange={setMusicAsset}
+                onQueued={onQueued}
+                onError={onError}
+                // With nothing chosen the template's own track plays, so that
+                // is what the empty row says.
+                emptyLabel={music ?? chosen?.music ?? undefined}
+                hint={t("music.beatHint")}
+              />
+            </div>
             <label>
               <span>Speed <b>{speed.toFixed(2)}×</b></span>
               <input

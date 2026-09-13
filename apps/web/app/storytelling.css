@@ -82,6 +82,9 @@
    167px column and spilled into the language field next to it. */
 .story-shape .ui-segmented button { gap: 4px; padding-inline: 6px; }
 .story-shape > label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 600; }
+/* The music bed, under the pacing and the voice: the whole row, since the
+   picker opens two lists beneath it. */
+.story-music { display: grid; gap: 5px; margin-block-start: 12px; color: var(--muted); font-size: 10px; font-weight: 600; }
 .story-toggle { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: center; cursor: pointer; }
 .story-toggle input { grid-row: span 2; margin: 0; cursor: pointer; }
 .story-toggle span { color: var(--text); font-size: 12px; font-weight: 500; }

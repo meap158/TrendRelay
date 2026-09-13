@@ -52,6 +52,8 @@ import { LOCALE_CODES } from "../../lib/i18n/locales";
 import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail } from "../publish/composer";
 import type { LibraryAsset } from "../publish/composer";
+import { MusicPicker, loadMusicChoice } from "./music-picker";
+import type { MusicChoice } from "./music-picker";
 import { ActionIcon } from "../ui/action-icons";
 import { AspectIcon } from "../ui/aspect-icon";
 import { AssetFilters } from "../ui/asset-filters";
@@ -207,6 +209,9 @@ export function StorytellingDialog({
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templateId, setTemplateId] = useState("explainer");
   const [aspect, setAspect] = useState<string>("16:9");
+  //: A Library track laid under the voice, ducked while it speaks. Its credit
+  //  goes onto the finished video. Null is a narration with no music.
+  const [musicAsset, setMusicAsset] = useState<MusicChoice | null>(null);
   const [subtitles, setSubtitles] = useState(true);
   //: The caption look - "" is the plain sentence subtitle; a preset id is an
   //  animated word-highlight style that lights each word as it is spoken.
@@ -734,6 +739,7 @@ export function StorytellingDialog({
           aspect,
           subtitles,
           caption_style: captionStyle,
+          music_asset_id: musicAsset?.id ?? undefined,
           // The draft this is the render of, so it stops being offered to
           // pick up once its video is in the Library.
           draft_id: draftId ?? undefined,
@@ -863,6 +869,7 @@ export function StorytellingDialog({
           aspect,
           subtitles,
           caption_style: captionStyle,
+          music_asset_id: musicAsset?.id ?? undefined,
           broll_kind: brollKind,
           // Carry straight through to a queued render.
           render: true,
@@ -896,6 +903,7 @@ export function StorytellingDialog({
       aspect,
       subtitles,
       caption_style: captionStyle,
+      music_asset_id: musicAsset?.id ?? undefined,
     };
   }
 
@@ -967,6 +975,9 @@ export function StorytellingDialog({
       setAspect(spec.aspect ?? "16:9");
       setSubtitles(spec.subtitles !== false);
       setCaptionStyle(spec.caption_style ?? "");
+      // By id, from the Library: a track that has left it since is simply
+      // not chosen, and the story renders without music.
+      setMusicAsset(await loadMusicChoice(apiFetch, workspaceId, spec.music_asset_id));
       setDraftId(id);
       setDraftsOpen(false);
     } catch (reason) {
@@ -1345,6 +1356,21 @@ export function StorytellingDialog({
                 )}
               </label>
             )}
+          </div>
+          {/* The music bed. Under the voice rather than instead of it: the
+              renderer ducks it while the narration speaks, and the credit a
+              CC BY track owes goes onto the caption of every post. */}
+          <div className="story-music">
+            <span>{t("music.title")}</span>
+            <MusicPicker
+              workspaceId={workspaceId}
+              apiFetch={apiFetch}
+              value={musicAsset}
+              onChange={setMusicAsset}
+              onQueued={onQueued}
+              onError={onError}
+              hint={t("music.duckedHint")}
+            />
           </div>
         </section>
 
