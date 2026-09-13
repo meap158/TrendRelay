@@ -670,8 +670,13 @@ def build_server(workspace_id: str) -> FastMCP:
         name="list_products",
         description=(
             "Search the workspace product catalog, optionally limited to one "
-            "campaign or to products with/without a fetched listing. Returns "
-            "identity, primary image, a bounded listing preview and every offer; "
+            "campaign or to products with/without a fetched listing. Products "
+            "whose listing has never been read are included by default and "
+            "still carry their import thumbnail. Every row has `images` - the "
+            "one place to look for pictures, holding the first few of "
+            "`image_count` - plus `listing_status`, which says whether those "
+            "are the whole gallery or only what has been read so far. Also "
+            "returns identity, a bounded listing preview and every offer; "
             "pages with limit/offset. Use get_product_details only for products "
             "you need in full, rather than pulling every long description and "
             "gallery into context at once."
@@ -696,11 +701,15 @@ def build_server(workspace_id: str) -> FastMCP:
         name="get_product_details",
         description=(
             "Read one product's complete stored listing and commercial context: "
-            "full description, every stored image, categories, attributes, "
-            "variations, vouchers, listing freshness, offers, campaign membership, "
-            "tracking links, clicks and conversions. Use the product_id returned by "
-            "list_products, list_campaign_products or get_post_context. This is the "
-            "authoritative context for product-aware copy and media prompts."
+            "full description, categories, attributes, variations, vouchers, "
+            "listing freshness, offers, campaign membership, tracking links, "
+            "clicks and conversions. `images` holds every picture known for the "
+            "product as absolute URLs, ready to fetch and use as visual "
+            "reference; it is populated whether or not the listing has been "
+            "read, and `listing_status` says which of those two this is. Use "
+            "the product_id returned by list_products, list_campaign_products "
+            "or get_post_context. This is the authoritative context for "
+            "product-aware copy and media prompts."
         ),
     )
     def get_product_details(product_id: str) -> dict[str, Any]:

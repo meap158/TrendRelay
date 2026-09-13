@@ -74,9 +74,42 @@ def _listing_summary(product: Product) -> dict[str, Any] | None:
     }
 
 
+#: How many pictures a compact read carries. The gallery of a listing runs to
+#: a dozen; a catalogue page of fifty products would be six hundred URLs, and
+#: the caller that needs them all asks for one product by id.
+SUMMARY_IMAGES = 4
+
+
+def product_images(product: Product) -> list[str]:
+    """Every picture known for this product, best first, without duplicates.
+
+    One list, whatever state the product is in. The pictures live in two
+    places - the catalogue row's `image_url`, set by the import, and the
+    listing's gallery, set by a page read - and which of them holds anything
+    depends on whether that read has happened. A caller told to look at
+    `listing.images` finds `None` on a product whose listing was never
+    fetched, and misses the one picture that *is* there.
+
+    The gallery leads because it is ordered as the shop orders it, and the row
+    image is the same file as its first entry on every product in this
+    workspace - so it is appended rather than prepended, and only when the
+    gallery does not already have it.
+    """
+    from trendrelay_api.integrations.shopee_listing import is_fetched_listing
+
+    listing = product.listing if is_fetched_listing(product.listing) else None
+    found: list[str] = []
+    for url in [*(listing or {}).get("images", []), product.image_url]:
+        text = str(url).strip() if url else ""
+        if text and text not in found:
+            found.append(text)
+    return found
+
+
 def product_summary(product: Product) -> dict[str, Any]:
     """Stable compact product context shared by catalog, campaign and post reads."""
     listing = _listing_summary(product)
+    images = product_images(product)
     return {
         "product_id": product.id,
         "name": product.name,
@@ -86,9 +119,51 @@ def product_summary(product: Product) -> dict[str, Any]:
         "identifier": product.identifier,
         "product_url": product.product_url,
         "image_url": product.image_url,
+        #: The one place to look for pictures. `image_url` and
+        #: `listing.images` both remain, and both are subsets of this.
+        "images": images[:SUMMARY_IMAGES],
+        "image_count": len(images),
         "listing": listing,
         "listing_fetched_at": _iso(product.listing_fetched_at),
         "has_full_listing": listing is not None,
+        #: Whether the pictures above are all there are, or all that has been
+        #: read so far. Said rather than left to be inferred from a null: an
+        #: assistant building a prompt from one image should know whether it
+        #: is working from the whole gallery or from the thumbnail an import
+        #: happened to carry.
+        "listing_status": _listing_status(product, listing is not None, len(images)),
+    }
+
+
+def _listing_status(product: Product, fetched: bool, image_count: int) -> dict[str, Any]:
+    if fetched:
+        return {
+            "state": "fetched",
+            "detail": (
+                f"The listing page has been read, so these {image_count} "
+                "pictures, the description and the attributes are what the "
+                "shop published."
+            ),
+        }
+    if not product.product_url:
+        return {
+            "state": "unavailable",
+            "detail": (
+                "This product has no listing URL, so its page cannot be read. "
+                "What is here came from the import and is all there is."
+            ),
+        }
+    return {
+        "state": "not_fetched",
+        "detail": (
+            "The listing page has not been read yet, so this is the import's "
+            f"own thumbnail rather than the shop's gallery - {image_count} "
+            "picture, where a read usually finds several, plus the "
+            "description, attributes and variations. Ask the operator to run "
+            "Fetch listing details in Attribution for this product; reading "
+            "shop pages reaches an external service and is not something this "
+            "connection does on its own."
+        ),
     }
 
 
@@ -383,6 +458,10 @@ def get_product_details(session: Session, workspace_id: str, product_id: str) ->
 
     return {
         **product_summary(product),
+        # Every picture, not the four a catalogue page carries. This is the
+        # read a caller makes about one product it has already chosen, which
+        # is exactly when the rest of the gallery is wanted.
+        "images": product_images(product),
         "catalog_key": product.catalog_key,
         "import_filename": product.import_filename,
         "imported_at": _iso(product.imported_at),

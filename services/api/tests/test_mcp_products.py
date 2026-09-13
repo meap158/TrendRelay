@@ -396,3 +396,163 @@ def test_the_per_post_ceiling_is_enforced(session) -> None:
 def test_a_post_outside_the_workspace_is_not_found(session) -> None:
     with pytest.raises(LookupError):
         products.set_post_products(session, "other-ws", "q1", ["offer1"])
+
+
+# --- pictures, whether or not the listing page has been read ------------------
+
+
+def _catalogue(session, *, listing: dict | None, image_url: str | None,
+               product_url: str | None = "https://shopee.vn/x") -> Product:
+    """One product in a chosen state, with nothing else to distract from it."""
+    row = Product(
+        id="prod-pics", workspace_id="ws", catalog_key="k-pics",
+        name="Ring light", marketplace="shopee", image_url=image_url,
+        product_url=product_url, created_by="local-admin",
+    )
+    if listing is not None:
+        row.listing = listing
+        row.listing_fetched_at = datetime(2026, 9, 1, tzinfo=UTC)
+    session.add(row)
+    return row
+
+
+def test_every_picture_arrives_in_one_place_whatever_the_listing_state() -> None:
+    """The trap this closes.
+
+    Pictures live in two fields - the import's `image_url` and the listing's
+    gallery - and which one holds anything depends on whether the page has
+    been read. An assistant told to look at `listing.images` finds `None` on a
+    product whose listing was never fetched, and misses the picture that is
+    there. `images` is the one place, in both states.
+    """
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(session, listing=None, image_url="https://cdn.test/thumb.jpg")
+
+    with Factory() as session:
+        row = products.get_product_details(session, "ws", "prod-pics")
+
+    assert row["images"] == ["https://cdn.test/thumb.jpg"]
+    assert row["image_count"] == 1
+    assert row["has_full_listing"] is False
+    # The old fields are unchanged, so a caller reading either still works.
+    assert row["image_url"] == "https://cdn.test/thumb.jpg"
+    assert row["listing"] is None
+
+
+def test_the_gallery_leads_and_the_import_thumbnail_is_not_repeated() -> None:
+    """On every product in this workspace the row image is the gallery's first.
+
+    Concatenating them would hand an assistant the same picture twice and call
+    it two references.
+    """
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(
+            session,
+            listing={"images": ["https://cdn.test/1.jpg", "https://cdn.test/2.jpg"],
+                     "description": "A light.", "title": "Ring light"},
+            image_url="https://cdn.test/1.jpg",
+        )
+
+    with Factory() as session:
+        row = products.get_product_details(session, "ws", "prod-pics")
+
+    assert row["images"] == ["https://cdn.test/1.jpg", "https://cdn.test/2.jpg"]
+    assert row["image_count"] == 2
+
+
+def test_a_thumbnail_the_gallery_lacks_is_still_offered() -> None:
+    """Deduping must not become dropping."""
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(
+            session,
+            listing={"images": ["https://cdn.test/1.jpg"], "description": "x", "title": "t"},
+            image_url="https://cdn.test/other.jpg",
+        )
+
+    with Factory() as session:
+        row = products.get_product_details(session, "ws", "prod-pics")
+
+    assert row["images"] == ["https://cdn.test/1.jpg", "https://cdn.test/other.jpg"]
+
+
+def test_a_catalogue_page_carries_a_few_pictures_and_says_how_many_there_are() -> None:
+    """Fifty products' full galleries is six hundred URLs of context.
+
+    The count travels with the sample so a caller knows to ask for the one
+    product it actually wants.
+    """
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(
+            session,
+            listing={"images": [f"https://cdn.test/{n}.jpg" for n in range(9)],
+                     "description": "x", "title": "t"},
+            image_url="https://cdn.test/0.jpg",
+        )
+
+    with Factory() as session:
+        listed = products.list_products(session, "ws")["products"][0]
+        full = products.get_product_details(session, "ws", "prod-pics")
+
+    assert len(listed["images"]) == products.SUMMARY_IMAGES
+    assert listed["image_count"] == 9
+    # The read about one chosen product holds nothing back.
+    assert len(full["images"]) == 9
+
+
+def test_the_payload_says_whether_the_pictures_are_all_there_are() -> None:
+    """One picture means two different things, and the difference matters.
+
+    An assistant building a video prompt from a single reference should know
+    whether that is the whole gallery or the thumbnail an import happened to
+    carry - and, when more could be read, that reading it is the operator's
+    to run, because it reaches an external service.
+    """
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(session, listing=None, image_url="https://cdn.test/thumb.jpg")
+
+    with Factory() as session:
+        status = products.get_product_details(session, "ws", "prod-pics")["listing_status"]
+
+    assert status["state"] == "not_fetched"
+    assert "Fetch listing details" in status["detail"]
+    assert "external service" in status["detail"]
+
+
+def test_a_product_with_no_page_to_read_says_so_instead() -> None:
+    """A different answer, because there is nothing to be done about it."""
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(session, listing=None, image_url="https://cdn.test/t.jpg", product_url=None)
+
+    with Factory() as session:
+        status = products.get_product_details(session, "ws", "prod-pics")["listing_status"]
+
+    assert status["state"] == "unavailable"
+    assert "all there is" in status["detail"]
+
+
+def test_products_without_a_listing_are_in_the_catalogue_by_default() -> None:
+    """They are the ones most likely to be missed, so they are not opt-in."""
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Factory.begin() as session:
+        _catalogue(session, listing=None, image_url="https://cdn.test/t.jpg")
+
+    with Factory() as session:
+        assert [row["product_id"] for row in products.list_products(session, "ws")["products"]] \
+            == ["prod-pics"]
+        assert products.list_products(session, "ws", has_listing=True)["products"] == []
+        assert [row["product_id"] for row
+                in products.list_products(session, "ws", has_listing=False)["products"]] \
+            == ["prod-pics"]
