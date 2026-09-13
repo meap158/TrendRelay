@@ -6,10 +6,10 @@ Last updated: 2026-09-14
 
 - **Context & Request**:
   - Tags on media cards and the detail pane (e.g., `Cover text`, `Transcript draft`, `On-screen text draft`) were previously all rendered with the same blue color (`#1a56c4` on `var(--link-bg)`).
-  - User requested distinguishing tag classes: keep the blue color for effects (`Cover text`, `Face blur`, etc.), and use unified harmonious colors for other classes. Specifically, both `Transcript draft` and `On-screen text draft` belong to the same `processing` class and therefore share the exact same violet color (`#5e35b1` on `#f3eefa`).
+  - User requested distinguishing tag classes: keep the blue color for effects (`Cover text`, `Face blur`, etc.), and use unified harmonious colors for other classes. Specifically, both `Transcript draft` and `On-screen text draft` belong to the same `processing` class and therefore share the exact same warm yellow/amber color (`#7a5c00` on `#fdf5db`).
 - **Changes**:
   - `apps/web/app/console.css`:
-    - Defined semantic tokens inside `:root`: `--tag-effect` (blue), `--tag-processing` (violet `#5e35b1` on `#f3eefa`), `--tag-transcript` & `--tag-ocr` (aliased to `--tag-processing`), `--tag-captions` (teal `#0a635b` on `#e4f4f2`), `--tag-voiceover` (rose `#8f2747` on `#faebf0`), `--tag-vision` (slate `#4b5563` on `#f1f3f5`).
+    - Defined semantic tokens inside `:root`: `--tag-effect` (blue), `--tag-processing` (warm yellow/amber `#7a5c00` on `#fdf5db`), `--tag-transcript` & `--tag-ocr` (aliased to `--tag-processing`), `--tag-captions` (teal `#0a635b` on `#e4f4f2`), `--tag-voiceover` (rose `#8f2747` on `#faebf0`), `--tag-vision` (slate `#4b5563` on `#f1f3f5`).
   - `apps/web/app/media-library.css`:
     - Added category modifiers: `.blurred-tag.tag-effect`, `.blurred-tag.tag-processing` (applied to transcript and ocr tags), `.blurred-tag.tag-captions`, `.blurred-tag.tag-voiceover`, `.blurred-tag.tag-vision`.
   - `apps/web/app/library/page.tsx`:

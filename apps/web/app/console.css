@@ -24,8 +24,8 @@
   /* Category colors for media library tags & workflow artifacts */
   --tag-effect: #1a56c4;
   --tag-effect-bg: #eef2fb;
-  --tag-processing: #5e35b1;
-  --tag-processing-bg: #f3eefa;
+  --tag-processing: #7a5c00;
+  --tag-processing-bg: #fdf5db;
   --tag-transcript: var(--tag-processing);
   --tag-transcript-bg: var(--tag-processing-bg);
   --tag-ocr: var(--tag-processing);
