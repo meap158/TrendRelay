@@ -231,9 +231,13 @@ export function EffectEditor({
   const usesAutomaticFaceObject = (candidateSteps: Step[]) => batch
     && autoFaceObject
     && candidateSteps.some((step) => step.effect === "face_overlay");
+  const usesAutomaticRegions = (candidateSteps: Step[]) => batch
+    && candidateSteps.some((step) => step.effect === "cover_text" && !(step.values?.regions as any[])?.length);
   const automaticPreviewReason = usesAutomaticFaceObject(steps)
     ? "Each item gets its own matched object when the batch is queued. Turn off automatic selection to preview one shared object."
-    : "";
+    : usesAutomaticRegions(steps)
+      ? "Each item's text regions are resolved from its own OCR reading when the batch is queued."
+      : "";
 
   function edit(next: Step[]) {
     setSteps(next);
@@ -655,6 +659,21 @@ export function EffectEditor({
                             <span>
                               <strong>Automatic per item</strong>
                               <small>The resolved object is recorded on each tracked job.</small>
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        param.kind === "regions"
+                        && batch
+                        && effect.id === "cover_text"
+                      ) ? (
+                        <div key={param.id} className="effect-param effect-param-gallery">
+                          <span>{paramLabel(t, effect.id, param.id, param.label)}</span>
+                          <div className="effect-auto-object-value">
+                            <ActionIcon name="effects" />
+                            <span>
+                              <strong>Automatic per item</strong>
+                              <small>Regions are resolved from each clip&apos;s on-screen text reading.</small>
                             </span>
                           </div>
                         </div>

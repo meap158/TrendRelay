@@ -2,6 +2,35 @@
 
 Last updated: 2026-09-14
 
+## Feature: Auto-apply detected speech & on-screen text, enable batch Cover On-screen Text, 2026-09-14
+
+- **Context & Request**:
+  - In the Media Library, clips with detected speech or on-screen text had machine drafts available, but operators had to manually click "Use draft" and save each clip individually.
+  - Furthermore, running "Cover on-screen text" in batch across 42 clips failed with `Cover on-screen text has nothing to cover yet. Read the clip's on-screen text in the Library first, then add this.` because the batch effect runner passed empty regions to each clip instead of resolving regions per-asset from each clip's OCR data.
+  - The OCR checkbox in `AutoTranscribe` and `BatchTranscribe` also defaulted to unchecked (`false`).
+- **Changes**:
+  - `services/api/src/trendrelay_api/media_library.py`:
+    - Added `_auto_enrich` helper to queue speech and/or OCR enrichment after successful asset ingest when providers are ready.
+    - Wrapped post-ingest call in `try/except` so enrichment failures never block asset ingestion.
+  - `services/api/src/trendrelay_api/media_library_api.py`:
+    - Added `_try_ocr_reading` helper (non-raising query returning reviewed first, then machine draft).
+    - In `submit_batch_render`: added per-asset `cover_text` region resolution from the clip's OCR reading via `readable_lines(...)`, matching the `auto_face_object` architectural pattern. Skips items without OCR reading or text gracefully rather than failing the batch.
+  - `apps/web/app/library/auto-transcribe.tsx`:
+    - Default `ocr` mode to `ocrPossible` (checked by default for video/images when OCR provider is available, matching `speechPossible`).
+  - `apps/web/app/library/batch-transcribe.tsx`:
+    - Default `ocr` mode to `true` in `BatchTranscribe`.
+  - `apps/web/app/library/effect-editor.tsx`:
+    - For `param.kind === "regions"` on `cover_text` in batch mode, renders "Automatic per item" with explanation rather than a disabled "Read this clip" button.
+    - Updated `automaticPreviewReason` to inform user that text regions are resolved automatically per item at queue time.
+  - `apps/web/app/library/page.tsx`:
+    - In `reviewedText` and `reviewedLanguage`, fall back to the machine draft so detected speech and on-screen text populate the form and apply by default without requiring manual per-clip clicks.
+  - `services/api/tests/test_media_library_api.py`:
+    - Added unit tests for `_auto_enrich` and `_try_ocr_reading` fallback.
+- **Verification**:
+  - Pytest: 237/237 passed, new tests 2/2 passed.
+  - TypeScript typecheck: 0 errors.
+  - Vitest / Node test runner: 504/504 passed.
+
 ## Fix: Caption language dropdown resets modal scroll and vanishes, 2026-09-14
 
 - **Context & Request**:

@@ -1494,3 +1494,119 @@ def test_batch_media_import(tmp_path: Path, monkeypatch) -> None:
     # Verify the created jobs have batch metadata
     assert len(payload["queued"]) == 3
     assert payload["queued"][0]["payload"]["batch"]["total"] == 3
+
+
+def test_auto_enrich_queues_ready_providers(monkeypatch) -> None:
+    """Post-ingest auto-enrich queues speech + OCR when providers are ready."""
+    queued: list[dict] = []
+
+    monkeypatch.setattr(
+        "trendrelay_api.media_ai.provider_status",
+        lambda: {
+            "speech": {"ready": True, "provider": "faster-whisper"},
+            "ocr": {"ready": True, "provider": "rapidocr"},
+            "vision": {"ready": False, "provider": "clip"},
+        },
+    )
+    monkeypatch.setattr(
+        "trendrelay_api.media_ai.create_enrichment_job",
+        lambda **kwargs: queued.append(kwargs) or {"id": "enrich_123"},
+    )
+
+    # Video with audio gets both speech and ocr
+    media_library._auto_enrich(
+        workspace_id="ws_1",
+        asset_id="asset_1",
+        actor_user_id="user_1",
+        media_kind="video",
+        has_audio=True,
+    )
+    assert len(queued) == 1
+    assert queued[0]["modes"] == ["speech", "ocr"]
+
+    # Audio-only gets only speech
+    queued.clear()
+    media_library._auto_enrich(
+        workspace_id="ws_1",
+        asset_id="asset_2",
+        actor_user_id="user_1",
+        media_kind="audio",
+        has_audio=True,
+    )
+    assert len(queued) == 1
+    assert queued[0]["modes"] == ["speech"]
+
+    # Video without audio gets only ocr
+    queued.clear()
+    media_library._auto_enrich(
+        workspace_id="ws_1",
+        asset_id="asset_3",
+        actor_user_id="user_1",
+        media_kind="video",
+        has_audio=False,
+    )
+    assert len(queued) == 1
+    assert queued[0]["modes"] == ["ocr"]
+
+
+def test_try_ocr_reading_prefers_reviewed_over_machine() -> None:
+    """_try_ocr_reading falls back to machine draft when no reviewed text exists,
+    and returns reviewed when it does exist."""
+    workspace_id = create_workspace()
+    with TestingSession() as session:
+        asset = MediaAsset(
+            id="asset_ocr_test",
+            workspace_id=workspace_id,
+            title="OCR Test Asset",
+            media_kind="video",
+            source_type="local",
+            original_path="/tmp/test.mp4",
+            original_sha256="fake_sha",
+            mime_type="video/mp4",
+            size_bytes=1000,
+            created_by="user_1",
+        )
+        session.add(asset)
+
+        # 1. No reading at all
+        session.flush()
+        assert media_library_api._try_ocr_reading(session, workspace_id, asset.id) is None
+
+        # 2. Add machine draft
+        draft = MediaTranscript(
+            id="trans_machine",
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            kind="ocr",
+            provider="rapidocr",
+            status="machine",
+            text="Machine text",
+            segments=[{"text": "Machine text"}],
+            created_by="user_1",
+        )
+        session.add(draft)
+        session.flush()
+        found = media_library_api._try_ocr_reading(session, workspace_id, asset.id)
+        assert found is not None
+        assert found.status == "machine"
+        assert found.text == "Machine text"
+
+        # 3. Add reviewed reading -> preferred
+        reviewed = MediaTranscript(
+            id="trans_reviewed",
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            kind="ocr",
+            provider="rapidocr",
+            status="reviewed",
+            text="Reviewed text",
+            segments=[{"text": "Reviewed text"}],
+            created_by="user_1",
+        )
+        session.add(reviewed)
+        session.flush()
+        found = media_library_api._try_ocr_reading(session, workspace_id, asset.id)
+        assert found is not None
+        assert found.status == "reviewed"
+        assert found.text == "Reviewed text"
+

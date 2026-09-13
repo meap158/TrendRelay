@@ -105,7 +105,7 @@ export function AutoTranscribe({
     && (mediaKind === "video" || mediaKind === "image");
   const [modes, setModes] = useState<Record<"speech" | "ocr" | "vision", boolean>>({
     speech: speechPossible,
-    ocr: false,
+    ocr: ocrPossible,
     vision: false,
   });
   const [job, setJob] = useState<EnrichmentJob | null>(null);

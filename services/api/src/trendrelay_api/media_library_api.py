@@ -3257,6 +3257,16 @@ def submit_batch_render(
         if job.payload.get("asset_id")
     }
 
+    # Does any step in the recipe need per-asset text-region resolution?
+    # Checked once so the import and interval lookup happen at most once.
+    needs_cover_text = any(
+        item["effect"] == "cover_text" and not item["values"].get("regions")
+        for item in normalised
+    )
+    if needs_cover_text:
+        from trendrelay_api.text_cover import readable_lines
+        ocr_interval_ms = round(get_settings().media_ai_ocr_interval_seconds * 1000)
+
     results: list[dict[str, Any]] = []
     jobs: list[dict[str, Any]] = []
     automatic_object_counts = {"content_match": 0, "safe_fallback": 0}
@@ -3297,6 +3307,50 @@ def submit_batch_render(
                 for item in resolved:
                     if item["effect"] == "face_overlay":
                         item["values"]["object"] = automatic_object["value"]
+            # Per-asset text regions, the same idea as the face object above.
+            # A batch recipe arrives with empty regions because they belong to
+            # each clip's own OCR reading, not to the shared stack. Resolving
+            # them here lets "Cover on-screen text" work across a selection
+            # without the operator reading each clip one by one first.
+            if needs_cover_text:
+                reading = _try_ocr_reading(session, workspace_id, asset.id)
+                if reading is None:
+                    results.append({
+                        "asset_id": asset.id,
+                        "title": asset.title,
+                        "status": "skipped",
+                        "detail": (
+                            "On-screen text has not been read yet for this "
+                            "clip. Read it first, or wait for auto-enrichment "
+                            "to finish."
+                        ),
+                    })
+                    continue
+                if not asset.width or not asset.height:
+                    results.append({
+                        "asset_id": asset.id,
+                        "title": asset.title,
+                        "status": "skipped",
+                        "detail": "This clip's dimensions are unknown.",
+                    })
+                    continue
+                regions, _dropped = readable_lines(
+                    reading.segments or [],
+                    interval_ms=ocr_interval_ms,
+                    width=asset.width,
+                    height=asset.height,
+                )
+                if not regions:
+                    results.append({
+                        "asset_id": asset.id,
+                        "title": asset.title,
+                        "status": "skipped",
+                        "detail": "No on-screen text was found in this clip.",
+                    })
+                    continue
+                for item in resolved:
+                    if item["effect"] == "cover_text" and not item["values"].get("regions"):
+                        item["values"]["regions"] = regions
             job = create_render_job(
                 EffectRenderRequest(
                     workspace_id=workspace_id,
@@ -3678,19 +3732,24 @@ def translation_pairs(
     return {"pairs": installed_pairs()}
 
 
-def _ocr_reading(session: Any, workspace_id: str, asset_pk: str) -> Any:
-    """This clip's on-screen text reading, the reviewed one for preference.
-
-    Somebody corrected it on purpose, and the corrections are what is actually
-    on the screen.
-    """
-    found = session.scalar(
+def _try_ocr_reading(session: Any, workspace_id: str, asset_pk: str) -> Any:
+    """This clip's on-screen text reading, if any, preferring reviewed over machine draft."""
+    return session.scalar(
         select(MediaTranscript).where(
             MediaTranscript.asset_id == asset_pk,
             MediaTranscript.workspace_id == workspace_id,
             MediaTranscript.kind == "ocr",
         ).order_by(MediaTranscript.status.desc())
     )
+
+
+def _ocr_reading(session: Any, workspace_id: str, asset_pk: str) -> Any:
+    """This clip's on-screen text reading, the reviewed one for preference.
+
+    Somebody corrected it on purpose, and the corrections are what is actually
+    on the screen.
+    """
+    found = _try_ocr_reading(session, workspace_id, asset_pk)
     if not found:
         raise HTTPException(
             status_code=404,

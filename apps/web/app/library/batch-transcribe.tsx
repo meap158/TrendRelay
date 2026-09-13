@@ -99,7 +99,7 @@ export function BatchTranscribe({
   const { refresh: refreshJobs } = useJobs();
   const { locale } = useLocale();
   const mediaAi = useMediaAi(apiFetch, open);
-  const [chosen, setChosen] = useState<Record<Mode, boolean>>({ speech: true, ocr: false, vision: false });
+  const [chosen, setChosen] = useState<Record<Mode, boolean>>({ speech: true, ocr: true, vision: false });
   const [language, setLanguage] = useState("");
   // Named in the reader's own language, and only built when the model's list is
   // actually on screen.

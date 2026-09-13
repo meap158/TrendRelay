@@ -643,13 +643,21 @@ async function json<T>(response: Response): Promise<T> {
  * under the field now instead, with a button that says what it is doing.
  */
 function reviewedText(asset: Asset, kind: "speech" | "ocr"): string {
-  return asset.transcripts.find(
+  const reviewed = asset.transcripts.find(
     (item) => item.kind === kind && item.status === "reviewed",
+  )?.text;
+  if (reviewed) return reviewed;
+  // Apply detected machine draft by default so clips with detected speech
+  // or on-screen text are populated immediately rather than requiring manual clicks.
+  return asset.transcripts.find(
+    (item) => item.kind === kind && item.status === "machine",
   )?.text ?? "";
 }
 
 function reviewedLanguage(asset: Asset): string {
-  return asset.transcripts.find((item) => item.status === "reviewed")?.language ?? "und";
+  const reviewed = asset.transcripts.find((item) => item.status === "reviewed")?.language;
+  if (reviewed) return reviewed;
+  return asset.transcripts.find((item) => item.status === "machine")?.language ?? "und";
 }
 
 /**

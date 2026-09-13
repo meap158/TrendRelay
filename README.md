@@ -16,9 +16,9 @@ TrendRelay is a local-first Windows workspace. Discover consolidates topics, pos
 - **Keep source provenance** so every Library item can lead back to the Douyin URL that produced it.
 - **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
 - **Review media locally** using thumbnails, filters, gallery/list views, an in-page player, and **Import media** (drag-and-drop upload, file/folder picker, or local path batch import).
-- **Transcribe and translate locally** with faster-whisper speech drafts and Argos caption language packs; machine text stays separate until it is reviewed.
+- **Transcribe and translate locally** with faster-whisper speech drafts and Argos caption language packs; speech and on-screen text (OCR) are automatically queued upon media ingestion when providers are ready, with detected text applied by default.
 - **Generate governed voiceovers** from reviewed transcripts with optional ElevenLabs setup, live free/paid allowance, regional voice search, current models, and per-take voice controls before a metered job is queued.
-- **Apply non-destructive effects and clip ranges** to one item or a campaign-sized selection while keeping every original immutable.
+- **Apply non-destructive effects and clip ranges** to one item or a campaign-sized selection while keeping every original immutable; effects like Cover On-screen Text automatically resolve bounding regions per asset in batch.
 - **Run a campaign** from one workspace: queue clips and picture carousels, write copy, assign connected accounts, attach an imported offer, set posting times, preview the next day, and switch Autopilot on.
 - **Manage every campaign together** from Campaigns → Campaign overview: compare provider-backed output, views, engagement, queue health, warnings, and pending approvals, with compact metric charts, without opening each campaign.
 - **Place each affiliate URL where it can be clicked** — in the caption on networks that support it, and as a profile/bio pointer on Instagram and TikTok. Disclosure always leads the caption.

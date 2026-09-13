@@ -469,6 +469,43 @@ def create_ingest_job(
     )
 
 
+def _auto_enrich(
+    *,
+    workspace_id: str,
+    asset_id: str,
+    actor_user_id: str,
+    media_kind: str,
+    has_audio: bool,
+) -> None:
+    """Queue speech and/or OCR enrichment for a freshly ingested asset.
+
+    Called automatically after a successful ingest. Only the modes whose
+    providers are already downloaded and active are included — a missing
+    provider is silently skipped rather than raised, because the operator
+    may not have set one up yet and the asset is already safely in the
+    library.
+
+    Does nothing when no mode is applicable (e.g. an audio file with no
+    video track has nothing to OCR).
+    """
+    from trendrelay_api.media_ai import create_enrichment_job, provider_status
+
+    status = provider_status()
+    modes: list[str] = []
+    if has_audio and status.get("speech", {}).get("ready"):
+        modes.append("speech")
+    if media_kind in {"video", "image"} and status.get("ocr", {}).get("ready"):
+        modes.append("ocr")
+    if not modes:
+        return
+    create_enrichment_job(
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        actor_user_id=actor_user_id,
+        modes=modes,
+    )
+
+
 def run_ingest_job(
     job_id: str,
     worker_id: str = "media-library-worker",
@@ -547,7 +584,9 @@ def run_ingest_job(
                     )
                 )
             asset_id = item.id
-        return complete_job(
+            media_kind = processed["media_kind"]
+            has_audio = metadata.get("has_audio", False)
+        result = complete_job(
             job_id,
             worker_id,
             {
@@ -558,6 +597,26 @@ def run_ingest_job(
             },
             factory=factory,
         )
+        # Best-effort auto-enrichment: queue speech and/or OCR reading for
+        # the new asset when the providers are already downloaded and active.
+        # A failure here must never block ingestion — the operator can still
+        # trigger the reading manually from the Library.
+        try:
+            _auto_enrich(
+                workspace_id=payload["workspace_id"],
+                asset_id=asset_id,
+                actor_user_id=payload["actor_user_id"],
+                media_kind=media_kind,
+                has_audio=has_audio,
+            )
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).debug(
+                "Auto-enrichment skipped for %s: provider not ready or error",
+                asset_id,
+                exc_info=True,
+            )
+        return result
     except Exception as error:
         fail_job(job_id, worker_id, str(error), factory=factory)
         raise
