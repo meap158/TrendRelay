@@ -7,6 +7,18 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Media Tag Category Coloring by Class (2026-09-14)
+
+Tags on media cards and the detail pane in the Media Library previously shared a single
+blue color (`.blurred-tag`). They are now categorized into distinct classes:
+- **Effect** (e.g. `Cover text`, `Face blur`, `Face overlays`): Kept blue (`--tag-effect` / `var(--link-bg)`).
+- **Speech transcript** (e.g. `Transcript draft`, `Transcript reviewed`): Violet (`--tag-transcript: #5e35b1` on `#f3eefa`).
+- **On-screen text / OCR** (e.g. `On-screen text draft`, `On-screen text reviewed`): Amber (`--tag-ocr: #7a5c00` on `#fdf5db`).
+- **Captions** (e.g. `Captions`): Teal (`--tag-captions: #0a635b` on `#e4f4f2`).
+- **Voiceover** (e.g. `Voiceover`): Berry/Rose (`--tag-voiceover: #8f2747` on `#faebf0`).
+- **Vision** (e.g. `Scene descriptions`): Slate (`--tag-vision: #4b5563` on `#f1f3f5`).
+All tokens are defined in `:root` in `console.css` and mapped via `.blurred-tag.tag-*` in `media-library.css`, strictly adhering to `palette-guard`.
+
 ## Fix: Asset transcripts parsing in BulkVoiceEditor and VoiceEditor (2026-09-14)
 
 Even after enabling "Allow machine drafts", the Voiceover dialog previously showed

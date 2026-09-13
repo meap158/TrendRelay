@@ -2,6 +2,26 @@
 
 Last updated: 2026-09-14
 
+## Feature: Media Tag Category Coloring by Class, 2026-09-14
+
+- **Context & Request**:
+  - Tags on media cards and the detail pane (e.g., `Cover text`, `Transcript draft`, `On-screen text draft`) were previously all rendered with the same blue color (`#1a56c4` on `var(--link-bg)`).
+  - User requested distinguishing tag classes: keep the blue color for effects (`Cover text`, `Face blur`, etc.), and use different harmonious colors for other classes (transcripts, OCR on-screen text, captions, voiceovers, scene descriptions).
+- **Changes**:
+  - `apps/web/app/console.css`:
+    - Defined semantic tokens inside `:root`: `--tag-effect` (blue), `--tag-transcript` (violet `#5e35b1` on `#f3eefa`), `--tag-ocr` (amber `#7a5c00` on `#fdf5db`), `--tag-captions` (teal `#0a635b` on `#e4f4f2`), `--tag-voiceover` (rose `#8f2747` on `#faebf0`), `--tag-vision` (slate `#4b5563` on `#f1f3f5`).
+  - `apps/web/app/media-library.css`:
+    - Added category modifiers: `.blurred-tag.tag-effect`, `.blurred-tag.tag-transcript`, `.blurred-tag.tag-ocr`, `.blurred-tag.tag-captions`, `.blurred-tag.tag-voiceover`, `.blurred-tag.tag-vision`.
+  - `apps/web/app/library/page.tsx`:
+    - Typed media tags as `MediaTag` with `MediaTagKind = "effect" | "transcript" | "ocr" | "captions" | "voiceover" | "vision"`.
+    - Updated `processingTags` and `assetTags` to attach category metadata to each tag.
+    - Updated card rendering and detail pane kicker to render `<em className={`blurred-tag ${tagClass(tag.kind)}`} key={`${tag.kind}-${tag.name}`}>{tag.name}</em>`.
+- **Verification**:
+  - `node --test apps/web/lib/palette-guard.test.ts`: Passed (all 6 palette-guard tests passed, 0 hardcoded color leaks).
+  - Web unit tests: `npm --prefix apps/web test` (504/504 passed).
+  - Typecheck: `npm --prefix apps/web run typecheck` (0 errors).
+  - Lint: `npm --prefix apps/web run lint` (0 errors).
+
 ## Fix: Asset Transcripts Parsing in BulkVoiceEditor and VoiceEditor, 2026-09-14
 
 - **Context & Request**:

@@ -21,6 +21,19 @@
    * was already a token. */
   --series-trend: #1a73e8;
   --series-ad: #e37400;
+  /* Category colors for media library tags & workflow artifacts */
+  --tag-effect: #1a56c4;
+  --tag-effect-bg: #eef2fb;
+  --tag-transcript: #5e35b1;
+  --tag-transcript-bg: #f3eefa;
+  --tag-ocr: #7a5c00;
+  --tag-ocr-bg: #fdf5db;
+  --tag-captions: #0a635b;
+  --tag-captions-bg: #e4f4f2;
+  --tag-voiceover: #8f2747;
+  --tag-voiceover-bg: #faebf0;
+  --tag-vision: #4b5563;
+  --tag-vision-bg: #f1f3f5;
   /* The two states that had no tokens and so were mixed by hand at every use.
    *
    * Warning was #fff8e1 in eleven places and #fdf5db in five, over #8a6302 in

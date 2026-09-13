@@ -130,37 +130,75 @@ function cutEffects(t: Translate, version: Version): string[] {
   return [...new Set(names)];
 }
 
+export type MediaTagKind = "effect" | "transcript" | "ocr" | "captions" | "voiceover" | "vision";
+
+export type MediaTag = {
+  name: string;
+  kind: MediaTagKind;
+};
+
+export function tagClass(kind: MediaTagKind): string {
+  return `tag-${kind}`;
+}
+
 /** Workflow artifacts carried by an asset, separate from visual effects. */
-function processingTags(t: Translate, asset: Asset): string[] {
+function processingTags(t: Translate, asset: Asset): MediaTag[] {
   const speech = asset.transcripts.filter((item) => item.kind === "speech");
   const ocr = asset.transcripts.filter((item) => item.kind === "ocr");
   const vision = asset.transcripts.filter((item) => item.kind === "vision");
   const kinds = new Set(asset.versions.map((version) => version.kind));
-  return [
-    speech.some((item) => item.status === "reviewed")
-      ? t("filters.transcriptReviewed")
-      : speech.some((item) => item.status === "machine")
-        ? t("filters.transcriptDraft") : null,
-    ocr.some((item) => item.status === "reviewed")
-      ? t("filters.textReviewed")
-      : ocr.some((item) => item.status === "machine")
-        ? t("filters.textDraft") : null,
-    vision.some((item) => item.status === "machine")
-      ? t("filters.contentDraft") : null,
-    kinds.has("captioned") ? t("filters.captions") : null,
-    kinds.has("voiceover") || kinds.has("voiced") ? t("filters.voiceover") : null,
-  ].filter((tag): tag is string => Boolean(tag));
+  const tags: MediaTag[] = [];
+
+  if (speech.some((item) => item.status === "reviewed")) {
+    tags.push({ name: t("filters.transcriptReviewed"), kind: "transcript" });
+  } else if (speech.some((item) => item.status === "machine")) {
+    tags.push({ name: t("filters.transcriptDraft"), kind: "transcript" });
+  }
+
+  if (ocr.some((item) => item.status === "reviewed")) {
+    tags.push({ name: t("filters.textReviewed"), kind: "ocr" });
+  } else if (ocr.some((item) => item.status === "machine")) {
+    tags.push({ name: t("filters.textDraft"), kind: "ocr" });
+  }
+
+  if (vision.some((item) => item.status === "machine")) {
+    tags.push({ name: t("filters.contentDraft"), kind: "vision" });
+  }
+
+  if (kinds.has("captioned")) {
+    tags.push({ name: t("filters.captions"), kind: "captions" });
+  }
+
+  if (kinds.has("voiceover") || kinds.has("voiced")) {
+    tags.push({ name: t("filters.voiceover"), kind: "voiceover" });
+  }
+
+  return tags;
 }
 
-function assetTags(t: Translate, asset: Asset): string[] {
+function assetTags(t: Translate, asset: Asset): MediaTag[] {
   const rendered = renderedCut(asset.versions);
   const effects = rendered ? cutEffects(t, rendered) : [];
+  const tags: MediaTag[] = effects.map((name) => ({ name, kind: "effect" }));
+
   // Captioned cuts are represented by the workflow tag below. A legacy blur
   // or edit with no recorded recipe still needs its known outcome named.
   if (rendered && !effects.length && rendered.kind !== "captioned") {
-    effects.push(cutLabel(t, rendered));
+    const kind: MediaTagKind = (rendered.kind === "voiceover" || rendered.kind === "voiced")
+      ? "voiceover"
+      : "effect";
+    tags.push({ name: cutLabel(t, rendered), kind });
   }
-  return [...new Set([...effects, ...processingTags(t, asset)])];
+
+  const seen = new Set<string>();
+  const combined: MediaTag[] = [];
+  for (const tag of [...tags, ...processingTags(t, asset)]) {
+    if (!seen.has(tag.name)) {
+      seen.add(tag.name);
+      combined.push(tag);
+    }
+  }
+  return combined;
 }
 
 /**
@@ -1793,8 +1831,8 @@ function LibraryContent() {
               row was the only place that said so at a glance. */}
           {tags.length > 0 && (
             <span className="effect-tags" aria-label={t("library.mediaTags")}>
-              {tags.map((name) => (
-                <em className="blurred-tag" key={name}>{name}</em>
+              {tags.map((tag) => (
+                <em className={`blurred-tag ${tagClass(tag.kind)}`} key={`${tag.kind}-${tag.name}`}>{tag.name}</em>
               ))}
             </span>
           )}
@@ -2412,19 +2450,22 @@ function LibraryContent() {
                         earns the tag, not only a blurred one — a clip that has
                         been cropped and had an object put on a face has been
                         edited just as much, and said nothing here before. */}
-                    {assetTags(t, selected).length > 0 && (
-                      <span
-                        className="effect-tags"
-                        aria-label={t("library.mediaTags")}
-                        title={blurredVersion(selected)
-                          ? `Handoffs send this cut: ${handoffPath(selected)}`
-                          : undefined}
-                      >
-                        {assetTags(t, selected).map((name) => (
-                          <em className="blurred-tag" key={name}>{name}</em>
-                        ))}
-                      </span>
-                    )}
+                    {(() => {
+                      const selectedTags = assetTags(t, selected);
+                      return selectedTags.length > 0 && (
+                        <span
+                          className="effect-tags"
+                          aria-label={t("library.mediaTags")}
+                          title={blurredVersion(selected)
+                            ? `Handoffs send this cut: ${handoffPath(selected)}`
+                            : undefined}
+                        >
+                          {selectedTags.map((tag) => (
+                            <em className={`blurred-tag ${tagClass(tag.kind)}`} key={`${tag.kind}-${tag.name}`}>{tag.name}</em>
+                          ))}
+                        </span>
+                      );
+                    })()}
                   </p>
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>

@@ -477,9 +477,13 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 .library-source-meta .blurred-tag { margin-inline-start: 2px; }
 .effect-tags { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }
 .effect-recovery-note { margin: 0; border: 1px solid #f2ce7e; border-radius: 8px; padding: 9px 11px; color: #6f4c00; background: #fff8e7; font-size: 12px; line-height: 1.45; }
-/* Names the effects in the rendered cut, so it grows with the recipe. Capped,
-   because it sits in a list row next to a title that matters more. */
 .blurred-tag { justify-self: start; align-self: center; max-width: 100%; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: var(--link-bg); font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blurred-tag.tag-effect { color: var(--tag-effect); background: var(--tag-effect-bg); }
+.blurred-tag.tag-transcript { color: var(--tag-transcript); background: var(--tag-transcript-bg); }
+.blurred-tag.tag-ocr { color: var(--tag-ocr); background: var(--tag-ocr-bg); }
+.blurred-tag.tag-captions { color: var(--tag-captions); background: var(--tag-captions-bg); }
+.blurred-tag.tag-voiceover { color: var(--tag-voiceover); background: var(--tag-voiceover-bg); }
+.blurred-tag.tag-vision { color: var(--tag-vision); background: var(--tag-vision-bg); }
 /* Position sits with the heading; the action row holds only actions. */
 
 /* Metadata and the pager share one line, so browsing costs no extra height. */
