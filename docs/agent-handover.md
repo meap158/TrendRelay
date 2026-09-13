@@ -7,6 +7,21 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Fix: Caption language dropdown resets modal scroll and vanishes (2026-09-14)
+
+In the Captions modal (`CaptionEditor`), the language dropdown was broken: opening it
+caused the dialog to jump to the top (scroll reset), and on preview errors the dropdown
+disappeared entirely. Two root causes:
+1. CSS `overflow: visible` on `.ui-dialog:has(.search-select-popover)` destroyed the scroll
+   container of `.ui-dialog-body`, snapping `scrollTop` to 0.
+2. `setPreview(null)` on error nulled `sourceLanguage`, emptying `availableTranslations`
+   and unmounting the `<Select>` component.
+
+Fixed by: extending the overflow-containment CSS to `.ui-dialog-wide`, adding
+`data-contain-select-popovers` to the caption editor root, preserving the last good
+preview on errors, mirroring `knownLanguage` into `detectedLanguage` state for render-safe
+access, normalizing language-code matching, and keeping the `<Select>` always mounted.
+
 ## Attribution products table & toolbar layout optimization (2026-09-14)
 
 In the Attribution products view (`ProductTable`), the toolbar and table rows were redesigned to eliminate unpredictable wrapping and awkward element placements:

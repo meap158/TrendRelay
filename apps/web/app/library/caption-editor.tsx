@@ -342,6 +342,7 @@ export function CaptionEditor({
   const [coverStrength, setCoverStrength] = useState(0.08);
   const [translateTo, setTranslateTo] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [delivery, setDelivery] = useState("sidecar");
@@ -637,12 +638,12 @@ export function CaptionEditor({
       if (ticket !== latest.current) return;
       const body = await response.json();
       if (!response.ok) {
-        setPreview(null);
         setProblem(typeof body?.detail === "string" ? body.detail : "That did not work.");
         return;
       }
       setProblem(null);
       knownLanguage.current = (body as Preview).source_language ?? knownLanguage.current;
+      setDetectedLanguage(knownLanguage.current);
       setPreview(body as Preview);
     } catch {
       if (ticket === latest.current) setProblem("The preview could not be built.");
@@ -823,9 +824,17 @@ export function CaptionEditor({
   // The provider reports every reachable direction. The selector is for this
   // transcript, so offering directions whose source is another language made
   // duplicate targets and choices that could never apply to this clip.
-  const sourceLanguage = preview?.source_language ?? null;
+  const sourceLanguage = preview?.source_language ?? detectedLanguage ?? null;
+  const cleanSource = (sourceLanguage ?? "").trim().toLowerCase();
+  const baseSource = cleanSource.split(/[-_]/)[0];
   const availableTranslations = sourceLanguage
-    ? pairs.filter((pair) => pair.from === sourceLanguage && pair.to !== sourceLanguage)
+    ? pairs.filter((pair) => {
+        const pairFrom = pair.from.trim().toLowerCase();
+        const pairToBase = pair.to.trim().toLowerCase().split(/[-_]/)[0];
+        const matchesSource = pairFrom === cleanSource || pairFrom === baseSource;
+        const isNotSelf = pairToBase !== baseSource && pair.to.trim().toLowerCase() !== cleanSource;
+        return matchesSource && isNotSelf;
+      })
     : [];
   /**
    * What the captions are being turned into, when they are being turned into
@@ -840,6 +849,7 @@ export function CaptionEditor({
   const translatingTo = translateTo
     ? availableTranslations
       .find((pair) => pair.to === translateTo)?.label.replace(/^.*? to /, "")
+      ?? pairs.find((pair) => pair.to === translateTo)?.label.replace(/^.*? to /, "")
       ?? translateTo.toUpperCase()
     : "";
 
@@ -899,7 +909,7 @@ export function CaptionEditor({
         </>
       }
     >
-      <div className="caption-editor caption-editor-with-media">
+      <div className="caption-editor caption-editor-with-media" data-contain-select-popovers="true">
         {/* Without a transcript nothing below can build a caption, so the way to
             make one is the first thing in the modal rather than the last - the
             same control, moved out from under the timing list where it was
@@ -1349,22 +1359,30 @@ export function CaptionEditor({
                 onToggle={(provider, on) => void mediaAi.setActive(provider, on)}
               />
             </div>
-          ) : availableTranslations.length > 0 ? (
-            <Select
-              value={translateTo}
-              onChange={(event) => setTranslateTo(event.target.value)}
-            >
-              <option value="">As spoken — no translation</option>
-              {availableTranslations.map((pair) => (
-                <option key={`${pair.from}-${pair.to}`} value={pair.to}>
-                  {pair.label.replace(/^.*? to /, "")}
-                </option>
-              ))}
-            </Select>
           ) : (
-            <p className="caption-editor-note">
-              No installed translation starts from {sourceLanguage ?? "this transcript's language"}.
-            </p>
+            <>
+              <Select
+                value={translateTo}
+                onChange={(event) => setTranslateTo(event.target.value)}
+              >
+                <option value="">As spoken — no translation</option>
+                {availableTranslations.map((pair) => (
+                  <option key={`${pair.from}-${pair.to}`} value={pair.to}>
+                    {pair.label.replace(/^.*? to /, "")}
+                  </option>
+                ))}
+                {translateTo && !availableTranslations.some((pair) => pair.to === translateTo) && (
+                  <option value={translateTo}>
+                    {translatingTo || translateTo}
+                  </option>
+                )}
+              </Select>
+              {availableTranslations.length === 0 && (
+                <p className="caption-editor-note">
+                  No installed translation starts from {sourceLanguage ?? "this transcript's language"}.
+                </p>
+              )}
+            </>
           )}
           {translateTo && chosen?.needs_word_timings && (
             <p className="caption-editor-note">

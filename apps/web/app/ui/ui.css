@@ -554,10 +554,12 @@ a.ui-button { text-decoration: none; }
  * of the viewport and fields appear behind the dropdown. Opted-in long forms
  * retain their clip and scroll region. SearchSelect measures that region, flips
  * above/below, and gives the option list its own scrollbar when space is tight. */
-.ui-dialog:has([data-contain-select-popovers]):has(.search-select-popover) {
+.ui-dialog:has([data-contain-select-popovers]):has(.search-select-popover),
+.ui-dialog-wide:has(.search-select-popover) {
   overflow: hidden;
 }
-.ui-dialog:has([data-contain-select-popovers]):has(.search-select-popover) .ui-dialog-body {
+.ui-dialog:has([data-contain-select-popovers]):has(.search-select-popover) .ui-dialog-body,
+.ui-dialog-wide:has(.search-select-popover) .ui-dialog-body {
   overflow-y: auto;
 }
 
