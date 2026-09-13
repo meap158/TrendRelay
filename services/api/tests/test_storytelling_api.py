@@ -548,6 +548,90 @@ def test_autocreate_needs_no_pictures_to_start(monkeypatch) -> None:
     assert seen[0]["render"] is True
 
 
+def save_draft(workspace_id: str, spec: dict) -> str:
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/creations",
+        json={"kind": "storytelling", "spec": spec},
+    )
+    assert answer.status_code == 201, answer.text
+    return answer.json()["id"]
+
+
+def read_draft(workspace_id: str, draft_id: str) -> dict:
+    return request("GET", f"/api/workspaces/{workspace_id}/creations/{draft_id}").json()
+
+
+def test_a_render_of_a_reopened_draft_marks_the_draft_as_rendering(monkeypatch) -> None:
+    """The dialog reopens a draft and renders through this route, not through
+    the draft's own. The draft it reopened stayed a draft for good - offered
+    to pick up after its video was in the Library. Naming it here is what
+    lets it settle to rendered."""
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    draft_id = save_draft(workspace_id, {"body": SCRIPT, "asset_ids": ["pic0"]})
+    queued_kwargs(monkeypatch)
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={"body": SCRIPT, "asset_ids": ["pic0"], "voice_id": "voice-1", "draft_id": draft_id},
+    )
+    assert answer.status_code == 202, answer.text
+    draft = read_draft(workspace_id, draft_id)
+    assert draft["status"] == "rendering"
+    assert draft["render_job_id"] == "story_abc"
+
+
+def test_a_preview_of_a_draft_marks_nothing(monkeypatch) -> None:
+    # A preview is watched once and never filed; it is not the draft's render.
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    draft_id = save_draft(workspace_id, {"body": SCRIPT, "asset_ids": ["pic0"]})
+    queued_kwargs(monkeypatch)
+    monkeypatch.setattr(storytelling_api.story_jobs, "run_render_job", lambda job_id: None)
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/preview",
+        json={"body": SCRIPT, "asset_ids": ["pic0"], "voice_id": "voice-1", "draft_id": draft_id},
+    )
+    assert answer.status_code == 202, answer.text
+    assert read_draft(workspace_id, draft_id)["status"] == "draft"
+
+
+def test_a_render_of_a_draft_that_is_not_there_queues_nothing() -> None:
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={"body": SCRIPT, "asset_ids": ["pic0"], "voice_id": "voice-1", "draft_id": "draft_gone"},
+    )
+    assert answer.status_code == 404
+
+
+def test_an_auto_build_of_a_draft_is_the_draft_s_render_only_when_it_renders(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    draft_id = save_draft(workspace_id, {"body": SCRIPT})
+    autocreate_kwargs(monkeypatch)
+
+    # Stopping for review makes no video: the draft is untouched.
+    review = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/autocreate",
+        json={"body": SCRIPT, "voice_id": "voice-1", "render": False, "draft_id": draft_id},
+    )
+    assert review.status_code == 202, review.text
+    assert read_draft(workspace_id, draft_id)["status"] == "draft"
+
+    # Carrying through to a render is: the build's job is the draft's, and
+    # settling follows it to the render it queues.
+    build = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/autocreate",
+        json={"body": SCRIPT, "voice_id": "voice-1", "render": True, "draft_id": draft_id},
+    )
+    assert build.status_code == 202, build.text
+    draft = read_draft(workspace_id, draft_id)
+    assert draft["status"] == "rendering"
+    assert draft["render_job_id"] == "autocreate_abc"
+
+
 def test_autocreate_refuses_an_empty_script() -> None:
     workspace_id = make_workspace()
     answer = request(

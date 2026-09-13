@@ -1508,8 +1508,13 @@ function LibraryContent() {
     // The notification announces completion; refresh the same screen at that
     // moment so its new cut, exact tags, and effect facet appear without a
     // manual reload. Failed and cancelled jobs refresh too, clearing stale UI.
-    if (settledNow) void refresh();
-  }, [notificationJobs, refresh]);
+    // The drafts too: a draft whose render just landed is no longer one to
+    // pick up, and one whose render failed is offered again.
+    if (settledNow) {
+      void refresh();
+      refreshCreationDrafts();
+    }
+  }, [notificationJobs, refresh, refreshCreationDrafts]);
 
   function clearFilters() {
     setFilters({});

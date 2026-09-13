@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import creation_drafts as drafts
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.autocut import jobs as autocut_jobs
 from trendrelay_api.autocut import templates as autocut_templates
@@ -153,17 +154,29 @@ def preview_plan(
 class RenderRequestBody(PlanRequest):
     title: str | None = Field(default=None, max_length=200)
     confirm: bool = False
+    #: The saved draft this render is of, when the dialog reopened one. The
+    #: draft is then marked as rendering and settles to rendered on its own;
+    #: without it the draft stayed offered to pick up after its video was made.
+    draft_id: str | None = Field(default=None, max_length=64)
 
 
 def _queue(
     session: Session, request: Request, workspace_id: str, user: CurrentUser,
     body: PlanRequest, *, preview: bool, title: str | None = None,
+    draft_id: str | None = None,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     visuals, kinds = _known_visuals(session, workspace_id, body.asset_ids)
     if not visuals:
         raise HTTPException(status_code=422, detail="None of those are this workspace's photos or videos.")
     template_id = body.template_id or autocut_templates.best_template(len(visuals)).id
+    # Looked up before anything is queued, so a draft that is not there
+    # refuses the request rather than leaving a render nobody can find.
+    if draft_id:
+        try:
+            drafts.get_draft(session, workspace_id, draft_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Draft not found.") from error
     try:
         queued = autocut_jobs.enqueue_render(
             workspace_id, user.id,
@@ -181,11 +194,13 @@ def _queue(
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if draft_id:
+        drafts.begin_render(session, workspace_id, user.id, draft_id, job_id=queued["id"])
     audit(
         session, request, workspace_id, user.id,
         "autocut.preview_queued" if preview else "autocut.render_queued",
         "durable_job", queued["id"],
-        {"template": template_id, "clips": len(visuals), "preview": preview},
+        {"template": template_id, "clips": len(visuals), "preview": preview, "draft": draft_id},
     )
     session.commit()
     return queued
@@ -200,7 +215,10 @@ def start_render(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     """Queue the full render. Draws in the background, lands in the Library."""
-    return _queue(session, request, workspace_id, user, body, preview=False, title=body.title)
+    return _queue(
+        session, request, workspace_id, user, body,
+        preview=False, title=body.title, draft_id=body.draft_id,
+    )
 
 
 @router.post("/preview", status_code=202)

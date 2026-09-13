@@ -360,6 +360,76 @@ def test_a_render_whose_job_is_long_gone_is_eventually_given_back(
     assert drafts.get_draft(session, "ws-1", draft.id).status == "draft"
 
 
+def test_a_render_queued_by_the_feature_s_own_route_is_still_the_draft_s(session) -> None:
+    """The reported bug. The dialogs reopen a draft and render through their
+    own routes, so the draft never entered *rendering* and was offered to pick
+    up after its video was in the Library. The route now says which job is
+    the draft's, and the draft follows it like one rendered here."""
+    view = drafts.create_draft(
+        session, "ws-1", USER, kind="storytelling", title="A story",
+        spec={"body": "The house was empty.", "asset_ids": ["asset-0"]},
+    )
+    marked = drafts.begin_render(session, "ws-1", "assistant", view["id"], job_id="story_9")
+    assert marked["status"] == "rendering"
+    assert marked["render_job_id"] == "story_9"
+    assert marked["updated_by"] == "assistant"
+
+
+def test_settling_follows_the_build_to_the_render_it_queued(session, monkeypatch) -> None:
+    """The auto-build is the draft's job, and it finishes by queueing the
+    render. Finishing is not the video being made: the draft follows the
+    build to its render, and is rendered when that is."""
+    draft = rendering(session, job_id="autocreate_1")
+    records = {
+        "autocreate_1": {"status": "succeeded", "result": {"render_job_id": "story_2"}},
+        "story_2": {"status": "running", "result": None},
+    }
+    monkeypatch.setattr(
+        drafts, "get_job_record", lambda job_id, **kwargs: {"id": job_id, **records[job_id]},
+    )
+    settled = drafts.get_draft(session, "ws-1", draft.id)
+    assert settled.status == "rendering"
+    assert settled.render_job_id == "story_2"   # now watching the render
+
+    records["story_2"] = {"status": "succeeded", "result": {"asset_id": "asset-video"}}
+    settled = drafts.get_draft(session, "ws-1", draft.id)
+    assert settled.status == "rendered"
+    assert settled.asset_id == "asset-video"
+
+
+def test_a_draft_is_rendered_when_its_video_is_filed_not_when_it_is_drawn(
+    session, monkeypatch,
+) -> None:
+    # The render finishes by queueing the ingest that files its video, and
+    # reports no asset until then. Rendered means in the Library.
+    draft = rendering(session, job_id="story_1")
+    records = {
+        "story_1": {"status": "succeeded", "result": {"ingest_job_id": "media_1", "asset_id": None}},
+        "media_1": {"status": "running", "result": None},
+    }
+    monkeypatch.setattr(
+        drafts, "get_job_record", lambda job_id, **kwargs: {"id": job_id, **records[job_id]},
+    )
+    assert drafts.get_draft(session, "ws-1", draft.id).status == "rendering"
+
+    records["media_1"] = {"status": "succeeded", "result": {"asset_id": "asset-filed"}}
+    settled = drafts.get_draft(session, "ws-1", draft.id)
+    assert settled.status == "rendered"
+    assert settled.asset_id == "asset-filed"
+
+
+def test_a_video_the_library_refused_gives_the_draft_back(session, monkeypatch) -> None:
+    draft = rendering(session, job_id="story_1")
+    records = {
+        "story_1": {"status": "succeeded", "result": {"ingest_job_id": "media_1", "asset_id": None}},
+        "media_1": {"status": "failed", "result": None},
+    }
+    monkeypatch.setattr(
+        drafts, "get_job_record", lambda job_id, **kwargs: {"id": job_id, **records[job_id]},
+    )
+    assert drafts.get_draft(session, "ws-1", draft.id).status == "draft"
+
+
 def test_listing_settles_before_it_filters(session, monkeypatch) -> None:
     """Otherwise the status being filtered on is the stale one.
 

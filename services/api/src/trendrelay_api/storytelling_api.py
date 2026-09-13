@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import creation_drafts as drafts
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, membership, require_role
@@ -150,6 +151,10 @@ class RenderBody(ScriptRequest):
     #: …). Empty is the plain sentence subtitle. Validated against the catalogue.
     caption_style: str = Field(default="", max_length=40)
     title: str | None = None
+    #: The saved draft this render is of, when the dialog reopened one. The
+    #: draft is then marked as rendering and settles to rendered on its own;
+    #: without it the draft stayed offered to pick up after its video was made.
+    draft_id: str | None = Field(default=None, max_length=64)
 
 
 def _known_visuals(
@@ -181,6 +186,9 @@ def _queue(
             status_code=422,
             detail="None of those are this workspace's photos or videos.",
         )
+    # Looked up before anything is queued, so a draft that is not there
+    # refuses the request rather than leaving a render nobody can find.
+    draft_id = _draft_to_mark(session, workspace_id, body.draft_id, preview=preview)
     try:
         queued = story_jobs.enqueue_render(
             workspace_id, user.id,
@@ -206,6 +214,8 @@ def _queue(
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if draft_id:
+        drafts.begin_render(session, workspace_id, user.id, draft_id, job_id=queued["id"])
     audit(
         session, request, workspace_id, user.id,
         "storytelling.preview_queued" if preview else "storytelling.render_queued",
@@ -216,10 +226,28 @@ def _queue(
             "characters": len(body.body),
             "voice": "recording" if body.narration_asset_id else "generated",
             "preview": preview,
+            "draft": draft_id,
         },
     )
     session.commit()
     return queued
+
+
+def _draft_to_mark(
+    session: Session, workspace_id: str, draft_id: str | None, *, preview: bool,
+) -> str | None:
+    """The draft a render is of, checked to exist, or nothing to mark.
+
+    A preview is never a draft's render - it is watched once and not filed -
+    so it marks nothing even when the dialog names the draft it is of.
+    """
+    if not draft_id or preview:
+        return None
+    try:
+        drafts.get_draft(session, workspace_id, draft_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail="Draft not found.") from error
+    return draft_id
 
 
 @router.post("/render", status_code=202)
@@ -284,6 +312,9 @@ def start_autocreate(
     supplies the choices a person would otherwise make by hand.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    # A build that stops for review makes no video, so it is not the draft's
+    # render; only the one that carries through to a render is.
+    draft_id = _draft_to_mark(session, workspace_id, body.draft_id, preview=not body.render)
     try:
         queued = story_autocreate.enqueue_autocreate(
             workspace_id, user.id,
@@ -306,10 +337,17 @@ def start_autocreate(
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if draft_id:
+        # The build's job, not the render's: the render does not exist yet.
+        # Settling follows the build to the render it queues.
+        drafts.begin_render(session, workspace_id, user.id, draft_id, job_id=queued["id"])
     audit(
         session, request, workspace_id, user.id,
         "storytelling.autocreate_queued", "durable_job", queued["id"],
-        {"render": body.render, "broll_kind": body.broll_kind, "characters": len(body.body)},
+        {
+            "render": body.render, "broll_kind": body.broll_kind,
+            "characters": len(body.body), "draft": draft_id,
+        },
     )
     session.commit()
     return queued

@@ -160,6 +160,40 @@ def test_render_queues_a_job_and_audits_it(monkeypatch) -> None:
     assert queued[0]["asset_ids"] == ["pic-0", "pic-1", "pic-2"]
 
 
+def test_a_render_of_a_reopened_draft_marks_the_draft_as_rendering(monkeypatch) -> None:
+    """The dialog reopens a draft and renders through this route, so the
+    draft stayed a draft for good and was offered to pick up after its video
+    was in the Library. Naming it here is what lets it settle to rendered."""
+    workspace_id = make_workspace()
+    add_image(workspace_id, "pic-0")
+    saved = request(
+        "POST", f"/api/workspaces/{workspace_id}/creations",
+        json={"kind": "autocut", "spec": {"asset_ids": ["pic-0"]}},
+    )
+    assert saved.status_code == 201, saved.text
+    draft_id = saved.json()["id"]
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: {"id": "autocut_abc", "status": "queued", "plan": {}},
+    )
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "template_id": "punch", "draft_id": draft_id},
+    )
+    assert answer.status_code == 202, answer.text
+    draft = request("GET", f"/api/workspaces/{workspace_id}/creations/{draft_id}").json()
+    assert draft["status"] == "rendering"
+    assert draft["render_job_id"] == "autocut_abc"
+
+    # A draft that is not there refuses the render before anything is queued.
+    missing = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "template_id": "punch", "draft_id": "draft_gone"},
+    )
+    assert missing.status_code == 404
+
+
 def test_render_needs_at_least_one_real_picture() -> None:
     workspace_id = make_workspace()
     answer = request(

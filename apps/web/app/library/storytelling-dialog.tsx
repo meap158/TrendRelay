@@ -734,6 +734,9 @@ export function StorytellingDialog({
           aspect,
           subtitles,
           caption_style: captionStyle,
+          // The draft this is the render of, so it stops being offered to
+          // pick up once its video is in the Library.
+          draft_id: draftId ?? undefined,
         }),
       });
       const payload = await response.json();
@@ -742,6 +745,8 @@ export function StorytellingDialog({
       // It has been said now. Held until this point on purpose: a render that
       // failed is precisely when the words are still wanted.
       setBody("");
+      // The draft is the render's now; the next story saved here is a new one.
+      setDraftId(null);
       onClose();
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That could not be queued.");
@@ -861,12 +866,14 @@ export function StorytellingDialog({
           broll_kind: brollKind,
           // Carry straight through to a queued render.
           render: true,
+          draft_id: draftId ?? undefined,
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail ?? "That could not be queued.");
       onQueued("Finding b-roll for every sentence, then narrating and cutting it. It lands in your Library.");
       setBody("");
+      setDraftId(null);
       onClose();
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "That could not be queued.");

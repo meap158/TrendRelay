@@ -416,18 +416,23 @@ export function AutoCutDialog({
           asset_ids: order, template_id: templateId, music, speed, aspect, fill,
           caption: caption.trim(), caption_position: captionPos,
           title: title.trim() || undefined,
+          // The draft this is the render of, so it stops being offered to
+          // pick up once its video is in the Library.
+          draft_id: draftId ?? undefined,
         }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.detail ?? "Could not queue the render.");
       onQueued("AutoCut is rendering in the background - it lands in your Library, and progress is in the bell.");
+      // The draft is the render's now; the next cut saved here is a new one.
+      setDraftId(null);
       onClose();
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setRendering(false);
     }
-  }, [templateId, order, music, speed, aspect, fill, caption, captionPos, title, apiFetch, base, onQueued, onError, onClose]);
+  }, [templateId, order, music, speed, aspect, fill, caption, captionPos, title, draftId, apiFetch, base, onQueued, onError, onClose]);
 
   // The current arrangement as an AutoCut draft spec.
   const draftSpec = useCallback(() => ({

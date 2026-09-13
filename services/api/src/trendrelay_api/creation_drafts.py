@@ -530,9 +530,33 @@ def settle(session: Session, draft: CreationDraft) -> CreationDraft:
             draft.status = "draft"
             session.commit()
         return draft
+    result = job.get("result") or {}
+    if job["status"] == "succeeded" and result.get("render_job_id"):
+        # The job finished by queueing the render - it was the auto-build,
+        # which fills the pictures and hands them on. The draft is rendered
+        # when that render is, so follow it and read again from there.
+        draft.render_job_id = str(result["render_job_id"])
+        session.commit()
+        return settle(session, draft)
+    if job["status"] == "succeeded" and not result.get("asset_id") and result.get("ingest_job_id"):
+        # The render finished by queueing the ingest that files its video. Not
+        # rendered until that has landed: a draft counted as done while its
+        # video was still on its way was not done, and the asset it would
+        # carry did not exist yet.
+        try:
+            ingest = get_job_record(str(result["ingest_job_id"]))
+        except FileNotFoundError:
+            return draft
+        if ingest["status"] in {"failed", "cancelled"}:
+            draft.status = "draft"
+            session.commit()
+            return draft
+        if ingest["status"] != "succeeded":
+            return draft
+        result = ingest.get("result") or {}
     if job["status"] == "succeeded":
         draft.status = "rendered"
-        draft.asset_id = (job.get("result") or {}).get("asset_id") or draft.asset_id
+        draft.asset_id = result.get("asset_id") or draft.asset_id
         session.commit()
     elif job["status"] in {"failed", "cancelled"}:
         draft.status = "draft"
@@ -646,6 +670,28 @@ def render_draft(
         draft.updated_by = actor_user_id
         session.commit()
     return {"draft_id": draft.id, "preview": preview, "job": queued}
+
+
+def begin_render(
+    session: Session, workspace_id: str, actor_user_id: str, draft_id: str,
+    *, job_id: str,
+) -> dict[str, Any]:
+    """Record a render queued for this draft by its feature's own endpoint.
+
+    The AutoCut and Storytelling dialogs reopen a draft and then render
+    through their own routes, not through `render_draft` - the auto-build has
+    no draft route at all. Without this the draft they had reopened stayed a
+    draft for good: never *rendering*, so never settled to *rendered*, and
+    still offered to be picked up after its video was in the Library. The
+    route tells this store which job is the draft's, and `settle` does the
+    rest as it does for a render queued here.
+    """
+    draft = get_draft(session, workspace_id, draft_id)
+    draft.render_job_id = job_id
+    draft.status = "rendering"
+    draft.updated_by = actor_user_id
+    session.commit()
+    return _view(draft)
 
 
 def archive_draft(session: Session, workspace_id: str, draft_id: str) -> dict[str, Any]:
