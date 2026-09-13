@@ -129,6 +129,14 @@ def test_a_render_on_its_own_starts_a_chain_and_one_from_a_build_joins_it() -> N
         "w", "u", body="A line.", asset_ids=["clip-ocean"], voice_id="voice-1",
     )
     assert get_job_record(alone["id"])["payload"]["chain"] == {"id": alone["id"]}
+    # And it is named for what it says, not for the pacing that draws it -
+    # "Storytelling - Explainer" was the name of every story ever made.
+    assert get_job_record(alone["id"])["payload"]["title"] == "A line"
+    named = story_jobs.enqueue_render(
+        "w", "u", body="A line.", asset_ids=["clip-ocean"], voice_id="voice-1",
+        title="Episode 4",
+    )
+    assert get_job_record(named["id"])["payload"]["title"] == "Episode 4"
 
     joined = story_jobs.enqueue_render(
         "w", "u", body="A line.", asset_ids=["clip-ocean"], voice_id="voice-1",

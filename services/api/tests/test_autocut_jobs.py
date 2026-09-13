@@ -97,6 +97,48 @@ def test_a_render_lands_somewhere_the_library_will_accept_it() -> None:
         )
 
 
+def test_a_cut_nobody_named_is_named_for_its_clips(monkeypatch) -> None:
+    """"AutoCut - Breathe" was the name of every cut made with that pacing.
+    A cut is about the clips it is cut from: the first with a name to lend,
+    and how many more - a clip titled by a platform's id is passed over."""
+    from types import SimpleNamespace
+
+    from trendrelay_api.autocut import jobs as autocut_jobs
+    from trendrelay_api.database import SessionFactory
+    from trendrelay_api.jobs import get_job_record
+    from trendrelay_api.media_models import MediaAsset
+
+    with SessionFactory.begin() as session:
+        for asset_id, title in (("cut-a", "7224480649275559174.mp4"), ("cut-b", "Morning market")):
+            if session.get(MediaAsset, asset_id) is None:
+                session.add(MediaAsset(
+                    id=asset_id, workspace_id="w", title=title, media_kind="video",
+                    source_type="test", original_path=f"/c/{asset_id}.mp4",
+                    original_sha256=asset_id.ljust(64, "0"), mime_type="video/mp4",
+                    size_bytes=10, created_by="u",
+                ))
+    # The plan is not what is under test; a shot is enough for the queue.
+    plan = SimpleNamespace(shots=[SimpleNamespace(asset_id="cut-a", media_kind="video")])
+    monkeypatch.setattr(
+        autocut_jobs, "build_plan",
+        lambda *args, **kwargs: (plan, None, SimpleNamespace(name="Breathe", music=None), None),
+    )
+    monkeypatch.setattr(autocut_jobs, "_plan_json", lambda plan: {})
+
+    queued = autocut_jobs.enqueue_render("w", "u", template_id="breathe", asset_ids=["cut-a", "cut-b"])
+    assert get_job_record(queued["id"])["payload"]["title"] == "Morning market + 1 more"
+
+    # A name somebody gave is theirs.
+    named = autocut_jobs.enqueue_render(
+        "w", "u", template_id="breathe", asset_ids=["cut-a"], title="Launch teaser",
+    )
+    assert get_job_record(named["id"])["payload"]["title"] == "Launch teaser"
+
+    # And the pacing only names a cut whose clips are not in the Library at all.
+    bare = autocut_jobs.enqueue_render("w", "u", template_id="breathe", asset_ids=["ghost"])
+    assert get_job_record(bare["id"])["payload"]["title"] == "AutoCut - Breathe"
+
+
 def test_storytelling_writes_where_autocut_does() -> None:
     # It imports the same constants rather than keeping its own, so the two
     # cannot drift into one being ingestable and the other not.

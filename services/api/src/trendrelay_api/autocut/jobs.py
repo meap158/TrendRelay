@@ -22,6 +22,7 @@ from trendrelay_api.autocut import templates
 from trendrelay_api.autocut.beat_analysis import BeatGrid, analyze_beats
 from trendrelay_api.autocut.planner import CutPlan, Shot, plan_cuts
 from trendrelay_api.autocut.renderer import RenderRequest, render
+from trendrelay_api import creation_titles
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
 from trendrelay_api.models import utc_now
@@ -211,6 +212,21 @@ def _plan_from_json(data: dict[str, Any]) -> CutPlan:
     )
 
 
+def _clip_titles(asset_ids: list[str], workspace_id: str, factory: Any) -> list[str | None]:
+    """The clips' titles in the order they were arranged, for naming the cut."""
+    from trendrelay_api.media_models import MediaAsset
+
+    with factory() as session:
+        rows = session.execute(
+            select(MediaAsset.id, MediaAsset.title).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.id.in_(asset_ids),
+            )
+        ).all()
+    titles = {asset_id: title for asset_id, title in rows}
+    return [titles.get(asset_id) for asset_id in asset_ids if asset_id in titles]
+
+
 def enqueue_render(
     workspace_id: str,
     actor_user_id: str,
@@ -239,6 +255,10 @@ def enqueue_render(
     )
     if not plan.shots:
         raise ValueError("Choose at least one photo or video to cut together.")
+    if not title:
+        # Named for the clips it is cut from - what the video is about - and
+        # only for the pacing when no clip has a name to lend it.
+        title = creation_titles.from_clips(_clip_titles(asset_ids, workspace_id, factory))
     nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{aspect}:{fill}:{caption}:{caption_position}:{preview}:{utc_now()}"
     job_id = "autocut_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(

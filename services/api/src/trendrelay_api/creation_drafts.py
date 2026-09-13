@@ -121,6 +121,11 @@ class Adapter:
     render: Callable[..., dict[str, Any]]
     #: spec -> a compact dict for a list row
     summarize: Callable[[dict[str, Any]], dict[str, Any]]
+    #: (session, workspace_id, spec) -> what to call a draft nobody named, from
+    #: what the spec is about; None when the spec says nothing yet.
+    name: Callable[[Session, str, dict[str, Any]], str | None]
+    #: What the kind makes, for the name a draft has before it is about anything.
+    noun: str
 
 
 def _render_autocut(
@@ -196,9 +201,51 @@ def _summarize_story(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _name_autocut(session: Session, workspace_id: str, spec: dict[str, Any]) -> str | None:
+    """A cut is about the clips it is cut from: the first one's name, and how
+    many more. Media the draft owns is named by the file it arrived as."""
+    from trendrelay_api import creation_titles
+
+    ids = [ref for ref in spec.get("asset_ids", []) if isinstance(ref, str)]
+    if not ids:
+        return None
+    library = {
+        asset_id: title for asset_id, title in session.execute(
+            select(MediaAsset.id, MediaAsset.title).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.id.in_([ref for ref in ids if not ref.startswith(DRAFT_REF_PREFIX)]),
+            )
+        ).all()
+    }
+    owned = {
+        media.id: media.original_name for media in session.scalars(
+            select(CreationDraftMedia).where(CreationDraftMedia.id.in_(
+                [ref[len(DRAFT_REF_PREFIX):] for ref in ids if ref.startswith(DRAFT_REF_PREFIX)]
+            ))
+        ).all()
+    }
+    titles = [
+        owned.get(ref[len(DRAFT_REF_PREFIX):]) if ref.startswith(DRAFT_REF_PREFIX) else library.get(ref)
+        for ref in ids
+        if ref.startswith(DRAFT_REF_PREFIX) or ref in library
+    ]
+    return creation_titles.from_clips(titles)
+
+
+def _name_story(session: Session, workspace_id: str, spec: dict[str, Any]) -> str | None:
+    """A narration is about its first sentence."""
+    from trendrelay_api import creation_titles
+
+    return creation_titles.from_script(spec.get("body", ""))
+
+
 ADAPTERS: dict[str, Adapter] = {
-    "autocut": Adapter("autocut", AutoCutSpec, _render_autocut, _summarize_autocut),
-    "storytelling": Adapter("storytelling", StorySpec, _render_story, _summarize_story),
+    "autocut": Adapter(
+        "autocut", AutoCutSpec, _render_autocut, _summarize_autocut, _name_autocut, "cut",
+    ),
+    "storytelling": Adapter(
+        "storytelling", StorySpec, _render_story, _summarize_story, _name_story, "story",
+    ),
 }
 
 
@@ -409,16 +456,33 @@ def _row(draft: CreationDraft) -> dict[str, Any]:
     }
 
 
+def _given_name(session: Session, workspace_id: str, kind: str, spec: dict[str, Any]) -> str:
+    """What a draft of this kind is called when nobody names it.
+
+    From the spec, by the kind's adapter - the script's first sentence, the
+    first clip's name - and "Untitled" only while the spec is about nothing.
+    Also how an edit tells a name it gave from one somebody typed: the title
+    the previous spec would have been given is a given one.
+    """
+    adapter = _adapter(kind)
+    return adapter.name(session, workspace_id, spec) or f"Untitled {adapter.noun}"
+
+
 def create_draft(
     session: Session, workspace_id: str, actor_user_id: str,
     *, kind: str, title: str | None, spec: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Save a new draft of some kind. The spec is shape-checked and normalised."""
+    """Save a new draft of some kind. The spec is shape-checked and normalised.
+
+    A draft nobody named is named for what it is about - the script's first
+    sentence, the clips it is cut from - and only "Untitled" while the spec
+    says nothing yet. See `_given_name`.
+    """
     normalised = validate_spec(kind, spec)
     draft = CreationDraft(
         workspace_id=workspace_id,
         kind=kind,
-        title=(title or "").strip() or f"Untitled {kind}",
+        title=(title or "").strip() or _given_name(session, workspace_id, kind, normalised),
         status="draft",
         spec=normalised,
         created_by=actor_user_id,
@@ -540,7 +604,14 @@ def update_draft(
     if title is not None:
         draft.title = title.strip() or draft.title
     if spec is not None:
+        # A name that was given follows the spec it was given from: a draft
+        # saved before its script was written is "Untitled story", and once
+        # the script is there it is about something. A name somebody typed is
+        # theirs, and is left alone.
+        was_given = draft.title == _given_name(session, workspace_id, draft.kind, draft.spec or {})
         draft.spec = validate_spec(draft.kind, spec)
+        if title is None and was_given:
+            draft.title = _given_name(session, workspace_id, draft.kind, draft.spec)
     if status is not None:
         if status not in ("draft", "archived"):
             raise ValueError("A draft's status is set by rendering; you may only archive or reopen it.")

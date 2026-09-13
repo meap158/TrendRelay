@@ -62,6 +62,53 @@ def test_create_and_get_roundtrips_a_normalised_spec(session) -> None:
     assert fetched["spec"]["speed"] == 1.5
 
 
+def test_a_draft_nobody_named_is_named_for_what_it_is_about(session) -> None:
+    """"Untitled story" and "Untitled autocut" on every unnamed draft, however
+    much was in it. A story is about its first sentence; a cut is about the
+    clips it is cut from."""
+    story = drafts.create_draft(
+        session, "ws-1", USER, kind="storytelling", title=None,
+        spec={"body": "Why is the sea blue? Most people guess the sky."},
+    )
+    assert story["title"] == "Why is the sea blue"
+
+    cut = drafts.create_draft(
+        session, "ws-1", USER, kind="autocut", title="",
+        spec={"asset_ids": ["asset-2", "asset-0"]},
+    )
+    assert cut["title"] == "clip 2 + 1 more"
+
+    # Only while the spec is about nothing yet.
+    empty = drafts.create_draft(session, "ws-1", USER, kind="storytelling", title=None, spec={})
+    assert empty["title"] == "Untitled story"
+    assert drafts.create_draft(session, "ws-1", USER, kind="autocut", title=None, spec={})["title"] == "Untitled cut"
+
+
+def test_a_given_name_follows_the_spec_and_a_typed_one_stays(session) -> None:
+    # Saved before the script was written, then the script arrives: the draft
+    # is now about something, and its name says so.
+    view = drafts.create_draft(session, "ws-1", USER, kind="storytelling", title=None, spec={})
+    renamed = drafts.update_draft(
+        session, "ws-1", USER, view["id"], spec={"body": "The house was empty. Nobody came."},
+    )
+    assert renamed["title"] == "The house was empty"
+    # A rewrite renames it again, because the name was never anybody's choice.
+    rewritten = drafts.update_draft(
+        session, "ws-1", USER, view["id"], spec={"body": "Nobody came. The house was empty."},
+    )
+    assert rewritten["title"] == "Nobody came"
+
+    # A name somebody typed is theirs, whatever the script becomes.
+    typed = drafts.create_draft(
+        session, "ws-1", USER, kind="storytelling", title="Coastal episode 3",
+        spec={"body": "Why is the sea blue?"},
+    )
+    kept = drafts.update_draft(
+        session, "ws-1", USER, typed["id"], spec={"body": "A different opening line."},
+    )
+    assert kept["title"] == "Coastal episode 3"
+
+
 def test_an_unknown_kind_is_refused(session) -> None:
     with pytest.raises(ValueError, match="Unknown creation kind"):
         drafts.create_draft(session, "ws-1", USER, kind="hologram", title="x", spec={})

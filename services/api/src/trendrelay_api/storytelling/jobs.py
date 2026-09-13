@@ -34,6 +34,7 @@ from trendrelay_api.autocut.jobs import (
     dimensions,
 )
 from trendrelay_api.autocut.renderer import RenderRequest, render
+from trendrelay_api import creation_titles
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.jobs import claim_job, complete_job, create_job_record, fail_job
 from trendrelay_api.models import utc_now
@@ -239,7 +240,9 @@ def enqueue_render(
             # "karaoke", …). Empty is the plain sentence subtitle.
             "caption_style": caption_style,
             "preview": preview,
-            "title": title or f"Storytelling - {story.name}",
+            # A name somebody gave, else the script's first sentence - what the
+            # video is about, rather than the pacing that drew it.
+            "title": title or creation_titles.from_script(body) or f"Storytelling - {story.name}",
             "chain": {"id": chain_id or job_id},
         },
         max_attempts=1,

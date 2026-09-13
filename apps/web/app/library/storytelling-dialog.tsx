@@ -893,20 +893,21 @@ export function StorytellingDialog({
   }
 
   // Save (or re-save) the story as a resumable draft, so closing the dialog no
-  // longer loses the script and its arrangement.
+  // longer loses the script and its arrangement. Unnamed on purpose: the
+  // server names a draft for its first sentence, and renames it as the
+  // script changes, which a name sent from here would have frozen.
   async function saveDraft() {
     if (!body.trim() && !picked.length) return;
     setSavingDraft(true);
     try {
-      const title = body.trim().split(/\s+/).slice(0, 6).join(" ") || "Untitled story";
       const path = draftId ? `${creationsBase}/${draftId}` : creationsBase;
       const response = await apiFetch(path, {
         method: draftId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           draftId
-            ? { title, spec: draftSpec() }
-            : { kind: "storytelling", title, spec: draftSpec() },
+            ? { spec: draftSpec() }
+            : { kind: "storytelling", spec: draftSpec() },
         ),
       });
       const payload = await response.json();
