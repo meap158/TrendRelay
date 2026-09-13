@@ -1356,7 +1356,16 @@ def test_woopsocial_uploads_then_creates_a_post(
     }]
     assert body["schedule"]["type"] == "SCHEDULE_FOR_LATER"
     assert body["socialAccounts"][0]["platform"] == "TIKTOK"
+    assert body["socialAccounts"][0]["postType"] == "VIDEO"
+    assert body["socialAccounts"][0]["postMode"] == "DIRECT_POST"
     assert body["socialAccounts"][0]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
+    assert body["socialAccounts"][0]["allowComment"] is True
+    assert body["socialAccounts"][0]["allowDuet"] is True
+    assert body["socialAccounts"][0]["allowStitch"] is True
+    assert body["socialAccounts"][0]["isYourBrand"] is False
+    assert body["socialAccounts"][0]["isBrandedContent"] is False
+    assert body["socialAccounts"][0]["autoAddMusic"] is False
+    assert body["socialAccounts"][0]["isAiGeneratedContent"] is False
     # Reported per destination: three of four networks reached is not the same
     # outcome as all four, and only this engine says so.
     assert result["delivery"][0]["platform"] == "tiktok"
@@ -1585,6 +1594,58 @@ def test_the_preview_asks_woopsocial_what_it_would_refuse(
         targets=[publishing.PublishTarget(platform="tiktok", integration_id="w1")],
     ))
     assert preview["engine_problems"] == ["DESCRIPTION: Caption is too long"]
+
+
+def test_woopsocial_tiktok_private_visibility_maps_to_self_only(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1"}]
+        if path.startswith("/media"):
+            return {"mediaId": "med_1"}
+        if path == "/social-accounts":
+            return woop_accounts_payload()
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {"id": "p1"}
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    publishing._execute_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="tiktok", integration_id="w1")],
+        visibility="private",
+        confirm_external_action=True,
+    ))
+    body = sent["body"]
+    assert body["socialAccounts"][0]["privacyLevel"] == "SELF_ONLY"
+
+
+def test_woopsocial_error_message_parses_error_message_and_validation_errors() -> None:
+    import io
+    import json
+    import urllib.error
+
+    body_bytes = json.dumps({
+        "error_message": 'operation CreatePost: decode field "socialAccounts": invalid',
+        "validationErrors": [{"field": "TIKTOK_PRIVACY_LEVEL", "message": "Required"}],
+    }).encode()
+    error = urllib.error.HTTPError(
+        url="https://api.woopsocial.com/v1/posts",
+        code=400,
+        msg="Bad Request",
+        hdrs={},
+        fp=io.BytesIO(body_bytes),
+    )
+    msg = publishing._error_message("https://api.woopsocial.com/v1/posts", error)
+    assert "api.woopsocial.com" in msg
+    assert "operation CreatePost" in msg
+    assert "TIKTOK_PRIVACY_LEVEL: Required" in msg
+
 
 
 def test_a_dry_run_survives_the_engine_refusing_to_answer(
@@ -1867,6 +1928,12 @@ def test_woopsocial_posts_a_carousel_as_one_post_of_many_media(
 
     assert len(body["content"][0]["media"]) == 3
     assert body["socialAccounts"][0]["postType"] == "PHOTO"
+    assert body["socialAccounts"][0]["postMode"] == "DIRECT_POST"
+    assert body["socialAccounts"][0]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
+    assert body["socialAccounts"][0]["allowComment"] is True
+    assert body["socialAccounts"][0]["allowDuet"] is False
+    assert body["socialAccounts"][0]["allowStitch"] is False
+    assert body["socialAccounts"][0]["autoAddMusic"] is True
 
 
 def test_an_engine_without_a_carousel_contract_refuses_by_name(

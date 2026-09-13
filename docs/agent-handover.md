@@ -7,6 +7,19 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## WoopSocial TikTok publishing & privacy level mapping (2026-09-14)
+
+Uploading/publishing to TikTok via WoopSocial previously failed with `api.woopsocial.com: HTTP 400`
+because WoopSocial's live API contract requires specific TikTok fields for `DIRECT_POST`:
+`postMode="DIRECT_POST"`, `privacyLevel` (`PUBLIC_TO_EVERYONE` or `SELF_ONLY`),
+`allowComment=True`, `allowDuet=not carousel`, `allowStitch=not carousel`, `isYourBrand=False`,
+`isBrandedContent=False`, `autoAddMusic=carousel`, and `isAiGeneratedContent=bool(made_with_ai)`.
+In `services/api/src/trendrelay_api/integrations/publishing.py`, `_woopsocial_account_entry` now
+centralizes these fields across both `_woopsocial_publish` and `_woopsocial_validate`.
+`privacyLevel` automatically maps from `request.visibility` (`public` -> `PUBLIC_TO_EVERYONE`,
+`private` -> `SELF_ONLY`). `_error_message` was enhanced to parse provider `error_message`
+and detailed `validationErrors` / `errors` so field-level failures are transparent.
+
 ## On-demand music library (2026-09-13)
 
 All four stages are built, tested and committed. Migration 0068 is applied to

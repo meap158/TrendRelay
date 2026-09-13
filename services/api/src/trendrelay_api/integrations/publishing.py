@@ -1306,11 +1306,29 @@ def _error_message(url: str, error: urllib.error.HTTPError) -> str:
 
     message = ""
     if isinstance(detail, dict):
-        raw = detail.get("message") or detail.get("error") or detail.get("detail")
+        raw = (
+            detail.get("error_message")
+            or detail.get("message")
+            or detail.get("error")
+            or detail.get("detail")
+        )
         if isinstance(raw, dict):
             raw = raw.get("message")
         if raw:
             message = str(raw).strip()
+        val_errors = detail.get("validationErrors") or detail.get("errors")
+        if isinstance(val_errors, list) and val_errors:
+            field_msgs = [
+                f"{item.get('field') or item.get('path')}: {item.get('message')}"
+                for item in val_errors
+                if isinstance(item, dict) and item.get("message")
+            ]
+            if field_msgs:
+                message = (
+                    f"{message} ({'; '.join(field_msgs)})"
+                    if message
+                    else "; ".join(field_msgs)
+                )
     if not message:
         message = f"HTTP {error.code}"
 
@@ -2322,6 +2340,40 @@ def _woopsocial_upload(video: Path) -> str:
     return str(media_id)
 
 
+def _woopsocial_account_entry(
+    target: PublishTarget,
+    platform: str,
+    request: PublishRequest,
+    *,
+    carousel: bool,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {"platform": platform, "socialAccountId": target.integration_id}
+    if platform in {"INSTAGRAM", "FACEBOOK"}:
+        entry["postType"] = _WOOPSOCIAL_POST_TYPES[target.platform][target.kind.id]
+    elif platform == "TIKTOK":
+        entry["postType"] = "PHOTO" if carousel else "VIDEO"
+        entry["postMode"] = "DIRECT_POST"
+        entry["privacyLevel"] = (
+            "PUBLIC_TO_EVERYONE" if request.visibility == "public" else "SELF_ONLY"
+        )
+        entry["allowComment"] = True
+        entry["allowDuet"] = not carousel
+        entry["allowStitch"] = not carousel
+        entry["isYourBrand"] = False
+        entry["isBrandedContent"] = False
+        entry["autoAddMusic"] = carousel
+        entry["isAiGeneratedContent"] = bool(request.made_with_ai)
+    elif platform == "YOUTUBE":
+        entry["title"] = _post_title(request)[:100]
+        entry["privacy"] = request.visibility
+        entry["category"] = request.youtube_category_id
+        entry["madeForKids"] = False
+    elif platform == "PINTEREST":
+        entry["pinterestBoardId"] = request.board
+        entry["title"] = _post_title(request)[:100]
+    return entry
+
+
 def _woopsocial_validate(request: PublishRequest) -> list[str]:
     """Ask WoopSocial what it would refuse, without creating or uploading anything.
 
@@ -2337,11 +2389,12 @@ def _woopsocial_validate(request: PublishRequest) -> list[str]:
     """
     known = _woopsocial_account_platforms()
     accounts = []
+    carousel = _is_image_post(request)
     for target in request.targets:
         platform = known.get(target.integration_id)
         if not platform:
             return [f"{target.platform}: WoopSocial no longer lists this account."]
-        accounts.append({"platform": platform, "socialAccountId": target.integration_id})
+        accounts.append(_woopsocial_account_entry(target, platform, request, carousel=carousel))
     payload = _woopsocial_request(
         "POST",
         "/posts/validate",
@@ -2355,7 +2408,7 @@ def _woopsocial_validate(request: PublishRequest) -> list[str]:
     ) or {}
     return [
         f"{item.get('field', '')}: {item.get('message', '')}".strip(": ")
-        for item in (payload.get("validationErrors") or [])
+        for item in (payload.get("errors") or payload.get("validationErrors") or [])
         if str(item.get("field") or "").upper() != "MEDIA"
     ]
 
@@ -2439,24 +2492,7 @@ def _woopsocial_publish(request: PublishRequest, video: Path | None) -> dict[str
                 f"WoopSocial no longer lists the account behind {target.platform}. "
                 "Reload accounts and choose the destination again."
             )
-        entry: dict[str, Any] = {"platform": platform, "socialAccountId": target.integration_id}
-        if platform in {"INSTAGRAM", "FACEBOOK"}:
-            entry["postType"] = _WOOPSOCIAL_POST_TYPES[target.platform][target.kind.id]
-        elif platform == "TIKTOK":
-            entry["postType"] = "PHOTO" if carousel else "VIDEO"
-            entry["privacyLevel"] = (
-                "PUBLIC_TO_EVERYONE" if request.visibility == "public" else "SELF_ONLY"
-            )
-            entry["isAiGeneratedContent"] = request.made_with_ai
-        elif platform == "YOUTUBE":
-            entry["title"] = _post_title(request)[:100]
-            entry["privacy"] = request.visibility
-            entry["category"] = request.youtube_category_id
-            entry["madeForKids"] = False
-        elif platform == "PINTEREST":
-            entry["pinterestBoardId"] = request.board
-            entry["title"] = _post_title(request)[:100]
-        accounts.append(entry)
+        accounts.append(_woopsocial_account_entry(target, platform, request, carousel=carousel))
 
     result = _woopsocial_request(
         "POST",
