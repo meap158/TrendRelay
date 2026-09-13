@@ -1157,3 +1157,72 @@ def test_an_unmeasured_clip_queues_with_no_length_rather_than_zero(
     with TestingSession() as session:
         job = session.query(DurableJob).filter_by(kind="media_effect_render").one()
         assert job.payload["media_ms"] is None
+
+
+def test_batch_render_auto_resolves_cover_text_regions(
+    tmp_path, monkeypatch
+) -> None:
+    """Cover on-screen text in batch auto-resolves regions from each clip's OCR reading."""
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.media_models import MediaTranscript
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    clip1 = make_asset(workspace, tmp_path, name="clip-with-ocr")
+    clip2 = make_asset(workspace, tmp_path, name="clip-without-ocr")
+
+    with TestingSession() as session:
+        # Give clip1 dimensions and OCR transcript
+        asset1 = session.query(MediaAsset).filter_by(id=clip1).one()
+        asset1.width = 1080
+        asset1.height = 1920
+        transcript = MediaTranscript(
+            id="ocr_transcript_1",
+            workspace_id=workspace,
+            asset_id=clip1,
+            kind="ocr",
+            provider="rapidocr",
+            status="machine",
+            text="Detected text",
+            segments=[{
+                "timestamp_ms": 1000,
+                "lines": [{
+                    "box": [[100, 200], [500, 200], [500, 300], [100, 300]],
+                    "text": "Detected text",
+                    "confidence": 0.95,
+                }],
+            }],
+            created_by="cuts-owner",
+        )
+        session.add(transcript)
+        session.commit()
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [clip1, clip2],
+            "steps": [{"effect": "cover_text", "values": {"mode": "solid", "colour": "black", "strength": 0.08, "regions": []}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    data = response.json()
+    assert data["counts"]["queued"] == 1
+    assert data["counts"]["skipped"] == 1
+    assert data["results"][0]["asset_id"] == clip1
+    assert data["results"][0]["status"] == "queued"
+    assert data["results"][1]["asset_id"] == clip2
+    assert data["results"][1]["status"] == "skipped"
+    assert "On-screen text has not been read yet" in data["results"][1]["detail"]
+
+    # Verify the queued job's recipe has populated regions
+    with TestingSession() as session:
+        job = session.query(DurableJob).filter_by(kind="media_effect_render").one()
+        step = job.payload["request"]["steps"][0]
+        assert step["effect"] == "cover_text"
+        assert len(step["values"]["regions"]) > 0
+

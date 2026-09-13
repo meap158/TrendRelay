@@ -3264,7 +3264,9 @@ def submit_batch_render(
         for item in normalised
     )
     if needs_cover_text:
+        from trendrelay_api.config import get_settings
         from trendrelay_api.text_cover import readable_lines
+
         ocr_interval_ms = round(get_settings().media_ai_ocr_interval_seconds * 1000)
 
     results: list[dict[str, Any]] = []

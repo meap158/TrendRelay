@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-14
 
+## Fix: NameError: name 'get_settings' is not defined in submit_batch_render, 2026-09-14
+
+- **Context & Request**:
+  - Clicking "Apply to 24 items" in the Effect Editor with "Cover on-screen text" in the stack threw `Failed to fetch 0 of 24 were handled (0 queued); the rest were not queued.`
+  - Root cause: `submit_batch_render` in `services/api/src/trendrelay_api/media_library_api.py` called `get_settings().media_ai_ocr_interval_seconds` when `needs_cover_text` was True, but `get_settings` was not imported in that scope, causing an unhandled `NameError` on the FastAPI route which resulted in a 500 error and `Failed to fetch` in the browser.
+- **Changes**:
+  - `services/api/src/trendrelay_api/media_library_api.py`:
+    - Added `from trendrelay_api.config import get_settings` inside `needs_cover_text` block.
+  - `services/api/tests/test_version_cuts.py`:
+    - Added comprehensive end-to-end integration test `test_batch_render_auto_resolves_cover_text_regions` verifying `POST /effects/render-batch` with `cover_text` step across multiple assets, checking status 202, correct counts (`queued` vs `skipped`), and that the queued job's recipe has populated bounding regions.
+- **Verification**:
+  - Pytest: `test_version_cuts.py` 40/40 passed (including `test_batch_render_auto_resolves_cover_text_regions`).
+  - Web: Typecheck 0 errors, 504/504 tests passed.
+
 ## Feature: Auto-apply detected speech & on-screen text, enable batch Cover On-screen Text, 2026-09-14
 
 - **Context & Request**:
