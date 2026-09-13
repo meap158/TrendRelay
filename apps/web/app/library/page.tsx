@@ -433,11 +433,19 @@ function EffectActivity({
     return () => clearInterval(timer);
   }, []);
 
-  const matching = jobs.filter((job) =>
-    job.category === "edit"
-    && !isEffectPreviewJob(job)
-    && assetIdForEffectJob(job) === assetId,
-  );
+  const seenIds = new Set<string>();
+  const matching = jobs.filter((job) => {
+    if (
+      job.category !== "edit"
+      || isEffectPreviewJob(job)
+      || assetIdForEffectJob(job) !== assetId
+    ) {
+      return false;
+    }
+    if (seenIds.has(job.id)) return false;
+    seenIds.add(job.id);
+    return true;
+  });
   const active = matching.filter((job) => ["queued", "running"].includes(job.status));
   const settled = matching.filter((job) => !["queued", "running"].includes(job.status));
   // Everything in flight, always: that is operational state and carries the

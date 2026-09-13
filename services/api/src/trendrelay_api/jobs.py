@@ -403,15 +403,18 @@ def list_job_records_for_kinds(
         .limit(limit)
     )
     if session is not None:
-        return [
-            serialize_job_for_activity(item)
-            for item in [*session.scalars(unfinished).all(), *session.scalars(query).all()]
-        ]
-    with factory() as owned:
-        return [
-            serialize_job_for_activity(item)
-            for item in [*owned.scalars(unfinished).all(), *owned.scalars(query).all()]
-        ]
+        items = [*session.scalars(unfinished).all(), *session.scalars(query).all()]
+    else:
+        with factory() as owned:
+            items = [*owned.scalars(unfinished).all(), *owned.scalars(query).all()]
+    seen_ids: set[str] = set()
+    unique_items = []
+    for item in items:
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        unique_items.append(item)
+    return [serialize_job_for_activity(item) for item in unique_items]
 
 
 def record_completed_job(

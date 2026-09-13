@@ -2,6 +2,27 @@
 
 Last updated: 2026-09-14
 
+## Fix: Duplicate React key error in EffectActivity (`edit_...`), 2026-09-14
+
+- **Context & Request**:
+  - Console error reported: `Encountered two children with the same key, 'edit_1ec923d89658cd7a6afcf3b9'. Keys should be unique so that components maintain their identity across updates.` triggered in `EffectActivity` in `apps/web/app/library/page.tsx`.
+  - Root cause:
+    1. In `apps/web/app/jobs-provider.tsx`, neither `announceMediaJobs` nor `refresh` (`results.flat()`) deduplicated jobs by `id`. If the same job appeared multiple times (e.g. from rapid announcements, overlapping fetches, or server responses), duplicate jobs entered the state.
+    2. In `apps/web/app/library/page.tsx`, `EffectActivity` mapped `visible` and `matching` jobs to `<EffectActivityItem key={job.id} />` without deduplicating by `job.id`.
+    3. In `services/api/src/trendrelay_api/jobs.py` (`list_job_records_for_kinds`), jobs query combining `unfinished` and `query` did not deduplicate by `id`, allowing race transitions where a job completed between both queries to be included twice.
+- **Changes**:
+  - `apps/web/app/jobs-provider.tsx`:
+    - Added `dedupeJobs(jobs: BaseJob[])` helper to enforce single-occurrence by `id`.
+    - Applied `dedupeJobs` in `announceMediaJobs` and `refresh` when combining job arrays.
+  - `apps/web/app/library/page.tsx`:
+    - In `EffectActivity`, deduplicated matching jobs by `id` using a `seenIds` Set before splitting into active/settled and rendering.
+  - `services/api/src/trendrelay_api/jobs.py`:
+    - In `list_job_records_for_kinds`, deduplicated records by `item.id` before serialization.
+- **Verification**:
+  - Pytest: 364/364 passed.
+  - Typecheck: clean (0 errors).
+  - Web unit tests: 504/504 passed.
+
 ## Fix: NameError: name 'get_settings' is not defined in submit_batch_render, 2026-09-14
 
 - **Context & Request**:

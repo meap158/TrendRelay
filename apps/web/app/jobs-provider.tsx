@@ -121,6 +121,18 @@ export type BaseJob = {
 };
 
 
+function dedupeJobs(jobs: BaseJob[]): BaseJob[] {
+  const seen = new Set<string>();
+  const unique: BaseJob[] = [];
+  for (const job of jobs) {
+    if (!job?.id || seen.has(job.id)) continue;
+    seen.add(job.id);
+    unique.push(job);
+  }
+  return unique;
+}
+
+
 type JobsContextValue = {
   jobs: BaseJob[];
   busy: boolean;
@@ -267,13 +279,16 @@ export function JobsProvider({ children }: { children: ReactNode }) {
    * the interval. Replacing by id also lets cancellation update the same row.
    */
   const announceMediaJobs = useCallback((incoming: any[]) => {
-    const announced = incoming.filter((job) => job?.id).map(mediaJob);
+    const raw = incoming.filter((job) => job?.id).map(mediaJob);
+    const announced = dedupeJobs(raw);
     if (!announced.length) return;
     hasActiveJobs.current = announced.some((job) =>
       ["queued", "running", "in_progress", "pending"].includes(job.status));
     const ids = new Set(announced.map((job) => job.id));
-    setJobs((current) => [...announced, ...current.filter((job) => !ids.has(job.id))]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+    setJobs((current) => dedupeJobs([
+      ...announced,
+      ...current.filter((job) => !ids.has(job.id)),
+    ]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   }, [mediaJob]);
 
   const refresh = useCallback(async () => {
@@ -495,11 +510,12 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       }
 
       const results = await Promise.all(fetchPromises);
-      const combined = results.flat().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const combined = dedupeJobs(results.flat())
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        hasActiveJobs.current = combined.some((job) =>
-          ["queued", "running", "in_progress", "pending"].includes(job.status));
-        setJobs(combined);
+      hasActiveJobs.current = combined.some((job) =>
+        ["queued", "running", "in_progress", "pending"].includes(job.status));
+      setJobs(combined);
       } catch (e) {
         console.error("Failed to refresh jobs", e);
       } finally {
