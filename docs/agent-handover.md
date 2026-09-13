@@ -7,6 +7,142 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## On-demand music library (2026-09-13)
+
+All four stages are built, tested and committed. Migration 0068 is applied to
+the live database. The media worker runs the render job code from its own
+process and does not hot-reload: **restart it** before the next AutoCut or
+Storytelling render, or a job queued with a Library track will run the old
+code, ignore `music_asset_id` and file the video without its credit.
+
+### What the operator asked for and decided
+
+- Assess editly (github.com/mifi/editly) for Storytelling. Decision: **use it
+  as a reference, not a dependency.** Written up in
+  `docs/third-party/editly.md` and catalogued in `config/tool-catalog.json`
+  as `editly`, `evaluated-not-adapted` (its native `gl` build fails on this
+  machine with MSB8036, no stable release since v0.14.2 in Dec 2022, and it
+  would fork our ffmpeg render path). Storytelling already has Ken Burns via
+  `autocut/renderer.py` `zoompan`, with subject-aware framing editly lacks.
+- editly's README tip (rip music from a YouTube channel with youtube-dl) was
+  validated and **not adopted**: the channel UCht8qITGkBvXKsR1Byln-wA is a
+  third-party label (@audiolibrary_), not YouTube's library; the
+  `youtube.com/audiolibrary/music` link is a 404 (the library now lives in
+  YouTube Studio behind sign-in); ripping loses the licence terms, and our
+  posts are commercial and go to TikTok/Facebook/Instagram.
+- Build an **Audio library filled on demand while editing**, sourced from
+  Openverse (`api.openverse.org/v1/audio/`). Licence rule chosen by the
+  operator: **CC0 + CC BY only, credit added automatically.** BY-NC (no
+  commercial use), BY-ND (cutting a track is adaptation), BY-SA (would bind
+  the finished video) and the Public Domain Mark are refused.
+
+### Stage A - data and API (done, tests green)
+
+- Migration `20260913_0068_a_library_asset_carries_its_licence.py`:
+  `media_assets.license` (SPDX id, indexed), `license_url`, `attribution`
+  (the caption credit line; null when none is owed). Upgrade/downgrade
+  round-trip verified on a scratch database; applied to the live database on
+  2026-09-13 while the API was down.
+- `integrations/openverse_music.py`: `search`, `track` (reads the licence back
+  by id; raises `LicenceRefused`), `download` (bounded 40 MB, audio content
+  types, `.part` then rename, named `<openverse id><suffix>`), `credit_line`
+  (`Music: "Title" by Creator (CC BY 4.0)`, deliberately no links - networks
+  treat caption links as spam). The licence allow-list is enforced twice: in
+  the query and on every row returned.
+- `media_library.create_ingest_job` takes `license`/`license_url`/
+  `attribution` and carries them into the asset. On a duplicate file a licence
+  is filled in, never replaced.
+- `media_library_api.py`: `GET .../media/library/music/search?q=&page=`
+  (membership) and `POST .../media/library/music/imports` body
+  `{track_id, confirm_external_action}` (owner/editor/approver; 400 without
+  confirmation; 422 refused licence; 404 unknown id; 502 Openverse down).
+  The request carries only the id - title, creator and licence come from
+  Openverse, so a browser cannot relabel CC BY as CC0. Files save to
+  `.data/downloads/music/<workspace_id>/` (inside an approved media root).
+  Asset views now include `license`, `license_url`, `attribution`.
+- Tests: `tests/test_openverse_music.py` (29), `tests/test_media_library_music_api.py`
+  (7; imports helpers from `test_media_library_api`). Live checks done during
+  the build: Openverse returned only cc0/by 3.0/by 4.0 for the filtered query,
+  a Jamendo mp3 downloaded anonymously, and `/audio/{id}/` read-back works.
+  The Library held 0 audio assets at the time; AutoCut template tracks under
+  `.data/autocut/audio` have no recorded licence.
+
+### Stage C - music under narration (done)
+
+- `autocut/renderer.py`: `RenderRequest.music_path` is a second audio input.
+  With a voice in `audio_path` the two are mixed by `build_audio_graph` (pure,
+  tested): both to 48 kHz stereo; voice padded and trimmed to the plan so it
+  is the clock; bed at `MUSIC_BED_GAIN` 0.25, `atrim` to the plan, `afade`
+  out over the last 1.5 s, `sidechaincompress` with the voice as sidechain
+  (threshold 0.02, ratio 8, attack 20 ms, release 400 ms), `amix
+  duration=first normalize=0` → `[aout]`. The music input is `-stream_loop -1`
+  so a short track fills a long narration; `atrim` ends the graph, so the
+  encode stops with the video (verified with the bundled ffmpeg 6.1.1 on
+  synthetic inputs). A bed given without a voice is treated as the one track.
+  `loudnorm` was left out on purpose: single-pass it is heavy and the fixed
+  gain plus ducking read well; revisit if operators report level problems.
+- `autocut/jobs.py`: `MusicChoice` (asset id, path, attribution) and
+  `music_from_library(session, workspace_id, asset_id)` - audio only, this
+  workspace only. `build_plan(music_path=)` reads the beats from the chosen
+  file; `enqueue_render(music_asset=)` stores `music_asset_id` and
+  `music_attribution` on the payload and `run_render_job` hands the credit to
+  `create_ingest_job(attribution=)`, so the finished video owes it.
+- `storytelling/jobs.py`: `enqueue_render(music_asset_id=)`; resolved at run
+  time like the pictures; a track that has left the Library fails the job with
+  "That music is no longer in the Library" rather than rendering silent.
+  `autocreate.py` passes it through.
+- APIs: `PlanRequest.music_asset_id` (AutoCut plan/preview/render) and
+  `RenderBody.music_asset_id` (Storytelling render/autocreate); 422 when the id
+  is not an audio asset of this workspace. `creation_drafts.py` specs carry
+  `music_asset_id`; an AutoCut draft whose track has gone falls back to the
+  template's file.
+
+### Stage B - automatic credit (done)
+
+- `media_library.attribution_for(session, workspace_id, asset_id)` is the one
+  read: does this asset owe a credit line.
+- `campaign_autopilot.compose(credit=)` / `compose_products(credit=)` /
+  `compose_for_post(credit=)`: the credit sits after the words and links and
+  before the hashtags, on every placement branch, added once (`_with_credit`
+  skips a line already present in any part). `with_credit(caption, credit)`
+  does the same for a caption somebody typed.
+- Passed at every composer call site: `campaign_scheduler.plan_campaign`
+  (`frozen.asset_id`), `campaign_runner.recompose_held`
+  (`execution.asset_id`) and `publish_queue_item_now` (`frozen.asset_id`),
+  and the editor preview in `campaign_autopilot_api` (`draft.asset_id`) - so
+  what the editor shows is what the scheduler publishes.
+- Manual publish: `publishing_api._with_media_credit` appends the credit to
+  `PublishRequest.caption` for both `/preview` and `/jobs`, before the
+  network limits are checked, so a credit that overruns a limit is refused
+  with the reason rather than published cut off.
+
+### Stage D - UI (done)
+
+- `apps/web/app/library/music-picker.tsx`: `MusicPicker` (current choice with
+  licence badge and credit note; behind a button, two tabs: "In the Library"
+  through `useLibraryAssets` pinned to audio, and "Find more" searching
+  `.../music/search` with a native `<audio preload="none">` preview per row
+  and an Add button that POSTs `{track_id, confirm_external_action: true}` -
+  the click is the confirmation). After an add the Library list is re-read at
+  4 s and 10 s so the track appears without reopening; a duplicate with an
+  asset id is chosen immediately. `loadMusicChoice` restores a draft's track
+  by id. Strings under the `music` group in all seven locales.
+- Wired into `autocut-dialog.tsx` (Music field; the empty row names the
+  template's own track; plan/preview/render/draft carry `music_asset_id`) and
+  `storytelling-dialog.tsx` (a `story-music` block under the pacing grid;
+  render/autocreate/draft carry it). Styles: `.music-picker*` in
+  `media-library.css` (shared), `.story-music` in `storytelling.css`.
+
+### Still open
+
+- The Library page itself does not yet show an asset's licence or credit;
+  the picker and the asset view carry them.
+- Ducking levels are constants in `renderer.py`; no operator control.
+- **Worth taking from editly later** (details in `docs/third-party/editly.md`):
+  more `xfade` transitions, eased whips via `xfade=transition=custom` with an
+  easeOutExpo expression, `acrossfade` curves, no transition after the last
+  clip, 0.5 s default transition length.
+
 ## Shopee listing counts corrected (2026-09-06)
 
 User requested truthful notification/Attribution counts and complete, efficient
