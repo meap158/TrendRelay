@@ -47,6 +47,7 @@ import type { SortState } from "../ui/sortable-header";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
+import { effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
 import { ActionMenu, type ActionMenuItem } from "../ui/action-menu";
@@ -488,6 +489,15 @@ type Destination = {
   link_reason: string;
 };
 
+/** The cut of its video a post publishes, as the API resolves it: the newest
+    rendered cut with the effects on it, or the original file. */
+type MediaVersionInfo = {
+  id: string | null;
+  kind: string;
+  original: boolean;
+  effects: { id: string; label: string }[];
+};
+
 type QueueItem = {
   id: string;
   asset_id?: string | null;
@@ -527,7 +537,34 @@ type QueueItem = {
     /** What this post would actually carry, resolved by the matcher. */
     chosen_offer_ids?: string[];
   };
+  media_version?: MediaVersionInfo | null;
+  asset_hashtags?: string[];
 };
+
+/**
+ * The chips that say what cut a post carries.
+ *
+ * Each effect on the rendered cut by its registry name, translated by id the
+ * way the Library's own cards do it, so the same cut wears the same words on
+ * both pages. Or the one word for the unedited file. A rendered cut that
+ * records no effects - a trim, say - is still an edit and says so rather than
+ * passing as the original.
+ */
+function cutChips(
+  t: ReturnType<typeof useT>, version: MediaVersionInfo | null | undefined,
+): { name: string; effect: boolean }[] {
+  if (!version) return [];
+  if (version.original) return [{ name: t("autopilot.originalCut"), effect: false }];
+  const names = [...new Set(version.effects.map((effect) => effectTag(t, effect.id, effect.label)))];
+  return names.length
+    ? names.map((name) => ({ name, effect: true }))
+    : [{ name: t("autopilot.editedCut"), effect: true }];
+}
+
+/** A hashtag as typed, compared: no leading hash, no case. */
+function tagKey(tag: string): string {
+  return tag.replace(/^#/, "").toLowerCase();
+}
 
 function compatiblePostTypes(destination: Destination, item: QueueItem) {
   const choices = destination.post_types ?? [];
@@ -5147,6 +5184,14 @@ export function AutopilotPanel({
                       carries, in that order and in one style. */}
                   <span className="campaign-queue-facts">
                     <em>{namedFormat(null, item)}</em>
+                    {/* What was done to the video, in the Library's tag
+                        colour, sized to this row; the unedited file in the
+                        row's own grey, since it claims no edit. */}
+                    {cutChips(t, item.media_version).map((chip) => (
+                      <em key={chip.name} className={chip.effect ? "blurred-tag tag-effect" : undefined}>
+                        {chip.name}
+                      </em>
+                    ))}
                     <em>{item.times_posted > 0
                       ? t("autopilot.postedTimes", { count: item.times_posted })
                       : t("autopilot.neverPosted")}</em>
@@ -5584,6 +5629,23 @@ export function AutopilotPanel({
                       : shape;
                   })()}
                 </small>
+                {/* Which cut of the video this post publishes, and what was
+                    done to it. Only for the media the post has now: a staged
+                    replacement or a removal is described by the line above,
+                    and these chips would be describing the file being left. */}
+                {!editingMedia && !editingMediaRemoved && editing.media_version && (
+                  <span className="campaign-edit-media-chips">
+                    {cutChips(t, editing.media_version).map((chip) => (
+                      <em
+                        key={chip.name}
+                        className={chip.effect ? "blurred-tag tag-effect" : "blurred-tag campaign-cut-original"}
+                        title={chip.effect
+                          ? t("autopilot.appliedEdit", { label: chip.name })
+                          : t("autopilot.originalCutHint")}
+                      >{chip.name}</em>
+                    ))}
+                  </span>
+                )}
                 <span className="campaign-edit-media-actions">
                   {(editingMedia || editingMediaRemoved) && (
                     <Button type="button" variant="quiet" size="sm"
@@ -5744,6 +5806,42 @@ export function AutopilotPanel({
             </label>
             <label>{t("autopilot.hashtags")}
               <input name="hashtags" defaultValue={editing.hashtags.join(" ")} />
+              {/* The tags the video arrived with from its network, offered
+                  one click each - only the ones the field does not already
+                  hold, so a post that took them all shows no row. A post
+                  added from the Library starts with them; this is for the
+                  posts queued before that, and for tags somebody removed and
+                  wants back. The field is uncontrolled and read on submit,
+                  so a tag goes into the input itself. */}
+              {(() => {
+                const present = new Set(editing.hashtags.map(tagKey));
+                const offered = (editing.asset_hashtags ?? [])
+                  .filter((tag) => !present.has(tagKey(tag)));
+                if (!offered.length) return null;
+                return (
+                  <span className="campaign-tag-suggest">
+                    <small>{t("autopilot.tagsFromVideo")}</small>
+                    {offered.map((tag) => {
+                      const clean = tag.replace(/^#/, "");
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          title={t("autopilot.addTag", { tag: clean })}
+                          onClick={(event) => {
+                            const input = event.currentTarget.closest("form")
+                              ?.querySelector<HTMLInputElement>("input[name='hashtags']");
+                            if (!input) return;
+                            const current = input.value.split(/\s+/).filter(Boolean);
+                            if (current.some((word) => tagKey(word) === tagKey(clean))) return;
+                            input.value = [...current, clean].join(" ");
+                          }}
+                        >+#{clean}</button>
+                      );
+                    })}
+                  </span>
+                );
+              })()}
             </label>
             {/* Threads' single topic tag - a field the queue has carried since
                 the parity migration with nothing to write it. Shown only where

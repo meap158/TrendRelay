@@ -1859,6 +1859,17 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-edit-media-head strong { font-size: 12px; }
 .campaign-edit-media-head small { min-width: 160px; flex: 1 1 240px; margin-inline-end: auto; color: var(--muted); font-size: 11px; }
 .campaign-edit-media-actions { display: inline-flex; flex: none; flex-wrap: wrap; gap: 6px; }
+/* What was done to the video, as the Library's own effect tags - the same cut
+   wears the same chip on both pages. The unedited file is said in grey rather
+   than in the effect blue, which would claim an edit that was not made. */
+.campaign-edit-media-chips { display: inline-flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px; }
+.campaign-edit-media-chips .campaign-cut-original { color: var(--muted); background: var(--panel-raised); }
+/* The tags a video arrived with, offered under the hashtags field one click
+   each. Pills in the field's own scale, not the nine-point queue chips: these
+   are things to press, and sit beside an input. */
+.campaign-tag-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-block-start: 4px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.campaign-tag-suggest button { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--text); background: var(--panel-raised); font: inherit; font-size: 11px; cursor: pointer; }
+.campaign-tag-suggest button:hover { border-color: var(--link); }
 .campaign-edit-media-video { display: block; width: 100%; max-height: 300px; border-radius: var(--radius-sm); background: var(--ink); object-fit: contain; }
 .campaign-edit-media-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .campaign-edit-media-strip img { height: 110px; flex: none; border-radius: var(--radius-sm); object-fit: cover; }
