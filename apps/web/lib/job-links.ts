@@ -17,11 +17,15 @@ export type JobRecord = {
     sha256?: string;
     source_path?: string;
     product_id?: string;
+    /** The step this one handed its work to - so it made nothing itself. */
+    render_job_id?: string;
   } | null;
   payload?: {
     asset_id?: string;
     asset_ids?: string[];
     sha256?: string;
+    /** An ingest knows the hash of the file it was asked to take from the start. */
+    source_sha256?: string;
     source_path?: string;
     product_id?: string;
   } | null;
@@ -59,7 +63,7 @@ function assetId(job: JobRecord | null | undefined): string | undefined {
  * link works before and after.
  */
 function contentHash(job: JobRecord | null | undefined): string | undefined {
-  return (job?.result?.sha256 ?? job?.payload?.sha256) || undefined;
+  return (job?.result?.sha256 ?? job?.payload?.sha256 ?? job?.payload?.source_sha256) || undefined;
 }
 
 function productId(job: JobRecord | null | undefined): string | undefined {
@@ -142,10 +146,12 @@ export function notificationHref(
   context: { title?: string } = {},
 ): string | undefined {
   const ids = [...new Set(jobs.flatMap(assetIds))];
-  const fallback = ids.length === 0 && jobs.length === 1 ? assetHref(jobs[0]) : undefined;
-  if (ids.length === 0 && !fallback) {
+  if (ids.length === 0) {
     // Made something, but it is still on its way into the Library. By hash,
     // which resolves the moment the ingest lands and keeps resolving after.
+    // Before the path: an ingest copies its source into the hash-addressed
+    // store, so the source path never matches the entry it becomes, and the
+    // hash is the one thing that names the file on both sides of that move.
     const hashes = [...new Set(jobs.map(contentHash).filter((v): v is string => Boolean(v)))];
     if (hashes.length === 1) {
       const params = new URLSearchParams({ file: hashes[0], from: "notifications" });
@@ -153,6 +159,9 @@ export function notificationHref(
       if (notice) params.set("notice", notice);
       return `/library?${params}`;
     }
+  }
+  const fallback = ids.length === 0 && jobs.length === 1 ? assetHref(jobs[0]) : undefined;
+  if (ids.length === 0 && !fallback) {
     // Nothing here made a Library entry, so the products are what this row is
     // about. Checked after assets rather than before because a job carrying
     // both belongs to the thing it produced.
@@ -170,6 +179,41 @@ export function notificationHref(
   const title = contextNotice(context.title);
   if (title) params.set("notice", title);
   return `${path}?${params}`;
+}
+
+/**
+ * Open what a chain of jobs ended on.
+ *
+ * A chain is one thing somebody asked for, carried out as a sequence: the
+ * auto-build queues a render, the render queues the ingest that files its
+ * video. Each step reports its own inputs, so the union of everything the
+ * steps touched is the b-roll and the pictures - not the video. What the row
+ * stands for is the last step's output, so the link is the newest step that
+ * has something to open: the entry once the ingest has made one, and the
+ * file by hash from the moment the render finished.
+ *
+ * Nothing while no step has an output yet - a running chain has nothing to
+ * look at, and a link to the whole Library would say otherwise.
+ */
+export function chainHref(
+  jobs: JobRecord[],
+  context: { title?: string } = {},
+): string | undefined {
+  // Newest first, which is the order the drawer keeps its groups in.
+  for (const job of jobs) {
+    // A step that queued the next one made nothing itself: the build's
+    // pictures are the render's inputs, not this row's video.
+    if (job.result?.render_job_id) continue;
+    // Outputs only. A step's payload names what it was given, and a chain
+    // of inputs is precisely the wrong thing to open.
+    const made: JobRecord = {
+      result: job.result,
+      payload: { sha256: job.payload?.sha256, source_sha256: job.payload?.source_sha256 },
+    };
+    const href = notificationHref([made], context);
+    if (href) return href;
+  }
+  return undefined;
 }
 
 /**

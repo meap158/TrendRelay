@@ -14,7 +14,7 @@ import {
   type Pending,
 } from "../lib/eta";
 import { Clock, Languages, Settings } from "lucide-react";
-import { notificationHref } from "../lib/job-links";
+import { chainHref, notificationHref } from "../lib/job-links";
 import { listingBatchProgress } from "../lib/listing-batch-progress";
 
 import { useAuth } from "./auth-provider";
@@ -225,7 +225,37 @@ type NotificationGroup = {
  * error the title is the identity instead, so two separate downloads stay two
  * rows rather than collapsing into a meaningless "2 jobs".
  */
+/** The chain marker the API puts on every job that continues another's work. */
+function chainOf(job: BaseJob): string | null {
+  const id = job.raw?.payload?.chain?.id;
+  return id ? String(id) : null;
+}
+
+/**
+ * The job a chain's row is titled for.
+ *
+ * The newest step says where the chain is - queued, running, failed - so it
+ * is the row's state. But once the last step has filed the video, "Library:
+ * Why the sea is blue" is the ingest describing itself, and the person is
+ * waiting to hear that the story is ready: the step that made the video says
+ * that, so its finished title is the row's.
+ */
+function chainHeadline(group: NotificationGroup): BaseJob {
+  const latest = group.latest;
+  if (latest.category === "media" && latest.status === "succeeded") {
+    return group.jobs.find((item) => item.category !== "media") ?? latest;
+  }
+  return latest;
+}
+
 function groupKey(job: BaseJob): string {
+  // A chain is one thing somebody started, carried out as a sequence of jobs:
+  // the auto-build queues a render, the render queues the ingest that files
+  // its video. Three rows for that read as three things happening, and none
+  // of them was the video. Keyed across categories on purpose - the steps
+  // are different kinds of work, and that is exactly what is being folded.
+  const chain = chainOf(job);
+  if (chain) return `chain${chain}`;
   // A batch is one thing somebody started, however many jobs carry it out.
   // Keyed on the batch alone - not on the status - because the point is to
   // watch it move from queued to done, and a key including the status would
@@ -839,22 +869,36 @@ export function GlobalNav() {
                   {visibleGroups.slice(0, shownGroups).map((group) => {
                     const job = group.latest;
                     const batch = batchProgress(group);
-                    const destination = notificationHref(group.jobs, { title: job.title }) ?? job.href;
+                    const chain = chainOf(job);
+                    // A chain's row is titled for the step that made the
+                    // thing, and opens on that thing - not on the union of
+                    // every step's inputs, which is the b-roll rather than
+                    // the video. No step with an output yet is no link, the
+                    // same rule a running job has.
+                    const headline = chain ? chainHeadline(group) : job;
+                    const destination = chain
+                      ? chainHref(group.jobs, { title: headline.title })
+                      : notificationHref(group.jobs, { title: job.title }) ?? job.href;
                     const read = group.jobs.every((item) => readKeys.has(notificationKey(item)));
                     // One face for the row only when every job in it worked
-                    // on the same asset; a mixed batch gets no favourite.
+                    // on the same asset; a mixed batch gets no favourite. A
+                    // chain's face is what its newest step made: the steps
+                    // before it worked on the pictures, not on the video.
                     const assetIds = [...new Set(
                       group.jobs.map((item) => item.assetId).filter(Boolean),
                     )] as string[];
-                    const sharedAssetId = assetIds.length === 1 ? assetIds[0] : null;
+                    const sharedAssetId = chain
+                      ? job.assetId ?? null
+                      : assetIds.length === 1 ? assetIds[0] : null;
                     return (
                       <li className={read ? "notification-item read" : "notification-item unread"} key={group.key}>
                         <div className="notification-item-topline">
-                          <span className="notification-category">{job.category}</span>
+                          <span className="notification-category">{headline.category}</span>
                           {/* How many jobs this one message stands for. Shown
                               rather than repeated, so the count is information
-                              instead of noise. */}
-                          {group.jobs.length > 1 && !batch && (
+                              instead of noise. A chain's steps are not
+                              repeats, so a chain has no count. */}
+                          {group.jobs.length > 1 && !batch && !chain && (
                             <span className="notification-repeat">×{group.jobs.length}</span>
                           )}
                           {batch && (
@@ -894,9 +938,9 @@ export function GlobalNav() {
                             className="notification-title linked"
                             href={destination}
                             onClick={() => { markRead(group); setDrawerOpen(false); }}
-                          >{job.title}</Link>
+                          >{headline.title}</Link>
                         ) : (
-                          <strong className="notification-title">{job.title}</strong>
+                          <strong className="notification-title">{headline.title}</strong>
                         )}
                         {/* What the row is about, not just what happened to
                             it: the post that went out, or the clip it worked

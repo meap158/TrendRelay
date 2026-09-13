@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   assetHref,
+  chainHref,
   downloadFileLibraryHref,
   downloadLibraryHref,
   notificationHref,
@@ -224,4 +225,61 @@ test("an asset id is preferred over the hash once there is one", () => {
 test("a job with neither still falls through to its products", () => {
   const href = notificationHref([{ productId: "prod_7" }]);
   assert.match(href ?? "", /prod_7/);
+});
+
+test("an ingest links by the hash it was queued with, not by the path it was given", () => {
+  /* The ingest copies its source into the hash-addressed store, so the path
+     it knows never matches the entry it makes - a link by path opened the
+     Library and selected nothing. It knows the hash from the moment it is
+     queued, and the hash keeps resolving after the entry lands. */
+  const href = notificationHref([{
+    payload: { source_path: "S:\\renders\\story_1.mp4", source_sha256: "ab".repeat(32) },
+  }]);
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("file"), "ab".repeat(32));
+  assert.equal(params.get("asset"), null);
+});
+
+// A chain: the auto-build queues a render, the render queues the ingest that
+// files its video. The steps arrive newest first, as the drawer keeps them.
+
+test("a chain opens on what its newest step made, not on every step's inputs", () => {
+  const href = chainHref([
+    { result: { asset_id: "asset_video", sha256: "ab".repeat(32) } },            // the ingest
+    { result: { sha256: "ab".repeat(32) }, payload: { asset_ids: ["pic_1"] } },  // the render
+    { result: { asset_ids: ["pic_1", "pic_2"] } },                                // the build
+  ], { title: "Story video is ready" });
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("asset"), "asset_video");
+  assert.equal(params.get("assets"), "asset_video");
+  assert.equal(params.get("notice"), "Story video is ready");
+});
+
+test("a chain whose video is still being filed opens it by hash", () => {
+  const href = chainHref([
+    { payload: { source_sha256: "cd".repeat(32) } },           // the ingest, queued
+    { result: { sha256: "cd".repeat(32) } },                    // the render, done
+    { result: { asset_ids: ["pic_1"] } },                       // the build
+  ]);
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("file"), "cd".repeat(32));
+});
+
+test("a chain with nothing made yet has nowhere to go", () => {
+  // The build is still finding b-roll: the pictures it was given are what it
+  // is working with, and a link to them would say the video was there.
+  assert.equal(chainHref([{ payload: { asset_ids: ["pic_1"] }, result: null }]), undefined);
+  // Done, and it queued the render: the pool it reports is that render's
+  // input. The video is the next step's to report.
+  assert.equal(
+    chainHref([{ result: { asset_ids: ["pic_1", "pic_2"], render_job_id: "story_1" } }]),
+    undefined,
+  );
+});
+
+test("a build that stopped for review still opens the pictures it gathered", () => {
+  // No render was queued, so the pool is the build's output, not an input.
+  const href = chainHref([{ result: { asset_ids: ["pic_1", "pic_2"] } }]);
+  const params = new URLSearchParams(href!.split("?")[1]);
+  assert.equal(params.get("assets"), "pic_1,pic_2");
 });
