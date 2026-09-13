@@ -1217,6 +1217,7 @@ function LibraryContent() {
   const searchParams = useSearchParams();
   const { loading, user, apiFetch } = useAuth();
   const { workspaces, workspaceId } = useWorkspace();
+  const { refresh: refreshGlobalJobs } = useJobs();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -2926,9 +2927,14 @@ function LibraryContent() {
           workspaceId={workspaceId}
           apiFetch={apiFetch}
           onClose={() => setImportOpen(false)}
+          onItemQueued={() => {
+            void refresh();
+            void refreshGlobalJobs();
+          }}
           onImportQueued={(msg) => {
             succeed(msg);
             void refresh();
+            void refreshGlobalJobs();
           }}
         />
       )}

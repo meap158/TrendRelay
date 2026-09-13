@@ -53,12 +53,14 @@ export function MediaImportDialog({
   onClose,
   workspaceId,
   apiFetch,
+  onItemQueued,
   onImportQueued,
 }: {
   open: boolean;
   onClose: () => void;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  onItemQueued?: () => void;
   onImportQueued?: (message: string) => void;
 }) {
   const t = useT();
@@ -159,6 +161,18 @@ export function MediaImportDialog({
     let duplicateCount = 0;
     let errorCount = 0;
 
+    const batchId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const batchTotal = stagedFiles.length;
+    let lastNotifyTime = 0;
+
+    const notifyQueued = (force = false) => {
+      const now = Date.now();
+      if (force || now - lastNotifyTime >= 1200) {
+        lastNotifyTime = now;
+        onItemQueued?.();
+      }
+    };
+
     for (let i = 0; i < stagedFiles.length; i++) {
       const item = stagedFiles[i];
       // Skip files already successfully queued or stored
@@ -181,6 +195,10 @@ export function MediaImportDialog({
         formData.append("file", item.file);
         formData.append("title", item.title.trim() || item.file.name);
         formData.append("confirm_external_action", "true");
+        if (batchTotal > 1) {
+          formData.append("batch_id", batchId);
+          formData.append("batch_total", String(batchTotal));
+        }
 
         const res = await apiFetch(`/api/workspaces/${workspaceId}/media/library/imports/upload`, {
           method: "POST",
@@ -212,6 +230,7 @@ export function MediaImportDialog({
             idx === i ? { ...f, status: isDuplicate ? "duplicate" : "queued" } : f,
           ),
         );
+        notifyQueued();
       } catch (err) {
         errorCount++;
         const msg = err instanceof Error ? err.message : "Upload failed";
@@ -221,6 +240,7 @@ export function MediaImportDialog({
       }
     }
 
+    notifyQueued(true);
     setIsProcessing(false);
 
     const parts: string[] = [];
@@ -278,6 +298,7 @@ export function MediaImportDialog({
       const errors = body.errors ?? [];
 
       if (queued > 0) {
+        onItemQueued?.();
         const msg = `${queued} media ${queued === 1 ? "item" : "items"} queued for ingestion${
           errors.length ? ` (${errors.length} skipped)` : ""
         }.`;

@@ -1422,19 +1422,25 @@ def test_upload_media_import(tmp_path: Path, monkeypatch) -> None:
     )
     workspace_id = create_workspace()
 
-    # Successful upload
+    # Successful upload with batch metadata
     response = asyncio.run(
         request(
             "POST",
             f"/api/workspaces/{workspace_id}/media/library/imports/upload",
             files={"file": ("sample_clip.mp4", b"video-upload-content", "video/mp4")},
-            data={"title": "Uploaded Clip", "confirm_external_action": "true"},
+            data={
+                "title": "Uploaded Clip",
+                "confirm_external_action": "true",
+                "batch_id": "batch_test_123",
+                "batch_total": "5",
+            },
         )
     )
     assert response.status_code == 202, response.text
     job = response.json()["job"]
     assert job["status"] == "queued"
     assert job["payload"]["title"] == "Uploaded Clip"
+    assert job["payload"]["batch"] == {"id": "batch_test_123", "total": 5}
 
     # Reject unsupported extension
     bad_res = asyncio.run(
@@ -1485,3 +1491,6 @@ def test_batch_media_import(tmp_path: Path, monkeypatch) -> None:
     payload = response.json()
     assert payload["queued_count"] == 3
     assert len(payload["errors"]) == 0
+    # Verify the created jobs have batch metadata
+    assert len(payload["queued"]) == 3
+    assert payload["queued"][0]["payload"]["batch"]["total"] == 3

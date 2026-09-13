@@ -652,6 +652,8 @@ async def upload_import_asset(
     creator: Annotated[str | None, Form()] = None,
     caption: Annotated[str | None, Form()] = None,
     confirm_external_action: Annotated[bool, Form()] = True,
+    batch_id: Annotated[str | None, Form()] = None,
+    batch_total: Annotated[int | None, Form()] = None,
 ) -> dict[str, Any]:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "testclient"} and not client_is_local_operator(host):
@@ -694,6 +696,7 @@ async def upload_import_asset(
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {err}")
 
     asset_title = (title or "").strip() or Path(file.filename or "Media").stem
+    batch_dict = {"id": str(batch_id), "total": int(batch_total or 0)} if batch_id else None
     try:
         job = create_ingest_job(
             workspace_id=workspace_id,
@@ -705,6 +708,7 @@ async def upload_import_asset(
             platform=platform,
             creator=creator,
             caption=caption,
+            batch=batch_dict,
         )
     except PermissionError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
@@ -781,6 +785,8 @@ def batch_import_assets(
 
     unique_paths = list(dict.fromkeys(collected_paths))
     jobs: list[dict[str, Any]] = []
+    batch_id = f"batch_{token_hex(8)}" if len(unique_paths) > 1 else None
+    batch_dict = {"id": batch_id, "total": len(unique_paths)} if batch_id else None
     for media_path in unique_paths:
         try:
             job = create_ingest_job(
@@ -789,6 +795,7 @@ def batch_import_assets(
                 path=str(media_path),
                 title=media_path.stem,
                 source_type="manual-batch-import",
+                batch=batch_dict,
             )
             jobs.append(job)
         except Exception as e:

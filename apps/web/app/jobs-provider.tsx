@@ -341,17 +341,25 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 
         const fetchLibrary = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/jobs`)
           .then(res => res.json())
-          .then(data => (data.jobs || []).map((j: any) => ({
-            id: j.id,
-            category: "media" as JobCategory,
-            status: j.status,
-            created_at: j.created_at ?? j.payload?.created_at,
-            title: `Library: ${j.payload?.title ?? j.id}`,
-            error: j.error,
-            assetId: j?.payload?.asset_id ?? j?.result?.asset_id ?? null,
-            href: assetHref(j) ?? "/library",
-            raw: j,
-          })))
+          .then(data => (data.jobs || []).map((j: any) => {
+            const batch = j.payload?.batch ?? (
+              j.payload?.source_type === "manual-upload" || j.payload?.source_type === "manual-batch-import"
+                ? { id: `manual_${(j.created_at ?? j.payload?.created_at ?? "").slice(0, 16) || "batch"}`, total: 0 }
+                : null
+            );
+            const batchTotal = Number(batch?.total ?? 0);
+            return {
+              id: j.id,
+              category: "media" as JobCategory,
+              status: j.status,
+              created_at: j.created_at ?? j.payload?.created_at,
+              title: batch && batchTotal > 1 ? `Import: ${batchTotal} media items` : batch && !batchTotal ? "Import: Media files" : `Library: ${j.payload?.title ?? j.id}`,
+              error: j.error,
+              assetId: j?.payload?.asset_id ?? j?.result?.asset_id ?? null,
+              href: assetHref(j) ?? "/library",
+              raw: batch && !j.payload?.batch ? { ...j, payload: { ...(j.payload ?? {}), batch } } : j,
+            };
+          }))
           .catch(() => []);
         fetchPromises.push(fetchLibrary);
         // Shopee listing reads. Each job carries its product's full name and
