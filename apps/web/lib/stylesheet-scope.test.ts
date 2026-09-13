@@ -111,3 +111,57 @@ test("a class named inside a comment owns nothing", () => {
 
   assert.deepEqual(sharedClasses(owners), []);
 });
+
+test("refining another stylesheet's component inside your own is not a claim", () => {
+  // The distinction this file turns on. `.offer-picker { }` in two stylesheets
+  // is load-order roulette; `.mine > .theirs { }` reaches exactly one place its
+  // author named, and cannot land anywhere else. Read as ownership it reported
+  // every shared component in the app - forty-seven names, of which twenty-seven
+  // were this - and a check that cries wolf that often stops being read.
+  const owners = classOwnership({
+    "console.css": ".campaign-entry-actions { gap: 2px; }",
+    "styles.css": ".campaign-pipeline-destination > .campaign-entry-actions { flex: 1 1 100%; }",
+  });
+
+  assert.deepEqual(sharedClasses(owners), []);
+  // The scope itself is still claimed, so two sheets both defining
+  // `.campaign-pipeline-destination` would still be caught.
+  assert.deepEqual([...(owners.get("campaign-pipeline-destination") ?? [])], ["styles.css"]);
+});
+
+test("a module reaching a global component through :global is not a claim", () => {
+  // A `*.module.css` class is hashed by the bundler, so `.pipelineChart` here
+  // is not the `.pipelineChart` of anywhere else. Its `:global()` selectors are
+  // therefore always scoped by something local - a deliberate reach into a
+  // component declared elsewhere, which is the same thing sticky-headers.css
+  // does for a living.
+  const owners = classOwnership({
+    "ui/ui.css": ".ui-tooltip { position: relative; }",
+    "campaigns/manage/manage.module.css":
+      ".pipelineChart li > :global(.ui-tooltip) { display: flex; }",
+  });
+
+  assert.deepEqual(sharedClasses(owners), []);
+});
+
+test("a module claiming a global name outright is still a collision", () => {
+  // Unanchored, `:global()` emits a rule as global as any other, and the
+  // exemption above must not quietly cover it.
+  const owners = classOwnership({
+    "ui/ui.css": ".ui-tooltip { position: relative; }",
+    "campaigns/manage/manage.module.css": ":global(.ui-tooltip) { display: flex; }",
+  });
+
+  assert.deepEqual(sharedClasses(owners), ["ui-tooltip"]);
+});
+
+test("every selector in a list is read, not just the first", () => {
+  // `.a, .b { }` claims both. Splitting on commas is what makes the leftmost
+  // compound the right thing to read.
+  const owners = classOwnership({
+    "a.css": ".card, .tile { color: red; }",
+    "b.css": ".tile { color: blue; }",
+  });
+
+  assert.deepEqual(sharedClasses(owners), ["tile"]);
+});
