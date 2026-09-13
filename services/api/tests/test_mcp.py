@@ -431,6 +431,43 @@ def test_get_post_context_surfaces_link_disclosure_and_schedule(session) -> None
     assert " · " in ctx["destinations"][0]["posts_to"]
 
 
+def test_get_post_context_when_destination_link_placement_is_none(session) -> None:
+    # Update destination to be TikTok via WoopSocial with link_placement='none'
+    dest = session.get(CampaignDestination, "d1")
+    dest.platform = "tiktok"
+    dest.provider = "woopsocial"
+    dest.link_placement = "none"
+    session.commit()
+
+    ctx = context.get_post_context(session, "ws", "q1")
+    assert ctx["accepts_first_comment"] is True
+    assert ctx["first_comment_optional"] is True
+    assert ctx["needs"]["first_comment"] is False
+    assert ctx["follow_up_landing"]["any_deliverable"] is True
+    tiktok_landing = next(
+        d for d in ctx["follow_up_landing"]["per_destination"] if d["platform"] == "tiktok"
+    )
+    assert tiktok_landing["deliverable"] is True
+    assert tiktok_landing["accepts_first_comment"] is True
+    assert tiktok_landing["first_comment_optional"] is True
+    assert "No affiliate link" in tiktok_landing["note"]
+    assert "supplementary information" in tiktok_landing["note"]
+    dest_view = next(d for d in ctx["destinations"] if d["platform"] == "tiktok")
+    assert dest_view["follow_up_deliverable"] is True
+    assert "first_comment_guidance" in ctx["added_by_the_campaign"]
+    assert "No affiliate link" in ctx["added_by_the_campaign"]["first_comment_guidance"]
+
+    # Writing an optional first comment with supplementary info succeeds
+    res = writes.write_post_copy(
+        session,
+        "ws",
+        "q1",
+        first_comment="Size S-L available, inbox us for recommendations!",
+    )
+    assert res["first_comment"] == "Size S-L available, inbox us for recommendations!"
+
+
+
 def test_a_caption_carrying_the_link_is_refused(session) -> None:
     """What went out for a week, and why nobody spotted it in the writing.
 

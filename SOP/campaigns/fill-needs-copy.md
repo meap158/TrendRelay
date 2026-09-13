@@ -95,9 +95,9 @@ Check destination behavior before writing. Adapt for Facebook, Instagram, TikTok
 
 Default rule: **Do not insert affiliate URLs manually when the publishing system is configured to place them automatically.** If campaign context or user instructions explicitly require a manually written link, follow that campaign-specific rule. User instructions override system defaults for copy placement.
 
-## 14. Do not invent first comments
+## 14. First comments and supplementary information
 
-Only write a first comment when the campaign actually needs one, the destination supports it, there is a real content purpose, or the user explicitly requests it. Do not create first comments purely out of habit.
+Writing a first comment for supplementary information is optional. When link placement is configured as "No affiliate link" (`none`), first comments are explicitly accepted and stored with the post for supplementary details, styling advice, sizing notes, care instructions, or engagement prompts (never URLs). You may write a first comment when requested by the user, when campaign context suggests it, or when helpful for the audience; posts remain complete if left unset. Do not create first comments containing links, and do not invent first comments purely out of habit.
 
 ## 15. Do not misrepresent product-video relationships
 

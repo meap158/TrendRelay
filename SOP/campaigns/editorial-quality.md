@@ -184,12 +184,16 @@ by hand where the campaign places them for you.
 Use the campaign's required or default set where one is specified, and add a
 small number of content-specific tags only where they earn their place.
 
-### 17. Write an auxiliary field only where it lands
+### 17. Auxiliary fields and first comments
 
 Before writing a first comment, bio hint, disclosure, topic, title, thread, or
-post type, check what the destination actually does with it. A field that the
-destination drops is not a field worth writing, and a first comment generated
-out of habit for a platform that does not need one is noise.
+post type, check what the destination actually does with it. When link placement
+is set to "No affiliate link" (`none`), writing a first comment is optional and
+explicitly accepted for supplementary details, sizing guidance, fabric/material notes,
+or audience engagement prompts (never URLs) which are preserved with the post. On
+destinations where first comments deliver links, write copy that complements the
+affiliate link. Do not generate first comments purely out of habit where no
+supplementary purpose exists.
 
 ### 18. Titles are operational; captions are editorial
 

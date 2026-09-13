@@ -459,8 +459,12 @@ def _destination_view(
         "accepts_carousel": carousel_fits_destination(item.provider, item.platform, 1)[0],
         # Whether a follow-up (first comment or thread reply) can be delivered
         # here, so the package editor can show at a glance which destinations
-        # a written comment will actually reach.
-        "follow_up_deliverable": first_comment_deliverable(item.provider, item.platform),
+        # a written comment will actually reach. When link_placement is 'none',
+        # first comments are accepted for supplementary information.
+        "follow_up_deliverable": (
+            first_comment_deliverable(item.provider, item.platform)
+            or item.link_placement == "none"
+        ),
         # Posting one comment is not the same as publishing a thread. Facebook
         # through Zernio has the former but not the latter.
         "thread_deliverable": thread_deliverable(item.provider, item.platform),

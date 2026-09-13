@@ -88,7 +88,9 @@ INSTRUCTIONS = (
     "loading the whole queue at once, and "
     "`get_post_context` for one post: it gives the video, the attached product and "
     "what it pays, every destination the post reaches and where a first comment or "
-    "thread reply lands there, and the campaign's brief. Write with "
+    "thread reply lands there, and the campaign's brief. First comment is optional; "
+    "when link placement is set to 'No affiliate link' ('none'), first_comment is "
+    "explicitly accepted for supplementary info (styling, sizing, notes — not links). Write with "
     "`write_caption`, `write_first_comment` and `write_thread` (or `write_post_copy` "
     "for several at once).\n\n"
     "For product-aware copy or media prompts, use `list_products` (or "
@@ -439,9 +441,10 @@ def build_server(workspace_id: str) -> FastMCP:
     @server.tool(
         name="write_first_comment",
         description=(
-            "Write the first comment for a post - the reply that carries the "
-            "affiliate link on networks that hide a link in the caption. Check "
-            "get_post_context first for where it will land."
+            "Write the first comment for a post (optional). On networks that hide a link "
+            "in the caption, it carries the affiliate link. If link placement is 'none' "
+            "(No affiliate link), it is explicitly accepted for supplementary information, "
+            "details, sizing, or engagement prompts (never URLs). Check get_post_context first."
         ),
     )
     def write_first_comment(item_id: str, first_comment: str) -> dict[str, Any]:
@@ -470,7 +473,10 @@ def build_server(workspace_id: str) -> FastMCP:
         description=(
             "Write several copy fields for a post at once - any of caption, "
             "first_comment, thread, hashtags, title, disclosure, bio_hint, "
-            "topic, or post_types. `topic` is Threads' single topic tag (no "
+            "topic, or post_types. For first_comment (optional): on comment-link "
+            "networks it carries the affiliate link; if link placement is 'none' (No affiliate "
+            "link), it is explicitly accepted for supplementary information, sizing, or "
+            "engagement prompts (never URLs). `topic` is Threads' single topic tag (no "
             "leading #, up to 50 characters, no full stop or ampersand), "
             "delivered only on Threads through an engine that can attach it; "
             "an empty string clears it. `post_types` maps campaign destination "

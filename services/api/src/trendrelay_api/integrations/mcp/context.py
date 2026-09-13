@@ -224,9 +224,11 @@ def _destinations(session: Session, campaign_id: str, workspace_id: str) -> list
 def _follow_up_landing(destinations: list[Any]) -> dict[str, Any]:
     """Where a first comment / thread reply would actually land, per destination.
 
-    A follow-up only delivers on some networks and through some engines, so the
-    assistant is told where its reply will show and where it would be dropped
-    rather than writing one that never posts.
+    A follow-up delivers on some networks and through some engines. When an account
+    is configured with link_placement='none' (No affiliate link), first comments are
+    optional and explicitly accepted to carry supplementary information (e.g. styling, sizing,
+    product details, care instructions, or engagement prompts — not affiliate links)
+    and are preserved with the post.
     """
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
@@ -236,14 +238,27 @@ def _follow_up_landing(destinations: list[Any]) -> dict[str, Any]:
     landings: list[dict[str, Any]] = []
     any_deliverable = False
     for dest in destinations:
-        deliverable = first_comment_deliverable(dest.provider, dest.platform)
+        is_none = getattr(dest, "link_placement", None) == "none"
+        engine_deliverable = first_comment_deliverable(dest.provider, dest.platform)
+        deliverable = engine_deliverable or is_none
         any_deliverable = any_deliverable or deliverable
-        landings.append({
+        landing: dict[str, Any] = {
             "platform": dest.platform,
             "provider": dest.provider,
             "follow_up_kind": follow_up_kind(dest.platform),
             "deliverable": deliverable,
-        })
+            "accepts_first_comment": is_none or engine_deliverable,
+            "first_comment_optional": is_none,
+        }
+        if is_none:
+            landing["link_placement"] = "none"
+            landing["note"] = (
+                "Link placement is set to 'No affiliate link' ('none'). First comment is "
+                "optional and explicitly accepted for supplementary information (e.g. sizing, "
+                "styling tips, product notes, or engagement prompts — not affiliate links) "
+                "and is stored with the post."
+            )
+        landings.append(landing)
     return {"any_deliverable": any_deliverable, "per_destination": landings}
 
 
@@ -684,9 +699,16 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
     topic_reach = sorted({
         d.platform for d in destinations if topic_deliverable(d.provider, d.platform)
     })
+    has_none_link_placement = any(
+        getattr(d, "link_placement", None) == "none" for d in destinations
+    )
+    engine_delivers_first_comment = any(
+        d["deliverable"] and not d.get("first_comment_optional")
+        for d in follow_up["per_destination"]
+    )
     missing = {
         "caption": _needs_copy(item),
-        "first_comment": item.first_comment is None and follow_up["any_deliverable"],
+        "first_comment": item.first_comment is None and engine_delivers_first_comment,
         "thread": not (item.thread or []) and any(
             d["follow_up_kind"] == "reply in the thread" and d["deliverable"]
             for d in follow_up["per_destination"]
@@ -754,7 +776,16 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
                 "these in the caption, first comment or replies - name the "
                 "product in words instead. Copy containing a link is refused."
             ),
+            "first_comment_guidance": (
+                "Link placement is set to 'No affiliate link' ('none'). First comment is "
+                "optional and explicitly accepted for supplementary information (styling tips, "
+                "sizing, fabric/material details, care instructions, or engagement prompts). "
+                "Do not include URLs."
+                if has_none_link_placement else None
+            ),
         },
+        "accepts_first_comment": follow_up["any_deliverable"],
+        "first_comment_optional": has_none_link_placement,
         "current_copy": {
             "caption": None if _needs_copy(item) else item.body,
             "hashtags": list(item.hashtags or []),

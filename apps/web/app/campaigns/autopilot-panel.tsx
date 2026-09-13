@@ -5816,10 +5816,22 @@ export function AutopilotPanel({
               <textarea name="first_comment" rows={3} maxLength={2000}
                 defaultValue={editing.first_comment ?? ""}
                 placeholder={`Optional ${followUpFieldName.toLowerCase()}, published straight after the post`} />
-              <small>{followUpAccounts.length
-                ? `Delivered on ${[...new Set(followUpAccounts.map(
-                    (item) => platformLabels[item.platform]))].join(", ")}. Where the product link goes here too, your words lead and the link follows them in the same comment.`
-                : "No account on this campaign can deliver one. Anything written here is kept but not sent."}</small>
+              <small>{(() => {
+                const deliverableWithLinks = followUpAccounts.filter(
+                  (item) => item.link_placement !== "none"
+                );
+                const organicAccounts = destinations.filter(
+                  (item) => item.link_placement === "none"
+                );
+                if (deliverableWithLinks.length > 0) {
+                  return `Delivered on ${[...new Set(deliverableWithLinks.map(
+                    (item) => platformLabels[item.platform]))].join(", ")}. Where the product link goes here too, your words lead and the link follows them in the same comment.`;
+                }
+                if (organicAccounts.length > 0) {
+                  return "Link placement is 'No affiliate link'. First comment is optional and kept as supplementary information (sizing, styling, details).";
+                }
+                return "No account on this campaign can deliver one. Anything written here is kept but not sent.";
+              })()}</small>
             </label>
             {canPublishReplies ? (
               <fieldset className="campaign-reply-editor">

@@ -7,6 +7,16 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Optional supplementary first comments via MCP for organic destinations (2026-09-14)
+
+When campaign destination link placement is set to "No affiliate link" (`link_placement: "none"`),
+external AI agents connecting via MCP previously saw `needs.first_comment = false` and
+`follow_up_deliverable = false`, causing them to refuse to draft first comments.
+The contract now marks first comments as optional (never blocking in `needs`), but explicitly
+accepted (`accepts_first_comment: true`, `first_comment_optional: true`, `follow_up_deliverable: true`)
+for supplementary information such as sizing advice, care tips, styling notes, or engagement prompts
+(never affiliate URLs).
+
 ## WoopSocial TikTok publishing & privacy level mapping (2026-09-14)
 
 Uploading/publishing to TikTok via WoopSocial previously failed with `api.woopsocial.com: HTTP 400`
