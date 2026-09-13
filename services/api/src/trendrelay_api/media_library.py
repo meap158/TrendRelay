@@ -560,3 +560,21 @@ def run_ingest_job(
 def list_ingest_jobs(workspace_id: str, limit: int = 30, *, factory=None) -> list[dict[str, Any]]:
     factory = factory or JOB_SESSION_FACTORY
     return list_job_records(workspace_id, JOB_KIND, limit, factory=factory)
+
+
+def attribution_for(session: Session, workspace_id: str, asset_id: str | None) -> str | None:
+    """The credit line a post publishing this asset owes, or None.
+
+    One read, scoped to the workspace, answering the one question the publish
+    paths ask: does this video carry music (or anything else) that obliges a
+    credit? The line itself was written when the asset arrived, so nothing
+    here knows or needs to know which licence it came from.
+    """
+    if not asset_id:
+        return None
+    return session.scalar(
+        select(MediaAsset.attribution).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id == asset_id,
+        )
+    )

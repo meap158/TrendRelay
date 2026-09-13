@@ -178,3 +178,71 @@ def test_a_credential_with_nothing_saved_says_so(monkeypatch) -> None:
     ))
     assert response.status_code == 404
     assert "no saved value" in response.json()["detail"]
+
+
+# --- the credit a video's music obliges ------------------------------------------
+
+
+def _asset_owing_a_credit(workspace: str, asset_id: str, credit: str | None) -> None:
+    from trendrelay_api.media_models import MediaAsset
+
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id=asset_id, workspace_id=workspace, title="Cut", media_kind="video",
+            source_type="autocut", original_path="C:/media/clip.mp4",
+            original_sha256=f"{asset_id:0>64}"[:64], mime_type="video/mp4",
+            size_bytes=10, created_by="owner-user", attribution=credit,
+        ))
+
+
+def test_a_manual_post_of_a_video_that_owes_a_credit_carries_it(monkeypatch) -> None:
+    """The caption somebody typed, plus the line the video's music obliges -
+    on the preview and on the submission alike, so what is shown is what is
+    sent. Added once: a caption already carrying it is left as written."""
+    credit = 'Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)'
+    workspace = workspace_id()
+    _asset_owing_a_credit(workspace, "cut-1", credit)
+    _asset_owing_a_credit(workspace, "own-1", None)
+    seen: list = []
+    monkeypatch.setattr(
+        publishing_api, "preview_publish",
+        lambda body: seen.append(body)
+        or {"operation_id": "abc", "external_action": "create_draft"},
+    )
+    monkeypatch.setattr(
+        publishing_api, "create_publish_job",
+        lambda body: seen.append(body) or {"id": "publish_abc", "status": "queued"},
+    )
+    monkeypatch.setattr(publishing_api, "run_publish_job", lambda job_id: None)
+
+    previewed = asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace}/publishing/preview",
+        json={**payload(workspace), "asset_id": "cut-1"},
+    ))
+    assert previewed.status_code == 200, previewed.text
+    assert seen[-1].caption == f"Launch clip\n\n{credit}"
+
+    submitted = asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace}/publishing/jobs",
+        json={**payload(workspace), "asset_id": "cut-1", "confirm_external_action": True},
+    ))
+    assert submitted.status_code == 202, submitted.text
+    assert seen[-1].caption == f"Launch clip\n\n{credit}"
+
+    # Already written in: not doubled.
+    asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace}/publishing/preview",
+        json={**payload(workspace), "asset_id": "cut-1", "caption": f"Launch clip\n\n{credit}"},
+    ))
+    assert seen[-1].caption.count(credit) == 1
+
+    # A video owing nothing, and a post naming no asset, are sent as typed.
+    asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace}/publishing/preview",
+        json={**payload(workspace), "asset_id": "own-1"},
+    ))
+    assert seen[-1].caption == "Launch clip"
+    asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace}/publishing/preview", json=payload(workspace),
+    ))
+    assert seen[-1].caption == "Launch clip"

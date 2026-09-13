@@ -316,6 +316,43 @@ class DisclosureMissing(ValueError):
     """Raised rather than posting an undisclosed endorsement."""
 
 
+def _hashtag_line(hashtags: list[str] | None) -> str:
+    return " ".join(f"#{tag.lstrip('#')}" for tag in hashtags or [] if tag.strip())
+
+
+def _with_credit(parts: list[str], credit: str | None) -> list[str]:
+    """The caption parts with the media's credit line added, once.
+
+    The credit is what a Creative Commons track's licence obliges - `Music:
+    "Title" by Creator (CC BY 4.0)` - and it is owed by every post that
+    publishes the video carrying it, so it is composed in here beside the
+    disclosure and the link rather than remembered by whoever writes the copy.
+    It sits after the words and before the hashtags: a credit is part of the
+    post, a hashtag is an index entry.
+
+    Added once. A caption is recomposed when the words change and previewed
+    while they are typed, and somebody may already have written the credit
+    into the body themselves; a line that is already there is left alone.
+    """
+    line = (credit or "").strip()
+    if not line or any(line in part for part in parts):
+        return parts
+    return [*parts, line]
+
+
+def with_credit(caption: str, credit: str | None) -> str:
+    """A finished caption with the media's credit line appended, once.
+
+    For the paths that publish words somebody wrote rather than words the
+    campaign composed - the manual publish - where there are no parts to slot
+    the credit between. Same rule as the composer: after the text, never twice.
+    """
+    line = (credit or "").strip()
+    if not line or line in caption:
+        return caption
+    return f"{caption.rstrip()}\n\n{line}" if caption.strip() else line
+
+
 def compose(
     *,
     platform: str,
@@ -327,6 +364,7 @@ def compose(
     placement_override: str | None = None,
     comment_deliverable: bool = False,
     require_disclosure: bool = True,
+    credit: str | None = None,
 ) -> ComposedPost:
     """Build the caption and any first comment for one destination.
 
@@ -337,6 +375,9 @@ def compose(
     never opens the comments, and one after four lines of copy discloses nothing
     to a reader who never taps "more". Leading the caption is the only placement
     that satisfies all of those at once, so it is not configurable.
+
+    ``credit`` is the line the post's media obliges (a CC BY track's credit);
+    it follows the words and precedes the hashtags, see ``_with_credit``.
     """
     placement = resolve_placement(
         platform,
@@ -364,8 +405,9 @@ def compose(
         # the copy and the disclosure and says nothing about the profile.
         if platform not in BIO_HINT_UNSAFE_PLATFORMS:
             parts.append(bio_hint.strip())
+    parts = _with_credit(parts, credit)
     if hashtags:
-        parts.append(" ".join(f"#{tag.lstrip('#')}" for tag in hashtags if tag.strip()))
+        parts.append(_hashtag_line(hashtags))
 
     first_comment = None
     if link and placement.placement == "first_comment":
@@ -389,12 +431,16 @@ def compose_products(
     placement_override: str | None = None,
     comment_deliverable: bool = False,
     require_disclosure: bool = True,
+    credit: str | None = None,
 ) -> ComposedPost:
     """Compose one post with one or more matched affiliate products.
 
     Bio-only networks intentionally use one primary product. Thread-capable
     networks put additional products in disclosed replies; other link-friendly
     networks keep the small product list in the clickable caption/description.
+
+    ``credit`` is the media's credit line and reaches the caption on every
+    branch below - a post owes it whatever its products do.
     """
     # No products, or an account told to carry none. Both compose the same
     # post: the words and the hashtags, no link, and no disclosure - there is
@@ -409,6 +455,7 @@ def compose_products(
             hashtags=hashtags,
             disclosure="",
             placement_override=placement_override,
+            credit=credit,
         )
     # Required unless the campaign has said otherwise. Off is a decision an
     # operator makes in Campaign settings and carries themselves; empty while
@@ -442,6 +489,7 @@ def compose_products(
             placement_override=placement_override,
             comment_deliverable=comment_deliverable,
             require_disclosure=require_disclosure,
+            credit=credit,
         )
 
     if platform in THREAD_LINK_PLATFORMS and len(products) > 1:
@@ -455,6 +503,7 @@ def compose_products(
             placement_override=placement_override,
             comment_deliverable=comment_deliverable,
             require_disclosure=require_disclosure,
+            credit=credit,
         )
         for name, link in products[1:]:
             # Each promotional reply repeats the disclosure - and repeats
@@ -471,11 +520,9 @@ def compose_products(
 
     if placement.placement == "caption":
         links = "\n".join(f"{name}: {link}" for name, link in products)
-        parts = [disclosure.strip(), root_body, links]
+        parts = _with_credit([disclosure.strip(), root_body, links], credit)
         if hashtags:
-            parts.append(" ".join(
-                f"#{tag.lstrip('#')}" for tag in hashtags if tag.strip()
-            ))
+            parts.append(_hashtag_line(hashtags))
         return ComposedPost(
             caption="\n\n".join(part for part in parts if part),
             first_comment=None,
@@ -487,11 +534,9 @@ def compose_products(
     # which this branch alone used to drop while every other placement kept
     # them. A Facebook-via-Zernio campaign lives entirely in this branch, so
     # its captions went out with the hashtags silently gone.
-    parts = [disclosure.strip(), root_body]
+    parts = _with_credit([disclosure.strip(), root_body], credit)
     if hashtags:
-        parts.append(" ".join(
-            f"#{tag.lstrip('#')}" for tag in hashtags if tag.strip()
-        ))
+        parts.append(_hashtag_line(hashtags))
     return ComposedPost(
         caption="\n\n".join(part for part in parts if part),
         first_comment="\n".join(f"{name}: {link}" for name, link in products),

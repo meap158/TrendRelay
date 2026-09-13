@@ -8,8 +8,10 @@ from trendrelay_api.campaign_autopilot import (
     DisclosureMissing,
     choose_destination,
     compose,
+    compose_products,
     rank_destinations,
     resolve_placement,
+    with_credit,
 )
 
 DISCLOSURE = "Affiliate link; we may earn a commission."
@@ -230,3 +232,59 @@ def test_one_destination_is_always_the_choice() -> None:
 
 def test_no_destinations_is_no_choice_rather_than_an_error() -> None:
     assert choose_destination([], posts_so_far=0) is None
+
+
+# --- the credit a video's music obliges ------------------------------------------
+
+CREDIT = 'Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)'
+
+
+def test_the_music_credit_follows_the_words_and_precedes_the_hashtags() -> None:
+    """A credit is part of the post; a hashtag is an index entry."""
+    post = compose(
+        platform="youtube",
+        body="Morning brew.",
+        hashtags=["coffee"],
+        link="https://tr.example/c/abc",
+        disclosure=DISCLOSURE,
+        credit=CREDIT,
+    )
+    parts = post.caption.split("\n\n")
+    assert parts == [DISCLOSURE, "Morning brew.", "https://tr.example/c/abc", CREDIT, "#coffee"]
+
+
+def test_the_credit_reaches_every_placement_a_product_post_can_take() -> None:
+    """Whatever the products do, the post owes the credit: the bio placement,
+    the clickable caption list, the first-comment placement and the thread."""
+    for platform in ("instagram", "youtube", "facebook", "twitter"):
+        post = compose_products(
+            platform=platform,
+            body="Two grinders compared.",
+            products=[("Grinder A", "https://tr.example/a"), ("Grinder B", "https://tr.example/b")],
+            hashtags=["coffee"],
+            disclosure=DISCLOSURE,
+            comment_deliverable=True,
+            credit=CREDIT,
+        )
+        assert CREDIT in post.caption, platform
+        assert post.caption.rstrip().endswith("#coffee"), platform
+    # And with no products at all.
+    bare = compose_products(platform="tiktok", body="Just words.", products=[], credit=CREDIT)
+    assert bare.caption == f"Just words.\n\n{CREDIT}"
+
+
+def test_the_credit_is_never_added_twice() -> None:
+    """A caption is recomposed when the words change and previewed while they
+    are typed; somebody may also have written the credit themselves."""
+    written = compose(platform="youtube", body=f"Morning brew.\n\n{CREDIT}", credit=CREDIT)
+    assert written.caption.count(CREDIT) == 1
+    assert with_credit(written.caption, CREDIT) == written.caption
+    # No credit owed, nothing added - not even a blank line.
+    assert compose(platform="youtube", body="Morning brew.", credit=None).caption == "Morning brew."
+    assert with_credit("Morning brew.", "  ") == "Morning brew."
+
+
+def test_with_credit_appends_once_to_words_somebody_wrote() -> None:
+    assert with_credit("Morning brew.", CREDIT) == f"Morning brew.\n\n{CREDIT}"
+    assert with_credit("", CREDIT) == CREDIT
+    assert with_credit(f"Morning brew.\n\n{CREDIT}", CREDIT) == f"Morning brew.\n\n{CREDIT}"

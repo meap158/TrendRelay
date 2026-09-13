@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from trendrelay_api import publishing_connections
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
+from trendrelay_api.campaign_autopilot import with_credit
 from trendrelay_api.database import get_session
 from trendrelay_api.env_store import EnvWriteError
 from trendrelay_api.foundation import membership, require_role
@@ -38,6 +39,7 @@ from trendrelay_api.integrations.publishing import (
     test_provider,
 )
 from trendrelay_api.integrations.publishing_matrix import capability_matrix
+from trendrelay_api.media_library import attribution_for
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 
 # The type media travels under when it must not look like media on the wire -
@@ -850,6 +852,24 @@ def publishing_integrations_all(
     return discover_all_integrations()
 
 
+def _with_media_credit(session: Session, body: PublishRequest) -> PublishRequest:
+    """The request with the credit its Library video owes appended to the caption.
+
+    A video cut over a CC BY track carries the credit line on its Library
+    asset; a post publishing that video owes it, whoever wrote the caption.
+    Added here, before the request is checked against each network's limits,
+    so a credit that pushes a caption over one is refused with the reason
+    rather than published cut off. Once: a caption already carrying the line
+    keeps it as written. The preview and the submission both go through this,
+    so what is previewed is what is sent.
+    """
+    credit = attribution_for(session, body.workspace_id, body.asset_id)
+    caption = with_credit(body.caption, credit)
+    if caption == body.caption:
+        return body
+    return body.model_copy(update={"caption": caption})
+
+
 @router.post("/preview")
 def preview_publishing(
     workspace_id: str,
@@ -860,7 +880,7 @@ def preview_publishing(
     validate_workspace(body, workspace_id)
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     try:
-        return {"preview": preview_publish(body)}
+        return {"preview": preview_publish(_with_media_credit(session, body))}
     except (PermissionError, RuntimeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -877,7 +897,7 @@ def submit_publishing(
     require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
     require_governed_assurance(user)
     try:
-        job = create_publish_job(body)
+        job = create_publish_job(_with_media_credit(session, body))
     except PermissionError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (RuntimeError, ValueError) as error:

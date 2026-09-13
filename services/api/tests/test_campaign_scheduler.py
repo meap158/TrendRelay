@@ -1809,3 +1809,47 @@ def test_the_rotation_reflows_around_an_early_publish(session) -> None:
 
     by_time = {post.at: post.queue_item_id for post in replanned}
     assert by_time[datetime(2026, 8, 10, 10, 0, tzinfo=UTC)] == "second"
+
+
+# --- the credit a video's music obliges ------------------------------------------
+
+
+def test_a_scheduled_post_carries_the_credit_its_video_owes(session) -> None:
+    """A video cut over a CC BY track carries the credit line on its Library
+    asset. The post publishing it owes that line, so the scheduler composes it
+    in - after the words, before the hashtags - rather than leaving it to
+    whoever wrote the copy to remember."""
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    session.add(MediaAsset(
+        id="asset-1", workspace_id="ws", title="Clip", media_kind="video",
+        source_type="autocut", original_path=r"S:\media\cut.mp4",
+        original_sha256="a" * 64, mime_type="video/mp4", size_bytes=10,
+        created_by="user-1",
+        attribution='Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)',
+    ))
+    session.commit()
+    queue_item(session, "q1", asset_id="asset-1", video_path=r"S:\media\cut.mp4")
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    caption = posts[0].caption
+    assert 'Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)' in caption
+    assert caption.index("espresso") < caption.index("Music:") < caption.index("#coffee")
+
+
+def test_a_video_that_owes_no_credit_adds_none(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    session.add(MediaAsset(
+        id="asset-2", workspace_id="ws", title="Clip", media_kind="video",
+        source_type="upload", original_path=r"S:\media\own.mp4",
+        original_sha256="c" * 64, mime_type="video/mp4", size_bytes=10,
+        created_by="user-1",
+    ))
+    session.commit()
+    queue_item(session, "q1", asset_id="asset-2", video_path=r"S:\media\own.mp4")
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert "Music:" not in posts[0].caption

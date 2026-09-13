@@ -2023,6 +2023,7 @@ def compose_queue_item(
         limits_for,
         thread_deliverable,
     )
+    from trendrelay_api.media_library import attribution_for
 
     matches, strategy = chosen_matches(
         session, campaign, autopilot, draft, destinations,
@@ -2064,6 +2065,9 @@ def compose_queue_item(
                 ),
                 written_first_comment=draft.first_comment,
                 written_thread=draft.thread or (),
+                # The credit the post's video obliges, so the editor sees the
+                # caption with it - the same one the scheduler will publish.
+                credit=attribution_for(session, workspace_id, draft.asset_id),
             )
         except DisclosureMissing as refusal:
             accounts.append({

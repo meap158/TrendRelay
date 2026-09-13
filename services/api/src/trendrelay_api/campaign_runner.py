@@ -31,6 +31,7 @@ from trendrelay_api.campaign_scheduler import (
     record_published,
     record_scheduled,
 )
+from trendrelay_api.media_library import attribution_for
 from trendrelay_api.models import DurableJob
 from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
 
@@ -477,6 +478,7 @@ def recompose_held(
                 ),
                 written_first_comment=item.first_comment,
                 written_thread=item.thread or (),
+                credit=attribution_for(session, autopilot.workspace_id, execution.asset_id),
             )
         except DisclosureMissing:
             # The campaign asks for a disclosure and has none written. Left as
@@ -1359,6 +1361,7 @@ def publish_queue_item_now(
                 thread_deliverable=thread_ok,
                 written_first_comment=item.first_comment,
                 written_thread=item.thread or (),
+                credit=attribution_for(session, autopilot.workspace_id, frozen.asset_id),
             )
         except DisclosureMissing as error:
             skipped.append({

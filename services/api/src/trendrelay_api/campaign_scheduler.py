@@ -44,6 +44,7 @@ from trendrelay_api.campaign_offer_matcher import (
     last_promoted,
     resolve_matches,
 )
+from trendrelay_api.media_library import attribution_for
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublishingSlot, Workspace
 from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
@@ -1110,6 +1111,9 @@ def plan_campaign(
                     # by the composer, which is also what the editor previews.
                     written_first_comment=item.first_comment,
                     written_thread=item.thread or (),
+                    # The credit the video's music obliges, from the asset the
+                    # post was frozen against.
+                    credit=attribution_for(session, autopilot.workspace_id, frozen.asset_id),
                 )
             except DisclosureMissing as error:
                 return [], str(error)
