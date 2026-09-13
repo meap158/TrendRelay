@@ -24,10 +24,12 @@
   /* Category colors for media library tags & workflow artifacts */
   --tag-effect: #1a56c4;
   --tag-effect-bg: #eef2fb;
-  --tag-transcript: #5e35b1;
-  --tag-transcript-bg: #f3eefa;
-  --tag-ocr: #7a5c00;
-  --tag-ocr-bg: #fdf5db;
+  --tag-processing: #5e35b1;
+  --tag-processing-bg: #f3eefa;
+  --tag-transcript: var(--tag-processing);
+  --tag-transcript-bg: var(--tag-processing-bg);
+  --tag-ocr: var(--tag-processing);
+  --tag-ocr-bg: var(--tag-processing-bg);
   --tag-captions: #0a635b;
   --tag-captions-bg: #e4f4f2;
   --tag-voiceover: #8f2747;

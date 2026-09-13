@@ -6,15 +6,15 @@ Last updated: 2026-09-14
 
 - **Context & Request**:
   - Tags on media cards and the detail pane (e.g., `Cover text`, `Transcript draft`, `On-screen text draft`) were previously all rendered with the same blue color (`#1a56c4` on `var(--link-bg)`).
-  - User requested distinguishing tag classes: keep the blue color for effects (`Cover text`, `Face blur`, etc.), and use different harmonious colors for other classes (transcripts, OCR on-screen text, captions, voiceovers, scene descriptions).
+  - User requested distinguishing tag classes: keep the blue color for effects (`Cover text`, `Face blur`, etc.), and use unified harmonious colors for other classes. Specifically, both `Transcript draft` and `On-screen text draft` belong to the same `processing` class and therefore share the exact same violet color (`#5e35b1` on `#f3eefa`).
 - **Changes**:
   - `apps/web/app/console.css`:
-    - Defined semantic tokens inside `:root`: `--tag-effect` (blue), `--tag-transcript` (violet `#5e35b1` on `#f3eefa`), `--tag-ocr` (amber `#7a5c00` on `#fdf5db`), `--tag-captions` (teal `#0a635b` on `#e4f4f2`), `--tag-voiceover` (rose `#8f2747` on `#faebf0`), `--tag-vision` (slate `#4b5563` on `#f1f3f5`).
+    - Defined semantic tokens inside `:root`: `--tag-effect` (blue), `--tag-processing` (violet `#5e35b1` on `#f3eefa`), `--tag-transcript` & `--tag-ocr` (aliased to `--tag-processing`), `--tag-captions` (teal `#0a635b` on `#e4f4f2`), `--tag-voiceover` (rose `#8f2747` on `#faebf0`), `--tag-vision` (slate `#4b5563` on `#f1f3f5`).
   - `apps/web/app/media-library.css`:
-    - Added category modifiers: `.blurred-tag.tag-effect`, `.blurred-tag.tag-transcript`, `.blurred-tag.tag-ocr`, `.blurred-tag.tag-captions`, `.blurred-tag.tag-voiceover`, `.blurred-tag.tag-vision`.
+    - Added category modifiers: `.blurred-tag.tag-effect`, `.blurred-tag.tag-processing` (applied to transcript and ocr tags), `.blurred-tag.tag-captions`, `.blurred-tag.tag-voiceover`, `.blurred-tag.tag-vision`.
   - `apps/web/app/library/page.tsx`:
-    - Typed media tags as `MediaTag` with `MediaTagKind = "effect" | "transcript" | "ocr" | "captions" | "voiceover" | "vision"`.
-    - Updated `processingTags` and `assetTags` to attach category metadata to each tag.
+    - Typed media tags as `MediaTag` with `MediaTagKind = "effect" | "processing" | "captions" | "voiceover" | "vision"`.
+    - Both speech transcript tags and OCR on-screen text tags are assigned `kind: "processing"`, ensuring consistent color-coding across both badges.
     - Updated card rendering and detail pane kicker to render `<em className={`blurred-tag ${tagClass(tag.kind)}`} key={`${tag.kind}-${tag.name}`}>{tag.name}</em>`.
 - **Verification**:
   - `node --test apps/web/lib/palette-guard.test.ts`: Passed (all 6 palette-guard tests passed, 0 hardcoded color leaks).

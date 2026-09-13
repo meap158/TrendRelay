@@ -130,7 +130,7 @@ function cutEffects(t: Translate, version: Version): string[] {
   return [...new Set(names)];
 }
 
-export type MediaTagKind = "effect" | "transcript" | "ocr" | "captions" | "voiceover" | "vision";
+export type MediaTagKind = "effect" | "processing" | "captions" | "voiceover" | "vision";
 
 export type MediaTag = {
   name: string;
@@ -150,15 +150,15 @@ function processingTags(t: Translate, asset: Asset): MediaTag[] {
   const tags: MediaTag[] = [];
 
   if (speech.some((item) => item.status === "reviewed")) {
-    tags.push({ name: t("filters.transcriptReviewed"), kind: "transcript" });
+    tags.push({ name: t("filters.transcriptReviewed"), kind: "processing" });
   } else if (speech.some((item) => item.status === "machine")) {
-    tags.push({ name: t("filters.transcriptDraft"), kind: "transcript" });
+    tags.push({ name: t("filters.transcriptDraft"), kind: "processing" });
   }
 
   if (ocr.some((item) => item.status === "reviewed")) {
-    tags.push({ name: t("filters.textReviewed"), kind: "ocr" });
+    tags.push({ name: t("filters.textReviewed"), kind: "processing" });
   } else if (ocr.some((item) => item.status === "machine")) {
-    tags.push({ name: t("filters.textDraft"), kind: "ocr" });
+    tags.push({ name: t("filters.textDraft"), kind: "processing" });
   }
 
   if (vision.some((item) => item.status === "machine")) {

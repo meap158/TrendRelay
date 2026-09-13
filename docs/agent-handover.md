@@ -12,8 +12,7 @@ Read the "Live system" section first. Some of it is posting to real accounts.
 Tags on media cards and the detail pane in the Media Library previously shared a single
 blue color (`.blurred-tag`). They are now categorized into distinct classes:
 - **Effect** (e.g. `Cover text`, `Face blur`, `Face overlays`): Kept blue (`--tag-effect` / `var(--link-bg)`).
-- **Speech transcript** (e.g. `Transcript draft`, `Transcript reviewed`): Violet (`--tag-transcript: #5e35b1` on `#f3eefa`).
-- **On-screen text / OCR** (e.g. `On-screen text draft`, `On-screen text reviewed`): Amber (`--tag-ocr: #7a5c00` on `#fdf5db`).
+- **Processing** (e.g. `Transcript draft`, `On-screen text draft`, reviewed transcripts): Violet (`--tag-processing: #5e35b1` on `#f3eefa`). Both speech transcripts and OCR on-screen text share this same color as they belong to the `processing` class.
 - **Captions** (e.g. `Captions`): Teal (`--tag-captions: #0a635b` on `#e4f4f2`).
 - **Voiceover** (e.g. `Voiceover`): Berry/Rose (`--tag-voiceover: #8f2747` on `#faebf0`).
 - **Vision** (e.g. `Scene descriptions`): Slate (`--tag-vision: #4b5563` on `#f1f3f5`).
