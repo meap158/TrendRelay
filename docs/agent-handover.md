@@ -7,6 +7,18 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Attribution products table & toolbar layout optimization (2026-09-14)
+
+In the Attribution products view (`ProductTable`), the toolbar and table rows were redesigned to eliminate unpredictable wrapping and awkward element placements:
+- Structured the toolbar into three distinct, stable tiers (`.product-toolbar` grid with 8px gap):
+  1. Search tier: search input with leading search icon, quick-clear button, and `.product-listing-filter` tabs.
+  2. Filter tier: Campaign, File, Creator, Sub ID, Date filters, and "Clear filters" action.
+  3. Bulk action tier: subdivided into selection pills, action buttons, campaign tag group with vertical divider, and clear selection button.
+- Moved the disclosure chevron (`.product-disclosure`) to the leading edge before the product thumbnail (`.product-thumb`), rotating smoothly in place on expansion.
+- Wrapped offer counts and publish link counts in rounded pill badges (`.product-count-badge`).
+- Framed the table scroll container with a subtle border and radius (`.product-table-scroll`).
+- Fixed duplicate `.product-campaign-tags` rules, retaining green pill badges using design tokens.
+
 ## Batch transcribe mode explanations on hover (2026-09-14)
 
 In the Media Library "Transcribe" batch dialog (`BatchTranscribe`), each of the three reading modes

@@ -392,35 +392,51 @@ export function ProductTable({
           state inside this slot instead of inserting another row and pushing
           the whole table down. */}
       <div className="product-toolbar">
-        <input
-          type="search"
-          className="product-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("attribution.searchProducts")}
-          aria-label={t("attribution.searchProducts")}
-        />
-        {/* The listing axis, worn the way the Library wears its kinds: every
-            product, the ones whose page has been read, and the ones still to
-            read - each with its count, so "how much is enriched" is the
-            filter bar itself. Drawn once any product has a page to read. */}
-        {(listingCounts.with > 0 || products.some((product) => product.product_url)) && (
-          <div className="product-listing-filter" role="group" aria-label="Filter by listing">
-            {([
-              ["all", "All", listingCounts.all],
-              ["with", "With listing", listingCounts.with],
-              ["without", "No listing", listingCounts.without],
-            ] as const).map(([value, label, count]) => (
+        <div className="product-search-bar">
+          <div className="product-search-input-wrap">
+            <span className="product-search-icon"><ActionIcon name="search" size={14} /></span>
+            <input
+              type="search"
+              className="product-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("attribution.searchProducts")}
+              aria-label={t("attribution.searchProducts")}
+            />
+            {query && (
               <button
-                key={value}
                 type="button"
-                className={listingFilter === value ? "selected" : ""}
-                aria-pressed={listingFilter === value}
-                onClick={() => setListingFilter(value)}
-              ><span>{label}</span><b>{count}</b></button>
-            ))}
+                className="product-search-clear"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                title="Clear search"
+              >
+                <ActionIcon name="dismiss" size={13} />
+              </button>
+            )}
           </div>
-        )}
+          {/* The listing axis, worn the way the Library wears its kinds: every
+              product, the ones whose page has been read, and the ones still to
+              read - each with its count, so "how much is enriched" is the
+              filter bar itself. Drawn once any product has a page to read. */}
+          {(listingCounts.with > 0 || products.some((product) => product.product_url)) && (
+            <div className="product-listing-filter" role="group" aria-label="Filter by listing">
+              {([
+                ["all", "All", listingCounts.all],
+                ["with", "With listing", listingCounts.with],
+                ["without", "No listing", listingCounts.without],
+              ] as const).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={listingFilter === value ? "selected" : ""}
+                  aria-pressed={listingFilter === value}
+                  onClick={() => setListingFilter(value)}
+                ><span>{label}</span><b>{count}</b></button>
+              ))}
+            </div>
+          )}
+        </div>
         {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates
           || creatorNames.length > 0) && (
           <div className="product-filters">
@@ -523,51 +539,55 @@ export function ProductTable({
           </div>
         )}
         <div className="product-bulk" data-active={picked.size > 0 || undefined}>
-          <span className="product-bulk-count" aria-live="polite">
-            <strong>{picked.size}</strong>
-            <span>/ {SELECTION_LIMIT} {t("attribution.selected")}</span>
-          </span>
-          {/* Why this table is showing a handful of rows out of hundreds, on
-              the row that already carries the count, with the way back on the
-              same line. Without it a scoped table reads as a catalogue that
-              has lost most of its products. */}
-          {scope && (
-            <span className="product-bulk-scope">
-              <span>{arrivedWith?.notice || t("attribution.fromNotification")}</span>
-              <Button variant="quiet" size="sm" onClick={clearScope}>
-                {t("attribution.showAllProducts")}
-              </Button>
+          <div className="product-bulk-selection">
+            <span className="product-bulk-count" aria-live="polite">
+              <strong>{picked.size}</strong>
+              <span>/ {SELECTION_LIMIT} {t("attribution.selected")}</span>
             </span>
-          )}
-          {/* Resolved by the page, which holds the public URLs. */}
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={picked.size === 0}
-            onClick={() => onCopySelected?.([...picked])}
-          >
-            <ActionIcon name="copy" /> {t("attribution.copyLinks")}
-          </Button>
-          {/* A selection reads exactly these products' pages, snapshot or
-              not - choosing them was the statement that fresh listings are
-              wanted. The header button remains the whole-catalogue sweep. */}
-          {onFetchListings && (
+            {/* Why this table is showing a handful of rows out of hundreds, on
+                the row that already carries the count, with the way back on the
+                same line. Without it a scoped table reads as a catalogue that
+                has lost most of its products. */}
+            {scope && (
+              <span className="product-bulk-scope">
+                <span>{arrivedWith?.notice || t("attribution.fromNotification")}</span>
+                <Button variant="quiet" size="sm" onClick={clearScope}>
+                  {t("attribution.showAllProducts")}
+                </Button>
+              </span>
+            )}
+          </div>
+          <div className="product-bulk-actions">
+            {/* Resolved by the page, which holds the public URLs. */}
             <Button
               variant="secondary"
               size="sm"
               disabled={picked.size === 0}
-              title="Read these products' Shopee pages for description, pictures, variations, discount and vouchers."
-              onClick={() => void onFetchListings([...picked])}
+              onClick={() => onCopySelected?.([...picked])}
             >
-              <ActionIcon name="refresh" /> Fetch listings
+              <ActionIcon name="copy" /> {t("attribution.copyLinks")}
             </Button>
-          )}
+            {/* A selection reads exactly these products' pages, snapshot or
+                not - choosing them was the statement that fresh listings are
+                wanted. The header button remains the whole-catalogue sweep. */}
+            {onFetchListings && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={picked.size === 0}
+                title="Read these products' Shopee pages for description, pictures, variations, discount and vouchers."
+                onClick={() => void onFetchListings([...picked])}
+              >
+                <ActionIcon name="refresh" /> Fetch listings
+              </Button>
+            )}
+          </div>
           {/* Tagging a selection to a campaign, where the selection already
               is. A hundred products imported for one campaign is one decision,
               and making it a hundred times is how a catalogue ends up full of
               products no campaign can use. */}
           {onTagOffers && campaigns.length > 0 && (
-            <>
+            <div className="product-bulk-campaign-group">
               <Select
                 className="product-tag-campaign"
                 value={tagCampaign}
@@ -597,7 +617,7 @@ export function ProductTable({
                 title={!tagCampaign ? t("attribution.chooseCampaignFirst") : undefined}
                 onClick={() => void tagPicked(false)}
               >{t("attribution.removeFromCampaign")}</Button>
-            </>
+            </div>
           )}
           <Button
             variant="quiet"
@@ -675,6 +695,14 @@ export function ProductTable({
                       aria-controls={detailId}
                       onClick={() => toggle(product.id)}
                     >
+                      {/* The expand arrow, before the picture: the standard
+                          row toggle handle sits at the leading edge where it
+                          cannot be mistaken for content. */}
+                      <span
+                        className="product-disclosure"
+                        data-open={open || undefined}
+                        aria-hidden="true"
+                      ><ActionIcon name="expand" size={14} /></span>
                       {/* A picture when the listing gave one; the product's
                           own initial when not - every row wears the same
                           silhouette, and a wall of mixed rows stays a wall
@@ -712,11 +740,6 @@ export function ProductTable({
                           )}
                         </small>
                       </span>
-                      <span
-                        className="product-disclosure"
-                        data-open={open || undefined}
-                        aria-hidden="true"
-                      ><ActionIcon name="expand" size={16} /></span>
                     </button>
                   </th>
                   {onTagOffers && (() => {
@@ -761,8 +784,8 @@ export function ProductTable({
                   <td className="numeric">
                     {offerCommission(product) || <span className="product-no-data">—</span>}
                   </td>
-                  <td className="product-count">{product.offers.length}</td>
-                  <td className="product-count">{product.links.length + directOffers.length}</td>
+                  <td className="product-count"><span className="product-count-badge">{product.offers.length}</span></td>
+                  <td className="product-count"><span className="product-count-badge">{product.links.length + directOffers.length}</span></td>
                 </tr>,
                 open && (
                   <tr
