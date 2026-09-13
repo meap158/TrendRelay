@@ -317,6 +317,9 @@ def create_ingest_job(
     engagement: dict[str, Any] | None = None,
     source_sha256: str | None = None,
     batch: dict[str, Any] | None = None,
+    license: str | None = None,  # noqa: A002 - the column's own name
+    license_url: str | None = None,
+    attribution: str | None = None,
     factory=None,
 ) -> dict[str, Any]:
     factory = factory or JOB_SESSION_FACTORY
@@ -395,6 +398,14 @@ def create_ingest_job(
             ):
                 if not getattr(existing, attribute) and value:
                     setattr(existing, attribute, value)
+            # A licence is filled in, never replaced. The same file arriving a
+            # second time under a different claim is not evidence the first
+            # record was wrong, and quietly swapping CC BY for CC0 would drop
+            # the credit a published post still owes.
+            if license and not existing.license:
+                existing.license = license
+                existing.license_url = license_url
+                existing.attribution = attribution
             session.commit()
             return {
                 "id": None,
@@ -423,6 +434,9 @@ def create_ingest_job(
         "hashtags": hashtags or [],
         "audio_identifier": audio_identifier,
         "engagement": engagement or {},
+        "license": license,
+        "license_url": license_url,
+        "attribution": attribution,
         "created_at": _now(),
     }
     if batch and batch.get("id"):
@@ -502,6 +516,11 @@ def run_ingest_job(
                 video_codec=metadata.get("video_codec"),
                 audio_codec=metadata.get("audio_codec"),
                 has_audio=metadata.get("has_audio", False),
+                # `.get`, because a job queued before the licence was carried
+                # holds no such keys and must still ingest.
+                license=payload.get("license"),
+                license_url=payload.get("license_url"),
+                attribution=payload.get("attribution"),
                 created_by=payload["actor_user_id"],
             )
             session.add(item)

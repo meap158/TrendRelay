@@ -49,6 +49,14 @@ class MediaAsset(Base):
     video_codec: Mapped[str | None] = mapped_column(String(80))
     audio_codec: Mapped[str | None] = mapped_column(String(80))
     has_audio: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: The licence this asset may be published under, as an SPDX identifier
+    #: (`CC0-1.0`, `CC-BY-4.0`). Null for the workspace's own media and for
+    #: anything downloaded for study rather than for publishing.
+    license: Mapped[str | None] = mapped_column(String(40), index=True)
+    license_url: Mapped[str | None] = mapped_column(String(500))
+    #: The credit line the licence obliges, ready to append to a caption.
+    #: Null when none is owed, so "does this post owe a credit" is a null check.
+    attribution: Mapped[str | None] = mapped_column(String(1000))
     collected_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
