@@ -136,9 +136,18 @@ ACTIVITY_PAYLOAD_FIELDS = (
 #: every job that shares the batch.
 ACTIVITY_BATCH_FIELDS = ("id", "position", "total")
 
+#: The chain marker: the job that started a sequence of jobs, so the drawer can
+#: show the sequence as the one thing somebody asked for. Only the id travels.
+ACTIVITY_CHAIN_FIELDS = ("id",)
+
 #: Result keys a finished job is drawn from.
+#:
+#: `sha256` is how a render's notification finds its video before the ingest
+#: has made a Library entry for it - and this list once dropped it, so the
+#: link the render reported was never the link the drawer received.
 ACTIVITY_RESULT_FIELDS = (
-    "asset_id", "removed_versions", "coverage", "faces_tracked", "frame_effects",
+    "asset_id", "sha256", "removed_versions", "coverage", "faces_tracked",
+    "frame_effects",
 )
 
 #: What survives of each `frame_effects` entry.
@@ -157,6 +166,9 @@ def _activity_payload(payload: Any) -> dict[str, Any]:
     batch = payload.get("batch")
     if isinstance(batch, dict):
         slim["batch"] = {key: batch[key] for key in ACTIVITY_BATCH_FIELDS if key in batch}
+    chain = payload.get("chain")
+    if isinstance(chain, dict):
+        slim["chain"] = {key: chain[key] for key in ACTIVITY_CHAIN_FIELDS if key in chain}
     request = payload.get("request")
     if isinstance(request, dict) and "preview_seconds" in request:
         # The one thing read out of the request: whether this is a preview.

@@ -317,6 +317,7 @@ def create_ingest_job(
     engagement: dict[str, Any] | None = None,
     source_sha256: str | None = None,
     batch: dict[str, Any] | None = None,
+    chain: dict[str, Any] | None = None,
     license: str | None = None,  # noqa: A002 - the column's own name
     license_url: str | None = None,
     attribution: str | None = None,
@@ -446,6 +447,12 @@ def create_ingest_job(
         # run streams ingests in as sources finish, so the card counts its
         # own rows instead of promising a figure nobody knows yet.
         payload["batch"] = {"id": str(batch["id"]), "total": int(batch.get("total") or 0)}
+    if chain and chain.get("id"):
+        # The other marker the bell folds on. A render files its video through
+        # this queue, so from the operator's side the render and the ingest are
+        # one thing; the marker names the job that started it, and the drawer
+        # shows the sequence as one row that ends on the video.
+        payload["chain"] = {"id": str(chain["id"])}
     return create_job_record(
         job_id,
         workspace_id,

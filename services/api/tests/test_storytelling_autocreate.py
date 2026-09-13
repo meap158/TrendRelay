@@ -115,3 +115,23 @@ def test_the_full_build_hands_the_arrangement_to_the_ordinary_render(monkeypatch
     assert seen["asset_ids"] == ["clip-ocean"]
     assert seen["assignments"] == ["clip-ocean"]
     assert seen["voice_id"] == "voice-1"
+    # The build, the render it queued and the ingest the render will queue are
+    # one thing to whoever asked for it. The build names itself as the chain,
+    # and hands that name to the render so the ingest inherits it too.
+    assert record["payload"]["chain"] == {"id": queued["id"]}
+    assert seen["chain_id"] == queued["id"]
+
+
+def test_a_render_on_its_own_starts_a_chain_and_one_from_a_build_joins_it() -> None:
+    from trendrelay_api.storytelling import jobs as story_jobs
+
+    alone = story_jobs.enqueue_render(
+        "w", "u", body="A line.", asset_ids=["clip-ocean"], voice_id="voice-1",
+    )
+    assert get_job_record(alone["id"])["payload"]["chain"] == {"id": alone["id"]}
+
+    joined = story_jobs.enqueue_render(
+        "w", "u", body="A line.", asset_ids=["clip-ocean"], voice_id="voice-1",
+        chain_id="autocreate_parent",
+    )
+    assert get_job_record(joined["id"])["payload"]["chain"] == {"id": "autocreate_parent"}

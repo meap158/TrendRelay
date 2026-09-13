@@ -603,6 +603,35 @@ def test_the_activity_stream_carries_what_is_drawn_and_not_the_render_recipe() -
     assert "automatic_face_object" in get_job_record("slim-1", factory=sessions)["payload"]["batch"]
 
 
+def test_the_activity_stream_keeps_a_chain_marker_and_a_render_s_hash() -> None:
+    """The two things a render's notification is folded and linked by.
+
+    A render queues an ingest to file its video, and the auto-build queues the
+    render: three jobs for one thing asked for. `chain` is what the drawer
+    folds them on, and `sha256` is how the row finds the video before the
+    ingest has made an entry for it. The slimming here once dropped the hash,
+    so the link the render reported never reached the drawer.
+    """
+    sessions = factory()
+    create_job_record(
+        "story_1", "ws", "storytelling_render",
+        {"title": "Why the sea is blue", "chain": {"id": "autocreate_1", "extra": "x"}},
+        factory=sessions,
+    )
+    claim_job("story_1", "worker", factory=sessions)
+    complete_job(
+        "story_1", "worker",
+        {"output_path": r"S:\renders\story_1.mp4", "sha256": "ab" * 32, "asset_id": None},
+        factory=sessions,
+    )
+
+    [job] = list_job_records_for_kinds("ws", {"storytelling_render"}, 5, factory=sessions)
+
+    assert job["payload"]["chain"] == {"id": "autocreate_1"}
+    assert job["result"]["sha256"] == "ab" * 32
+    assert "output_path" not in job["result"]
+
+
 def test_a_finished_job_keeps_the_one_figure_its_row_shows() -> None:
     """`frame_effects` describes the render in fourteen keys; one is read."""
     sessions = factory()

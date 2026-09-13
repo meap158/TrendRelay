@@ -191,9 +191,15 @@ def enqueue_render(
     fill: str = "cover",
     subtitles: bool = True,
     caption_style: str = "",
+    chain_id: str | None = None,
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
-    """Queue one narrated video. The plan is built when the voice exists."""
+    """Queue one narrated video. The plan is built when the voice exists.
+
+    `chain_id` names the job this render is a step of - the autonomous build
+    that queued it - so the two show as one notification. On its own, a render
+    starts a chain of its own: the ingest that files its video joins it.
+    """
     if not body.strip():
         raise ValueError("Write the script this video narrates.")
     if not asset_ids:
@@ -234,6 +240,7 @@ def enqueue_render(
             "caption_style": caption_style,
             "preview": preview,
             "title": title or f"Storytelling - {story.name}",
+            "chain": {"id": chain_id or job_id},
         },
         max_attempts=1,
         factory=factory,
@@ -361,6 +368,7 @@ def run_render_job(
             title=payload["title"],
             source_type="storytelling",
             platform="storytelling",
+            chain=payload.get("chain"),
             factory=factory,
         )
         complete_job(

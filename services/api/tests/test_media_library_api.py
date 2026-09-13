@@ -931,6 +931,34 @@ def test_a_duplicate_download_keeps_membership_in_each_batch(monkeypatch) -> Non
         source.unlink(missing_ok=True)
 
 
+def test_an_ingest_queued_by_a_render_carries_the_render_s_chain(monkeypatch) -> None:
+    """A render files its video through this queue, so the ingest is the last
+    step of the thing somebody asked for. The chain marker is what lets the
+    bell show the render and its ingest as one row that ends on the video."""
+    workspace_id = create_workspace()
+    source = Path(__file__).resolve().parent / ".chain-ingest-test.mp4"
+    source.write_bytes(b"a rendered story")
+    monkeypatch.setattr(
+        media_library,
+        "get_settings",
+        lambda: SimpleNamespace(publishing_media_root_list=[str(source.parent)]),
+    )
+    try:
+        queued = media_library.create_ingest_job(
+            workspace_id=workspace_id,
+            actor_user_id="library-owner",
+            path=str(source),
+            title="Why the sea is blue",
+            source_type="storytelling",
+            chain={"id": "autocreate_1", "stage": "ignored"},
+            factory=TestingSession,
+        )
+        assert queued["payload"]["chain"] == {"id": "autocreate_1"}
+        assert queued["payload"]["source_sha256"] == media_library.file_sha256(source)
+    finally:
+        source.unlink(missing_ok=True)
+
+
 def test_paging_past_the_end_is_empty_rather_than_an_error() -> None:
     """A picker that pages until it runs out must be able to run out."""
     workspace_id = create_workspace()

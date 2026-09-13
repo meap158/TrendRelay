@@ -100,6 +100,9 @@ def enqueue_autocreate(
             "broll_kind": broll_kind,
             # False stops after arranging, for review; true queues the render.
             "render": bool(render),
+            # The build is the first step of a chain the render and its ingest
+            # join, so the three jobs show as the one thing that was asked for.
+            "chain": {"id": job_id},
         },
         max_attempts=1,
         factory=factory,
@@ -259,6 +262,7 @@ def run_autocreate_job(
             fill=payload.get("fill", "cover"),
             subtitles=payload.get("subtitles", True),
             caption_style=payload.get("caption_style", ""),
+            chain_id=job_id,
             factory=factory,
         )
         complete_job(

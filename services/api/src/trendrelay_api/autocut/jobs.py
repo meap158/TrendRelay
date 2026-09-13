@@ -261,6 +261,9 @@ def enqueue_render(
             "title": title or f"AutoCut - {template.name}",
             "plan": _plan_json(plan),
             "audio_path": str(audio) if audio else None,
+            # This render starts a chain; the ingest that files its video
+            # joins it, so the two are one notification ending on the video.
+            "chain": {"id": job_id},
         },
         max_attempts=2,
         factory=factory,
@@ -348,6 +351,7 @@ def run_render_job(
             title=payload["title"],
             source_type="autocut",
             platform="autocut",
+            chain=payload.get("chain"),
             factory=factory,
         )
         complete_job(
