@@ -147,3 +147,89 @@ def test_storytelling_writes_where_autocut_does() -> None:
 
     assert storytelling.OUTPUT_ROOT == autocut.OUTPUT_ROOT
     assert storytelling.PREVIEW_ROOT == autocut.PREVIEW_ROOT
+
+
+# --- a Library track instead of the template's file --------------------------------
+
+
+def test_a_library_track_is_cut_to_and_its_credit_reaches_the_video(monkeypatch, tmp_path) -> None:
+    """The choice stands in for the template's file everywhere it matters: the
+    beats are read from it, the render hears it, and the credit it carries is
+    handed to the ingest so the finished video owes it."""
+    from trendrelay_api import media_library
+    from trendrelay_api.autocut import jobs as autocut_jobs
+    from trendrelay_api.autocut.beat_analysis import BeatGrid
+    from trendrelay_api.database import SessionFactory
+    from trendrelay_api.jobs import get_job_record
+    from trendrelay_api.media_models import MediaAsset
+
+    credit = 'Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)'
+    track = tmp_path / "song.mp3"
+    track.write_bytes(b"MP3")
+    with SessionFactory.begin() as session:
+        if session.get(MediaAsset, "cut-pic") is None:
+            session.add(MediaAsset(
+                id="cut-pic", workspace_id="w", title="Pic", media_kind="image",
+                source_type="test", original_path="/c/cut-pic.png",
+                original_sha256="p" * 64, mime_type="image/png", size_bytes=10, created_by="u",
+            ))
+        song = session.get(MediaAsset, "cut-song")
+        if song is None:
+            session.add(MediaAsset(
+                id="cut-song", workspace_id="w", title="Upbeat Corporate", media_kind="audio",
+                source_type="openverse-music", original_path=str(track),
+                original_sha256="q" * 64, mime_type="audio/mpeg", size_bytes=10, created_by="u",
+                attribution=credit,
+            ))
+        else:
+            song.original_path = str(track)  # this run's tmp_path
+    with SessionFactory() as session:
+        choice = autocut_jobs.music_from_library(session, "w", "cut-song")
+        assert choice is not None and choice.attribution == credit
+        # Not a track: a picture's id, another workspace, a name nobody has.
+        assert autocut_jobs.music_from_library(session, "w", "cut-pic") is None
+        assert autocut_jobs.music_from_library(session, "other", "cut-song") is None
+        assert autocut_jobs.music_from_library(session, "w", None) is None
+
+    # The beats are read from the chosen file, not the template's.
+    analysed: list = []
+    monkeypatch.setattr(
+        autocut_jobs, "analyze_beats",
+        lambda ffmpeg, audio: analysed.append(audio) or BeatGrid(bpm=0.0, beats=(), duration=0.0),
+    )
+    queued = autocut_jobs.enqueue_render(
+        "w", "u", template_id="breathe", asset_ids=["cut-pic"], music_asset=choice, fill="blur",
+    )
+    assert analysed == [track]
+    payload = get_job_record(queued["id"])["payload"]
+    assert payload["audio_path"] == str(track)
+    assert payload["music_asset_id"] == "cut-song"
+    assert payload["music_attribution"] == credit
+
+    drawn: dict = {}
+    monkeypatch.setattr(
+        autocut_jobs, "render",
+        lambda ffmpeg, request: drawn.update(request=request)
+        or request.destination.write_bytes(b"MP4") or request.destination,
+    )
+    filed: dict = {}
+    monkeypatch.setattr(
+        media_library, "create_ingest_job",
+        lambda **kwargs: filed.update(kwargs) or {"id": "ingest_cut", "payload": {}},
+    )
+    autocut_jobs.run_render_job(queued["id"])
+
+    record = get_job_record(queued["id"])
+    assert record["status"] == "succeeded", record.get("error")
+    assert drawn["request"].audio_path == track
+    assert filed["attribution"] == credit
+
+    # No choice: the template's file (absent here, so silent) and no credit.
+    plain = autocut_jobs.enqueue_render(
+        "w", "u", template_id="breathe", asset_ids=["cut-pic"], fill="blur",
+    )
+    plain_payload = get_job_record(plain["id"])["payload"]
+    assert plain_payload["music_asset_id"] is None
+    assert plain_payload["music_attribution"] is None
+    autocut_jobs.run_render_job(plain["id"])
+    assert filed["attribution"] is None

@@ -144,6 +144,9 @@ class RenderBody(ScriptRequest):
     language_code: str | None = None
     #: A Library asset somebody recorded themselves, used instead of a voice.
     narration_asset_id: str | None = None
+    #: A Library track laid under the voice, ducked while it speaks. Its credit
+    #: line goes onto the finished video. None is a narration with no music.
+    music_asset_id: str | None = Field(default=None, max_length=64)
     aspect: str = story_jobs.DEFAULT_ASPECT
     fill: str = "cover"
     subtitles: bool = True
@@ -173,6 +176,23 @@ def _known_visuals(
     ).all()
     known = {row.id for row in rows}
     return [asset_id for asset_id in asset_ids if asset_id in known]
+
+
+def _known_music(session: Session, workspace_id: str, asset_id: str | None) -> str | None:
+    """The music track's id, checked to be an audio file in this workspace.
+
+    Refused rather than dropped: somebody chose that track, and a narration
+    that quietly went out without its music is not the video they asked for.
+    """
+    if not asset_id:
+        return None
+    from trendrelay_api.autocut.jobs import music_from_library
+
+    if music_from_library(session, workspace_id, asset_id) is None:
+        raise HTTPException(
+            status_code=422, detail="That music is not an audio file in this workspace's Library.",
+        )
+    return asset_id
 
 
 def _queue(
@@ -205,6 +225,7 @@ def _queue(
             model_id=body.model_id,
             language_code=body.language_code,
             narration_asset_id=body.narration_asset_id,
+            music_asset_id=_known_music(session, workspace_id, body.music_asset_id),
             title=body.title,
             preview=preview,
             aspect=body.aspect,
@@ -326,6 +347,7 @@ def start_autocreate(
             model_id=body.model_id,
             language_code=body.language_code,
             narration_asset_id=body.narration_asset_id,
+            music_asset_id=_known_music(session, workspace_id, body.music_asset_id),
             template_id=body.template_id,
             aspect=body.aspect,
             fill=body.fill,

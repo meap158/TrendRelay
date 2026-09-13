@@ -32,6 +32,7 @@ from trendrelay_api.autocut.jobs import (
     _plan_json,
     _prune_stale,
     dimensions,
+    music_from_library,
 )
 from trendrelay_api.autocut.renderer import RenderRequest, render
 from trendrelay_api import creation_titles
@@ -184,6 +185,7 @@ def enqueue_render(
     model_id: str | None = None,
     language_code: str | None = None,
     narration_asset_id: str | None = None,
+    music_asset_id: str | None = None,
     title: str | None = None,
     preview: bool = False,
     kinds: dict[str, str] | None = None,
@@ -196,6 +198,10 @@ def enqueue_render(
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
     """Queue one narrated video. The plan is built when the voice exists.
+
+    `music_asset_id` names a Library track to lay under the voice, ducked
+    while it speaks. Resolved when the job runs, like the pictures, so the
+    file and the credit it owes are read at the moment they are used.
 
     `chain_id` names the job this render is a step of - the autonomous build
     that queued it - so the two show as one notification. On its own, a render
@@ -210,7 +216,7 @@ def enqueue_render(
     story = planner.template(template_id)
     nonce = (
         f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{voice_id}:"
-        f"{narration_asset_id}:{aspect}:{fill}:{preview}:{utc_now()}"
+        f"{narration_asset_id}:{music_asset_id}:{aspect}:{fill}:{preview}:{utc_now()}"
     )
     job_id = "story_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(
@@ -233,6 +239,7 @@ def enqueue_render(
             "model_id": model_id,
             "language_code": language_code,
             "narration_asset_id": narration_asset_id,
+            "music_asset_id": music_asset_id,
             "aspect": aspect,
             "fill": fill,
             "subtitles": subtitles,
@@ -296,6 +303,12 @@ def run_render_job(
             ).all()
             paths = {row.id: Path(row.original_path) for row in rows}
             kinds = {row.id: row.media_kind for row in rows}
+            # The music bed, when one was chosen. Refused rather than rendered
+            # silent when it has gone: somebody chose it, and a video quietly
+            # missing its music is not the video they asked for.
+            music = music_from_library(session, workspace_id, payload.get("music_asset_id"))
+        if payload.get("music_asset_id") and music is None:
+            raise NarrationUnavailable("That music is no longer in the Library.")
         # In the order they were chosen, not the order the database returned
         # them: the pictures follow the story, and a set has no story in it.
         pictures = [
@@ -345,6 +358,7 @@ def run_render_job(
             plan=plan,
             image_paths=paths,
             audio_path=audio_path,
+            music_path=music.path if music else None,
             destination=destination,
             width=width,
             height=height,
@@ -370,6 +384,8 @@ def run_render_job(
             path=str(destination),
             title=payload["title"],
             source_type="storytelling",
+            # The credit the music owes, now owed by the video that carries it.
+            attribution=music.attribution if music else None,
             platform="storytelling",
             chain=payload.get("chain"),
             factory=factory,

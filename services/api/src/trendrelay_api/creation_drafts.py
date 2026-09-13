@@ -60,6 +60,9 @@ class AutoCutSpec(BaseModel):
     asset_ids: list[str] = Field(default_factory=list, max_length=40)
     template_id: str | None = None
     music: str | None = None
+    #: A Library track over the template's file - the choice the music picker
+    #: makes, kept so a reopened draft cuts to the same track.
+    music_asset_id: str | None = Field(default=None, max_length=64)
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     aspect: str = Field(default="portrait", pattern="^(portrait|square|landscape)$")
     fill: str = Field(default="cover", pattern="^(cover|blur)$")
@@ -80,6 +83,7 @@ class StorySpec(BaseModel):
     model_id: str | None = None
     language_code: str | None = None
     narration_asset_id: str | None = None
+    music_asset_id: str | None = Field(default=None, max_length=64)
     aspect: str = "16:9"
     fill: str = Field(default="cover", pattern="^(cover|blur)$")
     subtitles: bool = True
@@ -152,6 +156,12 @@ def _render_autocut(
         fill=spec.get("fill", "cover"),
         caption=(spec.get("caption") or "").strip(),
         caption_position=spec.get("caption_position", "bottom"),
+        # Resolved now rather than trusted from the draft: the track may have
+        # left the Library since. Gone means the template's own file, which is
+        # what an AutoCut with no choice made cuts to.
+        music_asset=autocut_jobs.music_from_library(
+            session, workspace_id, spec.get("music_asset_id"),
+        ),
     )
 
 
@@ -171,6 +181,7 @@ def _render_story(
         model_id=spec.get("model_id"),
         language_code=spec.get("language_code"),
         narration_asset_id=spec.get("narration_asset_id"),
+        music_asset_id=spec.get("music_asset_id"),
         title=title,
         preview=preview,
         kinds=kinds,

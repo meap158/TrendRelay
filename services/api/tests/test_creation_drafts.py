@@ -41,6 +41,14 @@ def session():
                 original_path=f"/m/asset-{index}", original_sha256=f"{index:0>64}",
                 mime_type="image/png", size_bytes=10, created_by=USER,
             ))
+        # A track from the music search, with the credit its licence obliges.
+        s.add(MediaAsset(
+            id="song", workspace_id="ws-1", title="Upbeat Corporate",
+            media_kind="audio", source_type="openverse-music",
+            original_path="/m/song.mp3", original_sha256="s" * 64,
+            mime_type="audio/mpeg", size_bytes=10, created_by=USER,
+            attribution='Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)',
+        ))
         s.commit()
         yield s
 
@@ -187,6 +195,51 @@ def test_render_hands_the_spec_to_the_feature_and_records_the_job(session, monke
     after = drafts.get_draft(session, "ws-1", view["id"])
     assert after.status == "rendering"
     assert after.render_job_id == "autocut_job1"
+
+
+def test_a_draft_keeps_the_track_it_was_cut_to(session, monkeypatch) -> None:
+    """The music picker's choice is part of the draft, and a reopened draft
+    renders to the same track - resolved when it renders, so a track that has
+    left the Library since falls back to the template's file rather than
+    failing the render on a name."""
+    from trendrelay_api.autocut import jobs as autocut_jobs
+    from trendrelay_api.storytelling import jobs as story_jobs
+
+    cut: dict = {}
+    monkeypatch.setattr(
+        autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: cut.update(kwargs) or {"id": "autocut_j", "status": "queued"},
+    )
+    view = drafts.create_draft(
+        session, "ws-1", USER, kind="autocut", title="Cut",
+        spec={"asset_ids": ["asset-0"], "music_asset_id": "song"},
+    )
+    assert drafts.get_draft(session, "ws-1", view["id"]).spec["music_asset_id"] == "song"
+    drafts.render_draft(session, "ws-1", USER, view["id"])
+    assert cut["music_asset"].asset_id == "song"
+    assert cut["music_asset"].attribution.startswith("Music:")
+
+    gone = drafts.create_draft(
+        session, "ws-1", USER, kind="autocut", title="Cut",
+        spec={"asset_ids": ["asset-0"], "music_asset_id": "vanished"},
+    )
+    drafts.render_draft(session, "ws-1", USER, gone["id"])
+    assert cut["music_asset"] is None
+
+    story: dict = {}
+    monkeypatch.setattr(
+        story_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: story.update(kwargs) or {"id": "story_j", "status": "queued"},
+    )
+    told = drafts.create_draft(
+        session, "ws-1", USER, kind="storytelling", title="Story",
+        spec={
+            "body": "A line.", "asset_ids": ["asset-0"], "voice_id": "v",
+            "music_asset_id": "song",
+        },
+    )
+    drafts.render_draft(session, "ws-1", USER, told["id"])
+    assert story["music_asset_id"] == "song"
 
 
 def test_rendering_with_no_real_media_is_refused(session) -> None:

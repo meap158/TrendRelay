@@ -80,6 +80,10 @@ class PlanRequest(BaseModel):
     asset_ids: list[str] = Field(min_length=1, max_length=MAX_PICTURES)
     template_id: str | None = None
     music: str | None = None
+    #: A Library track to cut to instead of the template's file - one added
+    #: from the music search, say. The beats are read from it, and the credit
+    #: it carries goes onto the finished video.
+    music_asset_id: str | None = Field(default=None, max_length=64)
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     #: The canvas shape - the plan is the same for all, only the render frame
     #: differs, so it rides the render/preview calls, not the plan preview.
@@ -115,6 +119,25 @@ def _known_visuals(
     return ordered, kinds
 
 
+def _music(
+    session: Session, workspace_id: str, asset_id: str | None,
+) -> autocut_jobs.MusicChoice | None:
+    """The Library track a request names, or 422 when it is not one of ours.
+
+    Refused rather than quietly falling back to the template's file: somebody
+    chose that track, and a plan cut to different music is not the plan they
+    asked to see.
+    """
+    if not asset_id:
+        return None
+    choice = autocut_jobs.music_from_library(session, workspace_id, asset_id)
+    if choice is None:
+        raise HTTPException(
+            status_code=422, detail="That music is not an audio file in this workspace's Library.",
+        )
+    return choice
+
+
 @router.post("/plan")
 def preview_plan(
     workspace_id: str,
@@ -132,9 +155,11 @@ def preview_plan(
     if not visuals:
         raise HTTPException(status_code=422, detail="None of those are this workspace's photos or videos.")
     template_id = body.template_id or autocut_templates.best_template(len(visuals)).id
+    choice = _music(session, workspace_id, body.music_asset_id)
     try:
         plan, grid, template, audio = autocut_jobs.build_plan(
             template_id, visuals, music=body.music, speed=body.speed, kinds=kinds,
+            music_path=choice.path if choice else None,
         )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -191,6 +216,7 @@ def _queue(
             fill=body.fill,
             caption=body.caption.strip(),
             caption_position=body.caption_position,
+            music_asset=_music(session, workspace_id, body.music_asset_id),
         )
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

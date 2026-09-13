@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,45 @@ def resolve_audio(music: str | None) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+@dataclass(frozen=True)
+class MusicChoice:
+    """A Library track chosen for a render, with the credit it carries.
+
+    The other place music comes from. A template names a file under
+    ``AUDIO_ROOT``; this names an audio asset in the workspace's Library -
+    usually one added from Openverse, which arrives with its licence and the
+    credit line owed. The credit travels with the choice so the render can
+    hand it to the video it makes, and every post publishing that video can
+    carry it.
+    """
+
+    asset_id: str
+    path: Path
+    attribution: str | None
+
+
+def music_from_library(session: Any, workspace_id: str, asset_id: str | None) -> MusicChoice | None:
+    """The workspace's audio asset by id, or None when there is no such track.
+
+    Scoped to the workspace and to audio: a picture's id here is not a track,
+    and another workspace's track is not this one's to use.
+    """
+    if not asset_id:
+        return None
+    from trendrelay_api.media_models import MediaAsset
+
+    row = session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id == asset_id,
+            MediaAsset.media_kind == "audio",
+        )
+    )
+    if row is None:
+        return None
+    return MusicChoice(asset_id=row.id, path=Path(row.original_path), attribution=row.attribution)
+
+
 def build_plan(
     template_id: str,
     asset_ids: list[str],
@@ -148,16 +188,21 @@ def build_plan(
     music: str | None = None,
     speed: float = 1.0,
     kinds: dict[str, str] | None = None,
+    music_path: Path | None = None,
 ) -> tuple[CutPlan, BeatGrid, templates.Template, Path | None]:
     """Everything decided before a frame is drawn, computed once.
 
     Returns the plan, the beat grid it was built on, the chosen template and
     the resolved audio path - so the caller can both preview the plan and, if
     it queues a render, store exactly what will be drawn.
+
+    ``music_path`` is a Library track already resolved (see ``MusicChoice``)
+    and takes precedence over the template's file; the beats are read from
+    whichever is used, so the cuts land on the track that will be heard.
     """
     template = templates.get_template(template_id)
     track = music or template.music
-    audio = resolve_audio(track)
+    audio = music_path if music_path and music_path.is_file() else resolve_audio(track)
     grid = analyze_beats(_ffmpeg(), audio) if audio else BeatGrid(bpm=0.0, beats=(), duration=0.0)
     plan = plan_cuts(template, grid, asset_ids, speed=speed, kinds=kinds)
     return plan, grid, template, audio
@@ -242,6 +287,7 @@ def enqueue_render(
     fill: str = "cover",
     caption: str = "",
     caption_position: str = "bottom",
+    music_asset: MusicChoice | None = None,
     factory: Any = SessionFactory,
 ) -> dict[str, Any]:
     """Plan the render now, queue it to draw in the background.
@@ -249,9 +295,14 @@ def enqueue_render(
     A preview renders the same plan at half the frame and is never filed in
     the Library - it exists to be watched once in the dialog before the real
     render is committed.
+
+    ``music_asset`` is a Library track standing in for the template's file.
+    Its credit line is stored with the job and handed to the finished video,
+    so the credit is owed by the video rather than remembered by a person.
     """
     plan, _grid, template, audio = build_plan(
         template_id, asset_ids, music=music, speed=speed, kinds=kinds,
+        music_path=music_asset.path if music_asset else None,
     )
     if not plan.shots:
         raise ValueError("Choose at least one photo or video to cut together.")
@@ -259,7 +310,11 @@ def enqueue_render(
         # Named for the clips it is cut from - what the video is about - and
         # only for the pacing when no clip has a name to lend it.
         title = creation_titles.from_clips(_clip_titles(asset_ids, workspace_id, factory))
-    nonce = f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{music}:{speed}:{aspect}:{fill}:{caption}:{caption_position}:{preview}:{utc_now()}"
+    track_key = music_asset.asset_id if music_asset else music
+    nonce = (
+        f"{workspace_id}:{template_id}:{','.join(asset_ids)}:{track_key}:{speed}:{aspect}:"
+        f"{fill}:{caption}:{caption_position}:{preview}:{utc_now()}"
+    )
     job_id = "autocut_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
     create_job_record(
         job_id,
@@ -272,6 +327,11 @@ def enqueue_render(
             "template_name": template.name,
             "asset_ids": asset_ids,
             "music": music or template.music,
+            # A Library track over the template's file, and the credit it
+            # obliges - read at render time by the ingest, so the finished
+            # video carries it. Null when the template's own track is used.
+            "music_asset_id": music_asset.asset_id if music_asset else None,
+            "music_attribution": music_asset.attribution if music_asset else None,
             "speed": speed,
             "aspect": aspect,
             "fill": fill,
@@ -370,6 +430,9 @@ def run_render_job(
             path=str(destination),
             title=payload["title"],
             source_type="autocut",
+            # The credit the music owes, now owed by the video that carries
+            # it. `.get`: a job queued before this was recorded has no key.
+            attribution=payload.get("music_attribution"),
             platform="autocut",
             chain=payload.get("chain"),
             factory=factory,

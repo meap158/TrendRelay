@@ -353,3 +353,72 @@ def test_preview_status_and_stream_are_scoped_to_the_workspace() -> None:
     other = make_workspace()
     missing = request("GET", f"/api/workspaces/{other}/autocut/jobs/autocut_ready")
     assert missing.status_code == 404
+
+
+# --- a Library track instead of the template's file --------------------------------
+
+
+def add_track(workspace_id: str, asset_id: str, credit: str | None) -> None:
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id=asset_id, workspace_id=workspace_id, title=asset_id,
+            media_kind="audio", source_type="openverse-music",
+            original_path=f"/music/{asset_id}.mp3",
+            original_sha256=f"{asset_id:0>64}"[:64], mime_type="audio/mpeg",
+            size_bytes=10, created_by="owner-user", attribution=credit,
+        ))
+
+
+def test_a_library_track_reaches_the_plan_and_the_render_with_its_credit(monkeypatch) -> None:
+    """The track the picker chose is the one the beats are read from and the
+    one the video is cut to - and the credit it carries travels with it, so
+    the finished video owes it rather than a person remembering to."""
+    workspace_id = make_workspace()
+    add_image(workspace_id, "pic-0")
+    credit = 'Music: "Upbeat Corporate" by Soundrider (CC BY 3.0)'
+    add_track(workspace_id, "song", credit)
+
+    planned: dict = {}
+    real_build_plan = autocut_api.autocut_jobs.build_plan
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "build_plan",
+        lambda *args, **kwargs: planned.update(kwargs) or real_build_plan(*args, **kwargs),
+    )
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/plan",
+        json={"asset_ids": ["pic-0"], "music_asset_id": "song"},
+    )
+    assert answer.status_code == 200, answer.text
+    assert str(planned["music_path"]).replace("\\", "/").endswith("/music/song.mp3")
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        autocut_api.autocut_jobs, "enqueue_render",
+        lambda ws, actor, **kwargs: captured.update(kwargs)
+        or {"id": "autocut_x", "status": "queued"},
+    )
+    queued = request(
+        "POST", f"/api/workspaces/{workspace_id}/autocut/render",
+        json={"asset_ids": ["pic-0"], "music_asset_id": "song"},
+    )
+    assert queued.status_code == 202, queued.text
+    assert captured["music_asset"].asset_id == "song"
+    assert captured["music_asset"].attribution == credit
+
+    # Nothing chosen: the template's own file, as before.
+    request("POST", f"/api/workspaces/{workspace_id}/autocut/render", json={"asset_ids": ["pic-0"]})
+    assert captured["music_asset"] is None
+
+
+def test_a_track_that_is_not_ours_or_not_audio_is_refused() -> None:
+    mine, theirs = make_workspace(), make_workspace()
+    add_image(mine, "pic-0")
+    add_image(mine, "still", kind="image")
+    add_track(theirs, "their-song", None)
+    for track in ("their-song", "still", "ghost"):
+        answer = request(
+            "POST", f"/api/workspaces/{mine}/autocut/render",
+            json={"asset_ids": ["pic-0"], "music_asset_id": track},
+        )
+        assert answer.status_code == 422, track
+        assert "not an audio file in this workspace" in answer.json()["detail"]

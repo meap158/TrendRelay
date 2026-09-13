@@ -707,3 +707,57 @@ def test_a_plan_that_cannot_be_read_still_offers_the_voices(monkeypatch) -> None
     ).json()
     assert body["voices"][0]["addable"] is True
     assert body["plan"]["known"] is False
+
+
+# --- a music bed under the narration ----------------------------------------------
+
+
+def test_a_music_bed_from_the_library_is_queued_with_the_render(monkeypatch) -> None:
+    """The track rides the job by id and is resolved when it runs, like the
+    pictures - the credit it carries is read at the moment it is used."""
+    workspace_id = make_workspace()
+    add_picture(workspace_id, "pic0")
+    add_picture(workspace_id, "song", kind="audio")
+    seen = queued_kwargs(monkeypatch)
+
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/render",
+        json={
+            "body": SCRIPT, "asset_ids": ["pic0"], "voice_id": "voice-1",
+            "music_asset_id": "song",
+        },
+    )
+    assert answer.status_code == 202, answer.text
+    assert seen[0]["music_asset_id"] == "song"
+
+    # And through the autonomous build, which is the same render with the
+    # pictures filled in.
+    built: dict = {}
+    monkeypatch.setattr(
+        storytelling_api.story_autocreate, "enqueue_autocreate",
+        lambda ws, actor, **kwargs: built.update(kwargs)
+        or {"id": "autocreate_x", "status": "queued"},
+    )
+    answer = request(
+        "POST", f"/api/workspaces/{workspace_id}/storytelling/autocreate",
+        json={"body": SCRIPT, "voice_id": "voice-1", "music_asset_id": "song"},
+    )
+    assert answer.status_code == 202, answer.text
+    assert built["music_asset_id"] == "song"
+
+
+def test_a_music_bed_that_is_not_an_audio_file_of_ours_is_refused(monkeypatch) -> None:
+    mine, theirs = make_workspace(), make_workspace()
+    add_picture(mine, "pic0")
+    add_picture(theirs, "their-song", kind="audio")
+    seen = queued_kwargs(monkeypatch)
+    for track in ("their-song", "pic0", "ghost"):
+        answer = request(
+            "POST", f"/api/workspaces/{mine}/storytelling/render",
+            json={
+                "body": SCRIPT, "asset_ids": ["pic0"], "voice_id": "voice-1",
+                "music_asset_id": track,
+            },
+        )
+        assert answer.status_code == 422, track
+    assert seen == []
