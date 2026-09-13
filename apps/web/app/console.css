@@ -854,7 +854,20 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .connection-info:focus .connection-tooltip { opacity: 1; visibility: visible; }
 
 .download-options { border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
-.download-options summary { display: flex; justify-content: space-between; gap: 16px; padding: 12px 2px; color: var(--text); font-weight: 600; cursor: pointer; }
+.download-options summary { display: flex; justify-content: space-between; gap: 16px; padding: 12px 2px; color: var(--text); font-weight: 600; cursor: pointer; list-style: none; }
+.download-options summary::-webkit-details-marker { display: none; }
+/* A chevron of its own, the same one Campaign settings uses for the same
+   reason: a flex `summary` drops the native marker, so the row read as a
+   heading with nothing to say it opens. The label carries it rather than the
+   summary, which under `space-between` would have sent the two to opposite
+   ends of the row. The empty alt keeps the glyph out of a screen reader, which
+   already announces the disclosure's own expanded state. */
+.download-options summary > strong { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.download-options summary > strong::before { content: "›" / ""; color: var(--muted); font-size: 14px; line-height: 1; }
+.download-options[open] summary > strong::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: no-preference) {
+  .download-options summary > strong::before { transition: transform 150ms ease; }
+}
 .download-options summary span { color: var(--muted); font-weight: 400; }
 .download-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 0 12px; }
 .download-options-grid label { display: grid; gap: 6px; font-weight: 600; }

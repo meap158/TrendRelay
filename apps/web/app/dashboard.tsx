@@ -1364,7 +1364,11 @@ export default function Dashboard() {
               reachable, and not a row of its own. */}
 
           <details className="download-options">
-            <summary>{t("downloads.options")} <span>{modeLabel(mode, detectedService)} · {limit === 0 ? (detectedService === "TikTok" ? "all channel videos" : "all posts") : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
+            {/* The label is its own element so the chevron has something to sit
+                beside. Left as a bare text node it shared the row with the
+                summary text under `space-between`, which would have pushed the
+                two to opposite ends of the row. */}
+            <summary><strong>{t("downloads.options")}</strong> <span>{modeLabel(mode, detectedService)} · {limit === 0 ? (detectedService === "TikTok" ? "all channel videos" : "all posts") : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
               {/* Only the fetches this service can actually deliver. TikTok keeps
                   likes private and its sound extractor is broken upstream, so
