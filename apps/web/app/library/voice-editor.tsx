@@ -6,7 +6,7 @@ import { offerVoices } from "../../lib/elevenlabs-voices";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
-import { Badge } from "../ui/primitives";
+import { Badge, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { Select } from "../ui/select";
 import { SegmentedControl } from "../ui/segmented";
@@ -218,6 +218,7 @@ export function VoiceEditor({
   const [deliver, setDeliver] = useState<Deliver>("audio");
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [allowDrafts, setAllowDrafts] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -390,14 +391,21 @@ export function VoiceEditor({
     ? chosenReviewed
     : preparedTargets[0]?.transcript ?? null;
   const draft = readingLanguage ? chosenDraft : preparedTargets[0]?.draft ?? null;
-  const voicableTargets = preparedTargets.filter((target) => target.transcript);
+  const voicableTargets = preparedTargets.filter((target) =>
+    target.transcript || (allowDrafts && target.draft),
+  );
+  const draftTargetsCount = allowDrafts
+    ? voicableTargets.filter((target) => !target.transcript && target.draft).length
+    : 0;
   const missingTranscripts = preparedTargets.length - voicableTargets.length;
   const loading = open && !data && !loadError;
 
   const typed = script.trim();
-  const spoken = typed || (transcript?.text ?? "").trim();
+  const spoken = typed || (transcript?.text ?? (allowDrafts ? draft?.text : "") ?? "").trim();
   const scripts = batch
-    ? voicableTargets.map((target) => (target.transcript?.text ?? "").trim())
+    ? voicableTargets.map((target) =>
+        (target.transcript?.text ?? (allowDrafts ? target.draft?.text : "") ?? "").trim(),
+      )
     : [spoken];
   /**
    * Counted the way it will be billed, which is not the way it is typed.
@@ -520,12 +528,17 @@ export function VoiceEditor({
                 voice_settings: voiceSettings,
                 deliver,
                 ...(batch
-                  ? { transcript_id: target.transcript!.id }
+                  ? {
+                      transcript_id: (target.transcript ?? (allowDrafts ? target.draft : null))!.id,
+                      allow_draft: allowDrafts,
+                    }
                   : typed
                     ? { text: typed }
                     : target.transcript
                       ? { transcript_id: target.transcript.id }
-                      : {}),
+                      : allowDrafts && target.draft
+                        ? { transcript_id: target.draft.id, allow_draft: true }
+                        : {}),
               }),
             },
           );
@@ -645,12 +658,29 @@ export function VoiceEditor({
             <p className="voice-note">{t("library.actionSkippedIncompatible", { count: skippedTargets })}</p>
           )}
           {batch && (
-            <p className="voice-note">
-              {t("library.voiceBatchTranscriptNote")}{" "}
-              {missingTranscripts > 0
-                ? t("library.voiceBatchMissingTranscript", { count: missingTranscripts })
-                : null}
-            </p>
+            <>
+              <p className="voice-note">
+                {allowDrafts
+                  ? t("library.voiceBatchTranscriptNoteWithDrafts")
+                  : t("library.voiceBatchTranscriptNote")}{" "}
+                {allowDrafts && draftTargetsCount > 0
+                  ? `${t("library.voiceBatchDraftsCount", { count: draftTargetsCount })} `
+                  : ""}
+                {missingTranscripts > 0
+                  ? (allowDrafts
+                      ? t("library.voiceBatchMissingTranscriptTotal", { count: missingTranscripts })
+                      : t("library.voiceBatchMissingTranscript", { count: missingTranscripts }))
+                  : null}
+              </p>
+              <div className="voice-field">
+                <Switch
+                  checked={allowDrafts}
+                  onChange={setAllowDrafts}
+                  label={t("library.voiceAllowDrafts")}
+                  description={t("library.voiceAllowDraftsDescription")}
+                />
+              </div>
+            </>
           )}
           <div className="voice-filter-grid">
             <label className="voice-field">

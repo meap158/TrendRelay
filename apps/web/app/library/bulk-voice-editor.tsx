@@ -7,10 +7,11 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { SegmentedControl } from "../ui/segmented";
+import { Switch } from "../ui/primitives";
 
 type Target = { id: string; title: string; mediaKind: string };
 type Transcript = { id: string; kind: string; status: string; text?: string | null };
-type PreparedTarget = Target & { transcript: Transcript | null };
+type PreparedTarget = Target & { transcript: Transcript | null; draft: Transcript | null };
 type Deliver = "audio" | "video" | "both";
 
 /**
@@ -70,6 +71,7 @@ export function BulkVoiceEditor({
     prepared: PreparedTarget[];
   } | null>(null);
   const [voiceId, setVoiceId] = useState("");
+  const [allowDrafts, setAllowDrafts] = useState(false);
   const [deliver, setDeliver] = useState<Deliver>("audio");
   const [problem, setProblem] = useState<string | null>(null);
   const [queueing, setQueueing] = useState(false);
@@ -88,10 +90,12 @@ export function BulkVoiceEditor({
         );
         const payload = await response.json() as { transcripts?: Transcript[]; detail?: string };
         if (!response.ok) throw new Error(payload.detail ?? t("library.actionCouldNotStart"));
-        const transcript = (payload.transcripts ?? []).find((item) =>
-          item.kind === "speech" && item.status === "reviewed" && (item.text ?? "").trim(),
-        ) ?? null;
-        return { ...target, transcript };
+        const speech = (payload.transcripts ?? []).filter(
+          (item) => item.kind === "speech" && (item.text ?? "").trim(),
+        );
+        const transcript = speech.find((item) => item.status === "reviewed") ?? null;
+        const draft = transcript ? null : speech.find((item) => item.status === "machine") ?? null;
+        return { ...target, transcript, draft };
       })),
     ]).then(async ([voiceResponse, prepared]) => {
       const payload = await voiceResponse.json() as {
@@ -121,14 +125,20 @@ export function BulkVoiceEditor({
     return () => controller.abort();
   }, [apiFetch, compatible, open, t, workspaceId]);
 
-  const readyTargets = data?.prepared.filter((target) => target.transcript) ?? [];
+  const readyTargets = data?.prepared.filter((target) =>
+    target.transcript || (allowDrafts && target.draft),
+  ) ?? [];
+  const draftCount = allowDrafts
+    ? readyTargets.filter((target) => !target.transcript && target.draft).length
+    : 0;
   const missing = (data?.prepared.length ?? 0) - readyTargets.length;
   // Composed before counting, the way the API counts and the service bills:
   // decomposed Vietnamese is the same sentence at about a fifth more
   // characters, and a figure that disagrees with the charge is worse than none.
-  const characters = readyTargets.reduce(
-    (sum, target) => sum + (target.transcript?.text?.trim().normalize("NFC").length ?? 0), 0,
-  );
+  const characters = readyTargets.reduce((sum, target) => {
+    const active = target.transcript ?? (allowDrafts ? target.draft : null);
+    return sum + (active?.text?.trim().normalize("NFC").length ?? 0);
+  }, 0);
   const allVideo = compatible.every((target) => target.mediaKind === "video");
   const deliveryOptions = [
     { value: "audio" as const, label: t("library.voiceDeliveryAudio") },
@@ -153,6 +163,7 @@ export function BulkVoiceEditor({
     try {
       for (let at = 0; at < readyTargets.length; at += 4) {
         const results = await Promise.all(readyTargets.slice(at, at + 4).map(async (target) => {
+          const active = target.transcript ?? (allowDrafts ? target.draft : null);
           const response = await apiFetch(
             `/api/workspaces/${workspaceId}/media/library/assets/${target.id}/voiceover`,
             {
@@ -161,7 +172,8 @@ export function BulkVoiceEditor({
               body: JSON.stringify({
                 voice_id: voiceId,
                 deliver,
-                transcript_id: target.transcript!.id,
+                transcript_id: active!.id,
+                allow_draft: allowDrafts,
                 batch: { id: batchId, total: readyTargets.length },
               }),
             },
@@ -217,10 +229,27 @@ export function BulkVoiceEditor({
       </p>}
       {data && !unavailable && <>
         <p className="voice-note">
-          {t("library.voiceBatchTranscriptNote")}{" "}
-          {missing ? t("library.voiceBatchMissingTranscript", { count: missing }) : null}
+          {allowDrafts
+            ? t("library.voiceBatchTranscriptNoteWithDrafts")
+            : t("library.voiceBatchTranscriptNote")}{" "}
+          {allowDrafts && draftCount > 0
+            ? `${t("library.voiceBatchDraftsCount", { count: draftCount })} `
+            : ""}
+          {missing > 0
+            ? (allowDrafts
+                ? t("library.voiceBatchMissingTranscriptTotal", { count: missing })
+                : t("library.voiceBatchMissingTranscript", { count: missing }))
+            : null}
           {skipped ? ` ${t("library.actionSkippedIncompatible", { count: skipped })}` : null}
         </p>
+        <div className="voice-field">
+          <Switch
+            checked={allowDrafts}
+            onChange={setAllowDrafts}
+            label={t("library.voiceAllowDrafts")}
+            description={t("library.voiceAllowDraftsDescription")}
+          />
+        </div>
         <div className="voice-field">
           <span>{t("library.voiceChoose")}</span>
           <SearchSelect

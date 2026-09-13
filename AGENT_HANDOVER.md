@@ -2,6 +2,35 @@
 
 Last updated: 2026-09-14
 
+## Option to Allow Machine Draft Transcripts in Voiceover Dialog, 2026-09-14
+
+- **Context & Request**:
+  - In the Media Library Voiceover dialog (`BulkVoiceEditor` and `VoiceEditor` in batch mode), all clips with only unreviewed machine draft transcripts were unconditionally skipped with "Machine drafts are never voiced" and "Generate for 0" disabled.
+  - The operator requested an option to allow machine drafts in this dialog.
+- **Changes**:
+  - `services/api/src/trendrelay_api/media_library_api.py`:
+    - Added `allow_draft: bool = False` to `VoiceRequest`.
+  - `services/api/src/trendrelay_api/voice_jobs.py`:
+    - Updated `script_for` to support `allow_draft: bool = False`. When `allow_draft=True` and no `transcript_id` is supplied, it falls back to machine draft transcripts (ordered by `reviewed` first, then `machine`).
+    - Passed `allow_draft` from `request` in `queue()`.
+  - `services/api/tests/test_voice_jobs.py`:
+    - Added `test_an_asset_with_only_a_draft_is_allowed_when_requested` (23/23 tests pass).
+  - `apps/web/lib/i18n/messages/` (all 7 locales: `en`, `ar`, `fr`, `ja`, `ru`, `vi`, `zh`):
+    - Added `voiceAllowDrafts`, `voiceAllowDraftsDescription`, `voiceBatchTranscriptNoteWithDrafts`, `voiceBatchMissingTranscriptTotal`, `voiceBatchDraftsCount`.
+  - `apps/web/app/library/bulk-voice-editor.tsx`:
+    - Added `draft` to `PreparedTarget` type and query extraction.
+    - Added `allowDrafts` state and `<Switch>` component in dialog body.
+    - Updated `readyTargets`, `draftCount`, `missing`, and `characters` to reactively include machine drafts when toggled on.
+    - Passed active transcript ID and `allow_draft` in `POST` payload.
+  - `apps/web/app/library/voice-editor.tsx`:
+    - Added `allowDrafts` state, `<Switch>` control, dynamic batch note, and draft inclusion in `voicableTargets` and character billing for batch mode.
+- **Verification**:
+  - Backend: 23/23 tests passed (`pytest services/api/tests/test_voice_jobs.py`).
+  - Web unit tests: 504/504 passed (`npm --prefix apps/web test`).
+  - i18n parity: passed (`node --test apps/web/lib/i18n/messages.test.ts`).
+  - Typecheck: passed (`npm --prefix apps/web run typecheck`).
+  - Lint: passed (`npm --prefix apps/web run lint`).
+
 ## Fix: Duplicate React key error in EffectActivity (`edit_...`), 2026-09-14
 
 - **Context & Request**:

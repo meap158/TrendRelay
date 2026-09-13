@@ -78,14 +78,20 @@ MAX_ATTEMPTS = 1
 
 
 def script_for(
-    session: Any, workspace_id: str, asset_id: str, *, text: str | None, transcript_id: str | None
+    session: Any,
+    workspace_id: str,
+    asset_id: str,
+    *,
+    text: str | None,
+    transcript_id: str | None,
+    allow_draft: bool = False,
 ) -> tuple[str, str | None]:
     """What to say, and the language it is in.
 
-    Typed text wins when it is given. Otherwise the asset's own reviewed
-    transcript - reviewed, not machine: a draft nobody has read is not something
-    to spend money voicing, and the Library keeps the two apart precisely so
-    this distinction can be made.
+    Typed text wins when it is given. Otherwise the asset's own transcript -
+    reviewed by default: a draft nobody has read is not something to spend
+    money voicing without being asked. When allow_draft is true, a machine draft
+    can be used if no reviewed transcript exists.
     """
     if text and text.strip():
         return text.strip(), None
@@ -96,6 +102,15 @@ def script_for(
     )
     if transcript_id:
         found = session.scalar(query.where(MediaTranscript.id == transcript_id))
+    elif allow_draft:
+        from sqlalchemy import case
+
+        found = session.scalar(
+            query.order_by(
+                case((MediaTranscript.status == "reviewed", 0), else_=1),
+                MediaTranscript.created_at.desc(),
+            )
+        )
     else:
         found = session.scalar(
             query.where(MediaTranscript.status == "reviewed").order_by(
@@ -103,11 +118,14 @@ def script_for(
             )
         )
     if not found or not (found.text or "").strip():
-        raise ValueError(
-            "This asset has no reviewed transcript to voice. Review one, or type "
-            "the script here."
+        detail = (
+            "This asset has no transcript to voice. Transcribe it first, or type the script here."
+            if allow_draft
+            else "This asset has no reviewed transcript to voice. Review one, or type the script here."
         )
+        raise ValueError(detail)
     return found.text.strip(), found.language
+
 
 
 def queue(
@@ -152,6 +170,7 @@ def queue(
             asset_id,
             text=request.get("text"),
             transcript_id=request.get("transcript_id"),
+            allow_draft=bool(request.get("allow_draft", False)),
         )
 
     configured = elevenlabs.defaults()

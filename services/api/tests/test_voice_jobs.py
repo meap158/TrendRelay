@@ -138,6 +138,15 @@ def test_an_asset_with_only_a_draft_is_refused() -> None:
         queue(item)
 
 
+def test_an_asset_with_only_a_draft_is_allowed_when_requested() -> None:
+    item = asset(reviewed=False, machine=True)
+
+    job = queue(item, allow_draft=True)
+
+    assert job["payload"]["text"] == MACHINE
+
+
+
 def test_typed_text_wins_over_the_transcript() -> None:
     item = asset()
 

@@ -7,6 +7,18 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Option to allow machine draft transcripts in Voiceover dialog (2026-09-14)
+
+In the Media Library Voiceover dialog (`BulkVoiceEditor` and `VoiceEditor` in batch mode),
+unreviewed items with only machine draft transcripts were previously skipped without
+recourse ("Machine drafts are never voiced" / "Generate for 0").
+Now an operator can toggle "Allow machine drafts" (`Switch` component):
+- Items with machine draft speech transcripts become eligible for voiceover generation.
+- Character allowances are computed across active drafts.
+- Informational notes reactively report the count of machine drafts being voiced.
+- The backend `VoiceRequest` accepts `allow_draft: bool`, and `voice_jobs.py`'s `script_for`
+  safely falls back to machine draft transcripts when permitted.
+
 ## Fix: Caption language dropdown resets modal scroll and vanishes (2026-09-14)
 
 In the Captions modal (`CaptionEditor`), the language dropdown was broken: opening it

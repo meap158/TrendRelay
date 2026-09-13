@@ -4123,6 +4123,7 @@ class VoiceRequest(BaseModel):
     #: them group as one action rather than merging with every other batch
     #: of their kind. See `BatchMarker`.
     batch: BatchMarker | None = None
+    allow_draft: bool = False
 
 
 class VoicePreviewRequest(BaseModel):
