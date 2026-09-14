@@ -40,9 +40,11 @@ moment, and every hold after.
 4. **Approvers**, optionally: the Telegram user ids allowed to press the
    buttons, comma-separated. Your own id is in the same `getUpdates` reply,
    under `from.id`. Leave it empty in a private chat.
-5. **Send a test message** from the card. It checks the token with Telegram
-   (`getMe`) and sends one line to the chat, so a wrong token and a wrong chat
-   are told apart before a real post is held.
+5. **Send a test carousel** from the card. It checks the token with Telegram
+   (`getMe`) and sends what a held carousel looks like - an album of three
+   sample pictures, then the card with its buttons, which on the test only
+   answer - so a wrong token and a wrong chat are told apart before a real
+   post is held, and the eye learns where the pictures sit.
 
 The values are saved to this machine's `.env` under `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_CHAT_ID` and `TELEGRAM_APPROVER_IDS`; the token is masked in the
@@ -51,9 +53,10 @@ interface afterwards and never returned to the browser.
 ## What is sent: one card per held post
 
 When the campaign runner holds posts for approval in a planning pass, and the
-campaign has asked for Telegram, each held post goes to the chat as its own
-message: the campaign, the account, when it is due, the caption, and why it
-was held. Under it, the same choices the app's approval inbox offers:
+campaign has asked for Telegram, each held post goes to the chat as it will
+look: the media first, then the card - the campaign, the account, when it is
+due, the caption, and why it was held - with the same choices the app's
+approval inbox offers under it:
 
 | Button | What it does |
 | --- | --- |
@@ -61,6 +64,17 @@ was held. Under it, the same choices the app's approval inbox offers:
 | 🚀 Approve and post now | the same, with `publish_now` - delivered at once |
 | 🚫 Dismiss | the execution is cancelled, freeing its slot and its queue item |
 | ↗ Open in app | a link to the campaign's inbox, for anything the card cannot do (editing the words) |
+
+**The media.** A carousel arrives as an album of its pictures (up to ten,
+Telegram's limit), followed by the card, because an album cannot carry
+buttons. A single picture, or a video, carries the card as its caption with
+the buttons under it, when the card fits Telegram's caption limit; otherwise
+the card follows as its own message. Pictures are scaled to a phone's
+screen with ffmpeg before they go - a Library original is often a
+multi-megabyte PNG - and a video over the fifty-megabyte upload limit is
+stood in for by the Library's still of it. A picture that cannot be prepared
+is left off and named on the run's note; the card still goes, because the
+words and the buttons are what decide.
 
 A press rewrites the card to say what was decided and by whom - "✅ Approved
 by @ana" - and removes the buttons, so a decided post cannot be pressed twice

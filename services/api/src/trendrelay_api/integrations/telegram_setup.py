@@ -1,13 +1,14 @@
 """Sanitized setup presentation for the Telegram approval channel.
 
 The card in Tools is the whole configuration: install the library, save the
-bot token and the chat, send one test message. Modelled on the hosted-key
+bot token and the chat, send one test carousel. Modelled on the hosted-key
 cards (ElevenLabs, Pexels) for the settings, and on yt-dlp for the install -
 the library goes into a runtime of its own rather than the API's environment.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from trendrelay_api import tool_settings
@@ -19,7 +20,7 @@ from trendrelay_api.integrations.telegram import (
     TelegramUnavailable,
     probe,
     provider_status,
-    send_message,
+    send_card,
 )
 
 
@@ -84,7 +85,7 @@ def setup_report() -> dict[str, Any]:
         "actions": [
             {
                 "id": "send-test",
-                "label": "Send a test message",
+                "label": "Send a test carousel",
                 "kind": "local-launch",
                 # It reaches Telegram, so it asks first - the same rule every
                 # outward action on this page follows.
@@ -101,24 +102,80 @@ def setup_report() -> dict[str, Any]:
         "settings_title": "Telegram bot",
         "settings_blurb": (
             "Saved to this machine's local .env and masked here afterwards. "
-            "Send a test message to check the token and the chat together."
+            "Send a test carousel to check the token and the chat together, and to see what a held post looks like there."
         ),
     }
 
 
+def _sample_pictures(scratch: Path) -> list[Path]:
+    """Three plain pictures in a carousel's shape, made with ffmpeg.
+
+    The test should look like the thing it is a test of - a carousel post
+    arriving as an album - and not like a line of text, so the eye learns
+    where the pictures sit before a real one arrives.
+    """
+    import subprocess  # noqa: PLC0415
+
+    from trendrelay_api.integrations.openmontage_runtime import FFMPEG  # noqa: PLC0415
+
+    made: list[Path] = []
+    for index, colour in enumerate(("0x2563eb", "0x16a34a", "0xdc2626"), start=1):
+        target = scratch / f"sample-{index}.png"
+        subprocess.run(
+            [
+                str(FFMPEG), "-y", "-v", "error", "-f", "lavfi",
+                "-i", f"color=c={colour}:s=1080x1350:d=1", "-frames:v", "1", str(target),
+            ],
+            capture_output=True, check=False, timeout=60,
+        )
+        if target.is_file():
+            made.append(target)
+    return made
+
+
 def launch_action(action_id: str) -> dict[str, Any]:
-    """The card's one outward action: prove the token and the chat work."""
+    """The card's one outward action: prove the token and the chat work.
+
+    Sends what a held carousel will look like - an album of three sample
+    pictures, then the card with the inbox's buttons - so the test is the
+    flow, not a line saying the flow exists. The buttons answer that this
+    was the test, and decide nothing.
+    """
+    import tempfile  # noqa: PLC0415
+
+    from trendrelay_api import approval_notices  # noqa: PLC0415
+
     if action_id != "send-test":
         raise KeyError(f"{TOOL_ID}:{action_id}")
     try:
         who = probe()
-        send_message(
-            "TrendRelay can reach this chat. Campaign posts that need approval "
-            "will arrive here as cards, with buttons to approve or dismiss them."
-        )
+        with tempfile.TemporaryDirectory(prefix="telegram-test-") as scratch:
+            pictures = _sample_pictures(Path(scratch))
+            outcome = send_card(
+                approval_notices.card_text(
+                    "Test campaign",
+                    {
+                        "destination": "Instagram · test account",
+                        "caption": (
+                            "This is what a held post looks like here: the pictures "
+                            "above, the caption, and why it waits. Press any button - "
+                            "on this card they only answer."
+                        ),
+                        "at": None,
+                        "reason": "Test card from Tools. Nothing is waiting.",
+                    },
+                ),
+                buttons=approval_notices.card_buttons("test", "test", test=True),
+                images=pictures,
+            )
     except TelegramUnavailable as error:
         raise RuntimeError(str(error)) from error
+    pictures_sent = outcome.get("media", 0)
     return {
         "status": "ok",
-        "message": f"Sent as @{who['username']}. Check the chat.",
+        "message": (
+            f"Sent as @{who['username']}: a test carousel of {pictures_sent} "
+            f"picture{'' if pictures_sent == 1 else 's'} and its card. Check the chat."
+            + (" Pictures left off: " + "; ".join(outcome["skipped"]) if outcome.get("skipped") else "")
+        ),
     }

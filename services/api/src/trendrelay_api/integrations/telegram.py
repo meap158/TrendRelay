@@ -42,8 +42,18 @@ APPROVER_IDS_ENV = "TELEGRAM_APPROVER_IDS"
 
 #: Telegram's own ceiling on one message's text, in characters.
 MESSAGE_LIMIT = 4096
+#: Telegram's ceiling on a photo or video caption, in characters.
+CAPTION_LIMIT = 1024
 #: Telegram's ceiling on a button's callback data, in bytes.
 CALLBACK_LIMIT = 64
+#: How many pictures one album may carry, and how large a bot may upload.
+ALBUM_LIMIT = 10
+PHOTO_LIMIT_BYTES = 10 * 1024 * 1024
+VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
+#: The long side a picture is scaled to before it is sent: a phone's screen,
+#: not a print. A Library original is often a multi-megabyte PNG, and the
+#: card is for deciding, not for archiving.
+PREVIEW_SIDE = 1280
 
 #: What BotFather hands out: the bot's numeric id, a colon, and a secret.
 TOKEN_SHAPE = re.compile(r"^\d{5,}:[A-Za-z0-9_-]{30,}$")
@@ -224,6 +234,161 @@ def send_message(
         raise
     except Exception as error:  # noqa: BLE001 - the library's reason is the reason
         raise TelegramUnavailable(f"Telegram refused the message: {_said(error)}") from error
+
+
+def _preview_bytes(path: Path) -> bytes:
+    """A picture as a JPEG a phone can show, scaled down, made with ffmpeg.
+
+    ffmpeg rather than an image library, because it is the one image tool
+    this app already has - the Library's thumbnails come from it - and a
+    second one for the same job is a second thing to install.
+    """
+    import subprocess  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    from trendrelay_api.integrations.openmontage_runtime import FFMPEG  # noqa: PLC0415
+
+    if not Path(FFMPEG).is_file():
+        raise TelegramUnavailable("The pinned local FFmpeg runtime is missing. Run npm install.")
+    with tempfile.TemporaryDirectory(prefix="telegram-preview-") as scratch:
+        target = Path(scratch) / "preview.jpg"
+        completed = subprocess.run(
+            [
+                str(FFMPEG), "-y", "-v", "error", "-i", str(path), "-frames:v", "1",
+                "-vf", f"scale='min({PREVIEW_SIDE},iw)':'min({PREVIEW_SIDE},ih)'"
+                       ":force_original_aspect_ratio=decrease",
+                "-q:v", "4", str(target),
+            ],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False, timeout=120,
+        )
+        if completed.returncode != 0 or not target.is_file():
+            raise TelegramUnavailable(
+                (completed.stderr or "The picture could not be prepared.").strip()[-300:]
+            )
+        return target.read_bytes()
+
+
+def _thumbnail_beside(video: Path) -> Path | None:
+    """The Library's own still for a video, kept next to the original."""
+    candidate = video.parent / "thumbnail.jpg"
+    return candidate if candidate.is_file() else None
+
+
+def send_card(
+    text: str,
+    *,
+    buttons: list[list[Button]] | None = None,
+    images: list[str | Path] | tuple[str | Path, ...] = (),
+    video: str | Path | None = None,
+    chat_id: str | None = None,
+) -> dict[str, Any]:
+    """Send a post as it will look, with the card's text and buttons.
+
+    The pictures first, then the words and the buttons. A carousel goes as
+    an album, which Telegram does not let carry buttons, so the card's text
+    follows it as a message that does. One picture, or a video, carries the
+    text as its caption when it fits Telegram's caption limit, buttons and
+    all; when it does not, the text follows as its own message. A video too
+    large for a bot to upload is stood in for by the Library's still of it.
+
+    A picture that cannot be prepared is left out rather than stopping the
+    card: what is being decided is the post, and the words and the buttons
+    are what decide it. How many media went, and what did not, is returned.
+    """
+    telegram = _telegram_module()
+    token, chat = _settings()
+    target = chat_id or chat
+    markup = _markup(telegram, buttons)
+    mode = telegram.constants.ParseMode.HTML
+
+    previews: list[bytes] = []
+    skipped: list[str] = []
+    for image in list(images)[:ALBUM_LIMIT]:
+        path = Path(image)
+        try:
+            if not path.is_file():
+                raise TelegramUnavailable("not on disk")
+            previews.append(_preview_bytes(path))
+        except (TelegramUnavailable, OSError) as error:
+            skipped.append(f"{path.name}: {error}")
+    clip: Path | None = None
+    still: bytes | None = None
+    if video and not previews:
+        path = Path(video)
+        if path.is_file() and path.stat().st_size <= VIDEO_LIMIT_BYTES:
+            clip = path
+        elif path.is_file():
+            thumbnail = _thumbnail_beside(path)
+            if thumbnail is not None:
+                try:
+                    still = _preview_bytes(thumbnail)
+                except TelegramUnavailable as error:
+                    skipped.append(f"{thumbnail.name}: {error}")
+            else:
+                skipped.append(f"{path.name}: too large to send, and no still beside it")
+        elif video:
+            skipped.append(f"{path.name}: not on disk")
+
+    caption_fits = len(text) <= CAPTION_LIMIT
+
+    async def go() -> dict[str, Any]:
+        async with telegram.Bot(token) as bot:
+            sent_media = 0
+            if len(previews) >= 2:
+                await bot.send_media_group(
+                    chat_id=target,
+                    media=[telegram.InputMediaPhoto(media=item) for item in previews],
+                )
+                sent_media = len(previews)
+                message = await bot.send_message(
+                    chat_id=target, text=text[:MESSAGE_LIMIT], parse_mode=mode,
+                    reply_markup=markup, disable_web_page_preview=True,
+                )
+            elif len(previews) == 1 or still is not None:
+                photo = previews[0] if previews else still
+                message = await bot.send_photo(
+                    chat_id=target, photo=photo,
+                    caption=text if caption_fits else None, parse_mode=mode,
+                    reply_markup=markup if caption_fits else None,
+                )
+                sent_media = 1
+                if not caption_fits:
+                    message = await bot.send_message(
+                        chat_id=target, text=text[:MESSAGE_LIMIT], parse_mode=mode,
+                        reply_markup=markup, disable_web_page_preview=True,
+                    )
+            elif clip is not None:
+                with clip.open("rb") as handle:
+                    message = await bot.send_video(
+                        chat_id=target, video=handle, supports_streaming=True,
+                        caption=text if caption_fits else None, parse_mode=mode,
+                        reply_markup=markup if caption_fits else None,
+                    )
+                sent_media = 1
+                if not caption_fits:
+                    message = await bot.send_message(
+                        chat_id=target, text=text[:MESSAGE_LIMIT], parse_mode=mode,
+                        reply_markup=markup, disable_web_page_preview=True,
+                    )
+            else:
+                message = await bot.send_message(
+                    chat_id=target, text=text[:MESSAGE_LIMIT], parse_mode=mode,
+                    reply_markup=markup, disable_web_page_preview=True,
+                )
+            return {
+                "message_id": message.message_id,
+                "chat_id": str(message.chat_id),
+                "media": sent_media,
+                "skipped": skipped,
+            }
+
+    try:
+        return _run(go())
+    except TelegramUnavailable:
+        raise
+    except Exception as error:  # noqa: BLE001 - the library's reason is the reason
+        raise TelegramUnavailable(f"Telegram refused the card: {_said(error)}") from error
 
 
 def probe() -> dict[str, Any]:

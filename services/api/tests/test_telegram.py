@@ -48,6 +48,18 @@ class _FakeBot:
             raise _FakeBot.refuse
         return SimpleNamespace(username="trendrelay_bot", first_name="TrendRelay")
 
+    async def send_media_group(self, **kwargs) -> list:
+        _FakeBot.sent.append({"kind": "album", **kwargs})
+        return [SimpleNamespace(message_id=8, chat_id=kwargs["chat_id"])]
+
+    async def send_photo(self, **kwargs) -> SimpleNamespace:
+        _FakeBot.sent.append({"kind": "photo", **kwargs})
+        return SimpleNamespace(message_id=9, chat_id=kwargs["chat_id"])
+
+    async def send_video(self, **kwargs) -> SimpleNamespace:
+        _FakeBot.sent.append({"kind": "video", **{k: v for k, v in kwargs.items() if k != "video"}})
+        return SimpleNamespace(message_id=10, chat_id=kwargs["chat_id"])
+
     async def get_updates(self, **kwargs) -> list:
         _FakeBot.asked.append(kwargs)
         return _FakeBot.updates
@@ -66,6 +78,7 @@ def _fake_module() -> SimpleNamespace:
         InlineKeyboardButton=lambda label, url=None, callback_data=None: {
             "label": label, "url": url, "callback_data": callback_data,
         },
+        InputMediaPhoto=lambda media: {"photo": media},
         constants=SimpleNamespace(ParseMode=SimpleNamespace(HTML="HTML")),
     )
 
@@ -145,6 +158,90 @@ def test_the_library_missing_is_said_and_points_at_tools(monkeypatch, tmp_path) 
     assert "Tools" in telegram.provider_status()["reason"]
 
 
+# --- a post as it will look ----------------------------------------------------
+
+
+@pytest.fixture
+def pictures(monkeypatch, tmp_path):
+    """Three pictures on disk, and a preview step that needs no ffmpeg."""
+    made = []
+    for index in range(3):
+        path = tmp_path / f"slide-{index}.png"
+        path.write_bytes(b"png" + bytes([index]))
+        made.append(path)
+    monkeypatch.setattr(telegram, "_preview_bytes", lambda path: b"jpeg:" + path.name.encode())
+    return made
+
+
+def test_a_carousel_goes_as_an_album_then_the_card_with_its_buttons(configured, pictures) -> None:
+    buttons = [[{"label": "Approve", "callback": "apr:pubexec_1"}]]
+    outcome = telegram.send_card("<b>Launch</b> · Instagram", buttons=buttons, images=pictures)
+
+    album, card = _FakeBot.sent
+    assert album["kind"] == "album"
+    assert album["media"] == [{"photo": b"jpeg:slide-0.png"}, {"photo": b"jpeg:slide-1.png"}, {"photo": b"jpeg:slide-2.png"}]
+    # The album cannot carry buttons; the card that follows does.
+    assert "reply_markup" not in album
+    assert card["text"] == "<b>Launch</b> · Instagram" and card["reply_markup"]["rows"]
+    assert outcome["media"] == 3 and outcome["skipped"] == []
+    assert outcome["message_id"] == 7  # the card, which is what a press comes back to
+
+
+def test_one_picture_carries_the_card_as_its_caption_when_it_fits(configured, pictures) -> None:
+    buttons = [[{"label": "Approve", "callback": "apr:pubexec_1"}]]
+    telegram.send_card("short card", buttons=buttons, images=pictures[:1])
+    [photo] = _FakeBot.sent
+    assert photo["kind"] == "photo" and photo["caption"] == "short card"
+    assert photo["reply_markup"]["rows"]
+
+    # Past Telegram's caption limit the words follow as their own message.
+    _FakeBot.sent = []
+    telegram.send_card("x" * (telegram.CAPTION_LIMIT + 1), buttons=buttons, images=pictures[:1])
+    photo, card = _FakeBot.sent
+    assert photo["caption"] is None and photo["reply_markup"] is None
+    assert card["reply_markup"]["rows"] and len(card["text"]) == telegram.CAPTION_LIMIT + 1
+
+
+def test_a_video_is_sent_when_a_bot_may_upload_it_and_its_still_when_not(
+    configured, monkeypatch, tmp_path,
+) -> None:
+    clip = tmp_path / "original.mp4"
+    clip.write_bytes(b"mp4")
+    telegram.send_card("card", images=[], video=clip)
+    [video] = _FakeBot.sent
+    assert video["kind"] == "video" and video["caption"] == "card" and video["supports_streaming"] is True
+
+    # Too large to upload: the Library keeps a still beside every original.
+    _FakeBot.sent = []
+    monkeypatch.setattr(telegram, "VIDEO_LIMIT_BYTES", 1)
+    (tmp_path / "thumbnail.jpg").write_bytes(b"jpg")
+    monkeypatch.setattr(telegram, "_preview_bytes", lambda path: b"still")
+    outcome = telegram.send_card("card", video=clip)
+    [photo] = _FakeBot.sent
+    assert photo["kind"] == "photo" and photo["photo"] == b"still"
+    assert outcome["media"] == 1
+
+
+def test_a_picture_that_cannot_be_prepared_is_left_off_and_named(configured, pictures, monkeypatch) -> None:
+    def prepare(path):
+        if path.name == "slide-1.png":
+            raise telegram.TelegramUnavailable("not a picture")
+        return b"jpeg"
+
+    monkeypatch.setattr(telegram, "_preview_bytes", prepare)
+    outcome = telegram.send_card("card", images=[*pictures, pictures[0].parent / "missing.png"])
+    album, _card = _FakeBot.sent
+    assert len(album["media"]) == 2
+    assert outcome["skipped"] == ["slide-1.png: not a picture", "missing.png: not on disk"]
+
+    # With nothing that can be shown, the card still goes as words.
+    _FakeBot.sent = []
+    monkeypatch.setattr(telegram, "_preview_bytes", lambda path: (_ for _ in ()).throw(telegram.TelegramUnavailable("no ffmpeg")))
+    outcome = telegram.send_card("card", images=pictures)
+    assert [item.get("kind") for item in _FakeBot.sent] == [None]
+    assert outcome["media"] == 0 and len(outcome["skipped"]) == 3
+
+
 def test_presses_are_read_as_plain_dicts_and_only_presses_are_asked_for(configured) -> None:
     _FakeBot.updates = [
         SimpleNamespace(update_id=41, callback_query=None),
@@ -204,10 +301,31 @@ def test_the_setup_card_says_what_is_missing_and_what_the_test_does(configured, 
     assert test_action["kind"] == "local-launch"
     assert test_action["requires_confirmation"] is True
 
+    # The test is the flow: an album of sample pictures, then the card with
+    # buttons that only answer.
+    monkeypatch.setattr(telegram_setup, "_sample_pictures", lambda scratch: [
+        (scratch / f"s{index}.png") for index in range(3)
+    ])
+    for index in range(3):
+        pass
+    monkeypatch.setattr(telegram, "_preview_bytes", lambda path: b"sample")
+    written: list = []
+
+    def make(scratch):
+        for index in range(3):
+            path = scratch / f"s{index}.png"
+            path.write_bytes(b"png")
+            written.append(path)
+        return list(written)
+
+    monkeypatch.setattr(telegram_setup, "_sample_pictures", make)
     outcome = telegram_setup.launch_action("send-test")
     assert outcome["status"] == "ok"
-    assert "@trendrelay_bot" in outcome["message"]
-    assert "approval" in _FakeBot.sent[0]["text"]
+    assert "@trendrelay_bot" in outcome["message"] and "3 pictures" in outcome["message"]
+    album, card = _FakeBot.sent
+    assert album["kind"] == "album" and len(album["media"]) == 3
+    assert "held post" in card["text"]
+    assert card["reply_markup"]["rows"][0][0]["callback_data"] == "tst:test"
 
     with pytest.raises(KeyError):
         telegram_setup.launch_action("not-a-thing")

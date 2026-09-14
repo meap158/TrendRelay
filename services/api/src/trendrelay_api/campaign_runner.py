@@ -844,6 +844,8 @@ def run_campaign(
                 # execution back.
                 "destination": destination.label,
                 "caption": post.caption,
+                "image_paths": list(post.image_paths or ()),
+                "video_path": post.video_path or None,
                 "at": post.at,
                 "reason": hold,
             })

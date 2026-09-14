@@ -43,6 +43,11 @@ def chat(monkeypatch):
         lambda text, **kwargs: sent.append({"text": text, **kwargs}) or {"message_id": len(sent)},
     )
     monkeypatch.setattr(
+        telegram, "send_card",
+        lambda text, **kwargs: sent.append({"text": text, **kwargs})
+        or {"message_id": len(sent), "media": len(kwargs.get("images") or []), "skipped": []},
+    )
+    monkeypatch.setattr(
         telegram, "settle_button",
         lambda callback_id, **kwargs: settled.append({"id": callback_id, **kwargs}),
     )
@@ -108,6 +113,53 @@ def test_a_campaign_that_asked_gets_a_card_per_held_post_with_the_inbox_s_button
     assert card["buttons"][1][1]["url"] == (
         "https://relay.example/campaigns?campaign=camp#campaign-approvals"
     )
+    # The post as it will look: its video travels with the card.
+    assert card["video"].endswith("clip.mp4") and card["images"] == []
+
+
+def test_a_carousel_s_pictures_travel_with_its_card(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    note = approval_notices.announce_held(session, pilot, [{
+        "execution_id": "pubexec_1", "destination": "instagram", "caption": "Three slides",
+        "at": None, "reason": "Waiting.", "image_paths": ["/a.png", "/b.png", "/c.png"],
+        "video_path": None,
+    }])
+    assert note == "Announced 1 post on Telegram."
+    [card] = chat["sent"]
+    assert card["images"] == ["/a.png", "/b.png", "/c.png"] and card["video"] is None
+
+
+def test_the_inbox_as_it_stands_carries_its_media_too(session, tmp_path, engine_stub, chat) -> None:
+    execution = held_one(session, tmp_path, engine_stub)
+    execution.image_paths = ["/x.png", "/y.png"]
+    session.commit()
+    pilot = session.get(type(execution), execution.id) and execution
+    from trendrelay_api.autopilot_models import CampaignAutopilot
+    autopilot_row = session.get(CampaignAutopilot, "auto")
+    note = approval_notices.announce_executions(session, autopilot_row, [execution])
+    assert note == "Announced 1 post on Telegram."
+    assert chat["sent"][0]["images"] == ["/x.png", "/y.png"]
+    assert pilot is execution
+
+
+def test_pictures_left_off_a_card_are_said_on_the_run(session, chat, monkeypatch) -> None:
+    monkeypatch.setattr(
+        telegram, "send_card",
+        lambda text, **kwargs: {"message_id": 1, "media": 1, "skipped": ["b.png: not on disk"]},
+    )
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    note = approval_notices.announce_held(session, pilot, [{
+        "execution_id": "pubexec_1", "destination": "x", "caption": "c", "at": None,
+        "reason": "", "image_paths": ["/a.png", "/b.png"],
+    }])
+    assert note == "Announced 1 post on Telegram. Media left off a card: b.png: not on disk"
+
+
+def test_the_test_card_s_buttons_only_answer(session, chat) -> None:
+    outcome = approval_notices.handle_update(same(session), press("test", "tst"))
+    assert outcome.startswith("This was the test card. Nothing was decided.")
+    [settled] = chat["settled"]
+    assert settled["message_id"] == 5
 
 
 def test_a_campaign_that_did_not_ask_sends_nothing(session, tmp_path, engine_stub, chat) -> None:
@@ -127,7 +179,10 @@ def test_a_chat_that_cannot_be_reached_is_said_on_the_run_not_raised(
     def refuse(text, **kwargs):
         raise telegram.TelegramUnavailable("Telegram refused the message: Chat not found")
 
+    # Both doors, so a test never reaches the real Telegram this machine may
+    # have set up - it once did, and Telegram answered.
     monkeypatch.setattr(telegram, "send_message", refuse)
+    monkeypatch.setattr(telegram, "send_card", refuse)
     result = run_campaign(
         session, autopilot(session, authority="assist", approvals_telegram=True), now=NOW,
     )
@@ -146,6 +201,23 @@ def test_telegram_not_set_up_is_said_in_the_tool_s_words(session, tmp_path, engi
         session, autopilot(session, authority="assist", approvals_telegram=True), now=NOW,
     )
     assert "Not announced on Telegram: No bot token is saved." in result["note"]
+
+
+def test_the_app_button_is_left_off_when_the_app_has_no_address_a_phone_can_open(monkeypatch) -> None:
+    """Telegram refuses a button to localhost - and the whole card with it.
+    The default web address is localhost, so a card from a machine that has
+    not published its address goes without the button rather than not at all."""
+    for base in ("http://localhost:3000", "http://127.0.0.1:3001/", "http://192.168.1.4:3000", "http://mybox:3000"):
+        monkeypatch.setattr(
+            approval_notices, "get_settings", lambda base=base: type("S", (), {"public_web_url": base})(),
+        )
+        assert approval_notices.app_link("camp") is None
+        labels = [button["label"] for row in approval_notices.card_buttons("e", "camp") for button in row]
+        assert "↗ Open in app" not in labels and len(labels) == 3
+    monkeypatch.setattr(
+        approval_notices, "get_settings", lambda: type("S", (), {"public_web_url": "https://relay.example"})(),
+    )
+    assert approval_notices.app_link("camp") == "https://relay.example/campaigns?campaign=camp#campaign-approvals"
 
 
 def test_a_card_reads_in_the_workspace_s_own_time_and_is_escaped() -> None:

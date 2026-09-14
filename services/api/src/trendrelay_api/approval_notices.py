@@ -49,6 +49,8 @@ CAPTION_CHARS = 400
 APPROVE = "apr"
 APPROVE_NOW = "now"
 DISMISS = "dis"
+#: The test card's buttons. They answer, and decide nothing.
+TEST = "tst"
 
 #: How long one poll holds its request open waiting for a press.
 POLL_SECONDS = 25
@@ -81,6 +83,29 @@ def approvals_url(campaign_id: str) -> str:
     return f"{base}/campaigns?campaign={campaign_id}#campaign-approvals"
 
 
+def app_link(campaign_id: str) -> str | None:
+    """The approvals link as a button can carry it, or None when it cannot.
+
+    Telegram refuses a button whose address is not one a phone could open -
+    `localhost`, a bare hostname, a private address - and it refuses the whole
+    message with it. The default web address is `http://localhost:3000`, so
+    without this every card from a machine that has not published its address
+    would have been refused for the sake of a button that could not work.
+    """
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    url = approvals_url(campaign_id)
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme not in ("http", "https") or not host:
+        return None
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or "." not in host:
+        return None
+    if host.endswith(".local") or host.startswith(("10.", "192.168.", "172.")):
+        return None
+    return url
+
+
 def card_text(
     campaign_name: str, item: dict[str, Any], *, zone: str | None = None,
 ) -> str:
@@ -101,18 +126,33 @@ def card_text(
     return "\n".join(lines).rstrip()
 
 
-def card_buttons(execution_id: str, campaign_id: str) -> list[list[dict[str, str]]]:
-    """The inbox's choices, as buttons: decide here, or go and look."""
+def card_buttons(
+    execution_id: str, campaign_id: str, *, test: bool = False,
+) -> list[list[dict[str, str]]]:
+    """The inbox's choices, as buttons: decide here, or go and look.
+
+    A test card has the same buttons so the hand learns the layout, but each
+    of them only answers that it was the test.
+    """
+    verbs = (TEST, TEST, TEST) if test else (APPROVE, DISMISS, APPROVE_NOW)
+    second_row = [{"label": "🚀 Approve and post now", "callback": f"{verbs[2]}:{execution_id}"}]
+    link = app_link(campaign_id)
+    if link:
+        second_row.append({"label": "↗ Open in app", "url": link})
     return [
         [
-            {"label": "✅ Approve", "callback": f"{APPROVE}:{execution_id}"},
-            {"label": "🚫 Dismiss", "callback": f"{DISMISS}:{execution_id}"},
+            {"label": "✅ Approve", "callback": f"{verbs[0]}:{execution_id}"},
+            {"label": "🚫 Dismiss", "callback": f"{verbs[1]}:{execution_id}"},
         ],
-        [
-            {"label": "🚀 Approve and post now", "callback": f"{APPROVE_NOW}:{execution_id}"},
-            {"label": "↗ Open in app", "url": approvals_url(campaign_id)},
-        ],
+        second_row,
     ]
+
+
+def _media_of(item: dict[str, Any]) -> tuple[list[str], str | None]:
+    """The post's pictures, or its video, as the card will show them."""
+    images = [str(path) for path in (item.get("image_paths") or []) if path]
+    video = str(item.get("video_path") or "") or None
+    return images, video
 
 
 def announce_held(
@@ -136,25 +176,34 @@ def announce_held(
     name = campaign.name if campaign else "Campaign"
     zone = workspace.timezone if workspace else None
     sent = 0
+    left_out: list[str] = []
     try:
         for item in held[:CARDS_PER_PASS]:
-            telegram.send_message(
+            images, video = _media_of(item)
+            outcome = telegram.send_card(
                 card_text(name, item, zone=zone),
                 buttons=card_buttons(str(item["execution_id"]), autopilot.campaign_id),
+                images=images, video=video,
             )
+            left_out.extend(outcome.get("skipped") or [])
             sent += 1
         rest = len(held) - sent
         if rest > 0:
+            link = app_link(autopilot.campaign_id)
             telegram.send_message(
                 f"<b>{html.escape(name)}</b> · {rest} more post{'' if rest == 1 else 's'} "
                 "waiting in the inbox.",
-                buttons=[[{"label": "↗ Open in app", "url": approvals_url(autopilot.campaign_id)}]],
+                buttons=[[{"label": "↗ Open in app", "url": link}]] if link else None,
             )
     except telegram.TelegramUnavailable as error:
         if sent:
             return f"Announced {sent} of {len(held)} on Telegram; then: {error}"
         return f"Not announced on Telegram: {error}"
-    return f"Announced {sent} post{'' if sent == 1 else 's'} on Telegram."
+    note = f"Announced {sent} post{'' if sent == 1 else 's'} on Telegram."
+    if left_out:
+        # Said, because a card without its pictures is a different decision.
+        note = f"{note} Media left off a card: {'; '.join(left_out[:3])}"
+    return note
 
 
 def announce_executions(
@@ -173,6 +222,8 @@ def announce_executions(
             "caption": execution.caption,
             "at": execution.scheduled_at,
             "reason": execution.held_reason,
+            "image_paths": list(execution.image_paths or []),
+            "video_path": execution.media_path,
         }
         for execution in executions
         if execution.state == "proposed"
@@ -189,7 +240,7 @@ class PressRefused(ValueError):
 
 def _decision(data: str) -> tuple[str, str]:
     verb, _, execution_id = (data or "").partition(":")
-    if verb not in (APPROVE, APPROVE_NOW, DISMISS) or not execution_id:
+    if verb not in (APPROVE, APPROVE_NOW, DISMISS, TEST) or not execution_id:
         raise PressRefused("That button is not one of ours.")
     return verb, execution_id
 
@@ -221,6 +272,8 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
     if allowed and presser not in allowed:
         raise PressRefused("You are not on the approvers list for this workspace.")
     verb, execution_id = _decision(callback.get("data", ""))
+    if verb == TEST:
+        return f"This was the test card. Nothing was decided. Pressed by {html.escape(_who(callback))}."
 
     execution = session.get(PublicationExecution, execution_id)
     if execution is None:
