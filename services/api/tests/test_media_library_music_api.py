@@ -214,3 +214,72 @@ def test_search_passes_the_query_and_page_through(tmp_path: Path, monkeypatch) -
     assert response.status_code == 200, response.text
     assert asked == [("lofi", 2)]
     assert response.json()["tracks"][0]["license"] == "CC-BY-3.0"
+
+
+def test_suggestions_read_the_clips_and_offer_the_librarys_own_tracks(monkeypatch) -> None:
+    """The clips travel as ids; their titles and tags are read here, never sent.
+
+    The offer is three things at once: the searches the piece earned and why,
+    the Library's own audio that shares a word with it, and what those
+    searches found - each track carrying the reason of the search that found
+    it, so the picker can say why a row is there.
+    """
+    from test_media_library_api import TestingSession
+
+    from trendrelay_api.media_models import MediaAsset
+
+    workspace_id = create_workspace()
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id="clip", workspace_id=workspace_id, title="7224480649275559174.mp4",
+            media_kind="video", source_type="tiktok", hashtags=["coffee", "espresso"],
+            original_path="/m/clip.mp4", original_sha256="c" * 64, mime_type="video/mp4",
+            size_bytes=10, created_by="owner-user",
+        ))
+        session.add(MediaAsset(
+            id="own", workspace_id=workspace_id, title="Coffee House Morning",
+            media_kind="audio", source_type="openverse-music", license="CC0-1.0",
+            original_path="/m/own.mp3", original_sha256="o" * 64, mime_type="audio/mpeg",
+            size_bytes=10, created_by="owner-user",
+        ))
+    asked: list[str] = []
+
+    def fake_search(query: str, *, page: int = 1, page_size: int = 20) -> dict:
+        asked.append(query)
+        return {"tracks": [found(id=f"{'0' * 30}{len(asked):06d}").payload()]}
+
+    monkeypatch.setattr(music, "search", fake_search)
+
+    response = asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace_id}/media/library/music/suggestions",
+        json={"mood": "energetic", "bpm": 126.5, "asset_ids": ["clip", "ghost"]},
+    ))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    # Each tag once, so the longer word leads the search.
+    assert asked == ["fast upbeat energetic", "espresso coffee"]
+    assert [entry["reason"] for entry in body["queries"]] == [
+        "The pacing is energetic, about 126 beats a minute",
+        "The clips are tagged #espresso #coffee",
+    ]
+    assert [entry["id"] for entry in body["library"]] == ["own"]
+    assert body["library"][0]["reason"] == "Matches coffee"
+    assert body["library"][0]["license"] == "CC0-1.0"
+    assert [track["reason"] for track in body["tracks"]] == [
+        "The pacing is energetic, about 126 beats a minute",
+        "The clips are tagged #espresso #coffee",
+    ]
+    assert body["unavailable"] is False
+
+
+def test_suggestions_with_nothing_to_go_on_run_no_search(monkeypatch) -> None:
+    monkeypatch.setattr(
+        music, "search", lambda *a, **k: (_ for _ in ()).throw(AssertionError("searched")),
+    )
+    workspace_id = create_workspace()
+    response = asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace_id}/media/library/music/suggestions", json={},
+    ))
+    assert response.status_code == 200, response.text
+    assert response.json() == {"queries": [], "library": [], "tracks": [], "unavailable": False}

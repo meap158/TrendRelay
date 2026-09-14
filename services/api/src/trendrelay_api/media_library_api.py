@@ -30,7 +30,7 @@ from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_valida
 from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api import bulk_actions
+from trendrelay_api import bulk_actions, music_suggestions
 from trendrelay_api.auth import (
     CurrentUser,
     client_is_local_operator,
@@ -851,6 +851,56 @@ def search_music(
         raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+class MusicContextBody(BaseModel):
+    """What is being made, so music can be offered for it before a search.
+
+    The clips travel as ids and are read here - their titles and the tags
+    they arrived with - rather than as words the browser chose to send.
+    """
+
+    text: str = Field(default="", max_length=20_000)
+    mood: str = Field(default="", max_length=40)
+    bpm: float | None = Field(default=None, ge=0, le=400)
+    asset_ids: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.post("/music/suggestions")
+def suggest_music(
+    workspace_id: str,
+    body: MusicContextBody,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Music for the piece being made: the Library's matches and a few searches, with reasons.
+
+    A read of Openverse like the search is, so open to any member. Openverse
+    being down empties the found list and says so rather than failing the
+    request - the Library's own matches still stand.
+    """
+    membership(session, workspace_id, user.id)
+    clips = session.scalars(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id.in_(body.asset_ids),
+        )
+    ).all() if body.asset_ids else []
+    context = music_suggestions.Context(
+        text=body.text,
+        mood=body.mood,
+        bpm=body.bpm,
+        titles=tuple(clip.title for clip in clips),
+        tags=tuple(str(tag) for clip in clips for tag in (clip.hashtags or [])),
+    )
+    found = music_suggestions.suggest(session, workspace_id, context)
+    return {
+        **found,
+        "library": [
+            {**_asset_view(session, match.asset), "reason": match.reason}
+            for match in found["library"]
+        ],
+    }
 
 
 @router.post("/music/imports", status_code=202)
