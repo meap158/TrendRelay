@@ -401,6 +401,7 @@ export const ja: Messages = {
     importMediaDescription: "1つまたは複数のメディアファイルをライブラリに読み込みます。",
     dropToImport: "ドロップしてライブラリに追加",
     dropToImportHint: "動画・画像・音声はまとめて読み込めます",
+    importingCount: "{total} 件中 {done} 件を追加中…",
     importLocal: "ローカルファイルを読み込む",
     filePath: "ファイルパス",
     platform: "プラットフォーム",

@@ -403,6 +403,7 @@ export const vi: Messages = {
     importMediaDescription: "Nhập một hoặc nhiều tệp phương tiện vào Thư viện của bạn.",
     dropToImport: "Thả để thêm vào Thư viện của bạn",
     dropToImportHint: "Video, hình ảnh và âm thanh nhập cùng lúc",
+    importingCount: "Đang thêm {done}/{total}…",
     importLocal: "Nhập tệp từ máy",
     filePath: "Đường dẫn tệp",
     platform: "Nền tảng",

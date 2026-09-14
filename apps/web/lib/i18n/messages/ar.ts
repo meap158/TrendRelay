@@ -401,6 +401,7 @@ export const ar: Messages = {
     importMediaDescription: "استيراد ملفات وسائط فردية أو مجمعة إلى المكتبة.",
     dropToImport: "أفلت الملفات لإضافتها إلى مكتبتك",
     dropToImportHint: "يمكن استيراد الفيديو والصور والصوت معًا",
+    importingCount: "جارٍ إضافة {done} من {total}…",
     importLocal: "استيراد ملف من الجهاز",
     filePath: "مسار الملف",
     platform: "المنصة",

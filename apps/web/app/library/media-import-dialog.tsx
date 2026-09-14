@@ -56,6 +56,8 @@ export function MediaImportDialog({
   onItemQueued,
   onImportQueued,
   droppedFiles,
+  onDropProgress,
+  onDropNeedsReview,
 }: {
   open: boolean;
   onClose: () => void;
@@ -69,8 +71,16 @@ export function MediaImportDialog({
    * They stage and upload here rather than through an uploader of their own:
    * dropping and picking are the same import, and a second path would mean a
    * second set of per-file states, retries and batch cards to keep in step.
+   *
+   * A drop runs without opening this, which is why the prop does not wait on
+   * `open`: a dialog that appears to report a one-second upload and dismisses
+   * itself is a flash, not a report. The Library shows the count instead.
    */
   droppedFiles?: File[];
+  /** How a background drop is getting on, and null once it is not running. */
+  onDropProgress?: (progress: { done: number; total: number } | null) => void;
+  /** A background drop left something a person has to look at. */
+  onDropNeedsReview?: () => void;
 }) {
   const t = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -183,7 +193,7 @@ export function MediaImportDialog({
    * are addressed by id for the same reason: the list being uploaded is not
    * always the whole list on screen.
    */
-  async function runUpload(uploading: StagedFile[]) {
+  async function runUpload(uploading: StagedFile[], background = false) {
     if (!uploading.length || isProcessing) return;
     setIsProcessing(true);
     setErrorMessage(null);
@@ -218,6 +228,7 @@ export function MediaImportDialog({
       }
 
       setUploadIndex(i + 1);
+      if (background) onDropProgress?.({ done: i + 1, total: uploading.length });
       setStagedFiles((prev) =>
         prev.map((f) => (f.id === item.id ? { ...f, status: "uploading", error: undefined } : f)),
       );
@@ -274,6 +285,7 @@ export function MediaImportDialog({
 
     notifyQueued(true);
     setIsProcessing(false);
+    if (background) onDropProgress?.(null);
 
     const parts: string[] = [];
     if (queuedCount > 0) parts.push(`${queuedCount} media ${queuedCount === 1 ? "item" : "items"} queued`);
@@ -284,12 +296,24 @@ export function MediaImportDialog({
     if (queuedCount > 0 || duplicateCount > 0) {
       onImportQueued?.(finalSummary);
       if (errorCount === 0) {
-        setTimeout(() => handleClose(), 700);
+        // A drop that worked has nothing to show: the toast said what landed
+        // and the files are in the grid behind it. Clearing rather than
+        // closing, because it was never opened.
+        if (background) {
+          resetState();
+          onClose();
+        } else {
+          setTimeout(() => handleClose(), 700);
+        }
       } else {
         setStatusMessage(finalSummary);
+        if (background) onDropNeedsReview?.();
       }
     } else if (errorCount > 0) {
       setErrorMessage(`Failed to import files. ${finalSummary}`);
+      // Nothing landed, so this is the one case a drop has to be answered by
+      // hand: the rows that failed say why, and can be tried again from here.
+      if (background) onDropNeedsReview?.();
     }
   }
 
@@ -301,7 +325,7 @@ export function MediaImportDialog({
   // which is why they happen in a microtask: the list they act on is the one
   // built here, not one read back out of state that has not settled yet.
   useEffect(() => {
-    if (!open || !droppedFiles?.length || staged.current === droppedFiles) return;
+    if (!droppedFiles?.length || staged.current === droppedFiles) return;
     staged.current = droppedFiles;
     const arriving = toStaged(droppedFiles);
     if (!arriving.length) return;
@@ -309,10 +333,10 @@ export function MediaImportDialog({
       setActiveTab("upload");
       setErrorMessage(null);
       setStagedFiles((prev) => [...prev, ...arriving]);
-      void runUpload(arriving);
+      void runUpload(arriving, true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the drop
-  }, [open, droppedFiles]);
+  }, [droppedFiles]);
 
   async function handlePathsSubmit() {
     const rawLines = localPathsText

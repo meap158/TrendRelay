@@ -407,6 +407,7 @@ export const en = {
     importMediaDescription: "Import single or batch media files into your Library.",
     dropToImport: "Drop to add to your Library",
     dropToImportHint: "Videos, images and audio import together",
+    importingCount: "Adding {done} of {total}…",
     importLocal: "Import a local file",
     filePath: "File path",
     platform: "Platform",

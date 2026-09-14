@@ -406,6 +406,7 @@ export const ru: Messages = {
     importMediaDescription: "Импорт одного или нескольких медиафайлов в медиатеку.",
     dropToImport: "Отпустите, чтобы добавить в медиатеку",
     dropToImportHint: "Видео, изображения и аудио импортируются вместе",
+    importingCount: "Добавление {done} из {total}…",
     importLocal: "Импортировать локальный файл",
     filePath: "Путь к файлу",
     platform: "Платформа",

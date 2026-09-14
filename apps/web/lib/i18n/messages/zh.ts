@@ -395,6 +395,7 @@ export const zh: Messages = {
     importMediaDescription: "将单个或批量本地媒体文件导入媒体库。",
     dropToImport: "拖放即可添加到媒体库",
     dropToImportHint: "视频、图片和音频可一并导入",
+    importingCount: "正在添加第 {done} 个，共 {total} 个…",
     importLocal: "导入本地文件",
     filePath: "文件路径",
     platform: "平台",

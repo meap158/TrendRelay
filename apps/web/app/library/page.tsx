@@ -1411,6 +1411,10 @@ function LibraryContent() {
   // dialog, which stages and uploads them the same way picked files go.
   const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
   const [dropTargetActive, setDropTargetActive] = useState(false);
+  // How a dropped batch is getting on. A drop uploads without opening the
+  // dialog, so this is where it is visible - beside the button that does the
+  // same job, rather than in a row of its own.
+  const [dropProgress, setDropProgress] = useState<{ done: number; total: number } | null>(null);
   // Unfinished AutoCut and Storytelling videos, shown as a Library chip so a
   // half-built one is picked up again rather than lost. Library-only: it reads
   // the creation-drafts store, not the media assets, so it never reaches the
@@ -1970,8 +1974,11 @@ function LibraryContent() {
       clear();
       const files = Array.from(event.dataTransfer?.files ?? []);
       if (!files.length) return;
+      // No dialog: the drop already said what to import, and one that opens to
+      // report a second of work and dismisses itself is a flash rather than a
+      // report. It opens only if a file fails, which is the one outcome that
+      // needs answering.
       setDroppedFiles(files);
-      setImportOpen(true);
     };
 
     window.addEventListener("dragover", over);
@@ -2234,6 +2241,14 @@ function LibraryContent() {
             </form>
             {canImport && (
               <span className="library-import-btn-wrap">
+                {/* Where a dropped batch reports itself: beside the button for
+                    the same job, sharing its row rather than taking one. */}
+                {dropProgress && (
+                  <span className="library-import-progress" role="status" aria-live="polite">
+                    <LoaderCircle className="is-spinning" size={13} aria-hidden="true" />
+                    {t("library.importingCount", dropProgress)}
+                  </span>
+                )}
                 <Button
                   type="button"
                   variant="primary"
@@ -3090,6 +3105,8 @@ function LibraryContent() {
           workspaceId={workspaceId}
           apiFetch={apiFetch}
           droppedFiles={droppedFiles}
+          onDropProgress={setDropProgress}
+          onDropNeedsReview={() => setImportOpen(true)}
           onClose={() => { setImportOpen(false); setDroppedFiles(undefined); }}
           onItemQueued={() => {
             void refresh();
