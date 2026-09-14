@@ -39,6 +39,25 @@ export type MusicChoice = {
 /** A Library row, as the assets endpoint serialises it. */
 type AudioRow = MusicChoice & { media_kind: string };
 
+/** What is being made, for music to be offered before anybody searches: a
+    narration's script, a pacing's mood and tempo, the clips (by id - the
+    server reads their titles and tags). Every field optional. */
+export type MusicContext = {
+  text?: string;
+  mood?: string;
+  bpm?: number | null;
+  assetIds?: string[];
+};
+
+/** The offer for a piece: the searches run and why, the Library's own
+    matches, and the tracks those searches found, each with its reason. */
+type Suggestions = {
+  queries: { q: string; reason: string }[];
+  library: (AudioRow & { reason: string })[];
+  tracks: (FoundTrack & { reason: string })[];
+  unavailable: boolean;
+};
+
 /** A track Openverse offers, as the music search returns it. */
 type FoundTrack = {
   id: string;
@@ -103,6 +122,7 @@ export function MusicPicker({
   onError,
   emptyLabel,
   hint,
+  context,
 }: {
   workspaceId: string;
   apiFetch: Fetcher;
@@ -114,10 +134,56 @@ export function MusicPicker({
   emptyLabel?: string;
   /** What choosing does here - cuts on the beat, or plays under the voice. */
   hint?: string;
+  /** What the music is for. With this the picker opens on suggestions. */
+  context?: MusicContext;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"library" | "find">("library");
+  // The piece as a string, so a context object rebuilt on every render of
+  // the dialog does not re-ask; only a change in what it says does.
+  const contextKey = JSON.stringify({
+    text: context?.text?.trim() ?? "",
+    mood: context?.mood ?? "",
+    bpm: context?.bpm ?? null,
+    assetIds: context?.assetIds ?? [],
+  });
+  const hasContext = Boolean(
+    context && (context.text?.trim() || context.mood || context.assetIds?.length),
+  );
+  const [tab, setTab] = useState<"suggested" | "library" | "find">(
+    hasContext ? "suggested" : "library",
+  );
+
+  const [suggested, setSuggested] = useState<Suggestions | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const suggestionRun = useRef(0);
+  // Asked when the panel is open and the piece has something to say; asked
+  // again, after a pause, when the script or the clips change under it.
+  useEffect(() => {
+    if (!open || !hasContext) return;
+    const mine = ++suggestionRun.current;
+    const parsed = JSON.parse(contextKey) as {
+      text: string; mood: string; bpm: number | null; assetIds: string[];
+    };
+    const wait = window.setTimeout(() => {
+      setSuggesting(true);
+      void apiFetch(`/api/workspaces/${workspaceId}/media/library/music/suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: parsed.text, mood: parsed.mood, bpm: parsed.bpm, asset_ids: parsed.assetIds,
+        }),
+      })
+        .then((response) => response.json().then((body) => ({ ok: response.ok, body })))
+        .then(({ ok, body }) => {
+          if (mine !== suggestionRun.current) return;
+          setSuggested(ok ? (body as Suggestions) : null);
+        })
+        .catch(() => { if (mine === suggestionRun.current) setSuggested(null); })
+        .finally(() => { if (mine === suggestionRun.current) setSuggesting(false); });
+    }, 400);
+    return () => window.clearTimeout(wait);
+  }, [open, hasContext, contextKey, apiFetch, workspaceId]);
 
   // The Library's audio, through the shared loop: it owns the debounce, the
   // paging and the stale-response guard. Pinned to audio and kept to audio,
@@ -238,6 +304,15 @@ export function MusicPicker({
       {open && (
         <div className="music-picker-panel">
           <div className="library-category-tabs" role="tablist" aria-label={t("music.title")}>
+            {hasContext && (
+              <button
+                type="button"
+                role="tab"
+                className={tab === "suggested" ? "selected" : ""}
+                aria-selected={tab === "suggested"}
+                onClick={() => setTab("suggested")}
+              >{t("music.suggested")}</button>
+            )}
             <button
               type="button"
               role="tab"
@@ -254,7 +329,82 @@ export function MusicPicker({
             >{t("music.findMore")}</button>
           </div>
 
-          {tab === "library" ? (
+          {tab === "suggested" ? (
+            <>
+              <p className="music-picker-note">{t("music.suggestedHint")}</p>
+              {suggesting && !suggested && (
+                <p className="music-picker-note">{t("common.loading")}</p>
+              )}
+              {suggested && suggested.library.length > 0 && (
+                <ul className="music-picker-list">
+                  {suggested.library.map((row) => (
+                    <li key={row.id} className={value?.id === row.id ? "selected" : ""}>
+                      <button type="button" className="music-picker-row" onClick={() => choose(row)}>
+                        <span className="music-picker-name">
+                          <strong>{row.title}</strong>
+                          <small>{[row.creator, t("music.inLibrary")].filter(Boolean).join(" · ")}</small>
+                          <small>{row.reason}</small>
+                        </span>
+                        <Terms license={row.license} attribution={row.attribution} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {suggested && suggested.tracks.length > 0 && (
+                <ul className="music-picker-list">
+                  {suggested.tracks.map((track) => (
+                    <li key={track.id}>
+                      <div className="music-picker-row music-picker-found">
+                        <span className="music-picker-name">
+                          <strong>{track.title}</strong>
+                          <small>
+                            {[track.creator, track.source, seconds(track.duration_ms)]
+                              .filter(Boolean).join(" · ")}
+                          </small>
+                          <small>{track.reason}</small>
+                          <small className="music-terms">
+                            <Badge tone={track.credit_required ? "info" : "good"} title={track.credit ?? t("music.noCredit")}>
+                              {track.license_label}
+                            </Badge>
+                            <span>{track.credit ?? t("music.noCredit")}</span>
+                          </small>
+                        </span>
+                        <audio
+                          controls
+                          preload="none"
+                          src={track.preview_url}
+                          aria-label={t("music.preview", { title: track.title })}
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          busy={adding[track.id] === "busy"}
+                          disabled={adding[track.id] === "added"}
+                          onClick={() => void add(track)}
+                        >{adding[track.id] === "added" ? t("music.addedShort") : t("music.add")}</Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {suggested && !suggesting && suggested.library.length === 0 && suggested.tracks.length === 0 && (
+                <p className="music-picker-note">
+                  {suggested.unavailable ? t("music.failed") : t("music.nothingToSuggest")}
+                </p>
+              )}
+              {/* The searches that were run are the operator's to widen: the
+                  first one lands in the search box, ready to be changed. */}
+              <Button
+                variant="quiet"
+                size="sm"
+                onClick={() => {
+                  if (!query.trim() && suggested?.queries[0]) setQuery(suggested.queries[0].q);
+                  setTab("find");
+                }}
+              >{t("music.searchForMore")}</Button>
+            </>
+          ) : tab === "library" ? (
             <>
               <input
                 className="music-picker-search"

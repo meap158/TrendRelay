@@ -1733,6 +1733,10 @@ export const zh: Messages = {
     failed: "目前无法搜索音乐。",
     beatHint: "剪辑将跟随这首曲目的节拍。",
     duckedHint: "在配音下方播放，说话时自动降低音量。",
+    suggested: "推荐",
+    suggestedHint: "根据节奏、素材和脚本挑选，每行都注明原因。",
+    nothingToSuggest: "暂无可依据的内容。添加素材或脚本，或直接搜索。",
+    searchForMore: "搜索更多",
   },
 
   language: {

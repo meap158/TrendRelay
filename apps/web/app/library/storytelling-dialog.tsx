@@ -1370,6 +1370,9 @@ export function StorytellingDialog({
               onQueued={onQueued}
               onError={onError}
               hint={t("music.duckedHint")}
+              // The script and the pictures, so the picker can offer music
+              // for what the story is about before a search is typed.
+              context={{ text: body, assetIds: picked.map((asset) => asset.id) }}
             />
           </div>
         </section>

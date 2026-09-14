@@ -1762,6 +1762,10 @@ export const en = {
     failed: "Music could not be searched right now.",
     beatHint: "The cuts follow this track's beats.",
     duckedHint: "Plays under the voice and drops while it speaks.",
+    suggested: "Suggested",
+    suggestedHint: "Picked from the pacing, the clips and the script. Each row says why.",
+    nothingToSuggest: "Nothing to go on yet. Add clips or a script, or search.",
+    searchForMore: "Search for more",
   },
 
   language: {

@@ -1759,6 +1759,10 @@ export const vi: Messages = {
     failed: "Hiện không thể tìm nhạc.",
     beatHint: "Các đoạn cắt theo nhịp của bản nhạc này.",
     duckedHint: "Phát dưới giọng đọc và nhỏ lại khi có lời.",
+    suggested: "Gợi ý",
+    suggestedHint: "Chọn theo nhịp, các clip và kịch bản. Mỗi dòng nêu lý do.",
+    nothingToSuggest: "Chưa có gì để dựa vào. Thêm clip hoặc kịch bản, hoặc tìm kiếm.",
+    searchForMore: "Tìm thêm",
   },
 
   language: {

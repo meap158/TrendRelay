@@ -1751,6 +1751,10 @@ export const ja: Messages = {
     failed: "現在、音楽を検索できません。",
     beatHint: "この曲のビートに合わせてカットします。",
     duckedHint: "声の下で流れ、話している間は小さくなります。",
+    suggested: "おすすめ",
+    suggestedHint: "テンポ、クリップ、台本から選びました。各行に理由を表示します。",
+    nothingToSuggest: "まだ手がかりがありません。クリップか台本を追加するか、検索してください。",
+    searchForMore: "さらに検索",
   },
 
   language: {

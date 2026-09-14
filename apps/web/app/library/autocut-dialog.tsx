@@ -671,6 +671,10 @@ export function AutoCutDialog({
                 // is what the empty row says.
                 emptyLabel={music ?? chosen?.music ?? undefined}
                 hint={t("music.beatHint")}
+                // What the cut is: its pacing's mood and tempo, and the clips
+                // it is cut from - so the picker can offer music before a
+                // search is typed.
+                context={{ mood: chosen?.mood, bpm: chosen?.designed_bpm ?? null, assetIds: order }}
               />
             </div>
             <label>

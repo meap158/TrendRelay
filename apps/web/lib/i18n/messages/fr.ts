@@ -1779,6 +1779,10 @@ export const fr: Messages = {
     failed: "La recherche de musique est indisponible pour le moment.",
     beatHint: "Les coupes suivent le rythme de ce morceau.",
     duckedHint: "Joue sous la voix et baisse pendant qu'elle parle.",
+    suggested: "Suggestions",
+    suggestedHint: "Choisies d'après le rythme, les clips et le script. Chaque ligne dit pourquoi.",
+    nothingToSuggest: "Rien à exploiter pour l'instant. Ajoutez des clips ou un script, ou cherchez.",
+    searchForMore: "Chercher davantage",
   },
 
   language: {
