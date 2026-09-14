@@ -1403,6 +1403,14 @@ def _asset_title(session: Session, item: CampaignQueueItem) -> str | None:
     )
 
 
+def _telegram_ready() -> bool:
+    """Whether held posts could go to Telegram at all. Reads the local
+    settings only; nothing is asked of Telegram to draw a page."""
+    from trendrelay_api.integrations import telegram
+
+    return telegram.ready()
+
+
 def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str, Any]:
     """What the page shows: is it running, and what is it waiting for."""
     destinations = session.scalars(
@@ -1479,6 +1487,12 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "enabled": autopilot.enabled,
         "delivery": autopilot.delivery,
         "authority": autopilot.authority,
+        "approvals_telegram": autopilot.approvals_telegram,
+        # Whether the choice is even on offer: the Telegram tool installed and
+        # set up in Tools. The inbox shows the switch only when it is, so a
+        # workspace that never set Telegram up never sees a switch that does
+        # nothing.
+        "approvals_telegram_available": _telegram_ready(),
         "priority": autopilot.priority,
         "post_language": autopilot.post_language,
         "offer_id": autopilot.offer_id,

@@ -77,6 +77,21 @@ def tick_autopilot(now: float) -> None:
         print(f"Campaign autopilot tick failed: {error}", flush=True)
 
 
+def start_telegram_approvals() -> None:
+    """Listen for approval presses on Telegram, beside the job loop.
+
+    A thread of its own because it waits: each poll holds a request open until
+    a button is pressed or the time is up, which is what answers a press within
+    a second, and nothing in the job loop should wait on that. Asleep while the
+    Telegram tool is not set up, so a machine that never sends never asks.
+    """
+    from trendrelay_api.approval_notices import poll_forever
+
+    threading.Thread(
+        target=poll_forever, args=(SessionFactory,), name="telegram-approvals", daemon=True,
+    ).start()
+
+
 #: Every queue this worker drains. Named once so the sweep below cannot drift
 #: out of step with the list of things actually processed.
 JOB_KINDS = (
@@ -277,9 +292,10 @@ def worker_main() -> None:
         "Durable worker ready: douyin_download, trend_research, social_publish, "
         "openmontage_render, media_ingest, media_face_blur, media_effect_render, "
         "caption_render, media_ai_setup, media_enrichment, voice_render, "
-        "campaign_autopilot",
+        "campaign_autopilot, telegram_approvals",
         flush=True,
     )
+    start_telegram_approvals()
     try:
         while True:
             tick_autopilot(time.monotonic())

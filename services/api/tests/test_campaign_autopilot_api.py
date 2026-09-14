@@ -412,7 +412,12 @@ def test_a_campaign_may_decide_to_disclose_nothing(workspace) -> None:
     assert settings["disclosure"] == "Affiliate link."
 
 
-def test_settings_round_trip(workspace) -> None:
+def test_settings_round_trip(workspace, monkeypatch) -> None:
+    from trendrelay_api import campaign_scheduler
+
+    # Whatever this machine has set up: the answer is the tool's, read
+    # through this one door, and here the door says no.
+    monkeypatch.setattr(campaign_scheduler, "_telegram_ready", lambda: False)
     campaign_id = campaign(workspace)
     response = request(
         "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
@@ -428,6 +433,38 @@ def test_settings_round_trip(workspace) -> None:
     assert saved["min_recycle_days"] == 14
     assert saved["delivery"] == "schedule"
     assert saved["offer_mode"] == "manual"
+    # Off unless the campaign asks - and asked per campaign, not per workspace.
+    assert saved["approvals_telegram"] is False
+    # And not on offer here: nothing about Telegram is set up in the test
+    # environment, and the inbox hides a switch that could do nothing.
+    assert saved["approvals_telegram_available"] is False
+
+
+def test_switching_telegram_on_sends_what_is_already_waiting(workspace, monkeypatch) -> None:
+    from trendrelay_api import approval_notices
+
+    campaign_id = campaign(workspace)
+    announced: list = []
+    monkeypatch.setattr(
+        approval_notices, "announce_executions",
+        lambda session, autopilot, executions: announced.append(list(executions))
+        or "Announced 0 posts on Telegram.",
+    )
+    body = {
+        "enabled": False, "min_recycle_days": 14, "daily_cap_per_account": 3,
+        "delivery": "schedule", "approvals_telegram": True, "confirm_external_action": True,
+    }
+    asked = request("PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot", json=body)
+    assert asked.status_code == 200, asked.text
+    assert asked.json()["autopilot"]["approvals_telegram"] is True
+    # The switch is what sends: once, with whatever was held at that moment.
+    assert asked.json()["telegram"] == "Announced 0 posts on Telegram."
+    assert announced == [[]]
+    # Saving again with it still on sends nothing more.
+    again = request("PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot", json=body)
+    assert again.status_code == 200
+    assert again.json()["telegram"] == ""
+    assert len(announced) == 1
 
 
 def test_running_autopilot_settings_do_not_require_activation_confirmation(workspace) -> None:

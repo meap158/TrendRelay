@@ -151,6 +151,9 @@ class AutopilotSettings(BaseModel):
         default="run_by_exception",
         pattern=r"^(assist|auto_draft|run_by_exception|autonomous)$",
     )
+    #: Whether a held post is also announced on Telegram, through the tool
+    #: set up in Tools. A message only; approving stays in the app.
+    approvals_telegram: bool = False
     #: What ranking optimises for. Balanced blends whichever axes have
     #: evidence rather than pretending all three always do.
     priority: str = Field(
@@ -875,6 +878,8 @@ def save_autopilot(
             raise HTTPException(status_code=409, detail=blocked)
     autopilot.delivery = body.delivery
     autopilot.authority = body.authority
+    telegram_switched_on = body.approvals_telegram and not autopilot.approvals_telegram
+    autopilot.approvals_telegram = body.approvals_telegram
     autopilot.priority = body.priority
     autopilot.weekly_post_cap = body.weekly_post_cap
     autopilot.posting_preset_id = body.posting_preset_id
@@ -908,6 +913,21 @@ def save_autopilot(
         from trendrelay_api.campaign_runner import recompose_held
 
         reached = recompose_held(session, autopilot)
+    # Switched on with posts already waiting: those go to the chat now, as
+    # cards, rather than only whatever the next pass holds. The switch lives
+    # in the inbox, beside the posts it is about, so "now" is what it means.
+    telegram_note = ""
+    if telegram_switched_on:
+        from trendrelay_api.approval_notices import announce_executions
+
+        waiting = session.scalars(
+            select(PublicationExecution).where(
+                PublicationExecution.workspace_id == workspace_id,
+                PublicationExecution.campaign_id == campaign_id,
+                PublicationExecution.state == "proposed",
+            ).order_by(PublicationExecution.scheduled_at.asc())
+        ).all()
+        telegram_note = announce_executions(session, autopilot, list(waiting))
     audit(
         session, request, workspace_id, user.id,
         "campaign.autopilot_saved", "campaign", campaign_id,
@@ -915,6 +935,7 @@ def save_autopilot(
             "enabled": body.enabled,
             "delivery": body.delivery,
             "authority": body.authority,
+            "approvals_telegram": body.approvals_telegram,
             "recomposed_held": reached["recomposed"],
             "offer_id": body.offer_id,
             "offer_mode": body.offer_mode,
@@ -922,7 +943,11 @@ def save_autopilot(
             "max_products_per_post": body.max_products_per_post,
         },
     )
-    return {"autopilot": campaign_status(session, autopilot), "held": reached}
+    return {
+        "autopilot": campaign_status(session, autopilot),
+        "held": reached,
+        "telegram": telegram_note,
+    }
 
 
 @router.post("/{campaign_id}/destinations", status_code=201)

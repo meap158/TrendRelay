@@ -94,6 +94,11 @@ class CampaignAutopilot(Base):
     #: earned through `graduation_block` rather than chosen. A low-confidence
     #: product is held even there: quality is not a policy any level waives.
     authority: Mapped[str] = mapped_column(String(20), default="run_by_exception")
+    #: Whether a post held for approval is announced on Telegram as well as
+    #: in the inbox. Per campaign, off by default, and only ever a message:
+    #: the approving still happens in the app. Needs the Telegram tool set up
+    #: in Tools; without it the flag is kept and nothing is sent.
+    approvals_telegram: Mapped[bool] = mapped_column(Boolean, default=False)
     #: What the campaign optimises for: reach, discussion, revenue, or a
     #: balanced blend. Ranking reads this; the campaign's prose objective is
     #: for people.

@@ -582,6 +582,10 @@ type Autopilot = {
   delivery: "draft" | "schedule" | "now";
   /** How much the campaign may do alone; run by exception is the default. */
   authority: "assist" | "auto_draft" | "run_by_exception" | "autonomous";
+  /** Whether held posts also go to Telegram as cards to decide from, via the tool in Tools. */
+  approvals_telegram: boolean;
+  /** Whether that is on offer at all: the Telegram tool installed and set up. */
+  approvals_telegram_available: boolean;
   /** How near this campaign is to being allowed to post without a person. */
   graduation?: {
     published: number;
@@ -2662,7 +2666,11 @@ export function AutopilotPanel({
     if (!autopilot) return;
     const next = { ...autopilot, ...changes };
     await run("settings", async () => {
-      const saved = await json<{ held?: { recomposed: number; kept: number } }>(
+      const saved = await json<{
+        held?: { recomposed: number; kept: number };
+        /** What switching Telegram on did with the posts already waiting. */
+        telegram?: string;
+      }>(
         await apiFetch(`${base}/autopilot`, {
           method: "PUT",
         headers: { "content-type": "application/json" },
@@ -2687,14 +2695,18 @@ export function AutopilotPanel({
           posting_preset_id: next.posting_preset_id,
           delivery: next.delivery,
           authority: next.authority,
+          approvals_telegram: next.approvals_telegram,
           priority: next.priority,
           post_language: next.post_language,
           confirm_external_action: confirm,
         }),
       }));
-      const settled = next.enabled && !autopilot.enabled
-        ? t("autopilot.switchedOn")
-        : t("autopilot.saved");
+      const settled = [
+        next.enabled && !autopilot.enabled ? t("autopilot.switchedOn") : t("autopilot.saved"),
+        // Where the waiting posts went when Telegram was switched on - or why
+        // they did not - in the runner's own words.
+        saved?.telegram ?? "",
+      ].filter(Boolean).join(" ");
       // What the change reached, when it reached anything. A count is the
       // difference between "saved" and knowing three posts in the inbox were
       // rewritten to match.
@@ -4188,6 +4200,28 @@ export function AutopilotPanel({
           <p className="autopilot-lede">What you see is exactly what will go
             out. A post that is not finished can’t be approved — it shows what
             to fix first.</p>
+          {/* The same decisions, from the phone. Each held post goes to the
+              Telegram chat set up in Tools as a card with these buttons under
+              it, and a press settles it here. Offered only when Telegram is
+              set up - a switch that could do nothing is not a choice - and
+              kept on screen while it is on, so it can always be turned off.
+              Switching it on sends what is waiting now, not only what is held
+              next. */}
+          {(autopilot.approvals_telegram_available || autopilot.approvals_telegram) && (
+            <label
+              className="autopilot-delivery"
+              title="Send each held post to the Telegram chat set up in Tools, with Approve and Dismiss buttons. A press decides it here, and is recorded as your decision."
+            >
+              <input
+                type="checkbox"
+                checked={autopilot.approvals_telegram}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ approvals_telegram: event.target.checked })}
+              />
+              <span>Also decide these on Telegram</span>
+            </label>
+          )}
           {/* One line that reconciles the scattered counts into the operator's
               own three buckets: what needs them now, what is ready to go, and
               what is still unfinished. All from authoritative figures, so it

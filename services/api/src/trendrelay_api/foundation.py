@@ -129,7 +129,7 @@ def require_role(member: WorkspaceMember, allowed: set[str]) -> None:
 
 def audit(
     session: Session,
-    request: Request,
+    request: Request | None,
     workspace_id: str,
     user_id: str,
     action: str,
@@ -137,6 +137,9 @@ def audit(
     entity_id: str,
     detail: dict[str, Any] | None = None,
 ) -> None:
+    """Record who did what. `request` is None for a decision that arrived
+    without one - a press on a Telegram card, handled by the worker - and the
+    detail then says how it arrived."""
     session.add(
         AuditEvent(
             workspace_id=workspace_id,
@@ -145,7 +148,7 @@ def audit(
             entity_type=entity_type,
             entity_id=entity_id,
             detail=detail or {},
-            request_id=request.headers.get("x-request-id"),
+            request_id=request.headers.get("x-request-id") if request is not None else None,
         )
     )
 

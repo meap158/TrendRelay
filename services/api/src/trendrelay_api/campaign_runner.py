@@ -839,6 +839,11 @@ def run_campaign(
             held.append({
                 "execution_id": execution.id,
                 "destination_id": destination.id,
+                # Named and worded here so an announcement of the hold can
+                # say which account and which post without reading the
+                # execution back.
+                "destination": destination.label,
+                "caption": post.caption,
                 "at": post.at,
                 "reason": hold,
             })
@@ -878,6 +883,15 @@ def run_campaign(
             f"{note} {len(held)} post(s) waiting for approval in the "
             "exception inbox."
         )
+        if autopilot.approvals_telegram:
+            # Told, not only listed: the inbox is where the approval happens,
+            # and Telegram is where the approver hears that there is one.
+            # Whatever the send says - sent, or why not - goes on the run's
+            # note; a message that could not go out never fails the run, the
+            # post is held in the app either way.
+            from trendrelay_api.approval_notices import announce_held
+
+            note = f"{note} {announce_held(session, autopilot, held)}"
     if deferred:
         # Named as waiting rather than as a problem, because it is one: the
         # quota returns and the post is still there.
