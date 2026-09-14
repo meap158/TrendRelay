@@ -938,15 +938,26 @@ function MediaPreview({
   // are compared in place rather than in a second, smaller video somewhere else.
   //
   // It also opens on the rendered cut when there is one - see `openingCut`,
-  // which is the same rule Publish uses to pick the file it sends. Safe at
-  // mount for the same reason `requested` is: the preview is keyed by asset,
-  // so selecting another one asks the question again.
-  const [cut, setCut] = useState<"original" | "edited">(() => openingCut(asset));
+  // which is the same rule Publish uses to pick the file it sends.
+  //
+  // Derived rather than decided at mount, which is what made a finished edit
+  // invisible until the asset was deselected and picked up again: this
+  // component is keyed by asset, so a render landing on the asset already on
+  // screen remounts nothing, and a cut settled at "original" stayed there with
+  // the new file sitting behind a switch nobody had reason to press. Null
+  // until the viewer presses one of the two - after that their choice holds,
+  // so a poll arriving mid-comparison cannot pull them off the original they
+  // asked to see.
+  const [chosenCut, setChosenCut] = useState<"original" | "edited" | null>(null);
   // Both <video> and <audio> are HTMLMediaElement, which is the whole
   // transport surface used here: play, pause and paused.
   const videoRef = useRef<HTMLMediaElement>(null);
   const navigatingRef = useRef(false);
   const rendered = renderedCut(asset.versions);
+  // Still `openingCut`, which is the rule Publish uses to pick the file it
+  // sends: the two answer the same question, and the day they answer it
+  // differently is the day somebody publishes a cut they never watched.
+  const cut: "original" | "edited" = chosenCut ?? openingCut(asset);
 
   // A safety net, not a path the arrows can take: the image steps only land
   // on pictures. Selecting a video from the list under an open lightbox is
@@ -958,12 +969,19 @@ function MediaPreview({
   // Audio and video both have a transport; an image has nothing to play.
   const playable = asset.media_kind === "video" || asset.media_kind === "audio";
 
+  // Which file the request below is for, and the only thing about the render
+  // it depends on. `rendered` itself is rebuilt from a fresh versions array on
+  // every poll, so listing it re-read the whole preview every 2.5 seconds
+  // while a job ran - and still could not tell one render from the next, which
+  // is what kept a re-edit showing the cut it replaced.
+  const renderedPath = rendered?.path ?? "";
+
   useEffect(() => {
     if (!requested) return;
     let active = true;
     let objectUrl = "";
     const controller = new AbortController();
-    const wanted = cut === "edited" && rendered ? "edited" : "original";
+    const wanted = cut === "edited" && renderedPath ? "edited" : "original";
     // Hands a finished blob to the row through one guarded door, so both the
     // base64 path and the streamed fallback revoke correctly on cleanup.
     const adopt = (url: string) => {
@@ -1024,9 +1042,16 @@ function MediaPreview({
     return () => {
       active = false;
       controller.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        // Let go of the blob that was just revoked as well as the bytes. The
+        // switch's own handlers already did this before changing cut; a cut
+        // that changes on its own, when a render lands, has nobody to do it,
+        // and the player would spend the fetch pointed at a dead URL.
+        setSource("");
+      }
     };
-  }, [apiFetch, asset.id, asset.original_path, asset.title, asset.media_kind, playable, rendered, cut, requested, t, workspaceId]);
+  }, [apiFetch, asset.id, asset.original_path, asset.title, asset.media_kind, playable, renderedPath, cut, requested, t, workspaceId]);
 
   function startPlayback() {
     setError("");
@@ -1173,13 +1198,13 @@ function MediaPreview({
                four effects would otherwise make a control wider than the
                player it sits under. */
             title={cutEffects(t, rendered).join(" → ") || undefined}
-            onClick={() => { setError(""); setSource(""); setCut("edited"); setRequested(true); }}
+            onClick={() => { setError(""); setSource(""); setChosenCut("edited"); setRequested(true); }}
           >{cutLabel(t, rendered)}</button>
           <button
             type="button"
             className={cut === "original" ? "selected" : ""}
             aria-pressed={cut === "original"}
-            onClick={() => { setError(""); setSource(""); setCut("original"); setRequested(true); }}
+            onClick={() => { setError(""); setSource(""); setChosenCut("original"); setRequested(true); }}
           >{t("library.cutOriginal")}</button>
         </div>
       )}
