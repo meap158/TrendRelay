@@ -24,12 +24,20 @@ def env_file(monkeypatch, tmp_path):
     path = tmp_path / ".env"
     monkeypatch.setattr(env_store, "ENV_PATH", path)
     monkeypatch.setattr(env_store, "refresh_settings", lambda: None)
-    before = os.environ.get("ELEVENLABS_API_KEY")
+    # Every key a card here can write. A save updates the process environment
+    # as well as the file, and a key left behind reads as "configured" to
+    # every test after this one - a Telegram token from a test here once made
+    # the campaign inbox offer Telegram in a test that had set nothing up.
+    keys = (
+        "ELEVENLABS_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_APPROVER_IDS",
+    )
+    before = {key: os.environ.get(key) for key in keys}
     yield path
-    if before is None:
-        os.environ.pop("ELEVENLABS_API_KEY", None)
-    else:
-        os.environ["ELEVENLABS_API_KEY"] = before
+    for key, value in before.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 
 def test_a_tool_with_no_settings_says_so_rather_than_guessing() -> None:
@@ -39,7 +47,32 @@ def test_a_tool_with_no_settings_says_so_rather_than_guessing() -> None:
 
 
 def test_the_tools_that_do_have_settings_are_the_ones_that_need_a_key() -> None:
-    assert set(tool_settings.PROVIDERS) == {"mcp-server", "elevenlabs", "pexels"}
+    assert set(tool_settings.PROVIDERS) == {"mcp-server", "elevenlabs", "pexels", "telegram-bot"}
+
+
+def test_a_telegram_card_refuses_what_is_not_a_token_or_a_chat(env_file) -> None:
+    """Refused here, in the words of what was expected, rather than by Telegram
+    at the first approval request - when nobody is looking at the card."""
+    provider = provider_for("telegram-bot")
+    with pytest.raises(SettingsError, match="bot token"):
+        provider.save({"TELEGRAM_BOT_TOKEN": "my_bot_username"})
+    with pytest.raises(SettingsError, match="chat id"):
+        provider.save({"TELEGRAM_CHAT_ID": "my chat"})
+
+    written = provider.save({
+        "TELEGRAM_BOT_TOKEN": "123456789:" + "A" * 35,
+        "TELEGRAM_CHAT_ID": "-100200300",
+    })
+    assert written == ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]
+
+    token, chat, _approvers = provider.fields()
+    # The token is a secret: described and masked. The chat id is not.
+    assert token["configured"] and token["value"] == "" and token["preview"]
+    assert "A" * 35 not in token["preview"]
+    assert chat["configured"] and chat["value"] == "-100200300"
+    assert provider.reveal("TELEGRAM_BOT_TOKEN") == "123456789:" + "A" * 35
+    with pytest.raises(SettingsError):
+        provider.reveal("TELEGRAM_CHAT_ID")
 
 
 def test_a_hosted_key_card_refuses_a_setting_that_is_not_its_own(env_file) -> None:

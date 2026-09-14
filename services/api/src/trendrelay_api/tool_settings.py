@@ -341,12 +341,121 @@ class _Pexels:
         return value
 
 
+#: Telegram needs two things: which bot speaks, and which chat it speaks to.
+TELEGRAM_FIELDS: tuple[dict[str, Any], ...] = (
+    {
+        "key": "TELEGRAM_BOT_TOKEN",
+        "label": "Bot token",
+        "kind": "text",
+        "secret": True,
+        "required": True,
+        "help": (
+            "From @BotFather in Telegram: /newbot, then copy the token it "
+            "gives you. The bot is what posts the approval requests."
+        ),
+        "help_url": "https://core.telegram.org/bots/tutorial#obtain-your-bot-token",
+    },
+    {
+        "key": "TELEGRAM_CHAT_ID",
+        "label": "Chat id",
+        "kind": "text",
+        "secret": False,
+        "required": True,
+        "help": (
+            "Where the messages go: your own chat with the bot, or a group "
+            "the bot is in. A group's id starts with a minus sign. Write to "
+            "the bot once first - a bot cannot start the conversation."
+        ),
+        "help_url": "https://core.telegram.org/bots/api#getupdates",
+    },
+    {
+        "key": "TELEGRAM_APPROVER_IDS",
+        "label": "Approvers",
+        "kind": "text",
+        "secret": False,
+        "required": False,
+        "help": (
+            "Telegram user ids allowed to press the buttons, comma-separated. "
+            "Empty means everyone in the chat - which is only you in a private "
+            "chat, and everyone in a group. Your id is in the same getUpdates "
+            "reply as the chat id, under from.id."
+        ),
+        "placeholder": "123456789, 987654321",
+    },
+)
+
+
+class _Telegram:
+    """Two settings, and the same three methods every other card offers."""
+
+    def fields(self) -> list[dict[str, Any]]:
+        from trendrelay_api.env_store import effective_value, masked_value
+
+        described: list[dict[str, Any]] = []
+        for field in TELEGRAM_FIELDS:
+            stored = (effective_value(field["key"]) or "").strip()
+            described.append({
+                **field,
+                "configured": bool(stored),
+                "value": "" if field["secret"] else stored,
+                "preview": masked_value(field["key"]) if stored and field["secret"] else None,
+            })
+        return described
+
+    def save(self, values: dict[str, str]) -> list[str]:
+        from trendrelay_api.env_store import write_env_values
+        from trendrelay_api.integrations.telegram import (
+            APPROVERS_SHAPE,
+            CHAT_SHAPE,
+            TOKEN_SHAPE,
+        )
+
+        allowed = {field["key"] for field in TELEGRAM_FIELDS}
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise SettingsError(f"Not a Telegram setting: {unknown[0]}.")
+        cleaned: dict[str, str] = {}
+        for key, raw in values.items():
+            value = str(raw).strip()
+            # The shapes BotFather and the API hand out, so a pasted username
+            # or a truncated token is refused here rather than by Telegram at
+            # the first approval request.
+            if key == "TELEGRAM_BOT_TOKEN" and value and not TOKEN_SHAPE.match(value):
+                raise SettingsError(
+                    "That does not look like a bot token. It reads like "
+                    "123456789:AbCdEf... - copy the whole value from @BotFather."
+                )
+            if key == "TELEGRAM_CHAT_ID" and value and not CHAT_SHAPE.match(value):
+                raise SettingsError(
+                    "A chat id is a number - negative for a group - or a public "
+                    "channel's @name."
+                )
+            if key == "TELEGRAM_APPROVER_IDS" and value and not APPROVERS_SHAPE.match(value):
+                raise SettingsError(
+                    "Approvers are Telegram user ids - numbers - separated by commas."
+                )
+            cleaned[key] = value
+        return write_env_values(cleaned)
+
+    def reveal(self, key: str) -> str:
+        from trendrelay_api.env_store import effective_value
+
+        field = next((item for item in TELEGRAM_FIELDS if item["key"] == key), None)
+        if field is None or not field["secret"]:
+            raise SettingsError("That setting is not an exposable secret.")
+        value = (effective_value(key) or "").strip()
+        if not value:
+            raise SettingsError("No saved value is available for that secret.")
+        return value
+
+
 #: Tool id to its settings. A tool absent here has none, which is the honest
 #: answer for a model that is configured by being downloaded.
 PROVIDERS: dict[str, SettingsProvider] = {
     "mcp-server": _Tunnel(),
     "elevenlabs": _ElevenLabs(),
     "pexels": _Pexels(),
+    "telegram-bot": _Telegram(),
 }
 
 

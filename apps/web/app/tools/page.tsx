@@ -88,6 +88,11 @@ const SURFACES: { id: string; label: string; blurb: string; compact?: boolean }[
     // Each card still says which it is; the heading no longer speaks for them.
     blurb: "Models that read and edit your media. Each says whether it runs here or reaches out.",
   },
+  {
+    id: "campaigns",
+    label: "nav.campaigns",
+    blurb: "Reaching the people who run a campaign - the approver, where they are.",
+  },
 ];
 
 type SetupRequirement = { id: string; label: string; status: "ready" | "setup-required" | "optional" | "blocked"; detail: string };
@@ -187,6 +192,9 @@ const guidedSetup = new Set([
   // The other hosted one, and the same story: one free key, and without it
   // the b-roll search in Storytelling can only say what is missing.
   "pexels",
+  // Installed from here into its own runtime, then a bot token and a chat
+  // saved on the card, then a test message - the whole setup is the card.
+  "telegram-bot",
 ]);
 
 /** How often to re-read a setup report while its download is running. */

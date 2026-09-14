@@ -637,6 +637,35 @@
       "commercial_use": "allowed",
       "documentation": "docs/third-party/pexels.md",
       "block_reason": "Nothing to install: it is a hosted service and the API key is the switch."
+    },
+    {
+      "id": "telegram-bot",
+      "name": "Telegram approvals",
+      "repository": "https://github.com/python-telegram-bot/python-telegram-bot",
+      "revision": "22.8",
+      "version": "22.8",
+      "license": "LGPL-3.0",
+      "license_url": "https://github.com/python-telegram-bot/python-telegram-bot/blob/master/LICENSE",
+      "category": "Approvals",
+      "summary": "Sends each campaign post that is waiting for approval to a Telegram chat as a card with the inbox's own buttons - approve, approve and post now, dismiss - so it is decided from the phone. Optional, campaign by campaign.",
+      "capabilities": [
+        "Approval requests sent to a Telegram chat or group",
+        "Per-campaign opt-in, off by default",
+        "Approve, approve and post now, or dismiss with one press",
+        "Bot token, chat and approvers saved from Tools, test message from the card",
+        "Only the saved chat is listened to; the press is written on the audit event"
+      ],
+      "integration_status": "adapted",
+      "commercial_use": "allowed",
+      "install_strategy": "pypi",
+      "distribution": "python-telegram-bot",
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": false,
+      "runtime_path": ".tools/telegram-bot/runtime",
+      "documentation": "docs/third-party/python-telegram-bot.md",
+      "surface": "campaigns",
+      "runs": "network"
     }
   ]
 }
