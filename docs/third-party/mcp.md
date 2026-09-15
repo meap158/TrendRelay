@@ -104,10 +104,17 @@ Two rules make it worth having rather than a second place for the same facts:
   URL because the campaign routes the affiliate link itself. These notes are
   not posted, so a reference the next pass needs is just a reference.
 
-The queue listing never carries the text - a post's row says `has_context` and
-nothing more - so reading a campaign's queue stays the same size whether or not
-its posts carry notes.
+No listing carries the text. `list_posts_needing_copy` and
+`list_campaign_posts` mark the posts that have notes with `has_context` and
+stop there, so paging a campaign's queue stays the same size whether or not its
+posts carry any - and `get_post_context` reads the ones you mean to act on. The
+flag is read as a length across the whole page in one query; the column itself
+is deferred, so the scheduler, the runner and every listing leave the
+paragraphs where they are.
 
+The interface stores and shows the same field, so a note an assistant leaves is
+the note the operator reads in the post editor, and one they write by hand is
+there on the next pass.
 
 ## The second surface: media in, and a proposed post
 

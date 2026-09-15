@@ -2877,3 +2877,65 @@ def test_naming_the_clips_costs_one_query_for_a_whole_page(session) -> None:
 
     assert len(posts) == 6
     assert seen["queries"] == 1, f"{seen['queries']} lookups for one page"
+
+
+def test_a_listing_marks_the_posts_with_working_notes_without_reading_them(
+    session,
+) -> None:
+    """The flag an assistant scans a queue by, and the cost it must not carry.
+
+    A post's working notes say what a previous pass was going for; a listing
+    should say which posts have any so the next pass knows where to look. It
+    must not say what they are: the column is deferred so a page of posts does
+    not drag paragraphs along, and reading each row to answer would undo that
+    one lazy load at a time.
+    """
+    for index, note in enumerate(("", "Words done; still owes the unboxing shot.")):
+        session.add(CampaignQueueItem(
+            id=f"noted-{index}", workspace_id="ws", campaign_id="camp",
+            state="draft", created_by="local-admin", video_path="", title="",
+            body=f"Copy {index}", hashtags=[], position=10 + index,
+            offer_ids=[], last_posted_by_destination={}, context=note,
+        ))
+    session.commit()
+
+    page = context.list_campaign_posts(session, "ws", state="draft")
+    marks = {post["item_id"]: post["has_context"] for post in page["posts"]}
+
+    assert marks["noted-0"] is False
+    assert marks["noted-1"] is True
+    # The text itself belongs to get_post_context, never to a listing.
+    assert all("context" not in post for post in page["posts"])
+
+
+def test_an_assistant_can_write_and_read_back_a_posts_working_notes(session) -> None:
+    """The multi-phase loop, end to end through the tools an assistant has.
+
+    One pass writes the copy and says what it left undone; the next reads it
+    back before choosing the pictures. A link is allowed here, unlike every
+    other field these tools write, because none of this is posted.
+    """
+    from trendrelay_api.integrations.mcp import writes
+
+    session.add(CampaignQueueItem(
+        id="phased", workspace_id="ws", campaign_id="camp", state="draft",
+        created_by="local-admin", video_path="", title="",
+        body="Phase one copy.", hashtags=[], position=20,
+        offer_ids=[], last_posted_by_destination={},
+    ))
+    session.commit()
+
+    written = writes.write_post_copy(
+        session, "ws", "phased",
+        context="Dry tone. Reference https://example.com/lookbook for the styling.",
+    )
+
+    assert written["has_context"] is True
+    assert "lookbook" in written["context"]
+    read_back = context.get_post_context(session, "ws", "phased")
+    assert "lookbook" in read_back["queue_item"]["context"]
+
+    # An empty string clears them, the same way the other overrides clear.
+    cleared = writes.write_post_copy(session, "ws", "phased", context="")
+    assert cleared["context"] == ""
+    assert cleared["has_context"] is False

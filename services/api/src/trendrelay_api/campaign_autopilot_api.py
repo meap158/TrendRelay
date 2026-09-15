@@ -678,6 +678,29 @@ def _queue_view(
     }
 
 
+def posts_with_notes(session: Session, item_ids: list[str]) -> set[str]:
+    """Which of these posts carry working notes, without reading the notes.
+
+    One length query for a page of them. The column is deferred so a listing
+    does not drag paragraphs along; asking each row whether it has any would
+    undo that a lazy load at a time, which is the slower shape of the same
+    mistake. Shared, because every surface that lists posts wants the flag and
+    none of them wants the text - the interface's queue and both of the MCP
+    listings ask through here.
+    """
+    if not item_ids:
+        return set()
+    return {
+        row[0]
+        for row in session.execute(
+            select(CampaignQueueItem.id).where(
+                CampaignQueueItem.id.in_(item_ids),
+                func.length(CampaignQueueItem.context) > 0,
+            )
+        ).all()
+    }
+
+
 def _queue_views(
     session: Session,
     items: list[CampaignQueueItem],
@@ -698,17 +721,7 @@ def _queue_views(
     same mistake.
     """
     cuts = _library_cuts(session, workspace_id, items)
-    noted: set[str] = set()
-    if items and not with_context:
-        noted = {
-            row[0]
-            for row in session.execute(
-                select(CampaignQueueItem.id).where(
-                    CampaignQueueItem.id.in_([item.id for item in items]),
-                    func.length(CampaignQueueItem.context) > 0,
-                )
-            ).all()
-        }
+    noted = set() if with_context else posts_with_notes(session, [item.id for item in items])
     return [
         _queue_view(
             item,

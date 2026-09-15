@@ -373,11 +373,23 @@ def list_campaigns(session: Session, workspace_id: str) -> list[dict[str, Any]]:
     return result
 
 
+def posts_with_notes(session: Session, item_ids: list[str]) -> set[str]:
+    """Which of these posts carry working notes, in one query - see the queue's
+    own copy of this question, which this is."""
+    from trendrelay_api.campaign_autopilot_api import (  # noqa: PLC0415
+        posts_with_notes as _asked,
+    )
+
+    return _asked(session, item_ids)
+
+
 def _post_summary(
     session: Session,
     item: CampaignQueueItem,
     campaign: Campaign | None,
     asset: Any | None = None,
+    *,
+    has_context: bool = False,
 ) -> dict[str, Any]:
     products = _resolve_products(session, item)
     return {
@@ -404,6 +416,12 @@ def _post_summary(
         "has_caption": not _needs_copy(item),
         "has_first_comment": bool(item.first_comment),
         "thread_replies": len(item.thread or []),
+        # Whether a previous pass left working notes on this post, so a listing
+        # can be scanned for the ones that carry reasoning without opening each
+        # in turn. `get_post_context` reads what they say. Passed in rather than
+        # read off the item: the column is deferred, and a listing that touched
+        # it would fetch paragraphs a row at a time.
+        "has_context": has_context,
     }
 
 
@@ -462,10 +480,12 @@ def list_posts_needing_copy(
         ).all()
     } if campaign_ids else {}
     assets = _asset_index(session, list(items))
+    noted = posts_with_notes(session, [item.id for item in items])
     posts = [
         _post_summary(
             session, item, campaigns.get(item.campaign_id),
             assets.get(item.asset_id) if item.asset_id else None,
+            has_context=item.id in noted,
         )
         for item in items
     ]
@@ -568,12 +588,14 @@ def list_campaign_posts(
         ).all()
     } if campaign_ids else {}
     assets = _asset_index(session, list(page))
+    noted = posts_with_notes(session, [item.id for item in page])
     placeholder = _placeholder_body()
     posts = []
     for item in page:
         summary = _post_summary(
             session, item, campaigns.get(item.campaign_id),
             assets.get(item.asset_id) if item.asset_id else None,
+            has_context=item.id in noted,
         )
         summary["state"] = item.state
         caption = item.body if item.body != placeholder else ""
