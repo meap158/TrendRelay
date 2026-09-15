@@ -3514,7 +3514,7 @@ export default function PublishPage() {
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
                 </small>
               </div>
-              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
+              <label><span>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i></span>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>{t("publish.supplyHosted")}</small>
               </label>
@@ -3551,7 +3551,7 @@ export default function PublishPage() {
                 )}
                 <small className="ui-field-note">{mediaNote ?? "Media must sit under a configured publishing media directory."}</small>
               </div>
-              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
+              <label><span>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i></span>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>{t("publish.supplySkipUpload")}</small>
               </label>
@@ -3640,7 +3640,7 @@ export default function PublishPage() {
               and Pinterest" asks every operator to decide whether it applies to
               them - a decision the destinations already answer. */}
           {titleLimit && (
-          <label>{t("publish.title")} <i>{t("publish.titleUsedBy")}</i>
+          <label><span>{t("publish.title")} <i>{t("publish.titleUsedBy")}</i></span>
             <input name="title" maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
             <small className={`char-count${titleOver > 0 ? " over" : ""}`}>
               {title.length} / {titleLimit.title}
@@ -3654,7 +3654,7 @@ export default function PublishPage() {
               sent, so the field appears with the destination rather than
               sitting there being ignored. */}
           {topicTargets.length > 0 && (
-            <label>{t("publish.threadsTopic")} <i>{t("publish.threadsTopicNote")}</i>
+            <label><span>{t("publish.threadsTopic")} <i>{t("publish.threadsTopicNote")}</i></span>
               <FeatureReach
                 chosen={chosen}
                 supported={[...new Set(topicTargets.map((account) => account.platform))]}
@@ -3820,7 +3820,7 @@ export default function PublishPage() {
               ) : null;
             }
             return (
-              <label>{t("publish.firstComment")} <i>{t("publish.optional")}</i>
+              <label><span>{t("publish.firstComment")} <i>{t("publish.optional")}</i></span>
                 <FeatureReach chosen={chosen} supported={carriers} />
                 <textarea
                   name="first_comment"
@@ -3894,9 +3894,10 @@ export default function PublishPage() {
                     : "Stored with the draft; the engine does not act on it."}
               </small>
             </label>
-            {/* The heading and its hint are one item, not two. Each child of a
-                label is a grid row, so the loose <i> put the select a row lower
-                than the field beside it. */}
+            {/* The name and its qualifier are one item, as everywhere else in
+                this form: each child of a label is a grid row, so a loose <i>
+                is a line of its own however it is styled - and here it also
+                put the select a row lower than the field beside it. */}
             <label><span>{t("publish.visibility")} <i>{t("publish.visibilityScope")}</i>
               <FeatureReach chosen={chosen}
                 supported={chosen.filter((platform) =>
