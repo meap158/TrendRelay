@@ -523,21 +523,37 @@ def write_offset(offset: int) -> None:
     _write_state({"offset": int(offset)})
 
 
+#: One identity refresh at a time, and whether one is running.
+_REFRESH_LOCK = __import__("threading").Lock()
+_refreshing = False
+
 #: How long a remembered bot name and chat title are trusted before they are
 #: asked for again. A bot is renamed about never; a page that asked Telegram
 #: on every open would be paying a network round trip to learn nothing.
 IDENTITY_TTL_SECONDS = 60 * 60
 
 
+#: How long the identity probe may take. It runs while a page is being drawn,
+#: so it is bounded rather than left to the library's own generous defaults:
+#: an unreachable Telegram must cost the campaigns list a moment, not a stall.
+PROBE_CONNECT_SECONDS = 3.0
+PROBE_READ_SECONDS = 4.0
+
+
 def _ask_identity() -> dict[str, Any]:
     """Who the bot is and where it posts, as Telegram says right now."""
     telegram = _telegram_module()
     token, chat = _settings()
+    bounded = {
+        "connect_timeout": PROBE_CONNECT_SECONDS,
+        "read_timeout": PROBE_READ_SECONDS,
+        "pool_timeout": PROBE_CONNECT_SECONDS,
+    }
 
     async def go() -> dict[str, Any]:
         async with telegram.Bot(token) as bot:
-            me = await bot.get_me()
-            room = await bot.get_chat(chat)
+            me = await bot.get_me(**bounded)
+            room = await bot.get_chat(chat, **bounded)
             title = room.title or " ".join(
                 part for part in (room.first_name, room.last_name) if part
             ) or (f"@{room.username}" if room.username else str(chat))
@@ -572,20 +588,59 @@ def identity(*, refresh: bool = False) -> dict[str, Any] | None:
     chat = configured_chat_id()
     key = f"{token[: token.find(':')]}:{chat}"
     remembered = _read_state().get("identity")
+    for_this_pair = isinstance(remembered, dict) and remembered.get("for") == key
     fresh = (
-        isinstance(remembered, dict)
-        and remembered.get("for") == key
+        for_this_pair
         and time.time() - float(remembered.get("checked_at") or 0) < IDENTITY_TTL_SECONDS
     )
     if fresh and not refresh:
         return remembered
+    if for_this_pair and not refresh:
+        # Stale but known: answer from memory and go and check behind the
+        # page. A bot is renamed about never, and nothing on the screen is
+        # worth waiting on Telegram for - which is what this did, once an
+        # hour, in the middle of drawing the campaigns list.
+        _refresh_in_background(key)
+        return remembered
     try:
         learned = _ask_identity()
     except TelegramUnavailable:
-        return remembered if isinstance(remembered, dict) and remembered.get("for") == key else None
+        return remembered if for_this_pair else None
     learned.update({"for": key, "checked_at": time.time()})
     _write_state({"identity": learned})
     return learned
+
+
+def _refresh_in_background(key: str) -> None:
+    """Learn the names again without anybody waiting for them.
+
+    One thread at a time, and it takes the same bounded probe: a check
+    nobody is waiting for must not pile up threads against an unreachable
+    Telegram either.
+    """
+    import threading  # noqa: PLC0415
+
+    global _refreshing
+    with _REFRESH_LOCK:
+        if _refreshing:
+            return
+        _refreshing = True
+
+    def learn() -> None:
+        global _refreshing
+        try:
+            learned = _ask_identity()
+        except Exception:  # noqa: BLE001 - nothing is waiting for the answer
+            return
+        finally:
+            with _REFRESH_LOCK:
+                _refreshing = False
+        import time as clock  # noqa: PLC0415
+
+        learned.update({"for": key, "checked_at": clock.time()})
+        _write_state({"identity": learned})
+
+    threading.Thread(target=learn, name="telegram-identity", daemon=True).start()
 
 
 def connection_summary() -> dict[str, Any]:

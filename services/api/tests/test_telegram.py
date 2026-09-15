@@ -43,15 +43,16 @@ class _FakeBot:
         _FakeBot.sent.append(kwargs)
         return SimpleNamespace(message_id=7, chat_id=kwargs["chat_id"])
 
-    async def get_me(self) -> SimpleNamespace:
+    async def get_me(self, **kwargs) -> SimpleNamespace:
         if _FakeBot.refuse:
             raise _FakeBot.refuse
-        _FakeBot.asked.append({"get_me": True})
+        _FakeBot.asked.append({"get_me": True, **kwargs})
         return SimpleNamespace(username="trendrelay_bot", first_name="TrendRelay")
 
-    async def get_chat(self, chat_id) -> SimpleNamespace:
+    async def get_chat(self, chat_id, **kwargs) -> SimpleNamespace:
         if _FakeBot.refuse:
             raise _FakeBot.refuse
+        _FakeBot.asked.append({"get_chat": True, **kwargs})
         return SimpleNamespace(
             title="Approvals", first_name=None, last_name=None, username=None, type="group",
         )
@@ -318,6 +319,52 @@ def test_who_the_bot_is_is_asked_once_and_remembered_for_the_saved_pair(configur
     _FakeBot.refuse = RuntimeError("timed out")
     summary = telegram.connection_summary()
     assert summary["connected"] is False and "has not answered" in summary["reason"]
+
+
+def test_a_stale_memory_answers_at_once_and_is_refreshed_behind_the_page(
+    configured, monkeypatch, tmp_path,
+) -> None:
+    """The campaigns list draws through this. A name an hour old is worth
+    showing now and checking after, not worth waiting on Telegram for."""
+    import threading
+
+    monkeypatch.setattr(telegram, "_state_path", lambda: tmp_path / "state.json")
+    telegram.connection_summary()  # learns it once
+    asked = len([item for item in _FakeBot.asked if item.get("get_me")])
+
+    # Age the memory past its window.
+    state = telegram._read_state()
+    state["identity"]["checked_at"] = 0
+    (tmp_path / "state.json").write_text(__import__("json").dumps(state), encoding="utf-8")
+
+    done = threading.Event()
+    real = telegram._ask_identity
+
+    def probe() -> dict:
+        # Set after the call, not before it: the waiter below is waiting for
+        # the answer to have been recorded, not for the attempt to start.
+        learned = real()
+        done.set()
+        return learned
+
+    monkeypatch.setattr(telegram, "_ask_identity", probe)
+    summary = telegram.connection_summary()
+
+    # Answered from memory, not from Telegram.
+    assert summary["bot"] == "@trendrelay_bot"
+    assert done.wait(5), "the refresh runs behind the page"
+    assert len([item for item in _FakeBot.asked if item.get("get_me")]) == asked + 1
+
+
+def test_the_probe_is_bounded_so_a_page_cannot_stall_on_it(configured, tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(telegram, "_state_path", lambda: tmp_path / "state.json")
+    telegram.identity()
+    # Both calls carry the same short timeouts rather than the library's own.
+    for call in _FakeBot.asked:
+        if call.get("get_me"):
+            continue
+        assert call.get("read_timeout") == telegram.PROBE_READ_SECONDS
+        assert call.get("connect_timeout") == telegram.PROBE_CONNECT_SECONDS
 
 
 def test_a_settings_form_says_not_connected_without_asking_when_nothing_is_saved(monkeypatch, tmp_path) -> None:
