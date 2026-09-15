@@ -4295,14 +4295,22 @@ export function AutopilotPanel({
                 <span aria-hidden="true">{row.met
                   ? <Check size={14} strokeWidth={3} />
                   : <Circle size={9} strokeWidth={3} fill="currentColor" />}</span>
-                <span>{row.label}</span>
+                {/* Stacked in one box rather than two siblings in the pill's
+                    own row: the label and its hint were flex children of the
+                    same nowrap row as the icon, so the hint had nowhere to go
+                    but to wrap - on its own, against the pill's edge rather
+                    than the label's. Grouped, they keep one left edge whatever
+                    width the pill ends up at. */}
+                <span className="autopilot-checklist-copy">
+                  <span>{row.label}</span>
+                  {!row.met && row.id === "active" && (
+                    <small>Activates when you switch posting on.</small>
+                  )}
+                </span>
                 {!row.met && row.section && (
                   <button type="button" className="autopilot-fix" onClick={() => {
                     if (row.section) jumpTo(row.section);
                   }}>{t("autopilot.fixIt")}</button>
-                )}
-                {!row.met && row.id === "active" && (
-                  <small>Activates when you switch posting on.</small>
                 )}
               </li>
             ))}
@@ -5464,30 +5472,39 @@ export function AutopilotPanel({
                     "needs copy" each name a state without saying whether the
                     scheduler will pick the item up or what has to happen first,
                     which is the only thing the reader wants from them. */}
-                <Badge
-                  tone={item.needs_copy
-                    ? "warn" : item.state === "approved" ? "good" : "neutral"}
-                  title={item.needs_copy
-                    ? t("autopilot.state.help.needsCopy")
-                    : t(`autopilot.state.help.${item.state}`)}
-                >
-                  {item.needs_copy
-                    ? t("autopilot.state.needsCopy")
-                    : t(`autopilot.state.${item.state}`)}
-                </Badge>
-                {/* A mark, not a badge and not a column: it says only that
-                    somebody left notes on this post, which is all a row can
-                    usefully carry about paragraphs it does not show. The
-                    notes themselves are one click away, in the editor. */}
-                {item.has_context && (
-                  <span
-                    className="campaign-queue-context-mark"
-                    title={t("autopilot.context.markHelp")}
+                {/* Wrapped with the mark below rather than left as two top-level
+                    children: the row's grid is templated for a fixed count -
+                    checkbox, thumbnail, copy, status, actions - and a sixth
+                    child with no column of its own pushed the actions div
+                    into the next implicit row, which is why the buttons used
+                    to land on a stray line under the post instead of beside
+                    the badge. */}
+                <span className="campaign-queue-status">
+                  <Badge
+                    tone={item.needs_copy
+                      ? "warn" : item.state === "approved" ? "good" : "neutral"}
+                    title={item.needs_copy
+                      ? t("autopilot.state.help.needsCopy")
+                      : t(`autopilot.state.help.${item.state}`)}
                   >
-                    <span aria-hidden="true">✎</span>
-                    <span className="sr-only">{t("autopilot.context.mark")}</span>
-                  </span>
-                )}
+                    {item.needs_copy
+                      ? t("autopilot.state.needsCopy")
+                      : t(`autopilot.state.${item.state}`)}
+                  </Badge>
+                  {/* A mark, not a badge and not a column: it says only that
+                      somebody left notes on this post, which is all a row can
+                      usefully carry about paragraphs it does not show. The
+                      notes themselves are one click away, in the editor. */}
+                  {item.has_context && (
+                    <span
+                      className="campaign-queue-context-mark"
+                      title={t("autopilot.context.markHelp")}
+                    >
+                      <span aria-hidden="true">✎</span>
+                      <span className="sr-only">{t("autopilot.context.mark")}</span>
+                    </span>
+                  )}
+                </span>
                 {canEdit && (
                   <div className="campaign-queue-actions">
                     {item.state !== "approved" && (

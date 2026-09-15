@@ -1193,15 +1193,19 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-draft-rest { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
 .autopilot-draft-rest .ui-button { flex: none; }
 
-/* Before the switch, not after: what is missing, and where to go and fix it. */
-.autopilot-checklist { display: grid; gap: 4px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); list-style: none; }
+/* Before the switch, not after: what is missing, and where to go and fix it.
+   The chip shape itself - `display: flex`, the pill border, the compact
+   padding - is set further down, in the row of pills this became; what is
+   still set here is what that later rule does not touch: vertical centring,
+   the icon's own size and colour by state. An unconditional `display: grid`
+   used to sit here too, a leftover from a stacked-list design the chip strip
+   replaced, doing nothing but naming a layout the rule below always won. */
 .autopilot-checklist li { display: flex; gap: 8px; align-items: center; padding: 2px 0; font-size: 12px; line-height: 1.5; }
 .autopilot-checklist li > span:first-child { flex: none; width: 14px; font-size: 15px; line-height: 1.2; text-align: center; font-weight: 700; }
 .autopilot-checklist li > span:first-child svg { display: block; margin: 0 auto; }
 .autopilot-checklist li.met { color: var(--muted); }
 .autopilot-checklist li.met > span:first-child { color: var(--green); }
 .autopilot-checklist li.unmet > span:first-child { color: var(--amber); }
-.autopilot-checklist a { margin-inline-start: auto; color: var(--link); white-space: nowrap; }
 
 .autopilot-settings { display: grid; gap: 12px; }
 .autopilot-settings > label, .autopilot-numbers > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
@@ -1382,6 +1386,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-context.compact > summary { padding: 6px 8px; font-size: 11px; }
 .campaign-context-read { margin: 0; padding: 0 8px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .campaign-context-note { padding-bottom: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+/* One grid cell for the badge and the mark together - see the comment in
+   the component. `.autopilot-queue > li` is templated for exactly five
+   columns (checkbox, thumbnail, copy, status, actions); a bare wrapper with
+   no width of its own so it costs the grid nothing beyond what the badge
+   already did. */
+.campaign-queue-status { display: inline-flex; align-items: center; gap: 4px; }
 /* Dashed, so a reader who scans the queue sees at a glance that this mark is
    not one of the states the badges beside it report. */
 .campaign-queue-context-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 10px; }
@@ -1860,7 +1870,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .autopilot-queue:not(.selectable) > li.copy-only {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .autopilot-queue > li > .ui-badge { grid-column: auto; justify-self: start; }
+  /* The badge's own slot in the compact 4-column template - now the
+     wrapper that carries the badge and the context mark together, since
+     the mark is no longer a fifth top-level child to place. */
+  .autopilot-queue > li > .campaign-queue-status { grid-column: auto; justify-self: start; }
   .autopilot-queue.selectable > li > .campaign-queue-actions {
     grid-column: 3 / -1;
     justify-content: flex-start;
@@ -2034,9 +2047,15 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-checklist { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; padding: 0; border: 0; background: transparent; }
 .autopilot-checklist li { min-height: 26px; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; background: var(--panel-raised); font-size: 10px; }
 .autopilot-checklist li > span:first-child { width: auto; font-size: 11px; }
+/* The label and its hint, grouped so they keep one left edge. Ungrouped they
+   were two children of the pill's own nowrap row, alongside the icon - so a
+   hint too long for the remaining width wrapped against the pill's own edge
+   instead of the label's, landing wherever there was room rather than under
+   the sentence it explains. */
+.autopilot-checklist li > .autopilot-checklist-copy { display: grid; gap: 1px; }
 .autopilot-checklist :is(a, .autopilot-fix) { margin-inline-start: 2px; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; }
 .autopilot-fix { border: 0; padding: 0; background: transparent; cursor: pointer; }
-.autopilot-checklist li > small { color: var(--muted); font-size: 9px; }
+.autopilot-checklist-copy > small { color: var(--muted); font-size: 9px; }
 .campaign-media-browser { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
 .campaign-media-browser-head, .campaign-media-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
 .campaign-media-browser-head > div { display: grid; gap: 2px; }
@@ -2176,9 +2195,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .campaign-entry-actions { flex-wrap: wrap; max-inline-size: 100%; }
   .campaign-day-row > .campaign-entry-actions { flex: 1 1 100%; justify-content: flex-end; }
   .campaign-heading, .campaign-summary { display: grid; }
+  /* The run row and the delivery field stack at their own, wider breakpoint
+     below - see the comment there - so they are not named here any more. */
   .campaign-layout, .campaign-workspace, .campaign-summary, .autopilot,
-  .campaign-one-off-handoff, .autopilot-run-row, .autopilot-delivery { min-inline-size: 0; }
-  .autopilot-delivery { display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; }
+  .campaign-one-off-handoff { min-inline-size: 0; }
   .campaign-dialog-grid { grid-template-columns: 1fr; }
   .campaign-media-grid { grid-template-columns: 1fr; }
   .campaign-work-tabs { flex-wrap: nowrap; }
@@ -2231,18 +2251,31 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-telegram:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 /* Keep the paired selectors inside the mobile card. This must follow the
    desktop flex rule above so the cascade cannot restore their min-content
-   width after the narrow-screen layout has already opted into stacking. */
-@media (max-width: 600px) {
+   width after the narrow-screen layout has already opted into stacking.
+
+   900px, not 600px: below 600 this was the only rule doing anything, and
+   above it the row falls to `.ui-card-head`'s plain `flex-wrap`, which wraps
+   the whole aside as a block and right-aligns it (`justify-content: flex-end`)
+   rather than reflowing each control - Authority, Delivery, the Telegram
+   chip, the switch - onto its own line. Between 600 and roughly 900px that
+   read as a run of narrow chips stranded against the right edge with the
+   card's whole left two-thirds empty, not as a stacked settings list. 900px
+   is where `.campaign-layout` itself already drops the sidebar to one
+   column, so a campaign narrow enough to be single-column here was always
+   narrow enough to want this stacked too. */
+@media (max-width: 900px) {
   .autopilot-run-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     inline-size: 100%;
+    min-inline-size: 0;
   }
 
   .autopilot-delivery {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     inline-size: 100%;
+    min-inline-size: 0;
   }
 
   .autopilot-delivery .ui-select {
@@ -2250,8 +2283,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
     max-inline-size: 100%;
   }
 
-  /* The desktop widths above are what stops the header wrapping; on a phone
-     the row has already stacked, so each dial takes the card instead. */
+  /* The desktop widths above are what stops the header wrapping; below the
+     breakpoint the row has already stacked, so each dial takes the card
+     instead. */
   .autopilot-delivery .search-select,
   .autopilot-authority .search-select {
     inline-size: 100%;
