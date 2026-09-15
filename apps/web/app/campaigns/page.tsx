@@ -83,24 +83,24 @@ type CampaignPolicy = {
   weekly_post_cap: number | null;
   authority: string;
   priority: string;
+  /** Whether held posts also go to Telegram as cards to decide from. */
+  approvals_telegram: boolean;
   offer_mode: "smart" | "manual" | "none";
   offer_id: string | null;
   disclose: boolean;
-  /** Whether held posts also go to Telegram as cards to decide from. */
-  approvals_telegram: boolean;
   disclosure: string;
   /** Posts already frozen and waiting, which these settings will reach. */
   held?: { waiting: number; edited: number; recomposable: number };
   bio_hint: string;
 };
 
-type PublicationPlan = {
-  id: string;
-  campaign_id: string;
 /** Whether the workspace's Telegram is set up, and as whom - what the dialogs
     say beside the switch, and whether they offer it at all. */
 type TelegramLink = { connected: boolean; bot: string; chat: string; reason: string };
 
+type PublicationPlan = {
+  id: string;
+  campaign_id: string;
   title: string;
   platform: PublishingPlatform | "douyin" | "other";
   provider?: string | null;
@@ -365,6 +365,9 @@ export default function CampaignsPage() {
   // changes nothing and the list keeps showing what is actually saved.
   const [settingsFor, setSettingsFor] = useState<Campaign | null>(null);
   const [policy, setPolicy] = useState<CampaignPolicy | null>(null);
+  /** The workspace's Telegram, as the list reports it: whether the dialogs
+      offer approvals there, and which bot and chat they would go to. */
+  const [telegramLink, setTelegramLink] = useState<TelegramLink | null>(null);
   /** Held apart from the form because the offer picker appears only for one
       of the three modes, and a radio group cannot drive that on its own. */
   const [offerMode, setOfferMode] = useState<"smart" | "manual" | "none">("smart");
@@ -382,9 +385,6 @@ export default function CampaignsPage() {
       are rewritten when the post language changes. */
   const [newOfferMode, setNewOfferMode] = useState<OfferMode>("smart");
   const [newLanguage, setNewLanguage] = useState<string>(defaultLanguage(locale));
-  /** The workspace's Telegram, as the list reports it: whether the dialogs
-      offer approvals there, and which bot and chat they would go to. */
-  const [telegramLink, setTelegramLink] = useState<TelegramLink | null>(null);
   const [newScaffolding, setNewScaffolding] = useState(
     () => scaffoldingFor(defaultLanguage(locale)),
   );
@@ -450,6 +450,7 @@ export default function CampaignsPage() {
     );
     setCampaigns(snapshot.campaigns);
     setPlans(snapshot.plans);
+    setTelegramLink(snapshot.telegram ?? null);
     const requested = snapshot.campaigns.find(
       (item) => item.id === requestedCampaign.current,
     );
@@ -470,7 +471,6 @@ export default function CampaignsPage() {
     setCampaignId((current) => requested?.id
       ?? (visible.some((item) => item.id === current) ? current : visible[0]?.id ?? ""));
   }, [apiFetch]);
-    setTelegramLink(snapshot.telegram ?? null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -639,6 +639,12 @@ export default function CampaignsPage() {
             disclose: form.get("disclose") === "on",
             disclosure: newScaffolding.disclosure,
             bio_hint: newScaffolding.bioHint,
+            // Only when the switch was on the form at all - it is offered
+            // only with Telegram connected - so a workspace without it
+            // never sends a flag it could not have chosen.
+            ...(telegramLink?.connected
+              ? { approvals_telegram: form.get("approvals_telegram") === "on" }
+              : {}),
           }),
         }),
       );
@@ -659,12 +665,6 @@ export default function CampaignsPage() {
   /**
    * What the campaign is, and how hard it is run, in one dialog.
    *
-            // Only when the switch was on the form at all - it is offered
-            // only with Telegram connected - so a workspace without it
-            // never sends a flag it could not have chosen.
-            ...(telegramLink?.connected
-              ? { approvals_telegram: form.get("approvals_telegram") === "on" }
-              : {}),
    * The policy lives on the autopilot row because that is what reads it, and
    * it is fetched when the dialog opens rather than folded into every campaign
    * payload: this is the one screen that needs it, and it is opened by hand.
@@ -703,6 +703,8 @@ export default function CampaignsPage() {
       const payload = await json<{
         campaign: Campaign;
         held?: { recomposed: number; kept: number };
+        /** What switching Telegram on did with the posts already waiting. */
+        telegram?: string;
       }>(
         await apiFetch(`/api/workspaces/${workspaceId}/campaigns/${settingsFor.id}`, {
           method: "POST",
@@ -723,8 +725,6 @@ export default function CampaignsPage() {
               clear_weekly_cap: !form.get("weekly_post_cap"),
               offer_mode: offerMode,
               // Only meaningful for the one-offer mode, and cleared otherwise
-        /** What switching Telegram on did with the posts already waiting. */
-        telegram?: string;
               // so a mode change does not leave a stale pin behind it.
               offer_id: offerMode === "manual" ? (offerChoice || null) : null,
               min_recycle_days: Number(form.get("min_recycle_days")),
@@ -733,14 +733,19 @@ export default function CampaignsPage() {
               disclose: form.get("disclose") === "on",
               disclosure: form.get("disclosure"),
               bio_hint: form.get("bio_hint"),
+              // Sent only when the switch was on the form: with Telegram
+              // connected, or already on so it can be switched off.
+              ...(telegramLink?.connected || policy.approvals_telegram
+                ? { approvals_telegram: form.get("approvals_telegram") === "on" }
+                : {}),
             } : {}),
           }),
         }),
       );
       await refresh(workspaceId);
       setSettingsFor(null);
-      // What it reached, not only that it saved - and where the waiting
-      // posts went if Telegram was just switched on.
+      // What it reached, not only that it saved - and where the waiting posts
+      // went if Telegram was just switched on.
       const reached = payload.held;
       const saved = reached?.recomposed
         ? `Campaign settings saved. ${reached.recomposed} waiting post${
@@ -755,11 +760,6 @@ export default function CampaignsPage() {
     }
   }
 
-              // Sent only when the switch was on the form: with Telegram
-              // connected, or already on so it can be switched off.
-              ...(telegramLink?.connected || policy.approvals_telegram
-                ? { approvals_telegram: form.get("approvals_telegram") === "on" }
-                : {}),
   async function setCampaignStatus(status: Campaign["status"]) {
     if (!campaignId) return;
     setBusy(`campaign-${status}`);
@@ -1159,6 +1159,7 @@ export default function CampaignsPage() {
               </Select>
               <small>Ranking uses an axis only once it has evidence.</small>
             </label>
+            <TelegramApprovalsField link={telegramLink} defaultChecked={false} />
           </details>
         </form>
       </Dialog>
@@ -1262,7 +1263,6 @@ export default function CampaignsPage() {
                       onClick={() => setOfferMode(mode)}>
                       <strong>{title}</strong><small>{hint}</small>
                     </button>
-            <TelegramApprovalsField link={telegramLink} defaultChecked={false} />
                   ))}
                 </div>
               </div>
@@ -1381,6 +1381,10 @@ export default function CampaignsPage() {
                 </Select>
                 <small>Ranking uses an axis only once it has evidence.</small>
               </label>
+              <TelegramApprovalsField
+                link={telegramLink}
+                defaultChecked={policy.approvals_telegram}
+              />
             </>}
           </form>
         )}
@@ -1389,7 +1393,3 @@ export default function CampaignsPage() {
     </main>
   );
 }
-              <TelegramApprovalsField
-                link={telegramLink}
-                defaultChecked={policy.approvals_telegram}
-              />

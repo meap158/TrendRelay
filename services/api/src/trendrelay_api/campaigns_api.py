@@ -518,6 +518,7 @@ def create_campaign(
         "weekly_post_cap",
         "authority",
         "priority",
+        "approvals_telegram",
     ):
         value = getattr(body, field)
         if value is not None:
@@ -532,7 +533,6 @@ def create_campaign(
         "campaign.created",
         "campaign",
         item.id,
-        "approvals_telegram",
         {
             "status": item.status,
             # What was actually stored, not what was passed: an offer sent
@@ -729,6 +729,26 @@ def update_campaign(
             for field in COMPOSITION_SETTINGS
         ):
             reached = recompose_held(session, autopilot)
+    # Telegram switched on with posts already waiting: those go to the chat
+    # now, as cards - the same thing the autopilot route does on the flip -
+    # rather than only whatever the next pass holds.
+    telegram_note = ""
+    if (
+        autopilot
+        and body.approvals_telegram
+        and before.get("approvals_telegram") is False
+    ):
+        from trendrelay_api.approval_notices import announce_executions
+        from trendrelay_api.publication_models import PublicationExecution
+
+        waiting = session.scalars(
+            select(PublicationExecution).where(
+                PublicationExecution.workspace_id == workspace_id,
+                PublicationExecution.campaign_id == campaign_id,
+                PublicationExecution.state == "proposed",
+            ).order_by(PublicationExecution.scheduled_at.asc())
+        ).all()
+        telegram_note = announce_executions(session, autopilot, list(waiting))
     audit(
         session,
         request,
@@ -808,26 +828,6 @@ class CampaignDuplicate(BaseModel):
 #: The split is not "which columns look boring". It is: would carrying this
 #: forward make the copy claim something that never happened to it. A queue item
 #: saying it has been posted four times is held back by the recycle window for
-    # Telegram switched on with posts already waiting: those go to the chat
-    # now, as cards - the same thing the autopilot route does on the flip -
-    # rather than only whatever the next pass holds.
-    telegram_note = ""
-    if (
-        autopilot
-        and body.approvals_telegram
-        and before.get("approvals_telegram") is False
-    ):
-        from trendrelay_api.approval_notices import announce_executions
-        from trendrelay_api.publication_models import PublicationExecution
-
-        waiting = session.scalars(
-            select(PublicationExecution).where(
-                PublicationExecution.workspace_id == workspace_id,
-                PublicationExecution.campaign_id == campaign_id,
-                PublicationExecution.state == "proposed",
-            ).order_by(PublicationExecution.scheduled_at.asc())
-        ).all()
-        telegram_note = announce_executions(session, autopilot, list(waiting))
 #: work the copy never did, and an autopilot saying it ran an hour ago is a lie
 #: about a campaign that has never run.
 _COPY_RESETS: dict[str, dict[str, Any]] = {
