@@ -432,13 +432,13 @@ def list_campaigns(
             .group_by(PublicationExecution.campaign_id)
         ).all()
     )
+    from trendrelay_api.integrations.telegram import connection_summary
+
     return {
         "campaigns": [
             {
                 **_campaign(item),
                 "tagged_products": counts.get(item.id, 0),
-    from trendrelay_api.integrations.telegram import connection_summary
-
                 "held_count": held_counts.get(item.id, 0),
             }
             for item in items
@@ -669,6 +669,7 @@ def update_campaign(
             "daily_cap_per_account": body.daily_cap_per_account,
             "authority": body.authority,
             "priority": body.priority,
+            "approvals_telegram": body.approvals_telegram,
         }
         for field, value in policy.items():
             if value is None:
@@ -748,7 +749,6 @@ def update_campaign(
                     if autopilot and hasattr(autopilot, field)
                     else getattr(item, field, was)
                 )
-            "approvals_telegram": body.approvals_telegram,
             ),
             "post_language": language if retranslated else None,
             "recomposed_held": reached["recomposed"],
