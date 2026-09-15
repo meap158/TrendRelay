@@ -125,6 +125,24 @@ def graduation_block(session: Session, campaign_id: str) -> str | None:
     return None
 
 
+def _card_language(value: str | None) -> str | None:
+    """A language the Telegram cards can be written in, or None for the
+    campaign's own. Refused by name rather than saved and fallen back on
+    silently - a card that came out English after somebody chose Japanese
+    would look like the setting had not taken."""
+    from trendrelay_api import approval_words
+
+    if not value:
+        return None
+    if not approval_words.known(value):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Telegram cards cannot be written in {value!r}. "
+            f"Choose one of: {', '.join(sorted(approval_words.WORDS))}.",
+        )
+    return value
+
+
 class AutopilotSettings(BaseModel):
     enabled: bool = False
     offer_id: str | None = Field(default=None, max_length=64)
@@ -154,6 +172,8 @@ class AutopilotSettings(BaseModel):
     #: Whether a held post is also announced on Telegram, through the tool
     #: set up in Tools. A message only; approving stays in the app.
     approvals_telegram: bool = False
+    #: The language of those cards. None is the campaign's own post language.
+    approvals_telegram_language: str | None = Field(default=None, pattern=r"^[a-z]{2}$")
     #: What ranking optimises for. Balanced blends whichever axes have
     #: evidence rather than pretending all three always do.
     priority: str = Field(
@@ -880,6 +900,7 @@ def save_autopilot(
     autopilot.authority = body.authority
     telegram_switched_on = body.approvals_telegram and not autopilot.approvals_telegram
     autopilot.approvals_telegram = body.approvals_telegram
+    autopilot.approvals_telegram_language = _card_language(body.approvals_telegram_language)
     autopilot.priority = body.priority
     autopilot.weekly_post_cap = body.weekly_post_cap
     autopilot.posting_preset_id = body.posting_preset_id

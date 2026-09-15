@@ -799,8 +799,6 @@ export const fr: Messages = {
     scopeAll: "Toutes ({count})",
     noArchived: "Aucune campagne archivée.",
     noActive: "Aucune campagne active.",
-    reorderHint: "Faites glisser pour réorganiser, ou maintenez Alt et utilisez les flèches haut et bas.",
-    reorderFailed: "Cet ordre n'a pas pu être enregistré.",
     archivedAvailable: "Aucune campagne active. Les campagnes archivées sont disponibles ci-dessus.",
     archivedHiddenHelp: "Les campagnes archivées restent masquées des opérations quotidiennes jusqu’à leur consultation ou restauration.",
     viewArchived: "Voir les archives ({count})",

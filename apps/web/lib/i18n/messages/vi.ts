@@ -789,8 +789,6 @@ export const vi: Messages = {
     scopeAll: "Tất cả ({count})",
     noArchived: "Chưa có chiến dịch đã lưu trữ.",
     noActive: "Chưa có chiến dịch nào đang chạy.",
-    reorderHint: "Kéo để sắp xếp lại, hoặc giữ Alt và nhấn mũi tên lên xuống.",
-    reorderFailed: "Không lưu được thứ tự này.",
     archivedAvailable: "Chưa có chiến dịch nào đang chạy. Các chiến dịch đã lưu trữ có ở trên.",
     archivedHiddenHelp: "Chiến dịch đã lưu trữ được ẩn khỏi công việc hằng ngày cho đến khi bạn chọn xem hoặc khôi phục.",
     viewArchived: "Xem đã lưu trữ ({count})",

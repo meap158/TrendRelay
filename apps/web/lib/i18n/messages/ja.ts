@@ -788,8 +788,6 @@ export const ja: Messages = {
     scopeAll: "すべて ({count})",
     noArchived: "アーカイブ済みキャンペーンはありません。",
     noActive: "進行中のキャンペーンはありません。",
-    reorderHint: "ドラッグで並べ替え、または Alt を押しながら上下の矢印キー。",
-    reorderFailed: "この並び順を保存できませんでした。",
     archivedAvailable: "進行中のキャンペーンはありません。アーカイブ済みは上から選べます。",
     archivedHiddenHelp: "アーカイブ済みキャンペーンは、確認または復元するまで日常の運用画面に表示されません。",
     viewArchived: "アーカイブを表示 ({count})",

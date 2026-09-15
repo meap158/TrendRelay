@@ -99,6 +99,11 @@ class CampaignAutopilot(Base):
     #: the approving still happens in the app. Needs the Telegram tool set up
     #: in Tools; without it the flag is kept and nothing is sent.
     approvals_telegram: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: The language those cards are written in. Null is the campaign's own
+    #: post language - the approver's language far more often than the
+    #: server's - and a code here is for the campaign whose approver reads a
+    #: different language from its audience.
+    approvals_telegram_language: Mapped[str | None] = mapped_column(String(16))
     #: What the campaign optimises for: reach, discussion, revenue, or a
     #: balanced blend. Ranking reads this; the campaign's prose objective is
     #: for people.

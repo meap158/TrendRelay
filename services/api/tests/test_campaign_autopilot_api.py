@@ -467,6 +467,31 @@ def test_switching_telegram_on_sends_what_is_already_waiting(workspace, monkeypa
     assert len(announced) == 1
 
 
+def test_the_cards_language_is_a_choice_among_the_languages_the_cards_can_be_written_in(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = {
+        "enabled": False, "min_recycle_days": 14, "daily_cap_per_account": 3,
+        "delivery": "schedule", "approvals_telegram": True, "confirm_external_action": True,
+    }
+    # Unset is the campaign's own language, reported as null.
+    saved = request("PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot", json=base)
+    assert saved.json()["autopilot"]["approvals_telegram_language"] is None
+    chosen = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={**base, "approvals_telegram_language": "ja"},
+    )
+    assert chosen.status_code == 200, chosen.text
+    assert chosen.json()["autopilot"]["approvals_telegram_language"] == "ja"
+    # A language the cards cannot be written in is refused by name, not
+    # saved and quietly fallen back on.
+    refused = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={**base, "approvals_telegram_language": "xx"},
+    )
+    assert refused.status_code == 422
+    assert "'xx'" in refused.json()["detail"] and "vi" in refused.json()["detail"]
+
+
 def test_running_autopilot_settings_do_not_require_activation_confirmation(workspace) -> None:
     campaign_id = campaign(workspace)
     url = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"

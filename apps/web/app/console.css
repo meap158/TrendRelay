@@ -725,21 +725,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .campaign-list { display: grid; gap: 6px; }
 .campaign-list > button { display: grid; gap: 4px; width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 10px; color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
 .campaign-list > button.selected { border-color: var(--link); background: var(--link-bg); }
-/* The affordance is the cursor rather than a grip glyph: the row is already a
-   click target with a name, a state and a count in it, and a handle drawn
-   beside all that is one more thing to look past. Keyed off the attribute that
-   actually makes it draggable, so the two cannot disagree. */
-.campaign-list > button[draggable="true"] { cursor: grab; }
-/* Being dragged, and the row it would land on. Faded rather than hidden: the
-   row keeps its place in the list, so the gap the drag opens is where it came
-   from and not a hole the list closed up behind it. */
-.campaign-list > button.campaign-dragging { opacity: 0.45; cursor: grabbing; }
-/* The line goes on the side the row will come to rest on, which is below the
-   target coming down the list and above it coming up. Inset rather than an
-   outer border, so the row does not grow by two pixels as the drag passes and
-   push everything under it down. */
-.campaign-list > button.drop-above { box-shadow: inset 0 2px 0 0 var(--link); }
-.campaign-list > button.drop-below { box-shadow: inset 0 -2px 0 0 var(--link); }
 .campaign-list strong { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .campaign-status-icon { display: grid; flex: 0 0 auto; place-items: center; width: 17px; height: 17px; border-radius: 50%; color: var(--muted); }
 .campaign-status-icon.active { background: var(--link-bg); color: var(--link); }

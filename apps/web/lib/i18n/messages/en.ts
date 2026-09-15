@@ -793,8 +793,6 @@ export const en = {
     scopeAll: "All ({count})",
     noArchived: "No archived campaigns.",
     noActive: "No active campaigns.",
-    reorderHint: "Drag to reorder, or hold Alt and press the up or down arrow.",
-    reorderFailed: "That order could not be saved.",
     archivedAvailable: "No active campaigns. Archived campaigns are available above.",
     archivedHiddenHelp: "Archived campaigns stay hidden from daily operations until you choose to review or restore them.",
     viewArchived: "View archived ({count})",

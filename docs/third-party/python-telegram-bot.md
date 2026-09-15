@@ -68,6 +68,14 @@ approval inbox offers under it:
 | 🚫 Dismiss | the execution is cancelled, freeing its slot and its queue item |
 | ↗ Open in app | a link to the campaign's inbox, for anything the card cannot do (editing the words) |
 
+**The language.** The card's own words - its buttons, what it says once
+decided, why a press was refused, the due date - are written in the
+campaign's post language, in any of the seven the interface speaks; a
+campaign can choose another for its cards in the same setting, for the
+approver who reads a different language from the audience. The post itself
+is quoted as written. Refusals that arrive before the post is known - a
+press from another chat, a button that is not ours - are English.
+
 **The media.** A carousel arrives as an album of its pictures (up to ten,
 Telegram's limit), followed by the card, because an album cannot carry
 buttons. A single picture, or a video, carries the card as its caption with

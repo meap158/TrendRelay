@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AUTHORITIES } from "./authority-options";
 import { useAuth } from "../auth-provider";
@@ -72,9 +72,6 @@ type Campaign = {
   /** Posts this campaign is holding for approval right now. Only the list
       endpoint fills it in; shown on the sidebar row when there are any. */
   held_count?: number;
-  /** Where it sits in the workspace's own order. The list arrives sorted by
-      it; this is here so a reorder can be sent back in the same terms. */
-  position?: number;
 };
 /** How hard a campaign is run. Stored on its autopilot, set from its settings. */
 type CampaignPolicy = {
@@ -88,6 +85,8 @@ type CampaignPolicy = {
   priority: string;
   /** Whether held posts also go to Telegram as cards to decide from. */
   approvals_telegram: boolean;
+  /** The language of those cards; null is the campaign's own post language. */
+  approvals_telegram_language?: string | null;
   offer_mode: "smart" | "manual" | "none";
   offer_id: string | null;
   disclose: boolean;
@@ -222,11 +221,19 @@ type CampaignsSnapshot = {
 function TelegramApprovalsField({
   link,
   defaultChecked,
+  defaultLanguage,
+  campaignLanguage,
 }: {
   link: TelegramLink | null;
   defaultChecked: boolean;
+  /** The card language chosen for this campaign; empty is the campaign's own. */
+  defaultLanguage: string;
+  /** The campaign's post language, named in the default option so the reader
+      knows what "the campaign's language" resolves to right now. */
+  campaignLanguage: string;
 }) {
   if (!link?.connected && !defaultChecked) return null;
+  const own = POST_LANGUAGES.find((item) => item.value === campaignLanguage)?.label;
   return (
     <div className="campaign-dialog-integration">
       <strong>Telegram</strong>
@@ -251,6 +258,18 @@ function TelegramApprovalsField({
             </span>
           )}
         </span>
+      </label>
+      {/* The cards' language. The campaign's own is right nearly always - the
+          approver reads what the audience reads - so it is the default and is
+          named; a choice is for the approver who reads another. */}
+      <label>Card language
+        <Select name="approvals_telegram_language" defaultValue={defaultLanguage}>
+          <option value="">{own ? `Campaign language (${own})` : "Campaign language"}</option>
+          {POST_LANGUAGES.map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
+          ))}
+        </Select>
+        <small>What the buttons and the decisions say. The post itself is quoted as written.</small>
       </label>
     </div>
   );
@@ -353,17 +372,6 @@ export default function CampaignsPage() {
   // asks for it. "Current" includes drafts and active campaigns: both still
   // need attention, while an archive is historical by definition.
   const [campaignScope, setCampaignScope] = useState<CampaignScope>("active");
-  // Which campaign is being dragged, and which one it is currently over. Two
-  // ids rather than two indexes: the list is filtered, so an index means
-  // nothing outside the rows on screen.
-  const [draggingCampaign, setDraggingCampaign] = useState("");
-  const [dropOntoCampaign, setDropOntoCampaign] = useState("");
-  /** Counts the reorder saves, so only the newest one gets to answer. */
-  const reorderToken = useRef(0);
-  /** The order a move is computed against - see `moveCampaign`. Kept level
-      with the list below, so a refresh from the server is what the next drag
-      starts from. */
-  const campaignOrder = useRef<Campaign[]>([]);
   // Refresh is a network concern and must not rerun when this local filter
   // changes. The ref lets a completed refresh respect the latest view without
   // turning the view switch into another request.
@@ -422,17 +430,6 @@ export default function CampaignsPage() {
       ? archivedCampaigns
       : activeCampaigns;
   const canCreateCampaign = ["owner", "editor"].includes(selectedWorkspace?.role ?? "");
-  // The same roles the reorder endpoint takes, and only where there are two
-  // rows to put in an order - a single campaign has nothing to drag past.
-  const canReorder = canCreateCampaign && visibleCampaigns.length > 1;
-  const reorderHintId = useId();
-  // Which way the drag is travelling, so the line lands on the side the row
-  // will actually come to rest on. A drop takes the target's index: coming
-  // down the list that leaves the moved row below the target, coming up it
-  // leaves it above.
-  const draggedFromBelow = Boolean(draggingCampaign) && Boolean(dropOntoCampaign)
-    && visibleCampaigns.findIndex((item) => item.id === draggingCampaign)
-      > visibleCampaigns.findIndex((item) => item.id === dropOntoCampaign);
   const canCreatePlan = ["owner", "editor", "approver"].includes(selectedWorkspace?.role ?? "");
   const canApprove = ["owner", "approver"].includes(selectedWorkspace?.role ?? "");
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -496,11 +493,6 @@ export default function CampaignsPage() {
     setCampaignId((current) => requested?.id
       ?? (visible.some((item) => item.id === current) ? current : visible[0]?.id ?? ""));
   }, [apiFetch]);
-
-  // Whatever the list is showing is what the next drag moves within, however
-  // it got there - a refresh after a save, a snapshot restored on arrival, or
-  // a move made a moment ago.
-  useEffect(() => { campaignOrder.current = campaigns; }, [campaigns]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -673,7 +665,10 @@ export default function CampaignsPage() {
             // only with Telegram connected - so a workspace without it
             // never sends a flag it could not have chosen.
             ...(telegramLink?.connected
-              ? { approvals_telegram: form.get("approvals_telegram") === "on" }
+              ? {
+                approvals_telegram: form.get("approvals_telegram") === "on",
+                approvals_telegram_language: String(form.get("approvals_telegram_language") ?? ""),
+              }
               : {}),
           }),
         }),
@@ -766,7 +761,10 @@ export default function CampaignsPage() {
               // Sent only when the switch was on the form: with Telegram
               // connected, or already on so it can be switched off.
               ...(telegramLink?.connected || policy.approvals_telegram
-                ? { approvals_telegram: form.get("approvals_telegram") === "on" }
+                ? {
+                  approvals_telegram: form.get("approvals_telegram") === "on",
+                  approvals_telegram_language: String(form.get("approvals_telegram_language") ?? ""),
+                }
                 : {}),
             } : {}),
           }),
@@ -807,61 +805,6 @@ export default function CampaignsPage() {
     } finally {
       setBusy(null);
     }
-  }
-
-  /**
-   * Move one campaign to where another one sits, and keep it there.
-   *
-   * Applied to the whole list rather than to the rows on screen: the sidebar
-   * may be filtered, and an archived campaign nobody can see still has a place
-   * in the order. Moving by id inside the full list means the hidden ones keep
-   * theirs relative to everything else.
-   *
-   * Shown immediately and saved after. A reorder is somebody's own arrangement
-   * of nine rows - waiting on a round trip to see it land would make dragging
-   * feel broken - and the list goes back to what the server has if the save is
-   * refused, which is the only honest thing to show if it did not take.
-   */
-  function moveCampaign(movedId: string, ontoId: string) {
-    if (movedId === ontoId) return;
-    // Computed from the ref rather than from the rendered array: a held
-    // Alt+Arrow repeats faster than React re-renders, and a second move read
-    // off the list as it was last drawn would undo the first. The request
-    // body has to be the new order in full, so this cannot be done inside a
-    // state updater either - React is free to run that later.
-    const before = campaignOrder.current;
-    const from = before.findIndex((item) => item.id === movedId);
-    const onto = before.findIndex((item) => item.id === ontoId);
-    if (from < 0 || onto < 0) return;
-    const next = [...before];
-    const [moved] = next.splice(from, 1);
-    next.splice(onto, 0, moved);
-    campaignOrder.current = next;
-    setCampaigns(next);
-    const mine = ++reorderToken.current;
-    void (async () => {
-      try {
-        await json(
-          await apiFetch(`/api/workspaces/${workspaceId}/campaigns/order`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ campaign_ids: next.map((item) => item.id) }),
-          }),
-        );
-        // So the cached snapshot this tab reopens from is not the old order.
-        // Only for the most recent move: dragging three times in a row leaves
-        // three saves in flight, and an earlier one finishing last would pull
-        // the list back to an order already replaced.
-        if (reorderToken.current === mine) await refresh(workspaceId);
-      } catch (reason) {
-        // Same reason. A failure that is no longer the current arrangement has
-        // nothing to restore - `before` is two moves stale by then.
-        if (reorderToken.current !== mine) return;
-        campaignOrder.current = before;
-        setCampaigns(before);
-        fail(reason instanceof Error ? reason.message : t("campaigns.reorderFailed"));
-      }
-    })();
   }
 
   function changeCampaignScope(next: CampaignScope) {
@@ -931,72 +874,15 @@ export default function CampaignsPage() {
               </label>
             )}
           </div>
-          {/* Said once for the list rather than on each row - see the
-              `aria-describedby` below. Off-screen, because the grip on a
-              hovered row is what tells a sighted reader the same thing. */}
-          {canReorder && (
-            <p className="sr-only" id={reorderHintId}>{t("campaigns.reorderHint")}</p>
-          )}
           <div className="campaign-list">
             {!campaignsReady ? (
               <WaitingBlock className="waiting-block-compact" message={t("common.loading")} />
-            ) : visibleCampaigns.map((campaign, index) => (
+            ) : visibleCampaigns.map((campaign) => (
               <button
-                className={[
-                  campaign.id === campaignId ? "selected" : "",
-                  // Its own drag token rather than a bare `dragging`, so another
-                  // component's class can never restyle a campaign mid-drag.
-                  draggingCampaign === campaign.id ? "campaign-dragging" : "",
-                  // Which side the line is drawn on, because the drop lands
-                  // after the target when coming down the list and before it
-                  // when coming up. One line always drawn on top said the
-                  // wrong thing for half of every drag.
-                  dropOntoCampaign === campaign.id && draggingCampaign !== campaign.id
-                    ? draggedFromBelow ? "drop-above" : "drop-below"
-                    : "",
-                ].filter(Boolean).join(" ")}
+                className={campaign.id === campaignId ? "selected" : ""}
                 key={campaign.id}
                 onClick={() => selectCampaign(campaign.id)}
                 type="button"
-                // Reorderable by keyboard as well as by drag: Alt with an arrow
-                // moves a campaign along the list, and focus follows it so the
-                // same one can be walked several places in a row.
-                draggable={canReorder}
-                data-campaign-index={index}
-                aria-keyshortcuts={canReorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
-                // Said once, for the whole list, rather than as a tooltip on
-                // every row: a hint that pops up wherever the pointer rests is
-                // read once and in the way from then on. Screen readers hear it
-                // per row, which is where it is actually needed.
-                aria-describedby={canReorder ? reorderHintId : undefined}
-                onDragStart={() => setDraggingCampaign(campaign.id)}
-                onDragEnd={() => { setDraggingCampaign(""); setDropOntoCampaign(""); }}
-                onDragOver={(event) => {
-                  if (!draggingCampaign) return;
-                  event.preventDefault();
-                  setDropOntoCampaign(campaign.id);
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (draggingCampaign) moveCampaign(draggingCampaign, campaign.id);
-                  setDraggingCampaign("");
-                  setDropOntoCampaign("");
-                }}
-                onKeyDown={(event) => {
-                  if (!canReorder || !event.altKey) return;
-                  const step = event.key === "ArrowUp" ? -1
-                    : event.key === "ArrowDown" ? 1 : 0;
-                  const onto = visibleCampaigns[index + step];
-                  if (!step || !onto) return;
-                  event.preventDefault();
-                  const list = event.currentTarget.parentElement;
-                  moveCampaign(campaign.id, onto.id);
-                  requestAnimationFrame(() => {
-                    list?.querySelector<HTMLElement>(
-                      `[data-campaign-index="${index + step}"]`,
-                    )?.focus();
-                  });
-                }}
               >
                 <strong>
                   <span className={`campaign-status-icon ${campaign.status}`} aria-hidden="true">
@@ -1301,7 +1187,12 @@ export default function CampaignsPage() {
               </Select>
               <small>Ranking uses an axis only once it has evidence.</small>
             </label>
-            <TelegramApprovalsField link={telegramLink} defaultChecked={false} />
+            <TelegramApprovalsField
+              link={telegramLink}
+              defaultChecked={false}
+              defaultLanguage=""
+              campaignLanguage={newLanguage}
+            />
           </details>
         </form>
       </Dialog>
@@ -1526,6 +1417,8 @@ export default function CampaignsPage() {
               <TelegramApprovalsField
                 link={telegramLink}
                 defaultChecked={policy.approvals_telegram}
+                defaultLanguage={policy.approvals_telegram_language ?? ""}
+                campaignLanguage={settingsFor.languages[0] ?? "en"}
               />
             </>}
           </form>

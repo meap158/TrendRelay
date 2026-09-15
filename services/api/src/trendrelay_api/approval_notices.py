@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import approval_words as words
 from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.config import get_settings
 from trendrelay_api.foundation import audit
@@ -59,15 +60,26 @@ POLL_SECONDS = 25
 RETRY_SECONDS = 30
 
 
-def _when(at: datetime | None, zone: str | None) -> str:
-    """The due time as the workspace keeps time, short enough for a chat."""
+def _when(at: datetime | None, zone: str | None, language: str = "en") -> str:
+    """The due time as the workspace keeps time, written as the reader writes dates."""
     if at is None:
         return ""
     try:
         local = at.astimezone(ZoneInfo(zone)) if zone else at
     except (ValueError, KeyError):
         local = at
-    return local.strftime("%a %d %b, %H:%M")
+    return words.when(local, language)
+
+
+def card_language(autopilot: CampaignAutopilot) -> str:
+    """The language a campaign's cards are written in.
+
+    Its own choice when it made one; else the language it posts in, which is
+    the approver's language far more often than the server's; else English.
+    """
+    return words.language_for(
+        getattr(autopilot, "approvals_telegram_language", None), autopilot.post_language,
+    )
 
 
 def _excerpt(caption: str) -> str:
@@ -107,11 +119,11 @@ def app_link(campaign_id: str) -> str | None:
 
 
 def card_text(
-    campaign_name: str, item: dict[str, Any], *, zone: str | None = None,
+    campaign_name: str, item: dict[str, Any], *, zone: str | None = None, language: str = "en",
 ) -> str:
     """One held post as a message: where, when, the words, and why it waits."""
     where = html.escape(str(item.get("destination") or "an account"))
-    when = _when(item.get("at"), zone)
+    when = _when(item.get("at"), zone, language)
     lines = [
         f"<b>{html.escape(campaign_name)}</b> · {where}"
         + (f" · {html.escape(when)}" if when else ""),
@@ -127,7 +139,7 @@ def card_text(
 
 
 def card_buttons(
-    execution_id: str, campaign_id: str, *, test: bool = False,
+    execution_id: str, campaign_id: str, *, test: bool = False, language: str = "en",
 ) -> list[list[dict[str, str]]]:
     """The inbox's choices, as buttons: decide here, or go and look.
 
@@ -135,14 +147,16 @@ def card_buttons(
     of them only answers that it was the test.
     """
     verbs = (TEST, TEST, TEST) if test else (APPROVE, DISMISS, APPROVE_NOW)
-    second_row = [{"label": "🚀 Approve and post now", "callback": f"{verbs[2]}:{execution_id}"}]
+    second_row = [{
+        "label": words.say(language, "approve_now"), "callback": f"{verbs[2]}:{execution_id}",
+    }]
     link = app_link(campaign_id)
     if link:
-        second_row.append({"label": "↗ Open in app", "url": link})
+        second_row.append({"label": words.say(language, "open_app"), "url": link})
     return [
         [
-            {"label": "✅ Approve", "callback": f"{verbs[0]}:{execution_id}"},
-            {"label": "🚫 Dismiss", "callback": f"{verbs[1]}:{execution_id}"},
+            {"label": words.say(language, "approve"), "callback": f"{verbs[0]}:{execution_id}"},
+            {"label": words.say(language, "dismiss"), "callback": f"{verbs[1]}:{execution_id}"},
         ],
         second_row,
     ]
@@ -175,14 +189,17 @@ def announce_held(
     workspace = session.get(Workspace, autopilot.workspace_id)
     name = campaign.name if campaign else "Campaign"
     zone = workspace.timezone if workspace else None
+    language = card_language(autopilot)
     sent = 0
     left_out: list[str] = []
     try:
         for item in held[:CARDS_PER_PASS]:
             images, video = _media_of(item)
             outcome = telegram.send_card(
-                card_text(name, item, zone=zone),
-                buttons=card_buttons(str(item["execution_id"]), autopilot.campaign_id),
+                card_text(name, item, zone=zone, language=language),
+                buttons=card_buttons(
+                    str(item["execution_id"]), autopilot.campaign_id, language=language,
+                ),
                 images=images, video=video,
             )
             left_out.extend(outcome.get("skipped") or [])
@@ -191,9 +208,9 @@ def announce_held(
         if rest > 0:
             link = app_link(autopilot.campaign_id)
             telegram.send_message(
-                f"<b>{html.escape(name)}</b> · {rest} more post{'' if rest == 1 else 's'} "
-                "waiting in the inbox.",
-                buttons=[[{"label": "↗ Open in app", "url": link}]] if link else None,
+                f"<b>{html.escape(name)}</b> · "
+                + html.escape(words.say(language, "more_waiting", count=rest)),
+                buttons=[[{"label": words.say(language, "open_app"), "url": link}]] if link else None,
             )
     except telegram.TelegramUnavailable as error:
         if sent:
@@ -241,7 +258,7 @@ class PressRefused(ValueError):
 def _decision(data: str) -> tuple[str, str]:
     verb, _, execution_id = (data or "").partition(":")
     if verb not in (APPROVE, APPROVE_NOW, DISMISS, TEST) or not execution_id:
-        raise PressRefused("That button is not one of ours.")
+        raise PressRefused(words.say("en", "not_ours"))
     return verb, execution_id
 
 
@@ -264,30 +281,33 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
     from trendrelay_api.integrations import telegram
     from trendrelay_api.models import utc_now
 
+    # Before the post is known, the reader's language is not: these first
+    # refusals are English, and everything from the post on is the card's.
     chat = telegram.configured_chat_id()
     if not chat or str(callback.get("chat_id")) != chat:
-        raise PressRefused("This chat is not the one TrendRelay was set up with.")
+        raise PressRefused(words.say("en", "not_this_chat"))
     allowed = telegram.approver_ids()
     presser = str((callback.get("from") or {}).get("id") or "")
     if allowed and presser not in allowed:
-        raise PressRefused("You are not on the approvers list for this workspace.")
+        raise PressRefused(words.say("en", "not_approver"))
     verb, execution_id = _decision(callback.get("data", ""))
     if verb == TEST:
-        return f"This was the test card. Nothing was decided. Pressed by {html.escape(_who(callback))}."
+        return words.say("en", "test_answer", who=html.escape(_who(callback)))
 
     execution = session.get(PublicationExecution, execution_id)
     if execution is None:
-        raise PressRefused("That post is no longer here.")
-    if execution.state != "proposed":
-        raise PressRefused(f"Already decided in the app: it is {execution.state}.")
+        raise PressRefused(words.say("en", "gone"))
     autopilot = session.scalar(
         select(CampaignAutopilot).where(
             CampaignAutopilot.campaign_id == execution.campaign_id,
             CampaignAutopilot.workspace_id == execution.workspace_id,
         )
     )
+    language = card_language(autopilot) if autopilot else "en"
+    if execution.state != "proposed":
+        raise PressRefused(words.say(language, "already_decided", state=execution.state))
     if autopilot is None:
-        raise PressRefused("That campaign no longer runs on its own.")
+        raise PressRefused(words.say("en", "no_autopilot"))
     who = _who(callback)
     identity = {
         "via": "telegram",
@@ -305,7 +325,7 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
              **identity},
         )
         session.commit()
-        return f"🚫 Dismissed by {html.escape(who)}"
+        return words.say(language, "dismissed_by", who=html.escape(who))
     omitted = _omit_unsupported_thread(execution)
     publish_now = verb == APPROVE_NOW
     try:
@@ -321,10 +341,13 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
     )
     session.commit()
     if execution.state == "failed":
-        return f"⚠️ Approved by {html.escape(who)}, but it could not be queued: " \
-            f"{html.escape(execution.error or 'see the app')}"
-    return (f"🚀 Approved and posting now" if publish_now else "✅ Approved") \
-        + f" by {html.escape(who)}"
+        return words.say(
+            language, "approved_but_failed", who=html.escape(who),
+            reason=html.escape(execution.error or words.say(language, "see_the_app")),
+        )
+    return words.say(
+        language, "approved_now_by" if publish_now else "approved_by", who=html.escape(who),
+    )
 
 
 def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:

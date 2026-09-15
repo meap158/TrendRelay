@@ -162,6 +162,41 @@ def test_the_test_card_s_buttons_only_answer(session, chat) -> None:
     assert settled["message_id"] == 5
 
 
+def test_a_campaign_s_cards_speak_its_language_and_a_chosen_one_wins(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """A Vietnamese campaign's approver reads Vietnamese: the buttons, the
+    decision, the due date. A campaign may choose another language for the
+    approver who reads one its audience does not."""
+    execution = held_one(
+        session, tmp_path, engine_stub, approvals_telegram=True, post_language="vi",
+    )
+    [card] = chat["sent"]
+    labels = [[button["label"] for button in row] for row in card["buttons"]]
+    assert labels == [
+        ["✅ Duyệt", "🚫 Bỏ qua"],
+        ["🚀 Duyệt và đăng ngay", "↗ Mở trong ứng dụng"],
+    ]
+    assert "/08, " in card["text"] and "Aug" not in card["text"]  # day-first, not "Aug"
+
+    outcome = approval_notices.handle_update(same(session), press(execution.id, "apr"))
+    assert outcome == "✅ @ana đã duyệt"
+    again = approval_notices.handle_update(same(session), press(execution.id, "apr"))
+    assert again == "Đã được quyết định trong ứng dụng: trạng thái queued."
+
+    # The choice overrides the campaign's language.
+    from trendrelay_api.autopilot_models import CampaignAutopilot
+    pilot = session.get(CampaignAutopilot, "auto")
+    pilot.approvals_telegram_language = "ja"
+    session.commit()
+    chat["sent"].clear()
+    note = approval_notices.announce_held(session, pilot, [{
+        "execution_id": "pubexec_x", "destination": "acct", "caption": "c", "at": None, "reason": "",
+    }])
+    assert note == "Announced 1 post on Telegram."
+    assert chat["sent"][0]["buttons"][0][0]["label"] == "✅ 承認"
+
+
 def test_a_campaign_that_did_not_ask_sends_nothing(session, tmp_path, engine_stub, chat) -> None:
     campaign_setup(session, tmp_path)
     result = run_campaign(session, autopilot(session, authority="assist"), now=NOW)
@@ -243,7 +278,7 @@ def test_past_the_card_limit_the_rest_are_one_line_with_a_count(session, chat, m
     note = approval_notices.announce_held(session, pilot, held)
     assert note == f"Announced {approval_notices.CARDS_PER_PASS} posts on Telegram."
     assert len(chat["sent"]) == approval_notices.CARDS_PER_PASS + 1
-    assert "3 more posts waiting in the inbox." in chat["sent"][-1]["text"]
+    assert "3 more waiting in the inbox." in chat["sent"][-1]["text"]
 
 
 # --- the press ------------------------------------------------------------------

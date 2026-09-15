@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
@@ -119,6 +119,14 @@ class SignalInput(BaseModel):
     angles: list[str] = Field(default_factory=list, max_length=10)
 
 
+def _card_language(value: str) -> str | None:
+    """The same rule the autopilot route applies: a language the Telegram cards
+    can be written in, or None for the campaign's own."""
+    from trendrelay_api.campaign_autopilot_api import _card_language as known_or_refused
+
+    return known_or_refused(value)
+
+
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     objective: str = Field(min_length=2, max_length=1000)
@@ -155,6 +163,9 @@ class CampaignCreate(BaseModel):
     #: cards to decide from. Off unless asked; the form offers it only when
     #: Telegram is connected.
     approvals_telegram: bool | None = None
+    #: The language of those cards. Empty means the campaign's own post
+    #: language; None means not sent.
+    approvals_telegram_language: str | None = Field(default=None, pattern=r"^([a-z]{2})?$")
     offer_mode: str | None = Field(default=None, pattern=r"^(smart|manual|none)$")
     #: The caption scaffolding. Left unset these are written in the campaign's
     #: own language, which is what the route already did and what keeps a
@@ -229,6 +240,9 @@ class CampaignUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
     #: Whether held posts also go to Telegram as cards. None leaves it alone.
     approvals_telegram: bool | None = None
+    #: The language of those cards: a code, empty for the campaign's own post
+    #: language, None to leave it alone.
+    approvals_telegram_language: str | None = Field(default=None, pattern=r"^([a-z]{2})?$")
     #: How products attach: smart matching, one fixed offer, or none at all.
     #: A package can still override it by pinning, but this is what a package
     #: that says nothing falls through to.
@@ -335,7 +349,6 @@ def _campaign(item: Campaign) -> dict[str, Any]:
         "languages": item.languages,
         "affiliate_url": item.affiliate_url,
         "status": item.status,
-        "position": item.position,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
@@ -410,11 +423,7 @@ def list_campaigns(
     items = session.scalars(
         select(Campaign)
         .where(Campaign.workspace_id == workspace_id)
-        # The workspace's own order, with the same tie-break a queue uses. Not
-        # `updated_at`: sorting by it meant the list rearranged itself whenever
-        # a campaign was edited, which is the one thing a list somebody reads
-        # by position must not do.
-        .order_by(Campaign.position, Campaign.updated_at.desc())
+        .order_by(Campaign.updated_at.desc())
     ).all()
     # One grouped query for the whole list rather than a count per row. An offer
     # can be tagged to several campaigns, so these counts overlap and do not sum
@@ -475,14 +484,6 @@ def create_campaign(
         )
         if not offer:
             raise HTTPException(status_code=422, detail="Affiliate offer is unavailable.")
-    # A new campaign opens at the top, where it was when the list was sorted by
-    # what had been touched most recently - it is the thing just made, and the
-    # one about to be worked on. Above whatever is there rather than at some
-    # fixed number, so it stays first even after the order has been rearranged
-    # into negative ground.
-    highest = session.scalar(
-        select(func.min(Campaign.position)).where(Campaign.workspace_id == workspace_id)
-    )
     item = Campaign(
         workspace_id=workspace_id,
         name=body.name,
@@ -495,7 +496,6 @@ def create_campaign(
             if offer
             else str(body.affiliate_url) if body.affiliate_url else None
         ),
-        position=(highest - 1) if highest is not None else 0,
         created_by=user.id,
     )
     session.add(item)
@@ -537,6 +537,8 @@ def create_campaign(
         value = getattr(body, field)
         if value is not None:
             setattr(policy, field, value)
+    if body.approvals_telegram_language is not None:
+        policy.approvals_telegram_language = _card_language(body.approvals_telegram_language)
     session.add(policy)
     stored_signals = _store_signals(session, workspace_id, item.id, body.signals, user.id)
     audit(
@@ -617,74 +619,6 @@ def _store_signals(
     return stored
 
 
-class CampaignOrder(BaseModel):
-    """The workspace's campaigns, in the order they should be listed."""
-
-    #: Every campaign the caller could see, in their new order. A partial list
-    #: is accepted - a sidebar filtered to the unarchived ones sends what it
-    #: was showing - and the ones left out keep their place relative to each
-    #: other, after the ones named here.
-    campaign_ids: list[str] = Field(min_length=1, max_length=500)
-
-
-@router.post("/order")
-def reorder_campaigns(
-    workspace_id: str,
-    body: CampaignOrder,
-    request: Request,
-    user: AuthenticatedUser,
-    session: DatabaseSession,
-) -> dict[str, Any]:
-    """Put the campaign list in the order somebody dragged it into.
-
-    Declared above `/{campaign_id}`, which would otherwise match "order" as a
-    campaign id and answer a reorder with a 404 for a campaign nobody asked
-    about.
-
-    The whole list is renumbered from zero on every save rather than the moved
-    row being given a number between its new neighbours. Renumbering is one
-    statement per row on a table that holds tens of rows, and it cannot run out
-    of room between two positions the way a gap scheme eventually does.
-    """
-    require_role(membership(session, workspace_id, user.id), {"owner", "editor"})
-    items = session.scalars(
-        select(Campaign)
-        .where(Campaign.workspace_id == workspace_id)
-        .order_by(Campaign.position, Campaign.updated_at.desc())
-    ).all()
-    by_id = {item.id: item for item in items}
-    unknown = [item for item in body.campaign_ids if item not in by_id]
-    if unknown:
-        raise HTTPException(
-            status_code=404,
-            detail="No such campaign in this workspace: " + ", ".join(unknown[:5]),
-        )
-    # Named first, in the order given; then everything else in the order it
-    # already had. Duplicates in the request are ignored after the first.
-    wanted = list(dict.fromkeys(body.campaign_ids))
-    named = [by_id[campaign_id] for campaign_id in wanted]
-    remaining = [item for item in items if item.id not in set(wanted)]
-    ordered = [*named, *remaining]
-    for position, item in enumerate(ordered):
-        if item.position != position:
-            item.position = position
-    audit(
-        session,
-        request,
-        workspace_id,
-        user.id,
-        "campaign.reordered",
-        "workspace",
-        workspace_id,
-        {"count": len(body.campaign_ids)},
-    )
-    # Flushed, not committed: the session dependency commits on the way out,
-    # the way every other route in this file leaves it. Committing here would
-    # settle the audit row separately from the positions it describes.
-    session.flush()
-    return {"campaign_ids": [item.id for item in ordered]}
-
-
 @router.post("/{campaign_id}")
 def update_campaign(
     workspace_id: str,
@@ -758,6 +692,11 @@ def update_campaign(
                 continue
             before[field] = getattr(autopilot, field)
             setattr(autopilot, field, value)
+        if body.approvals_telegram_language is not None:
+            before["approvals_telegram_language"] = autopilot.approvals_telegram_language
+            autopilot.approvals_telegram_language = _card_language(
+                body.approvals_telegram_language
+            )
         # After the language pass below would be too late for the disclosure:
         # that pass rewrites it when the language changes, and an operator who
         # typed one in the same submission means the one they typed.

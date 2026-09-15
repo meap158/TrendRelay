@@ -18,8 +18,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CATALOG = PROJECT_ROOT / "config" / "tool-catalog.json"
 
-#: The groups the Tools page draws, in the order it draws them.
-SURFACES = {"discover", "download", "library", "assistant"}
+#: The groups the Tools page draws, in the order it draws them. Level with
+#: `SURFACES` in `apps/web/app/tools/page.tsx`: a surface named here and not
+#: there is a card that renders nowhere, which is what this guards.
+SURFACES = {"discover", "download", "library", "assistant", "campaigns"}
 RUNS = {"local", "network"}
 
 
