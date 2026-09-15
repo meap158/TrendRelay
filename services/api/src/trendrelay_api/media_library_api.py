@@ -897,7 +897,7 @@ def suggest_music(
     return {
         **found,
         "library": [
-            {**_asset_view(session, match.asset), "reason": match.reason}
+            {**_asset_view(session, match.asset), "reason": match.reason.payload()}
             for match in found["library"]
         ],
     }

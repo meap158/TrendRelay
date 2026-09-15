@@ -45,12 +45,18 @@ def _track(
 def test_the_pacing_leads_and_says_how_fast() -> None:
     asked = music.queries(music.Context(mood="energetic", bpm=126.5))
     assert asked[0].q == "fast upbeat energetic"
-    assert asked[0].reason == "The pacing is energetic, about 126 beats a minute"
+    # Parts, not a sentence: the interface words it in the reader's language.
+    assert asked[0].reason.payload() == {
+        "kind": "pacing", "words": [], "mood": "energetic", "bpm": 126,
+    }
     # A middling tempo says nothing the mood does not.
     assert music.queries(music.Context(mood="warm", bpm=94.0))[0].q == "warm acoustic"
     assert music.queries(music.Context(mood="calm", bpm=82.5))[0].q == "slow calm ambient"
+    # No tempo known, so the reason does not claim one.
+    assert music.queries(music.Context(mood="calm"))[0].reason.bpm is None
     # A mood the table does not know is searched for by its name.
     assert music.queries(music.Context(mood="Wistful"))[0].q == "Wistful"
+    assert music.queries(music.Context(mood="Wistful"))[0].reason.mood == "wistful"
 
 
 def test_tags_script_and_titles_each_earn_a_search_with_their_reason() -> None:
@@ -62,10 +68,13 @@ def test_tags_script_and_titles_each_earn_a_search_with_their_reason() -> None:
     # The word the script keeps returning to leads; then the longer words,
     # then the alphabet - and none of "the", "was" or "and".
     assert [query.q for query in asked] == ["coffee espresso", "ocean small boat", "harbour dawn"]
-    assert asked[0].reason == "The clips are tagged #coffee #espresso"
-    assert asked[1].reason == "The script is about ocean, small, boat"
+    assert asked[0].reason.kind == "tags"
+    assert asked[0].reason.words == ("coffee", "espresso")
+    assert asked[1].reason.kind == "script"
+    assert asked[1].reason.words == ("ocean", "small", "boat")
     # A clip titled by a platform's id lends no words; the named one does.
-    assert asked[2].reason == "The clips are called harbour, dawn"
+    assert asked[2].reason.kind == "titles"
+    assert asked[2].reason.words == ("harbour", "dawn")
 
 
 def test_three_searches_at_most_and_no_repeats() -> None:
@@ -103,9 +112,14 @@ def test_each_found_track_says_which_search_found_it_and_is_listed_once(session)
         "shared", "only-upbeat energetic", "only-coffee",
     ]
     # The first search that found it is the reason it is there.
-    assert found["tracks"][0]["reason"] == "The pacing is energetic"
-    assert found["tracks"][2]["reason"] == "The clips are tagged #coffee"
-    assert found["queries"][0] == {"q": "upbeat energetic", "reason": "The pacing is energetic"}
+    assert found["tracks"][0]["reason"]["kind"] == "pacing"
+    assert found["tracks"][2]["reason"] == {
+        "kind": "tags", "words": ["coffee"], "mood": "", "bpm": None,
+    }
+    assert found["queries"][0] == {
+        "q": "upbeat energetic",
+        "reason": {"kind": "pacing", "words": [], "mood": "energetic", "bpm": None},
+    }
     assert found["unavailable"] is False
 
 
@@ -143,7 +157,8 @@ def test_the_librarys_own_tracks_are_offered_when_they_share_a_word(session) -> 
 
     # Most words in common first; a video is never offered as music.
     assert [match.asset.id for match in matches] == ["d", "a", "b"]
-    assert matches[0].reason == "Matches espresso, coffee"
-    assert matches[2].reason == "Matches espresso"
+    assert matches[0].reason.kind == "match"
+    assert matches[0].reason.words == ("espresso", "coffee")
+    assert matches[2].reason.words == ("espresso",)
     assert music.library_matches(session, "ws", music.Context()) == []
     assert music.library_matches(session, "other", music.Context(tags=["coffee"])) == []

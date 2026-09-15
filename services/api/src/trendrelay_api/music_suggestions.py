@@ -49,6 +49,9 @@ MAX_QUERIES = 3
 TERMS_PER_QUERY = 3
 PER_QUERY = 6
 LIBRARY_MATCHES = 5
+#: How many of the workspace's own tracks are weighed for a match. See
+#: `library_matches` - the scoring wants them all, so the read is capped.
+CANDIDATE_TRACKS = 500
 
 #: Function words the shared tokeniser keeps - its stop list is tuned for
 #: matching a product name, where "of" can matter - that say nothing about
@@ -98,11 +101,35 @@ class Context:
 
 
 @dataclass(frozen=True)
+class Reason:
+    """Why a search was run, or why a track is offered - as parts, not a sentence.
+
+    The interface words it in the reader's language. Composing "The pacing is
+    energetic" here would put English on every screen however well the rest of
+    the panel is translated, which is the gap `lib/i18n/effects.ts` exists to
+    close; and it is how the stock matcher already works, handing back the
+    words it matched rather than a phrase about them.
+
+    `kind` is the stable name the dictionary is keyed by. The rest is whatever
+    that kind needs: the words for the three that are about words, the mood
+    and tempo for the one that is about the music itself.
+    """
+
+    kind: str
+    words: tuple[str, ...] = ()
+    mood: str = ""
+    bpm: int | None = None
+
+    def payload(self) -> dict[str, Any]:
+        return {"kind": self.kind, "words": list(self.words), "mood": self.mood, "bpm": self.bpm}
+
+
+@dataclass(frozen=True)
 class Query:
     """One search worth running, and the reason it is."""
 
     q: str
-    reason: str
+    reason: Reason
 
 
 @dataclass(frozen=True)
@@ -110,7 +137,7 @@ class LibraryMatch:
     """A track already in the Library that shares words with the piece."""
 
     asset: Any
-    reason: str
+    reason: Reason
 
 
 def _tempo(bpm: float | None) -> str:
@@ -149,7 +176,7 @@ def queries(context: Context) -> list[Query]:
     """
     found: list[Query] = []
 
-    def add(q: str, reason: str) -> None:
+    def add(q: str, reason: Reason) -> None:
         q = " ".join(q.split())
         if q and all(q.casefold() != known.q.casefold() for known in found):
             found.append(Query(q=q, reason=reason))
@@ -157,23 +184,25 @@ def queries(context: Context) -> list[Query]:
     if context.mood.strip():
         mood = context.mood.strip()
         base = MOOD_SEARCHES.get(mood.casefold(), mood)
-        tempo = _tempo(context.bpm)
-        reason = f"The pacing is {mood.casefold()}"
-        if context.bpm:
-            reason += f", about {context.bpm:.0f} beats a minute"
-        add(f"{tempo} {base}", reason)
+        add(
+            f"{_tempo(context.bpm)} {base}",
+            Reason(
+                kind="pacing",
+                mood=mood.casefold(),
+                bpm=round(context.bpm) if context.bpm else None,
+            ),
+        )
     tag_words = _specific((tag.lstrip("#") for tag in context.tags), TERMS_PER_QUERY)
     if tag_words:
-        tagged = " ".join(f"#{word}" for word in tag_words)
-        add(" ".join(tag_words), f"The clips are tagged {tagged}")
+        add(" ".join(tag_words), Reason(kind="tags", words=tuple(tag_words)))
     script_words = _specific([context.text], TERMS_PER_QUERY) if context.text.strip() else []
     if script_words:
-        add(" ".join(script_words), "The script is about " + ", ".join(script_words))
+        add(" ".join(script_words), Reason(kind="script", words=tuple(script_words)))
     # A clip titled by a platform's id has no words in it, and drops out here
     # on its own: the tokeniser keeps nothing of a run of digits.
     title_words = _specific((clean_clip_title(title) for title in context.titles), TERMS_PER_QUERY)
     if title_words:
-        add(" ".join(title_words), "The clips are called " + ", ".join(title_words))
+        add(" ".join(title_words), Reason(kind="titles", words=tuple(title_words)))
     return found[:MAX_QUERIES]
 
 
@@ -183,18 +212,25 @@ def library_matches(
     """The workspace's own tracks that share words with the piece, best first.
 
     Title, creator and the tags a track arrived with, against every word the
-    piece is about. Plain overlap: a Library holds tens of tracks, not tens
-    of thousands, and a word in common is the whole of what can be said
-    about a file with no listening done.
+    piece is about. Plain overlap: a word in common is the whole of what can
+    be said about a file with no listening done.
+
+    Scoring needs every candidate in hand, so the read is bounded rather than
+    paged - the newest few hundred tracks. A music library grows one hand-added
+    track at a time and will not reach that, but an unbounded select that is
+    true today is a table scan the day somebody bulk-imports.
     """
     words = context.words()
     if not words:
         return []
     rows = session.scalars(
-        select(MediaAsset).where(
+        select(MediaAsset)
+        .where(
             MediaAsset.workspace_id == workspace_id,
             MediaAsset.media_kind == "audio",
         )
+        .order_by(MediaAsset.created_at.desc())
+        .limit(CANDIDATE_TRACKS)
     ).all()
     scored: list[tuple[int, str, LibraryMatch]] = []
     for row in rows:
@@ -203,7 +239,7 @@ def library_matches(
             have |= _words(str(tag).lstrip("#"))
         common = sorted(words & have, key=lambda word: (-len(word), word))
         if common:
-            reason = "Matches " + ", ".join(common[:TERMS_PER_QUERY])
+            reason = Reason(kind="match", words=tuple(common[:TERMS_PER_QUERY]))
             scored.append((len(common), row.title or "", LibraryMatch(asset=row, reason=reason)))
     scored.sort(key=lambda entry: (-entry[0], entry[1]))
     return [match for _count, _title, match in scored[:limit]]
@@ -241,9 +277,9 @@ def suggest(
             if track["id"] in seen:
                 continue
             seen.add(track["id"])
-            tracks.append({**track, "reason": query.reason})
+            tracks.append({**track, "reason": query.reason.payload()})
     return {
-        "queries": [{"q": query.q, "reason": query.reason} for query in asked],
+        "queries": [{"q": query.q, "reason": query.reason.payload()} for query in asked],
         "library": library_matches(session, workspace_id, context),
         "tracks": tracks,
         "unavailable": unavailable,

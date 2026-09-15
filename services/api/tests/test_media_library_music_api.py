@@ -259,17 +259,18 @@ def test_suggestions_read_the_clips_and_offer_the_librarys_own_tracks(monkeypatc
     body = response.json()
     # Each tag once, so the longer word leads the search.
     assert asked == ["fast upbeat energetic", "espresso coffee"]
+    # Reasons travel as parts. The browser words them, so a suggestion reads
+    # in the same language as the panel around it.
     assert [entry["reason"] for entry in body["queries"]] == [
-        "The pacing is energetic, about 126 beats a minute",
-        "The clips are tagged #espresso #coffee",
+        {"kind": "pacing", "words": [], "mood": "energetic", "bpm": 126},
+        {"kind": "tags", "words": ["espresso", "coffee"], "mood": "", "bpm": None},
     ]
     assert [entry["id"] for entry in body["library"]] == ["own"]
-    assert body["library"][0]["reason"] == "Matches coffee"
+    assert body["library"][0]["reason"] == {
+        "kind": "match", "words": ["coffee"], "mood": "", "bpm": None,
+    }
     assert body["library"][0]["license"] == "CC0-1.0"
-    assert [track["reason"] for track in body["tracks"]] == [
-        "The pacing is energetic, about 126 beats a minute",
-        "The clips are tagged #espresso #coffee",
-    ]
+    assert [track["reason"]["kind"] for track in body["tracks"]] == ["pacing", "tags"]
     assert body["unavailable"] is False
 
 
