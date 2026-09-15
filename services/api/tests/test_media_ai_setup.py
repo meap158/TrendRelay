@@ -337,6 +337,11 @@ def test_the_model_is_fetched_with_no_credential(monkeypatch, tmp_path) -> None:
     _FakeWhisper.calls = []
     monkeypatch.setattr(media_ai, "_runtime_path", lambda: None)
     monkeypatch.setattr(media_ai, "MODEL_ROOT", tmp_path)
+    # The GPU half, which `_prepare_speech` ends by calling: on a machine with
+    # a card it pip-installs the CUDA runtime, so this test reached the
+    # network and failed on the download rather than on anything it is about.
+    # What it is about is the token, and that is above this line.
+    monkeypatch.setattr(media_ai, "_prepare_speech_cuda", lambda stage=None: [])
     module = type(sys)("faster_whisper")
     module.WhisperModel = _FakeWhisper
     monkeypatch.setitem(sys.modules, "faster_whisper", module)
