@@ -545,6 +545,7 @@ export const en = {
     pinterestBoardHelp: "The board that should receive the pin.",
     sendForApproval: "Send for approval",
     discloseAi: "Disclose AI-generated media",
+    addMusic: "Let the network add music",
     whatWillBeSent: "What will be sent",
     chooseMediaFirst: "Choose media above to see the frames that will go out.",
     howItWillLook: "How it will look",

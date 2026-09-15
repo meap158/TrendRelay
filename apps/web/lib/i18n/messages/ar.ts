@@ -537,6 +537,7 @@ export const ar: Messages = {
     pinterestBoardHelp: "اللوحة التي سيُضاف إليها الدبوس.",
     sendForApproval: "إرسال للاعتماد",
     discloseAi: "الإفصاح عن وسائط من إنتاج الذكاء الاصطناعي",
+    addMusic: "السماح للمنصة بإضافة موسيقى",
     whatWillBeSent: "ما الذي سيُرسل",
     chooseMediaFirst: "اختر وسائط أعلاه لعرض اللقطات التي ستُنشر.",
     howItWillLook: "كيف سيبدو",

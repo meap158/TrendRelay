@@ -549,6 +549,7 @@ export const fr: Messages = {
     pinterestBoardHelp: "Le tableau qui doit recevoir l'épingle.",
     sendForApproval: "Envoyer pour validation",
     discloseAi: "Signaler un média généré par IA",
+    addMusic: "Laisser le réseau ajouter une musique",
     whatWillBeSent: "Ce qui sera envoyé",
     chooseMediaFirst:
       "Choisissez un média ci-dessus pour voir les images qui seront publiées.",

@@ -125,6 +125,14 @@ def _platform_row(platform: str) -> dict[str, Any]:
             engine_id for engine_id, engine in PROVIDERS.items()
             if platform in engine.topic_platforms
         ],
+        # Engines that can have this network score a picture post. Empty for
+        # every network but TikTok, and for three of the four engines there:
+        # the network has to put a sound on a slideshow and the engine has to
+        # expose the flag that asks for it.
+        "picture_music_engines": [
+            engine_id for engine_id, engine in PROVIDERS.items()
+            if platform in engine.picture_music_platforms
+        ],
         "caption_limit": limits.caption,
         "title_limit": limits.title,
         "max_video_width": PLATFORM_MAX_VIDEO_WIDTH.get(platform),
@@ -164,6 +172,7 @@ def _engine_row(engine_id: str) -> dict[str, Any]:
         "platforms": list(engine.platforms),
         "carousel_platforms": list(engine.photo_carousel_platforms),
         "topic_platforms": list(engine.topic_platforms),
+        "picture_music_platforms": list(engine.picture_music_platforms),
         "follow_up_platforms": sorted(
             platform for platform in engine.platforms
             if first_comment_deliverable(engine_id, platform)

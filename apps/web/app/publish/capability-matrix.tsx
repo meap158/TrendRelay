@@ -66,6 +66,13 @@ type EngineRow = {
   platforms: string[];
   carousel_platforms: string[];
   topic_platforms: string[];
+  /**
+   * Networks where this engine can have a picture post scored.
+   *
+   * The network picks the track; no engine here takes a track id, so this is
+   * the whole of what "music on a carousel" can mean.
+   */
+  picture_music_platforms: string[];
   follow_up_platforms: string[];
   requires_public_media: boolean;
   ingests_media_url: boolean;
@@ -121,6 +128,7 @@ const MARKS = [
   { id: "carousel", glyph: "▦", label: "Photo carousel" },
   { id: "follow_up", glyph: "↳", label: "First comment or thread reply" },
   { id: "topic", glyph: "#", label: "Topic tag" },
+  { id: "music", glyph: "♪", label: "Network-chosen soundtrack on a picture post" },
 ] as const;
 
 export function CapabilityMatrixButton({ workspaceId }: { workspaceId: string }) {
@@ -270,6 +278,7 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
                     engine.carousel_platforms.includes(platform.id) ? "carousel" : null,
                     engine.follow_up_platforms.includes(platform.id) ? "follow_up" : null,
                     engine.topic_platforms.includes(platform.id) ? "topic" : null,
+                    engine.picture_music_platforms.includes(platform.id) ? "music" : null,
                   ].filter(Boolean) as string[];
                   return (
                     <td key={engine.id} className="capability-cell">

@@ -542,6 +542,7 @@ export const vi: Messages = {
     pinterestBoardHelp: "Bảng sẽ nhận ghim này.",
     sendForApproval: "Gửi duyệt",
     discloseAi: "Ghi rõ nội dung do AI tạo",
+    addMusic: "Để nền tảng thêm nhạc",
     whatWillBeSent: "Nội dung sẽ được gửi",
     chooseMediaFirst: "Chọn media ở trên để xem các khung hình sẽ đăng.",
     howItWillLook: "Hình dung khi đăng",

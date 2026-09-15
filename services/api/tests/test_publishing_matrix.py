@@ -103,6 +103,21 @@ def test_the_reachable_carousel_is_tiktok_through_two_engines() -> None:
     assert set(tiktok["carousel_engines"]) == {"zernio", "woopsocial"}
 
 
+def test_music_on_a_picture_post_is_one_network_through_one_engine() -> None:
+    """The table says where a carousel can have a sound, and where it cannot.
+
+    Instagram is the case worth pinning: two engines post a carousel there and
+    neither can give it audio, because the network has none to give on a
+    carousel. TikTok scores a slideshow, and only WoopSocial exposes the flag
+    that asks for it - Zernio posts the same carousel with no way to say so.
+    """
+    found = rows()
+
+    assert found["tiktok"]["picture_music_engines"] == ["woopsocial"]
+    assert found["instagram"]["picture_music_engines"] == []
+    assert "zernio" in found["tiktok"]["carousel_engines"]
+
+
 def test_a_thread_network_calls_it_a_reply_and_a_comment_network_a_comment() -> None:
     # On Threads the reply *is* the next post; calling it a comment describes
     # something the reader will never see.

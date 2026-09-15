@@ -176,6 +176,13 @@ type Provider = {
   image_post_limits?: Record<string, Record<string, number>>;
   /** Platforms this engine can attach a topic to. Threads, where it can. */
   topic_platforms?: string[];
+  /**
+   * Networks where this engine can have a picture post scored by the network.
+   *
+   * TikTok through WoopSocial, and nothing else today. The network picks the
+   * track, so this is a yes or no rather than a chooser.
+   */
+  picture_music_platforms?: string[];
   limits: Record<string, PlatformLimit>;
   first_comment_platforms: string[];
   /** Networks that take a first comment which this login's plan withholds. */
@@ -443,6 +450,13 @@ export default function PublishPage() {
   /** Replies after the caption, which is itself the first post of the thread. */
   const [thread, setThread] = useState<string[]>([]);
   const [needsApproval, setNeedsApproval] = useState(false);
+  /**
+   * Whether a picture post should be given a soundtrack by the network.
+   *
+   * On by default: a silent slideshow is the unusual post, and the flag behind
+   * this was previously wired straight to the carousel with nobody asked.
+   */
+  const [addMusic, setAddMusic] = useState(true);
   const [title, setTitle] = useState("");
   // The clock is read when the schedule pane opens, so a slot never drifts past.
   const [now, setNow] = useState(() => new Date());
@@ -795,6 +809,26 @@ export default function PublishPage() {
    * describes something the reader will never do.
    */
   const isCarousel = carouselTargetCount > 0;
+  /**
+   * Destinations on this post whose network will put a sound on the pictures.
+   *
+   * Both halves have to hold, which is why it is read off the engine rather
+   * than off the network: TikTok scores a slideshow and Instagram does not,
+   * and only one of the engines exposes the flag that asks for it. An empty
+   * list means the question never appears, rather than appearing and being
+   * quietly dropped at delivery.
+   */
+  const musicTargets = useMemo(
+    () => chosenAccounts.filter((account) => (
+      providerById.get(account.provider)?.picture_music_platforms ?? []
+    ).includes(account.platform)),
+    [chosenAccounts, providerById],
+  );
+  const offersMusic = wantsImages && musicTargets.length > 0;
+  /** The networks that will do it, named rather than counted. */
+  const musicNetworks = [...new Set(
+    musicTargets.map((account) => platformLabels[account.platform]),
+  )].join(" and ");
   const tooManyImages = imageCapacity > 0 && imagePaths.length > imageCapacity;
   /**
    * The TikTok photo-carousel wrinkle, mirrored from the delivery path.
@@ -1532,6 +1566,10 @@ export default function PublishPage() {
       delivery,
       schedule: delivery === "schedule",
       made_with_ai: form.get("made_with_ai") === "on",
+      // Only meaningful on a picture post to a network that scores one, and
+      // sent as the default otherwise so a post that was never asked the
+      // question behaves as it always did.
+      add_music: offersMusic ? addMusic : true,
       visibility: form.get("visibility") === "private" ? "private" : "public",
       // Only when a destination actually asked for one: images can be attached
       // and the post type then switched back, and sending them would make the
@@ -4018,6 +4056,22 @@ export default function PublishPage() {
             <input name="made_with_ai" type="checkbox" /> {t("publish.discloseAi")}
             <small>Sets each platform&apos;s synthetic-media flag where the engine exposes one.</small>
           </label>
+
+          {offersMusic && (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={addMusic}
+                onChange={(event) => setAddMusic(event.target.checked)}
+              /> {t("publish.addMusic")}
+              <small>
+                {musicNetworks} picks the track, so there is nothing to choose here.
+                {musicTargets.length < chosenAccounts.length
+                  ? " The other destinations publish the pictures without sound."
+                  : ""}
+              </small>
+            </label>
+          )}
 
           {blockedReason && (
             <p className="publish-blocked" role="status">{blockedReason}</p>

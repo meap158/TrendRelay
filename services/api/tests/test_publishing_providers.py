@@ -1936,6 +1936,117 @@ def test_woopsocial_posts_a_carousel_as_one_post_of_many_media(
     assert body["socialAccounts"][0]["autoAddMusic"] is True
 
 
+def test_a_carousel_can_go_out_without_a_soundtrack(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """The flag is the operator's answer now, not a consequence of the post.
+
+    TikTok scores a slideshow if asked, and asking was previously hard-wired to
+    the carousel, so a post that wanted silence had no way to say so. The
+    default is unchanged - the test above still sends `True` without being told
+    to - and this is the other answer reaching the wire.
+    """
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1"}]
+        if path.startswith("/media"):
+            return {"mediaId": "med_1"}
+        if path == "/social-accounts":
+            return [{"id": "account-1", "platform": "TIKTOK",
+                     "username": "brand", "status": "CONNECTED"}]
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {"id": "p"}
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    publishing._execute_publish(carousel(
+        carousel_images, add_music=False, confirm_external_action=True,
+    ))
+    assert sent["body"]["socialAccounts"][0]["autoAddMusic"] is False
+
+
+def test_only_the_engine_that_has_the_flag_offers_a_soundtrack() -> None:
+    """Both halves of the capability, stated where the composer reads them.
+
+    TikTok scores a picture post and Instagram does not, so Instagram is absent
+    even from the engine that has the field. The other three engines have no
+    field to send: Zernio's TikTok photo settings document no sound, and
+    Bundle.social and Buffer have no picture route to TikTok at all.
+    """
+    assert publishing.PROVIDERS["woopsocial"].picture_music_platforms == ("tiktok",)
+    assert publishing.scores_picture_posts(publishing.PROVIDERS["woopsocial"], "tiktok")
+    assert not publishing.scores_picture_posts(
+        publishing.PROVIDERS["woopsocial"], "instagram",
+    )
+    for engine in ("zernio", "bundle_social", "buffer"):
+        assert publishing.PROVIDERS[engine].picture_music_platforms == ()
+
+
+def test_a_video_post_is_never_given_a_soundtrack_flag(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """`add_music` says what to do with pictures, and a video has its own audio.
+
+    Left on - its default - while the post is a video: the flag still has to
+    reach WoopSocial as False, because a TikTok video post carrying it would be
+    asking for a second soundtrack over the one in the file.
+    """
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    entry = publishing._woopsocial_account_entry(
+        publishing.PublishTarget(platform="tiktok", integration_id="account-1"),
+        "TIKTOK",
+        request(str(media_file), add_music=True),
+        carousel=False,
+    )
+    assert entry["autoAddMusic"] is False
+
+
+def test_the_dry_run_says_whether_the_pictures_will_have_a_sound(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """Both answers, per destination, and silence where the question is moot.
+
+    A video post is not asked at all: the preview reporting a soundtrack choice
+    on a clip that carries its own audio would be describing something that
+    does not happen.
+    """
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    monkeypatch.setattr(publishing, "_woopsocial_validate", lambda part: [])
+
+    scored = publishing.preview_publish(carousel(carousel_images))
+    assert scored["add_music"] is True
+    assert "Soundtrack chosen by the network" in scored["destinations"][0]["notes"]
+
+    silent = publishing.preview_publish(carousel(carousel_images, add_music=False))
+    assert silent["add_music"] is False
+    assert "No soundtrack" in silent["destinations"][0]["notes"]
+
+    video = publishing.preview_publish(request(str(media_file)))
+    assert video["add_music"] is None
+
+
+def test_an_engine_that_cannot_ask_for_a_sound_says_nothing_about_one(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """Zernio posts the same carousel with no field for audio.
+
+    So the dry run leaves the fact out entirely rather than reporting the
+    default as though it had been honoured.
+    """
+    use_provider(monkeypatch, tmp_path, "zernio")
+
+    plan = publishing.preview_publish(carousel(carousel_images))
+
+    assert plan["add_music"] is None
+    assert not any(
+        "oundtrack" in note for note in plan["destinations"][0]["notes"]
+    )
+
+
 def test_an_engine_without_a_carousel_contract_refuses_by_name(
     monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
 ) -> None:
@@ -2375,6 +2486,20 @@ def test_a_network_without_topics_never_receives_one(monkeypatch, tmp_path: Path
 def test_only_engines_with_a_topic_contract_advertise_one() -> None:
     assert publishing.provider_status("buffer", probe=False)["topic_platforms"] == ["threads"]
     assert publishing.provider_status("zernio", probe=False)["topic_platforms"] == []
+
+
+def test_the_composer_is_told_where_a_picture_post_can_be_scored() -> None:
+    """The one pairing that works, and the near miss beside it.
+
+    Zernio posts a TikTok carousel and cannot ask for a sound on it, so an
+    engine's carousel reach is not evidence that the choice should appear.
+    """
+    woopsocial = publishing.provider_status("woopsocial", probe=False)
+    zernio = publishing.provider_status("zernio", probe=False)
+
+    assert woopsocial["picture_music_platforms"] == ["tiktok"]
+    assert zernio["picture_music_platforms"] == []
+    assert "tiktok" in zernio["photo_carousel_platforms"]
 
 
 def test_provider_status_distinguishes_network_image_limits_from_engine_support() -> None:

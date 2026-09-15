@@ -94,7 +94,14 @@ Uploading/publishing to TikTok via WoopSocial previously failed with `api.woopso
 because WoopSocial's live API contract requires specific TikTok fields for `DIRECT_POST`:
 `postMode="DIRECT_POST"`, `privacyLevel` (`PUBLIC_TO_EVERYONE` or `SELF_ONLY`),
 `allowComment=True`, `allowDuet=not carousel`, `allowStitch=not carousel`, `isYourBrand=False`,
-`isBrandedContent=False`, `autoAddMusic=carousel`, and `isAiGeneratedContent=bool(made_with_ai)`.
+`isBrandedContent=False`, `autoAddMusic`, and `isAiGeneratedContent=bool(made_with_ai)`.
+`autoAddMusic` was hard-wired to `carousel`; it is now `carousel and request.add_music`,
+so a slideshow can be published silent. It is the only field in the file that can put
+a sound on a picture post: TikTok scores a slideshow and Instagram has no audio on a
+carousel, and of the four engines only WoopSocial exposes the flag - see
+`ProviderDefinition.picture_music_platforms`. The network picks the track; nothing here
+accepts a track id, and the Library's own music is mixed into a rendered MP4 long before
+publishing sees it.
 In `services/api/src/trendrelay_api/integrations/publishing.py`, `_woopsocial_account_entry` now
 centralizes these fields across both `_woopsocial_publish` and `_woopsocial_validate`.
 `privacyLevel` automatically maps from `request.visibility` (`public` -> `PUBLIC_TO_EVERYONE`,

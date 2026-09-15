@@ -541,6 +541,7 @@ export const ja: Messages = {
     pinterestBoardHelp: "ピンを追加するボード。",
     sendForApproval: "承認に回す",
     discloseAi: "AI 生成であることを明示",
+    addMusic: "プラットフォームに音楽を付けてもらう",
     whatWillBeSent: "送信される内容",
     chooseMediaFirst: "上でメディアを選ぶと、投稿されるフレームを確認できます。",
     howItWillLook: "表示イメージ",

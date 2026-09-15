@@ -546,6 +546,7 @@ export const ru: Messages = {
     pinterestBoardHelp: "Доска, на которую попадёт пин.",
     sendForApproval: "Отправить на согласование",
     discloseAi: "Указать, что медиа создано ИИ",
+    addMusic: "Разрешить платформе добавить музыку",
     whatWillBeSent: "Что будет отправлено",
     chooseMediaFirst:
       "Выберите медиа выше, чтобы увидеть кадры, которые уйдут в публикацию.",

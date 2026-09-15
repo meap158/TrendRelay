@@ -234,6 +234,30 @@ class ProviderDefinition:
     #: tuple is deliberately conservative for engines whose adapter currently
     #: uploads a file unconditionally.
     text_post_surfaces: tuple[tuple[str, str], ...] = ()
+    #: Networks where this engine can have a picture post scored.
+    #:
+    #: Two conditions, and both have to hold. The network has to take a
+    #: soundtrack on a post made of pictures: TikTok does, because a photo post
+    #: there is a slideshow and slideshows play a sound, and its Content Posting
+    #: API carries the flag for it. Instagram does not - audio belongs to Reels,
+    #: and a carousel published through the Graph API has nowhere to put one -
+    #: so it is absent here even though every engine below can post an Instagram
+    #: carousel.
+    #:
+    #: The engine has to expose that flag as well. WoopSocial does, as
+    #: `autoAddMusic` on its TikTok account entry. Zernio's TikTok photo
+    #: settings document `media_type`, `photo_cover_index` and `description` and
+    #: nothing about sound, and Zernio rejects a field it does not declare, so
+    #: it is left out rather than guessed at. Bundle.social posts TikTok as
+    #: video only and Buffer has no picture route at all, so neither has a
+    #: picture post to score.
+    #:
+    #: What the flag buys is a sound, not *a* sound: the network chooses the
+    #: track. No engine here accepts a track id, and the Library's own music is
+    #: mixed into a rendered MP4 long before publishing sees it - so a picture
+    #: post cannot carry a chosen track by any route, and the interface should
+    #: not imply one.
+    picture_music_platforms: tuple[str, ...] = ()
     #: Platforms this engine can attach a topic to.
     #:
     #: Threads is the only network with one: a single tag per post that readers
@@ -484,6 +508,9 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # post at upload time.
         ingests_media_url=False,
         image_post_limits=(("tiktok", "photo", 35),),
+        # Its TikTok account entry carries `autoAddMusic`, which is the one
+        # place in this file where a picture post can be given a sound.
+        picture_music_platforms=("tiktok",),
         media_note=(
             "The approved local MP4 is uploaded to WoopSocial before the post is "
             "created. Single-request uploads are capped at 100 MB."
@@ -841,6 +868,17 @@ def image_post_limit(provider: ProviderDefinition, platform: str, post_type: str
     )
 
 
+def scores_picture_posts(provider: ProviderDefinition, platform: str) -> bool:
+    """Whether this engine can have this network put a sound on a picture post.
+
+    The pair matters, not either half: TikTok takes a soundtrack on a slideshow
+    and Instagram does not, while only one of the four engines exposes the flag
+    that asks for it. See `ProviderDefinition.picture_music_platforms` for which
+    is which and why.
+    """
+    return platform in provider.picture_music_platforms
+
+
 def _takes_pictures(target: PublishTarget) -> bool:
     """Whether this destination can carry a post made of pictures.
 
@@ -949,6 +987,18 @@ class PublishRequest(BaseModel):
     # than expressing a policy about how wide a post should go.
     targets: list[PublishTarget] = Field(min_length=1, max_length=25)
     made_with_ai: bool = False
+    #: Let the network put a sound on a picture post, where it can.
+    #:
+    #: Only ever read on a picture post to a surface an engine declares in
+    #: `picture_music_platforms`, which today is TikTok through WoopSocial and
+    #: nothing else; everywhere else it is carried and ignored. The network
+    #: chooses the track - this is a yes or no about having one, not a track
+    #: picker, and there is no engine field to make it one.
+    #:
+    #: Defaults to on because a TikTok slideshow in silence is the unusual
+    #: post, and because the flag was previously hard-wired to the carousel:
+    #: a job stored before this field existed replays exactly as it was sent.
+    add_music: bool = True
     visibility: Literal["public", "private"] = "public"
     provider: ConnectionId | None = None
     media_url: str | None = Field(default=None, max_length=2000)
@@ -2361,7 +2411,9 @@ def _woopsocial_account_entry(
         entry["allowStitch"] = not carousel
         entry["isYourBrand"] = False
         entry["isBrandedContent"] = False
-        entry["autoAddMusic"] = carousel
+        # A video post never takes one; a slideshow takes one unless the post
+        # asked to go out silent. WoopSocial requires the field either way.
+        entry["autoAddMusic"] = carousel and request.add_music
         entry["isAiGeneratedContent"] = bool(request.made_with_ai)
     elif platform == "YOUTUBE":
         entry["title"] = _post_title(request)[:100]
@@ -3754,6 +3806,12 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             ]
             for platform in provider.platforms
         },
+        # Networks where a picture post can be given a sound through this
+        # engine. Both halves have to hold - the network has to score a picture
+        # post and the engine has to expose the flag - so the composer offers
+        # the choice on exactly the destinations that will honour it, and says
+        # nothing anywhere else rather than offering something that is dropped.
+        "picture_music_platforms": list(provider.picture_music_platforms),
         # Same reasoning as post_types: the composer can only offer a topic
         # where the engine delivering that destination declares one.
         "topic_platforms": list(provider.topic_platforms),
@@ -4013,6 +4071,21 @@ def _delivery_plan(
                 notes.append(f"Privacy: {'everyone' if public else 'only me'}")
                 if request.made_with_ai:
                     notes.append("AI-generated disclosure on")
+            # Said per destination, because the same post can reach a network
+            # that scores a slideshow and one that has no sound to offer.
+            if _is_image_post(request):
+                if scores_picture_posts(provider, target.platform):
+                    notes.append(
+                        "Soundtrack chosen by the network"
+                        if request.add_music
+                        else "No soundtrack"
+                    )
+                elif not request.add_music:
+                    notes.append(
+                        f"No soundtrack either way - {provider.label} cannot ask "
+                        f"{PLATFORM_LABELS.get(target.platform, target.platform)} "
+                        "for one on a picture post"
+                    )
             if target.platform in {"reddit", "pinterest"}:
                 notes.append("Title required" if not request.title else "Title sent")
             # Said here, not silently dropped at delivery: only Buffer can
@@ -4139,6 +4212,18 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "limits": binding_limits([target.platform for target in request.targets]),
         "visibility": request.visibility,
         "made_with_ai": request.made_with_ai,
+        # Null where the post is not made of pictures or no engine on it can
+        # ask for a sound, so the dry run stays silent about a choice that was
+        # never offered instead of reporting a default nobody made.
+        "add_music": (
+            request.add_music
+            if _is_image_post(request) and any(
+                scores_picture_posts(providers[provider_id], target.platform)
+                for provider_id, part in scoped.items()
+                for target in part.targets
+            )
+            else None
+        ),
         "destinations": destinations,
     }
 

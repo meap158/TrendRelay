@@ -531,6 +531,7 @@ export const zh: Messages = {
     pinterestBoardHelp: "接收该图钉的图板。",
     sendForApproval: "提交审核",
     discloseAi: "标注为 AI 生成内容",
+    addMusic: "让平台自动配乐",
     whatWillBeSent: "将要发送的内容",
     chooseMediaFirst: "请先在上方选择素材，以预览将要发布的画面。",
     howItWillLook: "发布后的效果",
