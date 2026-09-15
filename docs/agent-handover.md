@@ -255,20 +255,41 @@ code, ignore `music_asset_id` and file the video without its credit.
 - `license_label` is worded once, in `openverse_music.licence_label`, and sent
   on both search results and asset views.
 
+### The mix is measured, not assumed (2026-09-15)
+
+`tests/test_autocut_audio_mix.py` renders a real four-second video - a voice
+that speaks a second and rests a second, over a bed that never stops - and
+reads the result in dB. A lowpass separates the two tones, and every level is
+read through the same lowpass so the filter's shape cancels out.
+
+Measured: the bed drops **9.6 dB** while the voice speaks and sits **15 dB**
+under the track it came from in the pauses. `MUSIC_BED_GAIN` alone is -12 dB;
+the extra three are the compressor still letting go of the last word. The
+assertions hold the behaviour, not the readings - at least 6 dB of duck, a bed
+still audible between sentences, and a resting level bounded on both sides.
+
+It runs ffmpeg and skips where the pinned runtime is missing, like
+`test_effect_render`. Two and a half seconds for both tests.
+
 ### Still open
 
-- Ducking levels are constants in `renderer.py` with no operator control, and
-  they were only ever checked against synthetic tones - never a real narration
-  over a real track. If an operator reports the bed sitting wrong, that is the
-  first thing to doubt. One "how loud is the music" control would serve better
-  than exposing four compressor parameters.
+- No operator control over the bed level. Now a preference rather than a
+  doubt: the levels are measured and sit where a bed belongs. If one is ever
+  wanted, it should be a single "how loud is the music", not four compressor
+  parameters.
 - **Worth taking from editly later** (details in `docs/third-party/editly.md`):
   more `xfade` transitions, eased whips via `xfade=transition=custom` with an
-  easeOutExpo expression, `acrossfade` curves, no transition after the last
-  clip, 0.5 s default transition length.
+  easeOutExpo expression, `acrossfade` curves, 0.5 s default transition length.
+  Its "no transition after the last clip" note is **already satisfied** and
+  needs no work: a `Shot.transition` is how a shot is transitioned *into*, so
+  `planner` gives the first shot none and `renderer._join` only ever runs
+  between shots. Different indexing, same result - do not re-investigate.
 - Nothing in the music work has been seen in a browser. The web dev server has
-  been down for every session that built it; it is covered by tests, types and
-  lint only.
+  been down for every session that built it. The mitigation is that the logic
+  is not in the components: `lib/music-reasons.ts` (wording) and
+  `lib/music-context.ts` (whether and when to ask) are pure and tested, and
+  the picker's rows are shared rather than copied. What remains unseen is
+  layout and colour, not behaviour.
 
 ## Shopee listing counts corrected (2026-09-06)
 
