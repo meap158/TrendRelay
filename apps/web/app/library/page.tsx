@@ -2602,11 +2602,19 @@ function LibraryContent() {
                       grid because the credit is a line to read and copy, not
                       a chip: it is what every post publishing this ends up
                       carrying, and seeing it is how somebody checks that. */}
-                  {selected.license_label && (
+                  {/* A credit without a licence of its own is the ordinary
+                      case for anything this app made: a montage cut over a
+                      CC BY track owes that track's credit, but the montage is
+                      not itself CC BY, so the render records the credit and
+                      no licence. Keying the block on the licence hid the one
+                      credit somebody most needs to read. */}
+                  {(selected.license_label || selected.attribution) && (
                     <p className="library-licence">
-                      <Badge tone={selected.attribution ? "info" : "good"}>
-                        {selected.license_label}
-                      </Badge>
+                      {selected.license_label && (
+                        <Badge tone={selected.attribution ? "info" : "good"}>
+                          {selected.license_label}
+                        </Badge>
+                      )}
                       <span>
                         {selected.attribution
                           ? t("library.creditOwed", { credit: selected.attribution })
