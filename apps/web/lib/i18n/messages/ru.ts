@@ -1790,6 +1790,11 @@ export const ru: Messages = {
     becauseScript: "Сценарий о {words}",
     becauseTitles: "Клипы называются {words}",
     becauseMatch: "Совпадает с {words}",
+    templateLicenceUnknown: "Лицензия не записана",
+    templateLicenceUnknownHint:
+      "Трек этого ритма взят из референсного видео, и никто не записал, под "
+      + "какой лицензией его можно публиковать. Выберите трек, чтобы "
+      + "публиковать под лицензией, которую пост может нести.",
     moods: {
       energetic: "энергичный",
       warm: "тёплый",

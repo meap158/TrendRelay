@@ -1774,6 +1774,11 @@ export const en = {
     becauseScript: "The script is about {words}",
     becauseTitles: "The clips are called {words}",
     becauseMatch: "Matches {words}",
+    templateLicenceUnknown: "Licence not recorded",
+    templateLicenceUnknownHint:
+      "This pacing's own track came from a reference video and nobody recorded "
+      + "what it may be published under. Choose a track to publish under a "
+      + "licence the post can carry.",
     moods: {
       energetic: "energetic",
       warm: "warm",

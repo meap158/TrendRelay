@@ -83,6 +83,17 @@ class Template:
     #: outside it still renders; it just is not the best fit.
     ideal_pictures: tuple[int, int] = field(default=(4, 12))
     mood: str = "energetic"
+    #: The licence the bundled track may be published under, as an SPDX id.
+    #:
+    #: Empty means nobody recorded one, which is the honest state of all five:
+    #: they are the audio of the operator's own reference videos, extracted by
+    #: `scripts/autocut_extract_music.py` (see `docs/autocut-music.md`), and
+    #: the music inside those videos came from somewhere else again. Said here
+    #: so the interface can say it, the way a missing file is already labelled
+    #: silent rather than quietly rendering without a track. Not enforced: a
+    #: track an operator has the rights to is their call to use, and the app's
+    #: job is to stop the question going unasked, not to answer it for them.
+    music_license: str = ""
 
 
 #: The catalogue. Kept small and legible on purpose: five clearly different

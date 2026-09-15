@@ -1763,6 +1763,10 @@ export const ja: Messages = {
     becauseScript: "台本は{words}についてです",
     becauseTitles: "クリップ名は{words}です",
     becauseMatch: "{words}に一致します",
+    templateLicenceUnknown: "ライセンス未記録",
+    templateLicenceUnknownHint:
+      "このテンポ付属の曲は参考動画から取り出したもので、どのライセンスで公開できるかは"
+      + "記録されていません。投稿が担えるライセンスで公開するには曲を選んでください。",
     moods: {
       energetic: "軽快",
       warm: "温かみのある",

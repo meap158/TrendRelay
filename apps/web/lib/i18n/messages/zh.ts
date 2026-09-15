@@ -1745,6 +1745,10 @@ export const zh: Messages = {
     becauseScript: "脚本讲的是{words}",
     becauseTitles: "素材名为{words}",
     becauseMatch: "匹配{words}",
+    templateLicenceUnknown: "未记录许可",
+    templateLicenceUnknownHint:
+      "该节奏自带的曲目取自参考视频，没有人记录它可以依据哪种许可发布。"
+      + "选择一首曲目，便可依据帖子能够承担的许可发布。",
     moods: {
       energetic: "轻快",
       warm: "温暖",

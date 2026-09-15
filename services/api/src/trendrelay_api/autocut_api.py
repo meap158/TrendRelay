@@ -49,6 +49,10 @@ def _template_view(template: autocut_templates.Template, score: float | None = N
         "designed_bpm": template.designed_bpm,
         "ideal_pictures": list(template.ideal_pictures),
         "music_available": autocut_jobs.resolve_audio(template.music) is not None,
+        # Null when nobody recorded one - which is every bundled track today.
+        # The dialog says so beside the choice, rather than leaving it to be
+        # discovered after a video has been published commercially.
+        "music_license": template.music_license or None,
         # The steady cadence in beats-per-cut, so the chooser can animate this
         # template's actual rhythm rather than approximate one from the tempo.
         "cadence": list(template.pattern.loop),

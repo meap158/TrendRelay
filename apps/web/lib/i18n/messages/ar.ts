@@ -1773,6 +1773,10 @@ export const ar: Messages = {
     becauseScript: "النص يدور حول {words}",
     becauseTitles: "أسماء المقاطع {words}",
     becauseMatch: "يطابق {words}",
+    templateLicenceUnknown: "الترخيص غير مسجَّل",
+    templateLicenceUnknownHint:
+      "مقطوعة هذا الإيقاع مأخوذة من فيديو مرجعي ولم يسجّل أحد الترخيص الذي "
+      + "يمكن نشرها بموجبه. اختر مقطوعة لتنشر بترخيص يستطيع المنشور حمله.",
     moods: {
       energetic: "حماسي",
       warm: "دافئ",

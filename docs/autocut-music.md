@@ -53,3 +53,31 @@ A template whose file is missing renders silent and is *labelled* silent -
 in the template list, the plan preview, and the render. AutoCut never lays
 no track and calls the result beat-synced; `beat_synced` is true only when a
 real grid was read from a real track.
+
+## What licence these carry
+
+None that anybody has written down. `Template.music_license` is empty on all
+five, the templates endpoint sends `music_license: null`, and the AutoCut
+dialog shows "Licence not recorded" beside the Music field whenever the
+template's own track is the one that would play.
+
+That is the honest state rather than an oversight. These are the audio of
+the operator's own reference videos, and the music inside those videos came
+from somewhere else again - a platform's own library, most likely, which
+licenses a track for posting *on that platform* and not for extraction into
+something we publish commercially elsewhere. Extracting your own post does
+not carry its music's terms with it. It is the same reasoning that turned
+down editly's README tip about ripping a YouTube channel for music
+(`docs/third-party/editly.md`), and the on-demand music library exists so
+there is a publishable answer: a CC0 or CC BY track from Openverse, with the
+credit line recorded on the asset and appended to every caption that
+publishes it.
+
+Nothing is blocked. An operator who holds the rights to a track knows that
+and the app should not argue; choosing anything from the music picker
+answers the question outright. What the app must not do is stay quiet, which
+is what it did until the label was added.
+
+To retire the gap rather than label it: record a real licence on a template
+by filling `music_license` with its SPDX id, or point `MAPPING` in the
+extraction script at a track that has one.

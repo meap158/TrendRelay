@@ -1771,6 +1771,11 @@ export const vi: Messages = {
     becauseScript: "Kịch bản nói về {words}",
     becauseTitles: "Các clip có tên {words}",
     becauseMatch: "Khớp với {words}",
+    templateLicenceUnknown: "Chưa ghi nhận giấy phép",
+    templateLicenceUnknownHint:
+      "Bản nhạc của nhịp phim này lấy từ một video tham chiếu và không ai ghi "
+      + "lại nó được đăng theo giấy phép nào. Hãy chọn một bản nhạc để đăng "
+      + "theo giấy phép mà bài đăng có thể mang.",
     moods: {
       energetic: "sôi động",
       warm: "ấm áp",

@@ -1791,6 +1791,11 @@ export const fr: Messages = {
     becauseScript: "Le script parle de {words}",
     becauseTitles: "Les clips s'appellent {words}",
     becauseMatch: "Correspond à {words}",
+    templateLicenceUnknown: "Licence non renseignée",
+    templateLicenceUnknownHint:
+      "Le morceau de ce rythme provient d'une vidéo de référence et personne "
+      + "n'a noté sous quelle licence il peut être publié. Choisissez un "
+      + "morceau pour publier sous une licence que le post peut porter.",
     moods: {
       energetic: "énergique",
       warm: "chaleureux",

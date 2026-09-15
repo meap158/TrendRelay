@@ -1270,6 +1270,13 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
 /* A field that holds a control rather than an input - the music picker - so it
    is not a <label>, whose click would send focus to the first thing inside. */
 .autocut-controls .autocut-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+/* The label and, when there is something to say about the track it falls back
+   to, the chip saying it. */
+.autocut-controls .autocut-field > span:first-child { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* An unrecorded licence is a warning, not an effect: the Library's tag shape
+   in the warn colour, so it reads as something to look at rather than as
+   another property of the track. */
+.autocut-licence-unknown { color: var(--warn); background: var(--warn-bg); }
 
 /* The music picker: the chosen track on one row, and behind a button the two
    lists it can be chosen from - the Library's own audio and a search of what

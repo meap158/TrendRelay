@@ -89,6 +89,12 @@ def test_templates_rank_for_the_picture_count() -> None:
     # And its steady cadence, so the chooser can animate the real rhythm.
     assert body["templates"][0]["cadence"] == [1]  # rapid-one: one beat a cut
     assert all(t["cadence"] and all(isinstance(b, int) for b in t["cadence"]) for t in body["templates"])
+    # Every template says what licence its bundled track carries. Null on all
+    # five today: they are extracted from the operator's own reference videos
+    # and nobody recorded terms for the music inside those. Said rather than
+    # left out, so the dialog can say it before a render is published.
+    assert all("music_license" in t for t in body["templates"])
+    assert all(t["music_license"] is None for t in body["templates"])
 
 
 def test_a_plan_preview_defaults_to_the_best_template_and_never_renders() -> None:

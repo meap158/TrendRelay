@@ -58,6 +58,8 @@ type TemplateView = {
   designed_bpm: number;
   ideal_pictures: [number, number];
   music_available: boolean;
+  /** The bundled track's licence, or null where nobody recorded one. */
+  music_license: string | null;
   match?: number;
   /** The steady cadence in beats-per-cut, for the rhythm hint. */
   cadence: number[];
@@ -659,7 +661,22 @@ export function AutoCutDialog({
             {/* A div, not a label: the picker holds buttons and inputs of its
                 own, and a label's click would send focus to the first of them. */}
             <div className="autocut-field autocut-field-wide">
-              <span>Music</span>
+              <span>
+                Music
+                {/* With nothing chosen the template's own track is what plays,
+                    and nobody recorded what it may be published under. Said
+                    where the choice is made rather than left to be discovered
+                    after a post has gone out - the same bargain the template
+                    list already makes by labelling a missing track silent.
+                    Not a block: an operator with the rights to it knows that,
+                    and choosing any Library track answers it outright. */}
+                {!musicAsset && chosen?.music_available && !chosen.music_license && (
+                  <em className="blurred-tag autocut-licence-unknown"
+                    title={t("music.templateLicenceUnknownHint")}>
+                    {t("music.templateLicenceUnknown")}
+                  </em>
+                )}
+              </span>
               <MusicPicker
                 workspaceId={workspaceId}
                 apiFetch={apiFetch}
