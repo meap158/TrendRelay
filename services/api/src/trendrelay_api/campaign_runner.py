@@ -846,6 +846,10 @@ def run_campaign(
                 "caption": post.caption,
                 "image_paths": list(post.image_paths or ()),
                 "video_path": post.video_path or None,
+                # The post this was frozen from, so an announcement can read
+                # its working notes - the one thing about a held post that
+                # lives nowhere else.
+                "queue_item_id": post.queue_item_id,
                 "at": post.at,
                 "reason": hold,
             })

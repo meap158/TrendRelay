@@ -197,6 +197,40 @@ def test_a_campaign_s_cards_speak_its_language_and_a_chosen_one_wins(
     assert chat["sent"][0]["buttons"][0][0]["label"] == "✅ 承認"
 
 
+def test_a_card_carries_the_post_s_working_notes(session, tmp_path, engine_stub, chat) -> None:
+    """The app's inbox shows them to whoever is deciding, so the card does:
+    they are the one thing about a held post that lives nowhere else."""
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+
+    campaign_setup(session, tmp_path)
+    session.get(CampaignQueueItem, "q1").context = "Trying the before-and-after angle."
+    session.commit()
+    run_campaign(
+        session, autopilot(session, authority="assist", approvals_telegram=True), now=NOW,
+    )
+
+    [card] = chat["sent"]
+    assert "<b>Notes</b>" in card["text"]
+    assert "Trying the before-and-after angle." in card["text"]
+
+
+def test_a_post_with_no_notes_says_nothing_about_them(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    approval_notices.announce_held(session, pilot, [{
+        "execution_id": "pubexec_1", "destination": "x", "caption": "c",
+        "at": None, "reason": "Waiting.", "queue_item_id": "gone",
+    }])
+    assert "Notes" not in chat["sent"][0]["text"]
+
+
+def test_long_notes_are_cut_rather_than_running_past_the_screen() -> None:
+    text = approval_notices.card_text(
+        "Launch", {"destination": "x", "caption": "c", "notes": "n" * 500}, language="en",
+    )
+    body = text.split("<b>Notes</b>\n")[1]
+    assert len(body) == approval_notices.NOTES_CHARS and body.endswith("…")
+
+
 def test_a_campaign_that_did_not_ask_sends_nothing(session, tmp_path, engine_stub, chat) -> None:
     campaign_setup(session, tmp_path)
     result = run_campaign(session, autopilot(session, authority="assist"), now=NOW)

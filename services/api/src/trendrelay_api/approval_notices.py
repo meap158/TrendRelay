@@ -44,6 +44,10 @@ from trendrelay_api.publication_models import PublicationExecution
 CARDS_PER_PASS = 8
 #: How much of a caption a card quotes.
 CAPTION_CHARS = 400
+#: How much of a post's working notes a card quotes. Shorter than the
+#: caption: the notes are context for a decision, and a card that runs past
+#: a phone screen is one nobody reads to the end of.
+NOTES_CHARS = 300
 
 #: What a press means. Short, because Telegram allows 64 bytes of data and
 #: the execution id takes forty of them.
@@ -82,11 +86,15 @@ def card_language(autopilot: CampaignAutopilot) -> str:
     )
 
 
+def _shorten(text: str, limit: int) -> str:
+    trimmed = (text or "").strip()
+    if len(trimmed) > limit:
+        trimmed = trimmed[: limit - 1].rstrip() + "…"
+    return trimmed
+
+
 def _excerpt(caption: str) -> str:
-    text = (caption or "").strip()
-    if len(text) > CAPTION_CHARS:
-        text = text[: CAPTION_CHARS - 1].rstrip() + "…"
-    return text
+    return _shorten(caption, CAPTION_CHARS)
 
 
 def approvals_url(campaign_id: str) -> str:
@@ -121,7 +129,13 @@ def app_link(campaign_id: str) -> str | None:
 def card_text(
     campaign_name: str, item: dict[str, Any], *, zone: str | None = None, language: str = "en",
 ) -> str:
-    """One held post as a message: where, when, the words, and why it waits."""
+    """One held post as a message: where, when, the words, why it waits.
+
+    And the working notes, when the post carries any. The app's inbox shows
+    them to whoever is deciding - they are the one thing about a held post
+    that lives nowhere else - and a card that left them out would be the
+    same decision made with less in front of it.
+    """
     where = html.escape(str(item.get("destination") or "an account"))
     when = _when(item.get("at"), zone, language)
     lines = [
@@ -132,6 +146,13 @@ def card_text(
     caption = _excerpt(str(item.get("caption") or ""))
     if caption:
         lines.extend([html.escape(caption), ""])
+    notes = _shorten(str(item.get("notes") or ""), NOTES_CHARS)
+    if notes:
+        lines.extend([
+            f"<b>{html.escape(words.say(language, 'notes'))}</b>",
+            html.escape(notes),
+            "",
+        ])
     reason = str(item.get("reason") or "").strip()
     if reason:
         lines.append(f"<i>{html.escape(reason)}</i>")
@@ -169,6 +190,29 @@ def _media_of(item: dict[str, Any]) -> tuple[list[str], str | None]:
     return images, video
 
 
+def _notes_for(session: Session, held: list[dict[str, Any]]) -> None:
+    """Fill each held item's working notes in, from the post it was frozen from.
+
+    One query, for the cards about to go and only then: the column is
+    deferred because nothing that sweeps this table wants it, and an
+    approval card is exactly the thing that does.
+    """
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+
+    wanted = [str(item["queue_item_id"]) for item in held if item.get("queue_item_id")]
+    if not wanted:
+        return
+    notes = dict(
+        session.execute(
+            select(CampaignQueueItem.id, CampaignQueueItem.context).where(
+                CampaignQueueItem.id.in_(wanted)
+            )
+        ).all()
+    )
+    for item in held:
+        item.setdefault("notes", notes.get(str(item.get("queue_item_id") or "")) or "")
+
+
 def announce_held(
     session: Session, autopilot: CampaignAutopilot, held: list[dict[str, Any]],
 ) -> str:
@@ -190,6 +234,7 @@ def announce_held(
     name = campaign.name if campaign else "Campaign"
     zone = workspace.timezone if workspace else None
     language = card_language(autopilot)
+    _notes_for(session, held[:CARDS_PER_PASS])
     sent = 0
     left_out: list[str] = []
     try:
@@ -241,6 +286,7 @@ def announce_executions(
             "reason": execution.held_reason,
             "image_paths": list(execution.image_paths or []),
             "video_path": execution.media_path,
+            "queue_item_id": execution.queue_item_id,
         }
         for execution in executions
         if execution.state == "proposed"

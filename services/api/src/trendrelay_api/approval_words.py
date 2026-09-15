@@ -33,6 +33,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "That campaign no longer runs on its own.",
         "more_waiting": "{count} more waiting in the inbox.",
         "test_answer": "This was the test card. Nothing was decided. Pressed by {who}.",
+        "notes": "Notes",
         "see_the_app": "see the app",
     },
     "vi": {
@@ -52,6 +53,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "Chiến dịch này không còn tự chạy nữa.",
         "more_waiting": "Còn {count} bài nữa đang chờ trong hộp duyệt.",
         "test_answer": "Đây là thẻ thử. Không có gì được quyết định. {who} đã bấm.",
+        "notes": "Ghi chú",
         "see_the_app": "xem trong ứng dụng",
     },
     "ja": {
@@ -71,6 +73,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "このキャンペーンはもう自動で動いていません。",
         "more_waiting": "あと {count} 件が受信箱で待っています。",
         "test_answer": "これはテストカードです。何も決定されていません。{who} が押しました。",
+        "notes": "メモ",
         "see_the_app": "アプリを確認してください",
     },
     "fr": {
@@ -90,6 +93,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "Cette campagne ne tourne plus toute seule.",
         "more_waiting": "{count} de plus en attente dans la boîte.",
         "test_answer": "C'était la carte de test. Rien n'a été décidé. Appuyé par {who}.",
+        "notes": "Notes",
         "see_the_app": "voir l'app",
     },
     "zh": {
@@ -109,6 +113,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "这个活动已不再自动运行。",
         "more_waiting": "收件箱中还有 {count} 条在等待。",
         "test_answer": "这是测试卡片。没有做出任何决定。由 {who} 按下。",
+        "notes": "备注",
         "see_the_app": "请查看应用",
     },
     "ru": {
@@ -128,6 +133,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "Эта кампания больше не работает сама.",
         "more_waiting": "Ещё {count} ждут во входящих.",
         "test_answer": "Это была тестовая карточка. Ничего не решено. Нажал(а): {who}.",
+        "notes": "Заметки",
         "see_the_app": "см. приложение",
     },
     "ar": {
@@ -147,6 +153,7 @@ WORDS: dict[str, dict[str, str]] = {
         "no_autopilot": "هذه الحملة لم تعد تعمل تلقائيًا.",
         "more_waiting": "{count} أخرى في انتظارك في صندوق الموافقات.",
         "test_answer": "هذه بطاقة تجريبية. لم يُتّخذ أي قرار. ضغطها {who}.",
+        "notes": "ملاحظات",
         "see_the_app": "راجع التطبيق",
     },
 }
