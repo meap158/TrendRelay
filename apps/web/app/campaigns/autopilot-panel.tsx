@@ -48,6 +48,7 @@ import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import type { SortState } from "../ui/sortable-header";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { Select } from "../ui/select";
+import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
@@ -3418,12 +3419,6 @@ export function AutopilotPanel({
 
   const unmet = ready.rows.filter((row) => !row.met);
 
-  /* What the two dials in the header currently mean, for the hover beside
-     each of them. Read from the same tables the lists are built from, so the
-     explanation and the option it explains cannot come apart. */
-  const authorityHelp = AUTHORITIES
-    .find(([value]) => value === autopilot.authority)?.[2] ?? "";
-  const deliveryHelp = t(DELIVERY_HELP[autopilot.delivery]);
   /* What the Telegram chip says when it is hovered. Names the language
      because that is the part somebody changes and then forgets: the cards
      speak the campaign's language unless this campaign chose another. */
@@ -4083,19 +4078,9 @@ export function AutopilotPanel({
                 a form about what the campaign is for. Read together they
                 explain each other; read apart, none of them explains
                 anything. */}
-            <label className="autopilot-delivery">
+            <div className="autopilot-delivery autopilot-authority">
               <span>
                 Authority
-                {/* What the chosen level does, on the dial rather than only
-                    inside the open list: the answer is wanted before the list
-                    is opened, and a permanent line of prose under two selects
-                    would cost a row of the header to say one sentence. */}
-                <Tooltip content={authorityHelp}>
-                  <i className="autopilot-what" tabIndex={0} role="note"
-                    aria-label="What this authority level does">
-                    <Info size={12} aria-hidden="true" />
-                  </i>
-                </Tooltip>
                 {/* The unlock progress, where the choice is made rather than
                     only where a refused switch would have explained it: the
                     chip says how close Autonomous is, and its hover carries the
@@ -4116,46 +4101,49 @@ export function AutopilotPanel({
                   </em>
                 )}
               </span>
-              <Select
+              {/* A listbox rather than a native select, for the descriptions.
+                  A browser draws `<option>` itself and shows neither its title
+                  nor a second line, so four levels whose names do not say what
+                  they do had nowhere to say it while the list was open. This
+                  is the same control the offer and account pickers use. */}
+              <SearchSelect
+                ariaLabel="Authority"
                 value={autopilot.authority}
                 disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ authority: event.target.value as Autopilot["authority"] })}
-              >
-                {/* The hover on each row, so the list explains itself while
-                    it is open rather than only after a choice is made. */}
-                {AUTHORITIES.map(([value, label, help]) => (
-                  <option key={value} value={value} title={help}>{label}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="autopilot-delivery">
+                searchable={false}
+                clearable={false}
+                placeholder="Choose"
+                options={AUTHORITIES.map(([value, label, description]) => ({
+                  value, label, description,
+                }))}
+                onChange={(next) =>
+                  void save({ authority: next as Autopilot["authority"] })}
+              />
+            </div>
+            <div className="autopilot-delivery">
               <span>
                 {t("autopilot.delivery")}
-                <Tooltip content={deliveryHelp}>
-                  <i className="autopilot-what" tabIndex={0} role="note"
-                    aria-label="What this delivery does">
-                    <Info size={12} aria-hidden="true" />
-                  </i>
-                </Tooltip>
               </span>
-              <Select
+              {/* The third row is the reason this is a list of three rather
+                  than two: the column and the engines have always allowed
+                  publish-now, and only the dropdown did not, so "Planned ·
+                  publish now" was a badge for a state nothing could reach. */}
+              <SearchSelect
+                ariaLabel={t("autopilot.delivery")}
                 value={autopilot.delivery}
                 disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ delivery: event.target.value as Autopilot["delivery"] })}
-              >
-                {/* The third one is the reason this is a list of three rather
-                    than two: the column and the engines have always allowed
-                    publish-now, and only the dropdown did not, so "Planned ·
-                    publish now" was a badge for a state nothing could reach. */}
-                {DELIVERIES.map((value) => (
-                  <option key={value} value={value} title={t(DELIVERY_HELP[value])}>
-                    {t(DELIVERY_LABEL[value])}
-                  </option>
-                ))}
-              </Select>
-            </label>
+                searchable={false}
+                clearable={false}
+                placeholder="Choose"
+                options={DELIVERIES.map((value) => ({
+                  value,
+                  label: t(DELIVERY_LABEL[value]),
+                  description: t(DELIVERY_HELP[value]),
+                }))}
+                onChange={(next) =>
+                  void save({ delivery: next as Autopilot["delivery"] })}
+              />
+            </div>
             {/* The third thing that decides what approval feels like, beside
                 the two that decide what it is: a held post also reaches a
                 phone. A chip rather than a fourth control - the switch for it

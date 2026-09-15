@@ -2208,15 +2208,21 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* The delivery choice, beside the sentence that says how many posts there will
    be. Laid out as a row rather than a stacked field: it is one decision with
    two answers, not a form. */
-.autopilot-run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.autopilot-run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
 .autopilot-delivery { display: flex; align-items: center; gap: 8px; margin: 0; }
 .autopilot-delivery > span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; font-weight: 600; }
-/* What the chosen option does, on hover beside the dial's own name. An icon
-   rather than a line of prose under the row: the header is three controls on
-   one line, and a sentence each would cost three rows to answer a question
-   asked once. The list itself carries the same text per option. */
-.autopilot-what { display: inline-grid; place-items: center; color: var(--muted-soft); cursor: help; }
-.autopilot-what:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+/* The dials are listboxes now, for the line of description under each option,
+   and a listbox is full-width by default. Sized to their own longest label so
+   the header stays one row: Authority's names are a sentence, Delivery's are
+   three words. */
+.autopilot-delivery .search-select { inline-size: clamp(150px, 15vw, 196px); }
+.autopilot-authority .search-select { inline-size: clamp(168px, 17vw, 240px); }
+.autopilot-delivery .search-select-trigger { min-height: 32px; padding: 5px 9px; font-size: 13px; }
+/* The list is wider than the dial, because what each option does is a
+   sentence and `max-content` would run it off the side of the page.
+   Fixed here rather than left to the text, so all four rows wrap to the
+   same measure and the list reads as a list. */
+.autopilot-delivery { --search-select-popover-width: 380px; }
 /* Where else these approvals land. Not a control - the switch is in the
    campaign's settings with the rest of the connection - so it is drawn as a
    fact the row states, in the same chip shape the rest of the console uses. */
@@ -2242,6 +2248,13 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
   .autopilot-delivery .ui-select {
     min-inline-size: 0;
     max-inline-size: 100%;
+  }
+
+  /* The desktop widths above are what stops the header wrapping; on a phone
+     the row has already stacked, so each dial takes the card instead. */
+  .autopilot-delivery .search-select,
+  .autopilot-authority .search-select {
+    inline-size: 100%;
   }
 }
 
