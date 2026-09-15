@@ -251,6 +251,16 @@ def test_a_picture_that_cannot_be_prepared_is_left_off_and_named(configured, pic
     assert outcome["media"] == 0 and len(outcome["skipped"]) == 3
 
 
+def test_a_picture_still_too_large_after_scaling_is_left_off(configured, pictures, monkeypatch) -> None:
+    """A bot cannot upload past Telegram's limit, and its refusal would take
+    the whole card rather than the one picture."""
+    monkeypatch.setattr(telegram, "PHOTO_LIMIT_BYTES", 8)
+    monkeypatch.setattr(telegram, "_preview_bytes", lambda path: b"x" * 9)
+    outcome = telegram.send_card("card", images=pictures[:1])
+    assert outcome["media"] == 0
+    assert outcome["skipped"] == ["slide-0.png: still too large to send after scaling"]
+
+
 def test_presses_are_read_as_plain_dicts_and_only_presses_are_asked_for(configured) -> None:
     _FakeBot.updates = [
         SimpleNamespace(update_id=41, callback_query=None),

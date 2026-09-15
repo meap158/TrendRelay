@@ -309,7 +309,14 @@ def send_card(
         try:
             if not path.is_file():
                 raise TelegramUnavailable("not on disk")
-            previews.append(_preview_bytes(path))
+            preview = _preview_bytes(path)
+            # Scaling makes this all but impossible - a 1280px JPEG is a few
+            # hundred kilobytes - but a bot cannot upload past the limit, and
+            # a refusal from Telegram would take the whole card with it
+            # rather than one picture.
+            if len(preview) > PHOTO_LIMIT_BYTES:
+                raise TelegramUnavailable("still too large to send after scaling")
+            previews.append(preview)
         except (TelegramUnavailable, OSError) as error:
             skipped.append(f"{path.name}: {error}")
     clip: Path | None = None
