@@ -252,6 +252,10 @@ export function MusicPicker({
     const parsed = JSON.parse(contextKey) as {
       text: string; mood: string; bpm: number | null; assetIds: string[];
     };
+    // Slow on purpose. Each ask is up to three searches of a public API, and
+    // the thing that changes most here is a script somebody is still writing -
+    // at a search box's reflexes that is a few calls a sentence, for a list
+    // whose answer barely moves between one sentence and the next.
     const wait = window.setTimeout(() => {
       setSuggesting(true);
       void apiFetch(`/api/workspaces/${workspaceId}/media/library/music/suggestions`, {
@@ -268,7 +272,7 @@ export function MusicPicker({
         })
         .catch(() => { if (mine === suggestionRun.current) setSuggested(null); })
         .finally(() => { if (mine === suggestionRun.current) setSuggesting(false); });
-    }, 400);
+    }, 1200);
     return () => window.clearTimeout(wait);
   }, [open, hasContext, contextKey, apiFetch, workspaceId]);
 
