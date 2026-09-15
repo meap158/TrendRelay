@@ -589,6 +589,60 @@ def test_campaign_settings_set_the_posting_policy() -> None:
     assert saved.priority == "revenue"
 
 
+def test_a_campaign_can_ask_for_telegram_when_it_is_made_and_later(monkeypatch) -> None:
+    """The switch is a campaign setting, asked beside the rest of how it
+    posts - at creation and in the settings dialog - and off unless asked."""
+    from trendrelay_api import approval_notices
+
+    workspace_id = create_workspace()
+    plain = create_campaign(workspace_id)["id"]
+    assert autopilot_of(plain).approvals_telegram is False
+
+    response = asyncio.run(request(
+        "POST", f"/api/workspaces/{workspace_id}/campaigns",
+        json={
+            "name": "Phone-approved launch", "objective": "Sell", "audience": "People",
+            "approvals_telegram": True,
+        },
+    ))
+    assert response.status_code == 201, response.text
+    asked = response.json()["campaign"]["id"]
+    assert autopilot_of(asked).approvals_telegram is True
+
+    # Switching it on later sends what is already waiting - none here - and
+    # the reply says so; saving again with it on sends nothing more.
+    announced: list = []
+    monkeypatch.setattr(
+        approval_notices, "announce_executions",
+        lambda session, autopilot, executions: announced.append(list(executions))
+        or "Announced 0 posts on Telegram.",
+    )
+    flipped = update_campaign(workspace_id, plain, approvals_telegram=True)
+    assert flipped.status_code == 200, flipped.text
+    assert flipped.json()["telegram"] == "Announced 0 posts on Telegram."
+    assert autopilot_of(plain).approvals_telegram is True
+    again = update_campaign(workspace_id, plain, approvals_telegram=True)
+    assert again.json()["telegram"] == ""
+    assert announced == [[]]
+    # And a correction that says nothing about it leaves it alone.
+    update_campaign(workspace_id, plain, audience="Different people")
+    assert autopilot_of(plain).approvals_telegram is True
+
+
+def test_the_list_says_whether_telegram_is_connected_and_as_whom(monkeypatch) -> None:
+    from trendrelay_api.integrations import telegram
+
+    workspace_id = create_workspace()
+    monkeypatch.setattr(telegram, "connection_summary", lambda: {
+        "connected": True, "bot": "@trendrelay_bot", "chat": "Approvals", "reason": "",
+    })
+    listed = asyncio.run(request("GET", f"/api/workspaces/{workspace_id}/campaigns"))
+    assert listed.status_code == 200
+    assert listed.json()["telegram"] == {
+        "connected": True, "bot": "@trendrelay_bot", "chat": "Approvals", "reason": "",
+    }
+
+
 def test_correcting_the_audience_does_not_reset_the_policy() -> None:
     """Every policy field is optional for exactly this.
 

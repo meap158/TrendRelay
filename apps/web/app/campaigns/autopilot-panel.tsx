@@ -4200,27 +4200,15 @@ export function AutopilotPanel({
           <p className="autopilot-lede">What you see is exactly what will go
             out. A post that is not finished can’t be approved — it shows what
             to fix first.</p>
-          {/* The same decisions, from the phone. Each held post goes to the
-              Telegram chat set up in Tools as a card with these buttons under
-              it, and a press settles it here. Offered only when Telegram is
-              set up - a switch that could do nothing is not a choice - and
-              kept on screen while it is on, so it can always be turned off.
-              Switching it on sends what is waiting now, not only what is held
-              next. */}
-          {(autopilot.approvals_telegram_available || autopilot.approvals_telegram) && (
-            <label
-              className="autopilot-delivery"
-              title="Send each held post to the Telegram chat set up in Tools, with Approve and Dismiss buttons. A press decides it here, and is recorded as your decision."
-            >
-              <input
-                type="checkbox"
-                checked={autopilot.approvals_telegram}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ approvals_telegram: event.target.checked })}
-              />
-              <span>Also decide these on Telegram</span>
-            </label>
+          {/* Said, not switched: the same decisions are also on the phone,
+              as cards with these buttons, when the campaign's settings ask
+              for it. The switch lives there, beside the rest of how the
+              campaign runs, so this only tells the reader where else the
+              inbox is. */}
+          {autopilot.approvals_telegram && (
+            <p className="autopilot-lede">
+              These are also on Telegram as cards. A press there decides them here.
+            </p>
           )}
           {/* One line that reconciles the scattered counts into the operator's
               own three buckets: what needs them now, what is ready to go, and

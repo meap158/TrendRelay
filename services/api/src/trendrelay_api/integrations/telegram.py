@@ -489,7 +489,7 @@ def settle_button(
         raise TelegramUnavailable(f"Telegram refused the answer: {_said(error)}") from error
 
 
-# --- where the poll left off ----------------------------------------------------
+# --- local state: where the poll left off, and who the bot is ------------------
 
 
 def _state_path() -> Path:
@@ -498,17 +498,115 @@ def _state_path() -> Path:
     return PROJECT_ROOT / ".data" / "telegram" / "state.json"
 
 
-def read_offset() -> int | None:
-    """The update id to read from next, so a press is handled once."""
+def _read_state() -> dict[str, Any]:
     try:
         data = json.loads(_state_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
-    value = data.get("offset") if isinstance(data, dict) else None
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_state(changes: dict[str, Any]) -> None:
+    path = _state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state = {**_read_state(), **changes}
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def read_offset() -> int | None:
+    """The update id to read from next, so a press is handled once."""
+    value = _read_state().get("offset")
     return int(value) if isinstance(value, int) else None
 
 
 def write_offset(offset: int) -> None:
-    path = _state_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"offset": int(offset)}), encoding="utf-8")
+    _write_state({"offset": int(offset)})
+
+
+#: How long a remembered bot name and chat title are trusted before they are
+#: asked for again. A bot is renamed about never; a page that asked Telegram
+#: on every open would be paying a network round trip to learn nothing.
+IDENTITY_TTL_SECONDS = 60 * 60
+
+
+def _ask_identity() -> dict[str, Any]:
+    """Who the bot is and where it posts, as Telegram says right now."""
+    telegram = _telegram_module()
+    token, chat = _settings()
+
+    async def go() -> dict[str, Any]:
+        async with telegram.Bot(token) as bot:
+            me = await bot.get_me()
+            room = await bot.get_chat(chat)
+            title = room.title or " ".join(
+                part for part in (room.first_name, room.last_name) if part
+            ) or (f"@{room.username}" if room.username else str(chat))
+            return {
+                "bot_username": me.username or "",
+                "bot_name": me.first_name or "",
+                "chat_title": title,
+                "chat_type": room.type or "",
+            }
+
+    try:
+        return _run(go())
+    except TelegramUnavailable:
+        raise
+    except Exception as error:  # noqa: BLE001
+        raise TelegramUnavailable(f"Telegram could not be asked who the bot is: {_said(error)}") from error
+
+
+def identity(*, refresh: bool = False) -> dict[str, Any] | None:
+    """The bot's name and the chat's title, remembered between asks.
+
+    Keyed to the token and chat they were learned for, so changing either on
+    the card does not show the old bot's name beside the new one's token. None
+    when Telegram is not set up, or has not answered yet and could not now.
+    """
+    import time  # noqa: PLC0415
+
+    saved = configured_keys((BOT_TOKEN_ENV, CHAT_ID_ENV))
+    if not (saved[BOT_TOKEN_ENV] and saved[CHAT_ID_ENV]):
+        return None
+    token = (effective_value(BOT_TOKEN_ENV) or "").strip()
+    chat = configured_chat_id()
+    key = f"{token[: token.find(':')]}:{chat}"
+    remembered = _read_state().get("identity")
+    fresh = (
+        isinstance(remembered, dict)
+        and remembered.get("for") == key
+        and time.time() - float(remembered.get("checked_at") or 0) < IDENTITY_TTL_SECONDS
+    )
+    if fresh and not refresh:
+        return remembered
+    try:
+        learned = _ask_identity()
+    except TelegramUnavailable:
+        return remembered if isinstance(remembered, dict) and remembered.get("for") == key else None
+    learned.update({"for": key, "checked_at": time.time()})
+    _write_state({"identity": learned})
+    return learned
+
+
+def connection_summary() -> dict[str, Any]:
+    """What a settings screen says about Telegram: connected, and as whom.
+
+    The names come from memory when there is one, so drawing a form costs
+    nothing; Telegram is asked only when nothing is remembered for the saved
+    token and chat, or the memory is an hour old.
+    """
+    status = provider_status()
+    if not (status["configured"] and status["installed"]):
+        return {"connected": False, "bot": "", "chat": "", "reason": status["reason"]}
+    who = identity()
+    if not who:
+        return {
+            "connected": False, "bot": "", "chat": "",
+            "reason": "Telegram has not answered yet. Send the test carousel from Tools.",
+        }
+    return {
+        "connected": True,
+        "bot": f"@{who['bot_username']}" if who.get("bot_username") else who.get("bot_name", ""),
+        "chat": who.get("chat_title", ""),
+        "reason": "",
+    }

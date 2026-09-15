@@ -151,6 +151,10 @@ class CampaignCreate(BaseModel):
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
     authority: str | None = Field(default=None, pattern=r"^[a-z_]{4,20}$")
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
+    #: Whether held posts also go to the Telegram chat set up in Tools, as
+    #: cards to decide from. Off unless asked; the form offers it only when
+    #: Telegram is connected.
+    approvals_telegram: bool | None = None
     offer_mode: str | None = Field(default=None, pattern=r"^(smart|manual|none)$")
     #: The caption scaffolding. Left unset these are written in the campaign's
     #: own language, which is what the route already did and what keeps a
@@ -223,6 +227,8 @@ class CampaignUpdate(BaseModel):
     clear_weekly_cap: bool = False
     authority: str | None = Field(default=None, pattern=r"^[a-z_]{4,20}$")
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
+    #: Whether held posts also go to Telegram as cards. None leaves it alone.
+    approvals_telegram: bool | None = None
     #: How products attach: smart matching, one fixed offer, or none at all.
     #: A package can still override it by pinning, but this is what a package
     #: that says nothing falls through to.
@@ -431,10 +437,16 @@ def list_campaigns(
             {
                 **_campaign(item),
                 "tagged_products": counts.get(item.id, 0),
+    from trendrelay_api.integrations.telegram import connection_summary
+
                 "held_count": held_counts.get(item.id, 0),
             }
             for item in items
-        ]
+        ],
+        # Whether a campaign may ask for its held posts on Telegram, and as
+        # whom: the create and settings dialogs offer the switch only when
+        # this says connected, and say which bot and chat beside it.
+        "telegram": connection_summary(),
     }
 
 
@@ -520,6 +532,7 @@ def create_campaign(
         "campaign.created",
         "campaign",
         item.id,
+        "approvals_telegram",
         {
             "status": item.status,
             # What was actually stored, not what was passed: an offer sent
@@ -735,12 +748,13 @@ def update_campaign(
                     if autopilot and hasattr(autopilot, field)
                     else getattr(item, field, was)
                 )
+            "approvals_telegram": body.approvals_telegram,
             ),
             "post_language": language if retranslated else None,
             "recomposed_held": reached["recomposed"],
         },
     )
-    return {"campaign": _campaign(item), "held": reached}
+    return {"campaign": _campaign(item), "held": reached, "telegram": telegram_note}
 
 
 @router.post("/{campaign_id}/status")
@@ -794,6 +808,26 @@ class CampaignDuplicate(BaseModel):
 #: The split is not "which columns look boring". It is: would carrying this
 #: forward make the copy claim something that never happened to it. A queue item
 #: saying it has been posted four times is held back by the recycle window for
+    # Telegram switched on with posts already waiting: those go to the chat
+    # now, as cards - the same thing the autopilot route does on the flip -
+    # rather than only whatever the next pass holds.
+    telegram_note = ""
+    if (
+        autopilot
+        and body.approvals_telegram
+        and before.get("approvals_telegram") is False
+    ):
+        from trendrelay_api.approval_notices import announce_executions
+        from trendrelay_api.publication_models import PublicationExecution
+
+        waiting = session.scalars(
+            select(PublicationExecution).where(
+                PublicationExecution.workspace_id == workspace_id,
+                PublicationExecution.campaign_id == campaign_id,
+                PublicationExecution.state == "proposed",
+            ).order_by(PublicationExecution.scheduled_at.asc())
+        ).all()
+        telegram_note = announce_executions(session, autopilot, list(waiting))
 #: work the copy never did, and an autopilot saying it ran an hour ago is a lie
 #: about a campaign that has never run.
 _COPY_RESETS: dict[str, dict[str, Any]] = {

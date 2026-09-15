@@ -16,12 +16,15 @@ itself is one look and one press. Telegram is where that person already is,
 so each held post goes there as a card with the inbox's own buttons under
 it, and a press decides it - the way a card is swiped.
 
-It is optional, and campaign by campaign: the switch sits in the campaign's
-approval inbox ("Also decide these on Telegram"), beside the posts it is
-about, and appears only once the tool is set up here - a switch that could do
-nothing is not a choice. Turning the tool on does not, by itself, make any
-campaign send; switching a campaign on sends the posts it is holding at that
-moment, and every hold after.
+It is optional, and campaign by campaign: the switch is a campaign setting,
+ruled off at the end of "How it posts" in both the new-campaign form and the
+campaign's settings dialog, and it says which bot and which chat beside it.
+It appears only once the tool is connected here - a switch that could do
+nothing is not a choice - and stays on the form while it is already on, so
+it can always be switched off. Turning the tool on does not, by itself, make
+any campaign send; switching a campaign on sends the posts it is holding at
+that moment, and every hold after. The approval inbox says when its posts are
+also on Telegram.
 
 ## What it needs
 

@@ -86,6 +86,8 @@ type CampaignPolicy = {
   offer_mode: "smart" | "manual" | "none";
   offer_id: string | null;
   disclose: boolean;
+  /** Whether held posts also go to Telegram as cards to decide from. */
+  approvals_telegram: boolean;
   disclosure: string;
   /** Posts already frozen and waiting, which these settings will reach. */
   held?: { waiting: number; edited: number; recomposable: number };
@@ -95,6 +97,10 @@ type CampaignPolicy = {
 type PublicationPlan = {
   id: string;
   campaign_id: string;
+/** Whether the workspace's Telegram is set up, and as whom - what the dialogs
+    say beside the switch, and whether they offer it at all. */
+type TelegramLink = { connected: boolean; bot: string; chat: string; reason: string };
+
   title: string;
   platform: PublishingPlatform | "douyin" | "other";
   provider?: string | null;
@@ -185,7 +191,58 @@ const CAMPAIGN_STATUS_ICON: Record<Campaign["status"], ActionName> = {
   active: "play",
   archived: "archive",
 };
-type CampaignsSnapshot = { campaigns: Campaign[]; plans: PublicationPlan[] };
+type CampaignsSnapshot = {
+  campaigns: Campaign[];
+  plans: PublicationPlan[];
+  telegram?: TelegramLink;
+};
+
+/**
+ * The one integration a campaign may ask for, ruled off from how it posts.
+ *
+ * Offered only when Telegram is connected in Tools - a switch that could do
+ * nothing is not a choice - and kept on the form while it is already on, so
+ * a campaign whose Telegram was later disconnected can still switch it off.
+ * Says which bot and which chat beside the switch, so what is being agreed
+ * to is on the screen rather than in another tab. Off by default: a campaign
+ * reaches somebody's phone because it was asked to.
+ */
+function TelegramApprovalsField({
+  link,
+  defaultChecked,
+}: {
+  link: TelegramLink | null;
+  defaultChecked: boolean;
+}) {
+  if (!link?.connected && !defaultChecked) return null;
+  return (
+    <div className="campaign-dialog-integration">
+      <strong>Telegram</strong>
+      <label className="campaign-dialog-check">
+        <input type="checkbox" name="approvals_telegram" defaultChecked={defaultChecked} />
+        <span>
+          Decide held posts on Telegram
+          <span className="campaign-dialog-hint">
+            Each post waiting for approval also goes to the chat as a card with
+            Approve and Dismiss buttons. A press there decides it here, and is
+            recorded as your decision.
+          </span>
+          {link?.connected ? (
+            <span className="campaign-dialog-connected">
+              <span>Bot <b>{link.bot}</b></span>
+              <span>Chat <b>{link.chat}</b></span>
+            </span>
+          ) : (
+            <span className="campaign-dialog-hint">
+              Telegram is not connected right now{link?.reason ? `: ${link.reason}` : "."}
+              {" "}Nothing is sent until it is set up again in Tools.
+            </span>
+          )}
+        </span>
+      </label>
+    </div>
+  );
+}
 
 const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
   ["smart", "Smart match", "Fit content automatically"],
@@ -316,6 +373,9 @@ export default function CampaignsPage() {
       are rewritten when the post language changes. */
   const [newOfferMode, setNewOfferMode] = useState<OfferMode>("smart");
   const [newLanguage, setNewLanguage] = useState<string>(defaultLanguage(locale));
+  /** The workspace's Telegram, as the list reports it: whether the dialogs
+      offer approvals there, and which bot and chat they would go to. */
+  const [telegramLink, setTelegramLink] = useState<TelegramLink | null>(null);
   const [newScaffolding, setNewScaffolding] = useState(
     () => scaffoldingFor(defaultLanguage(locale)),
   );
@@ -365,14 +425,18 @@ export default function CampaignsPage() {
       `campaigns:${nextWorkspaceId}`,
       async () => {
         const [campaignBody, calendarBody] = await Promise.all([
-          json<{ campaigns: Campaign[] }>(
+          json<{ campaigns: Campaign[]; telegram?: TelegramLink }>(
             await apiFetch(`/api/workspaces/${nextWorkspaceId}/campaigns`),
           ),
           json<{ plans: PublicationPlan[] }>(
             await apiFetch(`/api/workspaces/${nextWorkspaceId}/campaigns/calendar`),
           ),
         ]);
-        return { campaigns: campaignBody.campaigns, plans: calendarBody.plans };
+        return {
+          campaigns: campaignBody.campaigns,
+          plans: calendarBody.plans,
+          telegram: campaignBody.telegram,
+        };
       },
     );
     setCampaigns(snapshot.campaigns);
@@ -397,6 +461,7 @@ export default function CampaignsPage() {
     setCampaignId((current) => requested?.id
       ?? (visible.some((item) => item.id === current) ? current : visible[0]?.id ?? ""));
   }, [apiFetch]);
+    setTelegramLink(snapshot.telegram ?? null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -585,6 +650,12 @@ export default function CampaignsPage() {
   /**
    * What the campaign is, and how hard it is run, in one dialog.
    *
+            // Only when the switch was on the form at all - it is offered
+            // only with Telegram connected - so a workspace without it
+            // never sends a flag it could not have chosen.
+            ...(telegramLink?.connected
+              ? { approvals_telegram: form.get("approvals_telegram") === "on" }
+              : {}),
    * The policy lives on the autopilot row because that is what reads it, and
    * it is fetched when the dialog opens rather than folded into every campaign
    * payload: this is the one screen that needs it, and it is opened by hand.
@@ -643,6 +714,8 @@ export default function CampaignsPage() {
               clear_weekly_cap: !form.get("weekly_post_cap"),
               offer_mode: offerMode,
               // Only meaningful for the one-offer mode, and cleared otherwise
+        /** What switching Telegram on did with the posts already waiting. */
+        telegram?: string;
               // so a mode change does not leave a stale pin behind it.
               offer_id: offerMode === "manual" ? (offerChoice || null) : null,
               min_recycle_days: Number(form.get("min_recycle_days")),
@@ -657,13 +730,15 @@ export default function CampaignsPage() {
       );
       await refresh(workspaceId);
       setSettingsFor(null);
-      // What it reached, not only that it saved.
+      // What it reached, not only that it saved - and where the waiting
+      // posts went if Telegram was just switched on.
       const reached = payload.held;
-      succeed(reached?.recomposed
+      const saved = reached?.recomposed
         ? `Campaign settings saved. ${reached.recomposed} waiting post${
           reached.recomposed === 1 ? "" : "s"} updated to match`
           + (reached.kept ? `; ${reached.kept} left as edited by hand.` : ".")
-        : "Campaign settings saved.");
+        : "Campaign settings saved.";
+      succeed(payload.telegram ? `${saved} ${payload.telegram}` : saved);
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Could not save campaign settings.");
     } finally {
@@ -671,6 +746,11 @@ export default function CampaignsPage() {
     }
   }
 
+              // Sent only when the switch was on the form: with Telegram
+              // connected, or already on so it can be switched off.
+              ...(telegramLink?.connected || policy.approvals_telegram
+                ? { approvals_telegram: form.get("approvals_telegram") === "on" }
+                : {}),
   async function setCampaignStatus(status: Campaign["status"]) {
     if (!campaignId) return;
     setBusy(`campaign-${status}`);
@@ -1173,6 +1253,7 @@ export default function CampaignsPage() {
                       onClick={() => setOfferMode(mode)}>
                       <strong>{title}</strong><small>{hint}</small>
                     </button>
+            <TelegramApprovalsField link={telegramLink} defaultChecked={false} />
                   ))}
                 </div>
               </div>
@@ -1299,3 +1380,7 @@ export default function CampaignsPage() {
     </main>
   );
 }
+              <TelegramApprovalsField
+                link={telegramLink}
+                defaultChecked={policy.approvals_telegram}
+              />

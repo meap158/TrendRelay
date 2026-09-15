@@ -46,7 +46,15 @@ class _FakeBot:
     async def get_me(self) -> SimpleNamespace:
         if _FakeBot.refuse:
             raise _FakeBot.refuse
+        _FakeBot.asked.append({"get_me": True})
         return SimpleNamespace(username="trendrelay_bot", first_name="TrendRelay")
+
+    async def get_chat(self, chat_id) -> SimpleNamespace:
+        if _FakeBot.refuse:
+            raise _FakeBot.refuse
+        return SimpleNamespace(
+            title="Approvals", first_name=None, last_name=None, username=None, type="group",
+        )
 
     async def send_media_group(self, **kwargs) -> list:
         _FakeBot.sent.append({"kind": "album", **kwargs})
@@ -282,6 +290,43 @@ def test_the_poll_offset_survives_between_polls(monkeypatch, tmp_path) -> None:
     assert telegram.read_offset() is None
     telegram.write_offset(43)
     assert telegram.read_offset() == 43
+
+
+def test_who_the_bot_is_is_asked_once_and_remembered_for_the_saved_pair(configured, monkeypatch, tmp_path) -> None:
+    """A settings form draws from memory; Telegram is asked when nothing is
+    remembered for this token and chat, and again after an hour."""
+    monkeypatch.setattr(telegram, "_state_path", lambda: tmp_path / "state.json")
+    first = telegram.connection_summary()
+    assert first == {"connected": True, "bot": "@trendrelay_bot", "chat": "Approvals", "reason": ""}
+    asked = [item for item in _FakeBot.asked if item.get("get_me")]
+    assert len(asked) == 1
+
+    telegram.connection_summary()
+    assert len([item for item in _FakeBot.asked if item.get("get_me")]) == 1  # remembered
+    # The offset kept beside it is untouched by remembering.
+    telegram.write_offset(9)
+    assert telegram.identity()["bot_username"] == "trendrelay_bot"
+    assert telegram.read_offset() == 9
+
+    # A different chat is a different memory: asked again.
+    monkeypatch.setenv(telegram.CHAT_ID_ENV, "-100999")
+    telegram.connection_summary()
+    assert len([item for item in _FakeBot.asked if item.get("get_me")]) == 2
+
+    # Telegram not answering leaves the form honest rather than blank-and-connected.
+    monkeypatch.setenv(telegram.CHAT_ID_ENV, "-100777")
+    _FakeBot.refuse = RuntimeError("timed out")
+    summary = telegram.connection_summary()
+    assert summary["connected"] is False and "has not answered" in summary["reason"]
+
+
+def test_a_settings_form_says_not_connected_without_asking_when_nothing_is_saved(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(env_store, "ENV_PATH", tmp_path / ".env")
+    monkeypatch.delenv(telegram.BOT_TOKEN_ENV, raising=False)
+    monkeypatch.delenv(telegram.CHAT_ID_ENV, raising=False)
+    monkeypatch.setattr(telegram, "_telegram_module", _fake_module)
+    summary = telegram.connection_summary()
+    assert summary["connected"] is False and summary["reason"]
 
 
 def test_the_setup_card_says_what_is_missing_and_what_the_test_does(configured, monkeypatch) -> None:
