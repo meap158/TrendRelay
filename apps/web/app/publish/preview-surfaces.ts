@@ -77,3 +77,25 @@ export const SURFACE_FURNITURE: Record<string, SurfaceFurniture> = {
     audio: () => "Original audio",
   },
 };
+
+/**
+ * The line naming the post's sound, or nothing at all.
+ *
+ * "Original sound" is the audio of a video, so a post made of pictures has
+ * none to name. TikTok is where this shows: a photo carousel is the one
+ * picture post these four surfaces draw full-bleed, and the preview was
+ * putting "original sound · @handle" over a slideshow that has no original
+ * anything. `References/Posts/tiktok-photo_carousel_desktop.png` is a real one
+ * - dots, chevrons, caption, AI badge - and there is no sound line on it.
+ *
+ * Nothing rather than a different line: a slideshow can be scored, but TikTok
+ * chooses that track after the post is made, so naming one here would be
+ * inventing the one detail the preview cannot know.
+ */
+export function audioLine(
+  platform: string, handle: string, pictures: boolean,
+): string | null {
+  const furniture = SURFACE_FURNITURE[platform];
+  if (!furniture || pictures) return null;
+  return furniture.audio(handle || "your account");
+}

@@ -27,7 +27,7 @@ import { type CSSProperties, memo, useEffect, useMemo, useRef, useState } from "
 import { createPortal } from "react-dom";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
-import { SURFACE_FURNITURE, type RailAction } from "./preview-surfaces";
+import { SURFACE_FURNITURE, audioLine, type RailAction } from "./preview-surfaces";
 import {
   AssetFilters,
   type AssetFacets,
@@ -612,6 +612,7 @@ export function PostPreview({
    * this table exists to stop.
    */
   const furniture = SURFACE_FURNITURE[platform];
+  const sound = audioLine(platform, handle, Boolean(sourceIsImage));
   const account = (
     <span className="preview-surface-who">
       {/* The account's own picture where its engine sends one, and the
@@ -717,10 +718,12 @@ export function PostPreview({
               <div className="preview-surface-foot">
                 {account}
                 {caption && <p className="preview-surface-caption">{caption}</p>}
-                {furniture && (
-                  <span className={`preview-surface-audio${furniture.chip ? " chip" : ""}`}>
+                {/* Absent on a picture post, which has no original sound to
+                    name - see `audioLine`. */}
+                {sound && (
+                  <span className={`preview-surface-audio${furniture?.chip ? " chip" : ""}`}>
                     <Music2 size={11} />
-                    {furniture.audio(handle || "your account")}
+                    {sound}
                   </span>
                 )}
               </div>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { SURFACE_FURNITURE } from "../app/publish/preview-surfaces.ts";
+import { SURFACE_FURNITURE, audioLine } from "../app/publish/preview-surfaces.ts";
 
 test("no two of these surfaces draw the same rail", () => {
   // The bug this replaces was one rail - Instagram's - drawn over all four.
@@ -48,6 +48,25 @@ test("the sound is named the way each network names it", () => {
   assert.equal(SURFACE_FURNITURE.tiktok.audio("nona"), "original sound · nona");
   assert.equal(SURFACE_FURNITURE.facebook.audio("nona"), "Original audio");
   assert.equal(SURFACE_FURNITURE.youtube.audio("nona"), "Original audio");
+});
+
+test("a post made of pictures has no sound line at all", () => {
+  // A real TikTok carousel is saved at
+  // References/Posts/tiktok-photo_carousel_desktop.png: dots, chevrons,
+  // caption and the AI badge, and no sound row anywhere on it. The preview
+  // was drawing "original sound · @nona" over a slideshow that has no
+  // original anything.
+  assert.equal(audioLine("tiktok", "nona", true), null);
+  assert.equal(audioLine("tiktok", "nona", false), "original sound · nona");
+  assert.equal(audioLine("instagram", "nona", true), null);
+});
+
+test("an unnamed account still reads as a sentence", () => {
+  assert.equal(audioLine("tiktok", "", false), "original sound · your account");
+});
+
+test("a network with no furniture is named no sound either", () => {
+  assert.equal(audioLine("threads", "nona", false), null);
 });
 
 test("a network nobody has drawn gets no rail rather than a borrowed one", () => {
