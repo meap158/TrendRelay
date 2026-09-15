@@ -858,7 +858,7 @@ def preview_recipe_frame(
 
 
 def _objects_on_frame(
-    report: dict[str, Any], visual_at: list[int],
+    report: dict[str, Any] | None, visual_at: list[int],
 ) -> tuple[list[dict[str, Any]], dict[str, int] | None]:
     """The objects a rendered recipe drew, named by the step that drew them.
 
@@ -866,10 +866,14 @@ def _objects_on_frame(
     was handed; every pass renders the same size, so one frame size covers
     them all and the editor can scale once against however wide it is showing
     the picture.
+
+    Nothing at all is an answer too: a renderer stood in for by a test, or one
+    that drew only stream effects, reports no frame effects and the frame is
+    simply a picture with nothing on it to click.
     """
     objects: list[dict[str, Any]] = []
     frame_size: dict[str, int] | None = None
-    for outcome in report.get("frame_effects") or []:
+    for outcome in (report or {}).get("frame_effects") or []:
         frame = outcome.get("frame")
         if isinstance(frame, dict) and frame_size is None:
             frame_size = {"width": int(frame["width"]), "height": int(frame["height"])}
