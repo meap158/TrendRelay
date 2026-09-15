@@ -438,6 +438,8 @@ export const vi: Messages = {
       "Kiểm tra độ che phủ trên một khung hình và đặt độ rộng vùng mờ",
     effectsHelp: "Xếp chồng hiệu ứng lên tệp này mà không đụng đến bản gốc",
     mediaTags: "Thẻ nội dung",
+    creditOwed: "Mọi bài đăng đều mang: {credit}",
+    licenceTerms: "Đọc giấy phép",
     selectToBegin: "Chọn một tệp hoặc nhập tệp từ máy để bắt đầu.",
   },
 

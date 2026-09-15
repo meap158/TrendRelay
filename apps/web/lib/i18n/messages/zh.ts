@@ -429,6 +429,8 @@ export const zh: Messages = {
     blurSettingsHelp: "在单帧上检查覆盖范围，并设置模糊的宽度",
     effectsHelp: "在不改动原始文件的前提下，为该素材叠加特效",
     mediaTags: "媒体标签",
+    creditOwed: "每条帖子都会附上：{credit}",
+    licenceTerms: "查看许可",
     selectToBegin: "选择一个素材，或导入本地文件开始。",
   },
 

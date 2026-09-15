@@ -611,6 +611,12 @@ type Asset = {
   width?: number | null;
   height?: number | null;
   has_audio: boolean;
+  /** What this asset may be published under, and what publishing it owes.
+      Null on the workspace's own media, which owes nothing to anybody. */
+  license?: string | null;
+  license_label?: string | null;
+  license_url?: string | null;
+  attribution?: string | null;
   collected_at: string;
   versions: Version[];
   transcripts: Transcript[];
@@ -2590,6 +2596,29 @@ function LibraryContent() {
                   </p>
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>
+                  {/* The terms this file arrived under, where it arrived with
+                      any - music added from the picker does, the workspace's
+                      own footage does not. Here rather than as a tag on the
+                      grid because the credit is a line to read and copy, not
+                      a chip: it is what every post publishing this ends up
+                      carrying, and seeing it is how somebody checks that. */}
+                  {selected.license_label && (
+                    <p className="library-licence">
+                      <Badge tone={selected.attribution ? "info" : "good"}>
+                        {selected.license_label}
+                      </Badge>
+                      <span>
+                        {selected.attribution
+                          ? t("library.creditOwed", { credit: selected.attribution })
+                          : t("music.noCredit")}
+                      </span>
+                      {selected.license_url && (
+                        <a href={selected.license_url} target="_blank" rel="noreferrer">
+                          {t("library.licenceTerms")}
+                        </a>
+                      )}
+                    </p>
+                  )}
                   {/* The pager shares the metadata line rather than taking a
                       row of its own; the clip and its details are what deserve
                       the vertical space. */}

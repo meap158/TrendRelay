@@ -435,6 +435,8 @@ export const ja: Messages = {
     blurSettingsHelp: "1 フレームで範囲を確認し、ぼかしの広さを決めます",
     effectsHelp: "オリジナルに手を加えずに、この素材へエフェクトを重ねます",
     mediaTags: "メディアタグ",
+    creditOwed: "すべての投稿に記載: {credit}",
+    licenceTerms: "ライセンスを読む",
     selectToBegin:
       "素材を選ぶか、ローカルファイルを読み込んで始めてください。",
   },

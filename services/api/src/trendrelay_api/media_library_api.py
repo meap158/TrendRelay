@@ -321,6 +321,11 @@ def _asset_view(
         "audio_codec": item.audio_codec,
         "has_audio": item.has_audio,
         "license": item.license,
+        # The SPDX id as a person writes it, worded where licences are
+        # understood rather than a second time in the browser. A search
+        # result has carried this since the music routes were added; an
+        # asset carrying it too means one rule for one fact.
+        "license_label": openverse_music.licence_label(item.license) if item.license else None,
         "license_url": item.license_url,
         "attribution": item.attribution,
         "collected_at": item.collected_at,

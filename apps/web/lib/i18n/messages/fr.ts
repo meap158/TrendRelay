@@ -443,6 +443,8 @@ export const fr: Messages = {
       "Vérifiez la couverture sur une image et réglez la largeur du flou",
     effectsHelp: "Empilez des effets sur ce média sans toucher à l'original",
     mediaTags: "Étiquettes du média",
+    creditOwed: "Chaque post porte : {credit}",
+    licenceTerms: "Lire la licence",
     selectToBegin:
       "Sélectionnez un média ou importez un fichier local pour commencer.",
   },

@@ -216,6 +216,31 @@ def test_search_passes_the_query_and_page_through(tmp_path: Path, monkeypatch) -
     assert response.json()["tracks"][0]["license"] == "CC-BY-3.0"
 
 
+def test_an_asset_says_its_licence_the_way_a_person_writes_it() -> None:
+    """The SPDX id and the wording of it, so the Library and the picker do not
+    each carry their own rule for turning one into the other."""
+    from test_media_library_api import TestingSession
+
+    from trendrelay_api.media_models import MediaAsset
+
+    workspace_id = create_workspace()
+    with TestingSession.begin() as session:
+        for asset_id, licence in (("by", "CC-BY-3.0"), ("zero", "CC0-1.0"), ("mine", None)):
+            session.add(MediaAsset(
+                id=asset_id, workspace_id=workspace_id, title=asset_id, media_kind="audio",
+                source_type="openverse-music", license=licence,
+                original_path=f"/m/{asset_id}.mp3", original_sha256=asset_id.ljust(64, "0"),
+                mime_type="audio/mpeg", size_bytes=10, created_by="owner-user",
+            ))
+
+    listed = asyncio.run(request(
+        "GET", f"/api/workspaces/{workspace_id}/media/library/assets?media_kind=audio",
+    ))
+    assert listed.status_code == 200, listed.text
+    labels = {row["id"]: row["license_label"] for row in listed.json()["assets"]}
+    assert labels == {"by": "CC BY 3.0", "zero": "CC0 1.0", "mine": None}
+
+
 def test_suggestions_read_the_clips_and_offer_the_librarys_own_tracks(monkeypatch) -> None:
     """The clips travel as ids; their titles and tags are read here, never sent.
 

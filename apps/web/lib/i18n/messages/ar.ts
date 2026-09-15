@@ -435,6 +435,8 @@ export const ar: Messages = {
     blurSettingsHelp: "تحقّق من التغطية على إطار واحد وحدّد اتساع التمويه",
     effectsHelp: "أضف تأثيرات على هذا الملف دون المساس بالنسخة الأصلية",
     mediaTags: "وسوم الوسائط",
+    creditOwed: "كل منشور يحمل: {credit}",
+    licenceTerms: "اقرأ الترخيص",
     selectToBegin: "اختر ملفًا أو استورد ملفًا من جهازك للبدء.",
   },
 

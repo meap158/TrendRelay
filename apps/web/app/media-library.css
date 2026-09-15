@@ -1277,6 +1277,12 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    in the warn colour, so it reads as something to look at rather than as
    another property of the track. */
 .autocut-licence-unknown { color: var(--warn); background: var(--warn-bg); }
+/* The terms a Library file arrived under, in the detail pane. The credit is a
+   line to read rather than a chip to glance at - it is what every post
+   publishing this will carry - so it wraps and keeps its full width. */
+.library-licence { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin: 0 0 8px; color: var(--muted); font-size: 11px; }
+.library-licence span { min-inline-size: 0; }
+.library-licence a { color: var(--link); }
 
 /* The music picker: the chosen track on one row, and behind a button the two
    lists it can be chosen from - the Library's own audio and a search of what

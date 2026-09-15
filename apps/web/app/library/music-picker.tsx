@@ -35,6 +35,8 @@ export type MusicChoice = {
   title: string;
   creator: string | null;
   license: string | null;
+  /** The licence as a person writes it, worded by the API. */
+  license_label: string | null;
   attribution: string | null;
 };
 
@@ -78,11 +80,6 @@ type FoundTrack = {
 };
 
 /** `CC-BY-4.0` as a person writes it, for a Library row that stores the SPDX id. */
-function licenceLabel(license: string | null): string {
-  if (!license) return "";
-  return license === "CC0-1.0" ? "CC0 1.0" : license.replace(/-/g, " ");
-}
-
 function seconds(ms: number | null): string {
   if (!ms) return "";
   const total = Math.round(ms / 1000);
@@ -100,17 +97,22 @@ export async function loadMusicChoice(
   if (!response.ok) return null;
   const body = (await response.json().catch(() => ({}))) as { assets?: AudioRow[] };
   const row = (body.assets ?? []).find((asset) => asset.id === assetId && asset.media_kind === "audio");
-  return row ? { id: row.id, title: row.title, creator: row.creator, license: row.license, attribution: row.attribution } : null;
+  return row
+    ? {
+      id: row.id, title: row.title, creator: row.creator,
+      license: row.license, license_label: row.license_label, attribution: row.attribution,
+    }
+    : null;
 }
 
 /** The licence and, when one is owed, the credit - on a row or on the choice. */
-function Terms({ license, attribution }: { license: string | null; attribution: string | null }) {
+function Terms({ label, attribution }: { label: string | null; attribution: string | null }) {
   const t = useT();
-  if (!license) return null;
+  if (!label) return null;
   return (
     <small className="music-terms">
       <Badge tone={attribution ? "info" : "good"} title={attribution ?? t("music.noCredit")}>
-        {licenceLabel(license)}
+        {label}
       </Badge>
       <span>{attribution ? t("music.credit") : t("music.noCredit")}</span>
     </small>
@@ -143,7 +145,7 @@ function LibraryRow({
           {line && <small>{line}</small>}
           {why && <small>{why}</small>}
         </span>
-        <Terms license={row.license} attribution={row.attribution} />
+        <Terms label={row.license_label} attribution={row.attribution} />
       </button>
     </li>
   );
@@ -336,7 +338,8 @@ export function MusicPicker({
         // Already filed: it can be chosen right away.
         onChange({
           id: job.asset_id, title: track.title, creator: track.creator,
-          license: track.license, attribution: track.credit,
+          license: track.license, license_label: track.license_label,
+          attribution: track.credit,
         });
         setOpen(false);
         return;
@@ -360,7 +363,7 @@ export function MusicPicker({
   const choose = (row: AudioRow) => {
     onChange({
       id: row.id, title: row.title, creator: row.creator,
-      license: row.license, attribution: row.attribution,
+      license: row.license, license_label: row.license_label, attribution: row.attribution,
     });
     setOpen(false);
   };
@@ -373,7 +376,7 @@ export function MusicPicker({
             <>
               <strong>{value.title}</strong>
               {value.creator && <span className="music-picker-by"> · {value.creator}</span>}
-              <Terms license={value.license} attribution={value.attribution} />
+              <Terms label={value.license_label} attribution={value.attribution} />
             </>
           ) : (
             <span className="music-picker-empty">{emptyLabel || t("music.none")}</span>

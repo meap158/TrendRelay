@@ -442,6 +442,8 @@ export const en = {
       "Check coverage on one frame and set how wide the blur sits",
     effectsHelp: "Stack effects on this asset without touching the original",
     mediaTags: "Media tags",
+    creditOwed: "Every post carries: {credit}",
+    licenceTerms: "Read the licence",
     selectToBegin: "Select an asset or import a local file to begin.",
   },
 
