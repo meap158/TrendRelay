@@ -184,7 +184,16 @@ const POST_LANGUAGES = LOCALES.map((item) => ({ value: item.code, label: item.la
 
 /** What a post attaches when it does not pin its own product. */
 type OfferMode = "smart" | "manual" | "none";
-type CampaignScope = "current" | "archived" | "all";
+/**
+ * Which campaigns the sidebar is listing.
+ *
+ * "Active" here is the opposite of archived rather than the `active` status,
+ * so a draft is in it: these are the campaigns still in play, which is the
+ * distinction somebody filtering a sidebar is making. It was called "Current",
+ * a word that named no state this app has and left the operator to guess
+ * whether a draft counted.
+ */
+type CampaignScope = "active" | "archived" | "all";
 
 const CAMPAIGN_STATUS_ICON: Record<Campaign["status"], ActionName> = {
   draft: "edit",
@@ -340,11 +349,11 @@ export default function CampaignsPage() {
   // Archived work stays out of the operating list until somebody explicitly
   // asks for it. "Current" includes drafts and active campaigns: both still
   // need attention, while an archive is historical by definition.
-  const [campaignScope, setCampaignScope] = useState<CampaignScope>("current");
+  const [campaignScope, setCampaignScope] = useState<CampaignScope>("active");
   // Refresh is a network concern and must not rerun when this local filter
   // changes. The ref lets a completed refresh respect the latest view without
   // turning the view switch into another request.
-  const campaignScopeRef = useRef<CampaignScope>("current");
+  const campaignScopeRef = useRef<CampaignScope>("active");
   const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -385,7 +394,7 @@ export default function CampaignsPage() {
 
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const selectedCampaign = campaigns.find((item) => item.id === campaignId);
-  const currentCampaigns = useMemo(
+  const activeCampaigns = useMemo(
     () => campaigns.filter((item) => item.status !== "archived"),
     [campaigns],
   );
@@ -397,7 +406,7 @@ export default function CampaignsPage() {
     ? campaigns
     : campaignScope === "archived"
       ? archivedCampaigns
-      : currentCampaigns;
+      : activeCampaigns;
   const canCreateCampaign = ["owner", "editor"].includes(selectedWorkspace?.role ?? "");
   const canCreatePlan = ["owner", "editor", "approver"].includes(selectedWorkspace?.role ?? "");
   const canApprove = ["owner", "approver"].includes(selectedWorkspace?.role ?? "");
@@ -819,7 +828,7 @@ export default function CampaignsPage() {
             <div>
               <p className="section-kicker">{t("campaigns.listHeading")}</p>
               <h2>{campaignsReady
-                ? t("campaigns.currentCount", { count: currentCampaigns.length })
+                ? t("campaigns.activeCount", { count: activeCampaigns.length })
                 : "—"}</h2>
             </div>
             {campaignsReady && (
@@ -830,7 +839,7 @@ export default function CampaignsPage() {
                   value={campaignScope}
                   onChange={(event) => changeCampaignScope(event.target.value as CampaignScope)}
                 >
-                  <option value="current">{t("campaigns.scopeCurrent", { count: currentCampaigns.length })}</option>
+                  <option value="active">{t("campaigns.scopeActive", { count: activeCampaigns.length })}</option>
                   <option value="archived">{t("campaigns.scopeArchived", { count: archivedCampaigns.length })}</option>
                   <option value="all">{t("campaigns.scopeAll", { count: campaigns.length })}</option>
                 </Select>
@@ -873,7 +882,7 @@ export default function CampaignsPage() {
             {campaignsReady && !visibleCampaigns.length && (
               <p>{campaignScope === "archived"
                 ? t("campaigns.noArchived")
-                : campaignScope === "current" && archivedCampaigns.length
+                : campaignScope === "active" && archivedCampaigns.length
                   ? t("campaigns.archivedAvailable")
                   : t("campaigns.empty")}</p>
             )}
@@ -964,13 +973,13 @@ export default function CampaignsPage() {
             <section className="empty-console">
               <h2>{campaignScope === "archived"
                 ? t("campaigns.noArchived")
-                : campaignScope === "current" && archivedCampaigns.length
-                  ? t("campaigns.noCurrent")
+                : campaignScope === "active" && archivedCampaigns.length
+                  ? t("campaigns.noActive")
                   : t("campaigns.createToStart")}</h2>
-              <p>{campaignScope === "current" && archivedCampaigns.length
+              <p>{campaignScope === "active" && archivedCampaigns.length
                 ? t("campaigns.archivedHiddenHelp")
                 : t("campaigns.whatItConnects")}</p>
-              {campaignScope === "current" && archivedCampaigns.length > 0 && (
+              {campaignScope === "active" && archivedCampaigns.length > 0 && (
                 <Button variant="secondary" onClick={() => changeCampaignScope("archived")}>
                   <ActionIcon name="archive" />{t("campaigns.viewArchived", {
                     count: archivedCampaigns.length,
