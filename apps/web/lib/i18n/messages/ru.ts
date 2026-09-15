@@ -1784,6 +1784,18 @@ export const ru: Messages = {
     suggestedHint: "Подобраны по ритму, клипам и сценарию. Каждая строка объясняет почему.",
     nothingToSuggest: "Пока не на что опереться. Добавьте клипы или сценарий, либо воспользуйтесь поиском.",
     searchForMore: "Искать ещё",
+    becausePacing: "Ритм {mood}",
+    becausePacingTempo: "Ритм {mood}, около {bpm} ударов в минуту",
+    becauseTags: "Клипы помечены {words}",
+    becauseScript: "Сценарий о {words}",
+    becauseTitles: "Клипы называются {words}",
+    becauseMatch: "Совпадает с {words}",
+    moods: {
+      energetic: "энергичный",
+      warm: "тёплый",
+      dramatic: "драматичный",
+      calm: "спокойный",
+    },
   },
 
   language: {

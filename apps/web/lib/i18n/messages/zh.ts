@@ -1739,6 +1739,18 @@ export const zh: Messages = {
     suggestedHint: "根据节奏、素材和脚本挑选，每行都注明原因。",
     nothingToSuggest: "暂无可依据的内容。添加素材或脚本，或直接搜索。",
     searchForMore: "搜索更多",
+    becausePacing: "节奏{mood}",
+    becausePacingTempo: "节奏{mood}，约每分钟 {bpm} 拍",
+    becauseTags: "素材标记了{words}",
+    becauseScript: "脚本讲的是{words}",
+    becauseTitles: "素材名为{words}",
+    becauseMatch: "匹配{words}",
+    moods: {
+      energetic: "轻快",
+      warm: "温暖",
+      dramatic: "戏剧化",
+      calm: "平静",
+    },
   },
 
   language: {

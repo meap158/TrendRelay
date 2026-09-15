@@ -21,6 +21,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLibraryAssets } from "../../lib/use-library-assets";
+import { reasonText } from "../../lib/music-reasons";
+import type { MusicReason } from "../../lib/music-reasons";
 import { useT } from "../i18n-provider";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/primitives";
@@ -36,8 +38,9 @@ export type MusicChoice = {
   attribution: string | null;
 };
 
-/** A Library row, as the assets endpoint serialises it. */
-type AudioRow = MusicChoice & { media_kind: string };
+/** A Library row, as the assets endpoint serialises it. Suggested rows carry
+    a reason; the ones a search returned have nothing to explain. */
+type AudioRow = MusicChoice & { media_kind: string; reason?: MusicReason };
 
 /** What is being made, for music to be offered before anybody searches: a
     narration's script, a pacing's mood and tempo, the clips (by id - the
@@ -52,9 +55,9 @@ export type MusicContext = {
 /** The offer for a piece: the searches run and why, the Library's own
     matches, and the tracks those searches found, each with its reason. */
 type Suggestions = {
-  queries: { q: string; reason: string }[];
-  library: (AudioRow & { reason: string })[];
-  tracks: (FoundTrack & { reason: string })[];
+  queries: { q: string; reason: MusicReason }[];
+  library: AudioRow[];
+  tracks: FoundTrack[];
   unavailable: boolean;
 };
 
@@ -71,6 +74,7 @@ type FoundTrack = {
   source: string | null;
   credit_required: boolean;
   credit: string | null;
+  reason?: MusicReason;
 };
 
 /** `CC-BY-4.0` as a person writes it, for a Library row that stores the SPDX id. */
@@ -110,6 +114,87 @@ function Terms({ license, attribution }: { license: string | null; attribution: 
       </Badge>
       <span>{attribution ? t("music.credit") : t("music.noCredit")}</span>
     </small>
+  );
+}
+
+/**
+ * One track already in the Library, to be chosen.
+ *
+ * The same row wherever it is listed - searched for by hand, or suggested -
+ * so the two lists cannot drift into describing a track two ways. `note`
+ * marks it as already yours in a list that mixes both.
+ */
+function LibraryRow({
+  row, selected, note, onChoose,
+}: {
+  row: AudioRow;
+  selected: boolean;
+  note?: string;
+  onChoose: () => void;
+}) {
+  const t = useT();
+  const why = reasonText(t, row.reason);
+  const line = [row.creator, note].filter(Boolean).join(" · ");
+  return (
+    <li className={selected ? "selected" : ""}>
+      <button type="button" className="music-picker-row" onClick={onChoose}>
+        <span className="music-picker-name">
+          <strong>{row.title}</strong>
+          {line && <small>{line}</small>}
+          {why && <small>{why}</small>}
+        </span>
+        <Terms license={row.license} attribution={row.attribution} />
+      </button>
+    </li>
+  );
+}
+
+/** One track that may be added: its terms, a preview, and the button that
+    brings it in. Shared by the search results and the suggestions. */
+function FoundRow({
+  track, state, onAdd,
+}: {
+  track: FoundTrack;
+  state: "busy" | "added" | undefined;
+  onAdd: () => void;
+}) {
+  const t = useT();
+  const why = reasonText(t, track.reason);
+  return (
+    <li>
+      <div className="music-picker-row music-picker-found">
+        <span className="music-picker-name">
+          <strong>{track.title}</strong>
+          <small>
+            {[track.creator, track.source, seconds(track.duration_ms)]
+              .filter(Boolean).join(" · ")}
+          </small>
+          {why && <small>{why}</small>}
+          <small className="music-terms">
+            <Badge
+              tone={track.credit_required ? "info" : "good"}
+              title={track.credit ?? t("music.noCredit")}
+            >{track.license_label}</Badge>
+            <span>{track.credit ?? t("music.noCredit")}</span>
+          </small>
+        </span>
+        {/* Loaded only when played: the file is the source's, and nothing is
+            fetched until somebody presses play. */}
+        <audio
+          controls
+          preload="none"
+          src={track.preview_url}
+          aria-label={t("music.preview", { title: track.title })}
+        />
+        <Button
+          variant="secondary"
+          size="sm"
+          busy={state === "busy"}
+          disabled={state === "added"}
+          onClick={onAdd}
+        >{state === "added" ? t("music.addedShort") : t("music.add")}</Button>
+      </div>
+    </li>
   );
 }
 
@@ -188,12 +273,16 @@ export function MusicPicker({
   // The Library's audio, through the shared loop: it owns the debounce, the
   // paging and the stale-response guard. Pinned to audio and kept to audio,
   // so clearing the search can never widen the list to every video.
+  //
+  // Read whenever the panel is open rather than only on its own tab: the tab
+  // shows how many tracks there are, and a picker that opened on Suggested
+  // was offering to show a Library it had not counted.
   const library = useLibraryAssets<AudioRow>({
     workspaceId,
     apiFetch,
     baseline: { mediaKind: "audio" },
     keep: (asset) => asset.media_kind === "audio",
-    enabled: open && tab === "library",
+    enabled: open,
   });
 
   const [query, setQuery] = useState("");
@@ -291,9 +380,18 @@ export function MusicPicker({
           )}
         </span>
         <span className="music-picker-actions">
-          <Button variant="quiet" size="sm" onClick={() => setOpen((current) => !current)}>
-            {open ? t("common.close") : value ? t("music.change") : t("music.choose")}
-          </Button>
+          {/* Which tab to land on is decided on opening, not on mounting: the
+              Storytelling picker is mounted with an empty script and earns its
+              suggestions while somebody writes one. */}
+          <Button
+            variant="quiet"
+            size="sm"
+            onClick={() => {
+              const next = !open;
+              setOpen(next);
+              if (next) setTab(hasContext ? "suggested" : "library");
+            }}
+          >{open ? t("common.close") : value ? t("music.change") : t("music.choose")}</Button>
           {value && (
             <Button variant="quiet" size="sm" onClick={() => onChange(null)}>{t("music.clear")}</Button>
           )}
@@ -338,53 +436,25 @@ export function MusicPicker({
               {suggested && suggested.library.length > 0 && (
                 <ul className="music-picker-list">
                   {suggested.library.map((row) => (
-                    <li key={row.id} className={value?.id === row.id ? "selected" : ""}>
-                      <button type="button" className="music-picker-row" onClick={() => choose(row)}>
-                        <span className="music-picker-name">
-                          <strong>{row.title}</strong>
-                          <small>{[row.creator, t("music.inLibrary")].filter(Boolean).join(" · ")}</small>
-                          <small>{row.reason}</small>
-                        </span>
-                        <Terms license={row.license} attribution={row.attribution} />
-                      </button>
-                    </li>
+                    <LibraryRow
+                      key={row.id}
+                      row={row}
+                      selected={value?.id === row.id}
+                      note={t("music.inLibrary")}
+                      onChoose={() => choose(row)}
+                    />
                   ))}
                 </ul>
               )}
               {suggested && suggested.tracks.length > 0 && (
                 <ul className="music-picker-list">
                   {suggested.tracks.map((track) => (
-                    <li key={track.id}>
-                      <div className="music-picker-row music-picker-found">
-                        <span className="music-picker-name">
-                          <strong>{track.title}</strong>
-                          <small>
-                            {[track.creator, track.source, seconds(track.duration_ms)]
-                              .filter(Boolean).join(" · ")}
-                          </small>
-                          <small>{track.reason}</small>
-                          <small className="music-terms">
-                            <Badge tone={track.credit_required ? "info" : "good"} title={track.credit ?? t("music.noCredit")}>
-                              {track.license_label}
-                            </Badge>
-                            <span>{track.credit ?? t("music.noCredit")}</span>
-                          </small>
-                        </span>
-                        <audio
-                          controls
-                          preload="none"
-                          src={track.preview_url}
-                          aria-label={t("music.preview", { title: track.title })}
-                        />
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          busy={adding[track.id] === "busy"}
-                          disabled={adding[track.id] === "added"}
-                          onClick={() => void add(track)}
-                        >{adding[track.id] === "added" ? t("music.addedShort") : t("music.add")}</Button>
-                      </div>
-                    </li>
+                    <FoundRow
+                      key={track.id}
+                      track={track}
+                      state={adding[track.id]}
+                      onAdd={() => void add(track)}
+                    />
                   ))}
                 </ul>
               )}
@@ -423,15 +493,12 @@ export function MusicPicker({
               ) : (
                 <ul className="music-picker-list">
                   {library.assets.map((row) => (
-                    <li key={row.id} className={value?.id === row.id ? "selected" : ""}>
-                      <button type="button" className="music-picker-row" onClick={() => choose(row)}>
-                        <span className="music-picker-name">
-                          <strong>{row.title}</strong>
-                          {row.creator && <small>{row.creator}</small>}
-                        </span>
-                        <Terms license={row.license} attribution={row.attribution} />
-                      </button>
-                    </li>
+                    <LibraryRow
+                      key={row.id}
+                      row={row}
+                      selected={value?.id === row.id}
+                      onChoose={() => choose(row)}
+                    />
                   ))}
                 </ul>
               )}
@@ -469,38 +536,12 @@ export function MusicPicker({
               {found && found.length > 0 && (
                 <ul className="music-picker-list">
                   {found.map((track) => (
-                    <li key={track.id}>
-                      <div className="music-picker-row music-picker-found">
-                        <span className="music-picker-name">
-                          <strong>{track.title}</strong>
-                          <small>
-                            {[track.creator, track.source, seconds(track.duration_ms)]
-                              .filter(Boolean).join(" · ")}
-                          </small>
-                          <small className="music-terms">
-                            <Badge tone={track.credit_required ? "info" : "good"} title={track.credit ?? t("music.noCredit")}>
-                              {track.license_label}
-                            </Badge>
-                            <span>{track.credit ?? t("music.noCredit")}</span>
-                          </small>
-                        </span>
-                        {/* Loaded only when played: the file is the source's,
-                            and nothing is fetched until somebody presses play. */}
-                        <audio
-                          controls
-                          preload="none"
-                          src={track.preview_url}
-                          aria-label={t("music.preview", { title: track.title })}
-                        />
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          busy={adding[track.id] === "busy"}
-                          disabled={adding[track.id] === "added"}
-                          onClick={() => void add(track)}
-                        >{adding[track.id] === "added" ? t("music.addedShort") : t("music.add")}</Button>
-                      </div>
-                    </li>
+                    <FoundRow
+                      key={track.id}
+                      track={track}
+                      state={adding[track.id]}
+                      onAdd={() => void add(track)}
+                    />
                   ))}
                 </ul>
               )}

@@ -1785,6 +1785,18 @@ export const fr: Messages = {
     suggestedHint: "Choisies d'après le rythme, les clips et le script. Chaque ligne dit pourquoi.",
     nothingToSuggest: "Rien à exploiter pour l'instant. Ajoutez des clips ou un script, ou cherchez.",
     searchForMore: "Chercher davantage",
+    becausePacing: "Le rythme est {mood}",
+    becausePacingTempo: "Le rythme est {mood}, environ {bpm} battements par minute",
+    becauseTags: "Les clips sont tagués {words}",
+    becauseScript: "Le script parle de {words}",
+    becauseTitles: "Les clips s'appellent {words}",
+    becauseMatch: "Correspond à {words}",
+    moods: {
+      energetic: "énergique",
+      warm: "chaleureux",
+      dramatic: "dramatique",
+      calm: "calme",
+    },
   },
 
   language: {

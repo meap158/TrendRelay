@@ -1768,6 +1768,18 @@ export const en = {
     suggestedHint: "Picked from the pacing, the clips and the script. Each row says why.",
     nothingToSuggest: "Nothing to go on yet. Add clips or a script, or search.",
     searchForMore: "Search for more",
+    becausePacing: "The pacing is {mood}",
+    becausePacingTempo: "The pacing is {mood}, about {bpm} beats a minute",
+    becauseTags: "The clips are tagged {words}",
+    becauseScript: "The script is about {words}",
+    becauseTitles: "The clips are called {words}",
+    becauseMatch: "Matches {words}",
+    moods: {
+      energetic: "energetic",
+      warm: "warm",
+      dramatic: "dramatic",
+      calm: "calm",
+    },
   },
 
   language: {

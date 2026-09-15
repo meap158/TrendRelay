@@ -1767,6 +1767,18 @@ export const ar: Messages = {
     suggestedHint: "مختارة بحسب الإيقاع والمقاطع والنص. كل صف يذكر السبب.",
     nothingToSuggest: "لا يوجد ما يُستند إليه بعد. أضف مقاطع أو نصًا، أو ابحث.",
     searchForMore: "البحث عن المزيد",
+    becausePacing: "الإيقاع {mood}",
+    becausePacingTempo: "الإيقاع {mood}، نحو {bpm} نبضة في الدقيقة",
+    becauseTags: "المقاطع موسومة بـ {words}",
+    becauseScript: "النص يدور حول {words}",
+    becauseTitles: "أسماء المقاطع {words}",
+    becauseMatch: "يطابق {words}",
+    moods: {
+      energetic: "حماسي",
+      warm: "دافئ",
+      dramatic: "درامي",
+      calm: "هادئ",
+    },
   },
 
   language: {

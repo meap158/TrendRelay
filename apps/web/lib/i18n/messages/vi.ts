@@ -1765,6 +1765,18 @@ export const vi: Messages = {
     suggestedHint: "Chọn theo nhịp, các clip và kịch bản. Mỗi dòng nêu lý do.",
     nothingToSuggest: "Chưa có gì để dựa vào. Thêm clip hoặc kịch bản, hoặc tìm kiếm.",
     searchForMore: "Tìm thêm",
+    becausePacing: "Nhịp phim {mood}",
+    becausePacingTempo: "Nhịp phim {mood}, khoảng {bpm} nhịp mỗi phút",
+    becauseTags: "Các clip được gắn thẻ {words}",
+    becauseScript: "Kịch bản nói về {words}",
+    becauseTitles: "Các clip có tên {words}",
+    becauseMatch: "Khớp với {words}",
+    moods: {
+      energetic: "sôi động",
+      warm: "ấm áp",
+      dramatic: "kịch tính",
+      calm: "êm dịu",
+    },
   },
 
   language: {

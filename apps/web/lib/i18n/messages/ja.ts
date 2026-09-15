@@ -1757,6 +1757,18 @@ export const ja: Messages = {
     suggestedHint: "テンポ、クリップ、台本から選びました。各行に理由を表示します。",
     nothingToSuggest: "まだ手がかりがありません。クリップか台本を追加するか、検索してください。",
     searchForMore: "さらに検索",
+    becausePacing: "テンポは{mood}です",
+    becausePacingTempo: "テンポは{mood}、約{bpm} BPMです",
+    becauseTags: "クリップのタグは{words}です",
+    becauseScript: "台本は{words}についてです",
+    becauseTitles: "クリップ名は{words}です",
+    becauseMatch: "{words}に一致します",
+    moods: {
+      energetic: "軽快",
+      warm: "温かみのある",
+      dramatic: "劇的",
+      calm: "穏やか",
+    },
   },
 
   language: {
