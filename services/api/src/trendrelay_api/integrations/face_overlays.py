@@ -1296,7 +1296,7 @@ def _warning(
 
 def apply_to_image(
     cv2: Any, np: Any, frame: Any, faces: list[FaceAnchors], settings: OverlaySettings
-) -> int:
+) -> list[dict[str, Any]]:
     """Draw the object on the chosen faces of one decoded picture.
 
     Shared by the preview and by rendering a still, which are the same operation
@@ -1306,6 +1306,12 @@ def apply_to_image(
     There is no clip here to decide the main face from, so the largest one in
     the picture stands in for it. Callers that have a clip make that choice
     properly and pass the faces they want.
+
+    Returns where each object actually landed, in the frame's own pixels, with
+    the face it was placed on and the axes it was placed along. A count was
+    all this used to give, and a count cannot answer the one question an
+    editor asks of a picture: which of these pixels is the object, so that
+    clicking them can mean something.
     """
     overlay = _resolve(settings)
     drawn = (
@@ -1314,7 +1320,7 @@ def apply_to_image(
         else faces
     )
     sprites = _SpriteCache(cv2, np, overlay, (settings.turn, settings.tilt))
-    placed = 0
+    placed: list[dict[str, Any]] = []
     for face in drawn:
         placement = place(face, overlay, settings)
         if paste(
@@ -1326,8 +1332,34 @@ def apply_to_image(
             settings.opacity,
             settings.mirror,
         ):
-            placed += 1
+            placed.append(_landed(face, overlay, settings, placement))
     return placed
+
+
+def _landed(
+    face: FaceAnchors, overlay: Overlay, settings: OverlaySettings, placement: Placement,
+) -> dict[str, Any]:
+    """One drawn object, described in the pixels of the frame it is drawn on.
+
+    The axes travel with it because the offsets are read along them: a click
+    dragged across a picture is pixels, and what it has to become is a
+    distance in face widths along the head's own right and up. Working that
+    out anywhere but here would be a second copy of `place`, drifting.
+    """
+    tilted = settings.follow_tilt and overlay.follows_roll
+    right, up = face.axes if tilted else ((1.0, 0.0), (0.0, -1.0))
+    box = [float(value) for value in face.box]
+    return {
+        "centre": [round(placement.centre[0], 2), round(placement.centre[1], 2)],
+        "width": round(placement.width, 2),
+        "angle": round(placement.angle, 2),
+        "face": [round(value, 2) for value in box],
+        "face_width": round(face.width, 2),
+        "axes": {
+            "right": [round(right[0], 4), round(right[1], 4)],
+            "up": [round(up[0], 4), round(up[1], 4)],
+        },
+    }
 
 
 def render_still(
@@ -1364,7 +1396,10 @@ def render_still(
         "output": str(destination),
         "overlay": overlay.id,
         "faces_found": len(faces),
-        "objects_drawn": placed,
+        "objects_drawn": len(placed),
+        # Where each one landed, for an editor that lets them be clicked.
+        "objects": placed,
+        "frame": {"width": width, "height": height},
         "placement": tier,
         "occludes": overlay.occludes,
         "warning": _warning(overlay, settings, 1.0 if placed else 0.0),
@@ -1417,7 +1452,8 @@ def preview_frame(
     return {
         "image": encode_preview(cv2, frame, size),
         "faces": len(faces),
-        "drawn": drawn,
+        "drawn": len(drawn),
+        "objects": drawn,
         "placement": tier,
         "position": probed["position"],
         "duration_seconds": probed["duration_seconds"],

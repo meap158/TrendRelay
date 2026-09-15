@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 from collections import Counter
 from collections.abc import Sequence
@@ -2331,6 +2332,14 @@ def effect_preview_frame(
             # Percent-encoded: HTTP headers are latin-1, and a note is prose
             # that one day will not be.
             "X-Preview-Note": quote(str(result.get("note") or "")),
+            # Where each drawn object landed on this frame, so the editor can
+            # let it be clicked where it is. A header rather than a body
+            # because the body is the picture; percent-encoded JSON for the
+            # same reason the note is.
+            "X-Preview-Objects": quote(json.dumps({
+                "frame": result.get("frame"),
+                "objects": result.get("objects") or [],
+            })),
         },
     )
 

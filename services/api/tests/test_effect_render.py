@@ -365,3 +365,35 @@ def test_blur_availability_follows_the_runtime_rather_than_being_assumed() -> No
     # reported available with a reason, or unavailable without one, is what
     # makes a disabled control unexplainable.
     assert available is (reason is None)
+
+
+def test_a_preview_names_the_step_that_drew_each_object() -> None:
+    """The editor points back at a step, so the objects have to carry one.
+
+    The passes a render runs are reordered, so counting them is not the same
+    as counting the recipe; `_objects_on_frame` maps what each pass reported
+    back through the visual steps to the step the caller actually sent.
+    """
+    from trendrelay_api.integrations.effect_render import _objects_on_frame
+
+    report = {
+        "frame_effects": [
+            {"effect": "face_overlay", "step": 1, "frame": {"width": 640, "height": 360},
+             "objects": [{"centre": [10, 20]}, {"centre": [30, 40]}]},
+            {"effect": "face_blur", "step": 0, "objects": []},
+        ],
+    }
+    # The two visual steps were the second and fourth of the caller's recipe.
+    objects, frame = _objects_on_frame(report, [3, 1])
+
+    assert frame == {"width": 640, "height": 360}
+    assert [item["step"] for item in objects] == [1, 1]
+    assert [item["effect"] for item in objects] == ["face_overlay", "face_overlay"]
+    assert objects[0]["centre"] == [10, 20]
+
+
+def test_a_frame_effect_that_drew_nothing_leaves_the_report_empty() -> None:
+    from trendrelay_api.integrations.effect_render import _objects_on_frame
+
+    objects, frame = _objects_on_frame({"frame_effects": [{"effect": "flip"}]}, [0])
+    assert objects == [] and frame is None

@@ -640,6 +640,10 @@ def render_still_recipe(
         "frame_effects": [], "video_filters": video_filters, "audio_filters": [],
         "media_kind": "image",
     }
+    # Which step of the recipe each frame effect was, by identity rather than
+    # by the order the passes happen to run in: passes are reordered, and a
+    # caller that wants to point back at a step needs the step, not a guess.
+    order = {id(step): index for index, step in enumerate(steps)}
 
     passes = ordered_render_passes(steps)
     slice_of = 1.0 / max(1, len(passes))
@@ -671,7 +675,9 @@ def render_still_recipe(
                 pass_progress.started()
                 outcome = step.effect.render_still(current, staged, step.values)
                 pass_progress.finished()
-                report["frame_effects"].append({"effect": step.effect.id, **outcome})
+                report["frame_effects"].append(
+                    {"effect": step.effect.id, "step": order.get(id(step)), **outcome}
+                )
             current = staged
 
         if current != destination:
@@ -778,10 +784,14 @@ def preview_recipe_frame(
     position = float(base.get("position") or 0.0)
 
     visual: list[RecipeStep] = []
+    # Where each visual step sits in the recipe the caller sent, so an object
+    # drawn on the frame can be pointed back at the step that drew it.
+    visual_at: list[int] = []
     invisible: list[str] = []
-    for step in steps:
+    for index, step in enumerate(steps):
         if step.effect.stage == "frame" or "image" in step.effect.media_kinds:
             visual.append(step)
+            visual_at.append(index)
         else:
             invisible.append(step.effect.label)
 
@@ -791,24 +801,31 @@ def preview_recipe_frame(
     # rather than costing an encode to change nothing.
     at_ms = position * float(duration or 0.0) * 1000.0
     momentary: list[RecipeStep] = []
-    for step in visual:
+    momentary_at: list[int] = []
+    for step, at in zip(visual, visual_at, strict=True):
         if step.effect.still_values is None:
             momentary.append(step)
+            momentary_at.append(at)
             continue
         moment = step.effect.still_values(step.values, at_ms)
         if moment is None:
             notes.append(f"{step.effect.label} does nothing at this point in the clip.")
             continue
         momentary.append(RecipeStep(step.effect, moment))
+        momentary_at.append(at)
     visual = momentary
+    visual_at = momentary_at
 
+    objects: list[dict[str, Any]] = []
+    frame_size: dict[str, int] | None = None
     scratch = Path(tempfile.mkdtemp(prefix="frame-preview-"))
     try:
         source_frame = scratch / "source.jpg"
         destination = scratch / f"preview{face_blur.STILL_SUFFIX}"
         source_frame.write_bytes(base["image"])
         if visual:
-            render_still_recipe(source_frame, destination, visual)
+            drawn = render_still_recipe(source_frame, destination, visual)
+            objects, frame_size = _objects_on_frame(drawn, visual_at)
             cv2 = face_blur._load_opencv()
             rendered = face_blur.read_image(cv2, destination)
             height, width = rendered.shape[:2]
@@ -833,7 +850,34 @@ def preview_recipe_frame(
         "position": round(position, 4),
         "duration_seconds": duration,
         "note": " ".join(notes),
+        # What is on the frame and where, so the editor can let somebody
+        # click the object rather than hunt for it in a list of steps.
+        "objects": objects,
+        "frame": frame_size,
     }
+
+
+def _objects_on_frame(
+    report: dict[str, Any], visual_at: list[int],
+) -> tuple[list[dict[str, Any]], dict[str, int] | None]:
+    """The objects a rendered recipe drew, named by the step that drew them.
+
+    Each frame effect reports its own placements in the pixels of the frame it
+    was handed; every pass renders the same size, so one frame size covers
+    them all and the editor can scale once against however wide it is showing
+    the picture.
+    """
+    objects: list[dict[str, Any]] = []
+    frame_size: dict[str, int] | None = None
+    for outcome in report.get("frame_effects") or []:
+        frame = outcome.get("frame")
+        if isinstance(frame, dict) and frame_size is None:
+            frame_size = {"width": int(frame["width"]), "height": int(frame["height"])}
+        within = outcome.get("step")
+        at = visual_at[within] if isinstance(within, int) and within < len(visual_at) else None
+        for placement in outcome.get("objects") or []:
+            objects.append({"effect": outcome.get("effect"), "step": at, **placement})
+    return objects, frame_size
 
 
 def render_recipe(

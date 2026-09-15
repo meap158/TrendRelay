@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ActionIcon } from "../ui/action-icons";
 import { Button } from "../ui/button";
@@ -19,6 +19,14 @@ import {
   presetLabel,
   presetSummary,
 } from "../../lib/i18n/effects";
+import {
+  DEFAULT_BOUNDS,
+  frameLayout,
+  hotspotBox,
+  offsetsAfterDrag,
+  readPlacedObjects,
+  type PlacedReport,
+} from "../../lib/placed-objects";
 
 
 /**
@@ -84,6 +92,25 @@ export function EffectEditor({
   const [previewPosition, setPreviewPosition] = useState<number | null>(null);
   const [previewDuration, setPreviewDuration] = useState<number | null>(null);
   const [previewNote, setPreviewNote] = useState("");
+  /**
+   * What the render drew on the previewed frame, and where.
+   *
+   * The preview is a picture, so until the render said where each object
+   * landed there was nothing in the page to click: repositioning meant
+   * finding the step in the list beside it and moving a slider, which is a
+   * long way round for "that hat is too low".
+   */
+  const [placed, setPlaced] = useState<PlacedReport>({ frame: null, objects: [] });
+  /** The object whose actions are open, by its place in the report. */
+  const [chosen, setChosen] = useState<number | null>(null);
+  /** The object being dragged, and how far it has come, in the box's pixels. */
+  const [moving, setMoving] = useState<number | null>(null);
+  const [dragged, setDragged] = useState({ x: 0, y: 0 });
+  const dragFrom = useRef<{ id: number; x: number; y: number } | null>(null);
+  /** The box the picture is shown in, which the handles are laid out against. */
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const frameWatcher = useRef<ResizeObserver | null>(null);
   const previewUrlRef = useRef("");
   const previewSpecRef = useRef<PreviewSpec | null>(null);
   /** Which step is having its regions read off the clip, if any. */
@@ -401,12 +428,112 @@ export function EffectEditor({
       setPreviewDuration(Number.isFinite(duration) && duration > 0 ? duration : null);
       const note = response.headers.get("X-Preview-Note") ?? "";
       setPreviewNote(note ? decodeURIComponent(note) : "");
+      // What is on this frame and where. Closing whatever was open with it:
+      // the handles belong to the frame that was just drawn, and one left
+      // open would be pointing at a picture that no longer exists.
+      setPlaced(readPlacedObjects(response.headers.get("X-Preview-Objects")));
+      setChosen(null);
+      setMoving(null);
+      setDragged({ x: 0, y: 0 });
       replacePreviewUrl(URL.createObjectURL(await response.blob()));
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : "The preview frame could not be rendered.");
     } finally {
       setBusy("");
     }
+  }
+
+  /**
+   * Keep the handles laid out against the box the picture is actually in.
+   *
+   * The same arrangement the caption editor's overlay uses, for the same
+   * reason: the frame changes size when the dialog does and when the
+   * picture's own proportions arrive, and a handle sized against the old box
+   * sits beside the thing it is meant to be on.
+   */
+  const measureFrame = useCallback(() => {
+    const node = frameRef.current;
+    if (!node) return;
+    const width = node.clientWidth;
+    const height = node.clientHeight;
+    setFrameSize((current) => (
+      current.width === width && current.height === height ? current : { width, height }
+    ));
+  }, []);
+  useLayoutEffect(measureFrame);
+  const attachFrame = useCallback((node: HTMLDivElement | null) => {
+    frameRef.current = node;
+    frameWatcher.current?.disconnect();
+    frameWatcher.current = null;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    frameWatcher.current = new ResizeObserver(() => measureFrame());
+    frameWatcher.current.observe(node);
+    measureFrame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => () => frameWatcher.current?.disconnect(), []);
+
+  const layout = frameLayout(placed.frame, frameSize);
+
+  /** The two offsets one placed object is positioned by, as they stand now. */
+  function offsetsOf(step: number | null) {
+    const values = step === null ? undefined : steps[step]?.values;
+    return {
+      horizontal: Number(values?.horizontal_offset ?? 0) || 0,
+      vertical: Number(values?.offset ?? 0) || 0,
+    };
+  }
+
+  /** What the effect itself says those two may be, rather than what we assume. */
+  function boundsOf(step: number | null) {
+    const effect = step === null ? undefined : definitionOf(steps[step]?.effect ?? "");
+    const range = (id: string, fallback: { minimum: number; maximum: number }) => {
+      const param = effect?.params.find((item) => item.id === id);
+      return param && param.minimum !== null && param.maximum !== null
+        ? { minimum: param.minimum, maximum: param.maximum }
+        : fallback;
+    };
+    return {
+      horizontal: range("horizontal_offset", DEFAULT_BOUNDS.horizontal),
+      vertical: range("offset", DEFAULT_BOUNDS.vertical),
+    };
+  }
+
+  /** Write one step's values, from an action taken on the picture. */
+  function setOn(step: number | null, values: Record<string, unknown>) {
+    if (step === null || !steps[step]) return;
+    const next = [...steps];
+    next[step] = { ...next[step], values: { ...next[step].values, ...values } };
+    edit(next);
+    return next;
+  }
+
+  /** Size, changed from the object rather than from the slider beside it. */
+  function resize(index: number, by: number) {
+    const object = placed.objects[index];
+    if (!object) return;
+    const effect = definitionOf(steps[object.step ?? -1]?.effect ?? "");
+    const param = effect?.params.find((item) => item.id === "scale");
+    const current = Number(steps[object.step ?? -1]?.values.scale ?? 1) || 1;
+    const scale = Math.min(
+      param?.maximum ?? 2.5,
+      Math.max(param?.minimum ?? 0.4, Math.round((current + by) * 100) / 100),
+    );
+    const next = setOn(object.step, { scale });
+    setChosen(null);
+    if (next) void preview(next, "Effect stack preview", previewPosition);
+  }
+
+  /** Take the object off, from the object. */
+  function removeObject(index: number) {
+    const object = placed.objects[index];
+    if (!object || object.step === null) return;
+    const next = steps.filter((_step, at) => at !== object.step);
+    edit(next);
+    setChosen(null);
+    setPlaced({ frame: null, objects: [] });
+    if (next.length) void preview(next, "Effect stack preview", previewPosition);
+    else replacePreviewUrl("");
   }
 
   const unavailable = steps
@@ -749,13 +876,156 @@ export function EffectEditor({
                 </small>
               </div>
             </div>
-            <div className="effect-preview-frame">
+            <div className="effect-preview-frame" ref={attachFrame}>
               {previewUrl ? (
                 // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={previewUrl} alt="The current effect recipe preview frame" />
               ) : (
                 <p>Rendering a frame…</p>
+              )}
+              {/* A handle on each object the render drew, where it drew it.
+                  Repositioning used to mean finding the step in the list and
+                  moving a slider; this is the object itself, which is where
+                  somebody looking at it already is. */}
+              {previewUrl && layout && placed.objects.map((object, index) => {
+                const box = hotspotBox(object, layout);
+                const shift = moving === index ? dragged : { x: 0, y: 0 };
+                const name = effectLabel(t, object.effect, object.effect);
+                const nudge = (across: number, down: number) => {
+                  const bounds = boundsOf(object.step);
+                  const current = offsetsOf(object.step);
+                  const moved = {
+                    horizontal: Math.min(bounds.horizontal.maximum, Math.max(
+                      bounds.horizontal.minimum,
+                      Math.round((current.horizontal + across) * 100) / 100,
+                    )),
+                    vertical: Math.min(bounds.vertical.maximum, Math.max(
+                      bounds.vertical.minimum,
+                      Math.round((current.vertical + down) * 100) / 100,
+                    )),
+                  };
+                  const next = setOn(object.step, {
+                    horizontal_offset: moved.horizontal, offset: moved.vertical,
+                  });
+                  if (next) void preview(next, "Effect stack preview", previewPosition);
+                };
+                return (
+                  <button
+                    key={`${object.step}-${index}`}
+                    type="button"
+                    className={[
+                      "effect-object-handle",
+                      moving === index ? "effect-object-moving" : "",
+                      chosen === index ? "effect-object-chosen" : "",
+                    ].filter(Boolean).join(" ")}
+                    style={{
+                      left: `${box.left + shift.x}px`,
+                      top: `${box.top + shift.y}px`,
+                      width: `${box.size}px`,
+                      height: `${box.size}px`,
+                    }}
+                    aria-label={moving === index
+                      ? `Moving ${name}. Drag it, or use the arrow keys. Enter puts it down.`
+                      : `${name} on this frame. Open what can be done with it.`}
+                    onPointerDown={(event) => {
+                      if (moving !== index) return;
+                      dragFrom.current = {
+                        id: event.pointerId, x: event.clientX, y: event.clientY,
+                      };
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerMove={(event) => {
+                      const from = dragFrom.current;
+                      if (!from || from.id !== event.pointerId) return;
+                      setDragged({ x: event.clientX - from.x, y: event.clientY - from.y });
+                    }}
+                    onPointerUp={(event) => {
+                      const from = dragFrom.current;
+                      if (!from || from.id !== event.pointerId) return;
+                      dragFrom.current = null;
+                      const delta = { x: event.clientX - from.x, y: event.clientY - from.y };
+                      setDragged({ x: 0, y: 0 });
+                      setMoving(null);
+                      if (!layout || (!delta.x && !delta.y)) return;
+                      const moved = offsetsAfterDrag(
+                        object, delta, layout,
+                        offsetsOf(object.step), boundsOf(object.step),
+                      );
+                      const next = setOn(object.step, {
+                        horizontal_offset: moved.horizontal, offset: moved.vertical,
+                      });
+                      if (next) void preview(next, "Effect stack preview", previewPosition);
+                    }}
+                    onPointerCancel={() => {
+                      dragFrom.current = null;
+                      setDragged({ x: 0, y: 0 });
+                    }}
+                    onKeyDown={(event) => {
+                      if (moving !== index) return;
+                      // A step of the effect's own, so a nudge here and a
+                      // press on the slider beside it move the same amount.
+                      const step = 0.02;
+                      const by: Record<string, [number, number]> = {
+                        ArrowLeft: [-step, 0], ArrowRight: [step, 0],
+                        ArrowUp: [0, -step], ArrowDown: [0, step],
+                      };
+                      if (event.key === "Escape" || event.key === "Enter") {
+                        event.preventDefault();
+                        setMoving(null);
+                        return;
+                      }
+                      const delta = by[event.key];
+                      if (!delta) return;
+                      event.preventDefault();
+                      nudge(delta[0], delta[1]);
+                    }}
+                    onClick={() => {
+                      if (moving === index) return;
+                      setChosen(chosen === index ? null : index);
+                    }}
+                  />
+                );
+              })}
+              {/* What can be done with it, where it is. Small on purpose:
+                  everything here is also in the step's own form, and this is
+                  the handful worth doing without looking away from the
+                  picture. */}
+              {chosen !== null && layout && placed.objects[chosen] && (() => {
+                const object = placed.objects[chosen];
+                const box = hotspotBox(object, layout);
+                const left = Math.max(4, Math.min(
+                  frameSize.width - 188, box.left + box.size / 2 - 92,
+                ));
+                const below = box.top + box.size + 8;
+                const top = below + 92 > frameSize.height
+                  ? Math.max(4, box.top - 100)
+                  : below;
+                return (
+                  <div
+                    className="effect-object-actions"
+                    style={{ left: `${left}px`, top: `${top}px` }}
+                    role="group"
+                    aria-label={`${effectLabel(t, object.effect, object.effect)} on this frame`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { setMoving(chosen); setChosen(null); }}
+                    >Move</button>
+                    <button type="button" onClick={() => resize(chosen, 0.1)}>Bigger</button>
+                    <button type="button" onClick={() => resize(chosen, -0.1)}>Smaller</button>
+                    <button
+                      type="button"
+                      className="effect-object-remove"
+                      onClick={() => removeObject(chosen)}
+                    >Remove</button>
+                  </div>
+                );
+              })()}
+              {moving !== null && (
+                <span className="effect-object-hint">
+                  Drag it where it should be, or use the arrow keys.
+                </span>
               )}
               {busy === "preview" && previewUrl && <span>Rendering this position…</span>}
             </div>

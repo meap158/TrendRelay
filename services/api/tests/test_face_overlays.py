@@ -1835,3 +1835,39 @@ def test_frames_with_no_face_stay_empty_in_a_steadied_timeline() -> None:
 
     assert all(item is None for item in steadied[5:8])
     assert all(item is not None for item in steadied[:5] + steadied[8:])
+
+
+# --- where an object landed, for an editor that lets it be clicked --------------
+
+
+def test_a_drawn_object_says_where_it_landed_and_along_which_axes() -> None:
+    """A count cannot answer the question an editor asks of a picture: which
+    of these pixels is the object. The placement can, and it carries the face
+    and the axes the offsets are read along so a drag can be turned back into
+    them without a second copy of `place`.
+
+    Asked of the description rather than of a drawn frame, so it holds on a
+    machine with no OpenCV - the geometry is the part an editor depends on.
+    """
+    face = upright(width=120.0, centre=(300.0, 200.0))
+    settings = OverlaySettings(overlay_id="smiley", horizontal_offset=0.25, offset=-0.1)
+    overlay = face_overlays._resolve(settings)
+    expected = place(face, overlay, settings)
+
+    landed = face_overlays._landed(face, overlay, settings, expected)
+
+    assert landed["centre"] == [round(expected.centre[0], 2), round(expected.centre[1], 2)]
+    assert landed["width"] == round(expected.width, 2)
+    assert landed["face"] == [round(float(value), 2) for value in face.box]
+    assert landed["face_width"] == round(face.width, 2)
+    # An upright face is placed along the frame's own axes, which is what lets
+    # a drag to the right read as "more horizontal offset".
+    assert landed["axes"] == {"right": [1.0, 0.0], "up": [0.0, -1.0]}
+
+
+def test_nothing_landed_is_an_empty_list_not_a_missing_key() -> None:
+    cv2, numpy = _vision()
+    from trendrelay_api.integrations.face_overlays import apply_to_image
+
+    frame = numpy.full((100, 100, 3), 90, dtype=numpy.uint8)
+    assert apply_to_image(cv2, numpy, frame, [], OverlaySettings(overlay_id="smiley")) == []
