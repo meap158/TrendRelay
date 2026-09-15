@@ -21,7 +21,7 @@ from trendrelay_api.campaign_runner import run_campaign
 from trendrelay_api.integrations import telegram
 from trendrelay_api.models import AuditEvent
 from trendrelay_api.publication_models import PublicationExecution
-from tests.test_campaign_authority import (  # noqa: F401 - fixtures
+from test_campaign_authority import (  # noqa: F401 - fixtures
     NOW,
     autopilot,
     campaign_setup,
