@@ -288,6 +288,11 @@ class QueueItemCreate(BaseModel):
     #: Threads' topic tag, validated by the same rule Publish's request uses
     #: so a campaign cannot store a topic the network will bounce.
     topic: str | None = Field(default=None, max_length=60)
+    #: Working notes, settable from the start. The first pass of a post built
+    #: over several is the one that knows why it is being built, and making it
+    #: create the post and then edit it to say so is a round trip for something
+    #: it already had in hand.
+    context: str = Field(default="", max_length=8000)
     offer_ids: list[str] = Field(default_factory=list, max_length=5)
     #: Bring the post's products onto the campaign if they are not there yet.
     #:
@@ -599,6 +604,7 @@ def _queue_view(
     *,
     library: LibraryCut | None = None,
     with_context: bool = False,
+    has_context: bool | None = None,
 ) -> dict[str, Any]:
     """One queue item as the interface reads it.
 
@@ -612,6 +618,11 @@ def _queue_view(
     all to draw rows that show none of them would be the largest thing in the
     response and the least read. The rows get `has_context` instead, which is
     all they draw, and the editor asks for the text of the one post it opens.
+
+    `has_context` is that flag, already known. The column is deferred, so
+    reading it to answer "are there any" would fetch the paragraphs this is
+    trying not to fetch - once per row. A list passes the answer in from one
+    length query; a single item leaves it None and pays for the one load.
     """
     asset, cut = library if library else (None, None)
     carries_video = bool(item.video_path) and not item.image_paths and not item.text_only
@@ -662,7 +673,7 @@ def _queue_view(
         # Whether there are working notes, not what they say. A row marks the
         # posts that carry reasoning somebody left behind; that is the whole
         # of what a list needs to know, and it costs a boolean.
-        "has_context": bool(item.context),
+        "has_context": bool(item.context) if has_context is None else has_context,
         **({"context": item.context or ""} if with_context else {}),
     }
 
@@ -679,11 +690,31 @@ def _queue_views(
     `with_context` is for the one-item answers that go back to whoever just
     wrote a post - never for the queue itself, which is the response this
     argument exists to keep small.
+
+    Which posts have working notes is read as lengths in one query rather than
+    as text per row. The column is deferred precisely so a queue of hundreds
+    does not drag its paragraphs along; asking each item whether it has any
+    would undo that one lazy load at a time, which is the slower shape of the
+    same mistake.
     """
     cuts = _library_cuts(session, workspace_id, items)
+    noted: set[str] = set()
+    if items and not with_context:
+        noted = {
+            row[0]
+            for row in session.execute(
+                select(CampaignQueueItem.id).where(
+                    CampaignQueueItem.id.in_([item.id for item in items]),
+                    func.length(CampaignQueueItem.context) > 0,
+                )
+            ).all()
+        }
     return [
         _queue_view(
-            item, library=cuts.get(item.asset_id or ""), with_context=with_context,
+            item,
+            library=cuts.get(item.asset_id or ""),
+            with_context=with_context,
+            has_context=None if with_context else (item.id in noted),
         )
         for item in items
     ]
@@ -1337,6 +1368,7 @@ def create_queue_item(
         first_comment=(body.first_comment or "").strip() or None,
         thread=[part.strip() for part in body.thread if part.strip()],
         topic=body.topic,
+        context=(body.context or "").strip(),
         offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
         # Ready on arrival, for the operator's own additions. Approval lives
         # where it belongs - the authority dial and its exception inbox, where

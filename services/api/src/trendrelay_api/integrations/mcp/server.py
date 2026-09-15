@@ -972,7 +972,12 @@ def build_server(workspace_id: str) -> FastMCP:
             "`post_types` may map destination ids to per-account formats; "
             "omitted accounts inherit the default chosen when they were added. "
             "If the campaign's accounts cannot all carry a gallery, it is still created and "
-            "`carousel_warnings` says which ones will not - pass that on."
+            "`carousel_warnings` says which ones will not - pass that on. "
+            "`context` is working notes that are NEVER posted: when a post is "
+            "built over several phases, say here what this phase did and what "
+            "the next one still needs, so it does not have to guess. Do not "
+            "restate the product, its description or the transcript - those "
+            "are readable through get_post_context."
         ),
     )
     def create_campaign_post(
@@ -986,6 +991,7 @@ def build_server(workspace_id: str) -> FastMCP:
         topic: str | None = None,
         post_types: dict[str, str] | None = None,
         text_only: bool = False,
+        context: str | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_campaign_post",
@@ -993,7 +999,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 s, workspace_id, campaign_id, asset_ids,
                 caption=caption, title=title, hashtags=hashtags,
                 first_comment=first_comment, thread=thread, topic=topic,
-                post_types=post_types, text_only=text_only,
+                post_types=post_types, text_only=text_only, context=context,
             ),
         )
 

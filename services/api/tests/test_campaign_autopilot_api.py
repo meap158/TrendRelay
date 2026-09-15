@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -2845,3 +2845,67 @@ def test_clearing_the_notes_empties_them_rather_than_leaving_whitespace(workspac
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["item"]["context"] == ""
     assert cleared.json()["item"]["has_context"] is False
+
+
+def test_the_queue_does_not_read_the_notes_it_is_only_counting(workspace) -> None:
+    """The deferral, held by what the database is actually asked for.
+
+    `has_context` is a flag, and reading the column to compute it would fetch
+    the paragraphs the deferral exists to avoid - once per row, which is the
+    slower shape of the same mistake. The list asks for lengths in one query
+    and never selects the text.
+    """
+    campaign_id = campaign(workspace)
+    _post_with_notes(workspace, campaign_id)
+    for index in range(3):
+        request(
+            "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+            json={"video_path": rf"S:\media\clip{index}.mp4", "body": "Copy."},
+        )
+
+    statements: list[str] = []
+
+    def record(_conn, _cursor, statement, _params, _context, _many) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        queue = request(
+            "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        ).json()["queue"]
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    assert sum(item["has_context"] for item in queue) == 1
+    reads = [s for s in statements if "campaign_queue_items" in s]
+    assert reads, "the queue was not read at all"
+    # Selected for its length, never for its text.
+    assert not any(
+        "campaign_queue_items.context" in statement and "length(" not in statement.lower()
+        for statement in reads
+    ), reads
+
+
+def test_a_post_can_be_created_with_its_notes_already_written(workspace) -> None:
+    """The first pass of a multi-phase post is the one that knows why it is
+    being made, so it should not have to create the post and then edit it to
+    say so."""
+    campaign_id = campaign(workspace)
+
+    created = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": r"S:\media\clip.mp4",
+            "body": "Copy written in phase one.",
+            "context": "Pictures still to come; keep the tone dry.",
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["item"]["has_context"] is True
+    read = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        f"/queue/{created.json()['item']['id']}/context",
+    )
+    assert read.json()["context"] == "Pictures still to come; keep the tone dry."

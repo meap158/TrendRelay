@@ -802,12 +802,18 @@ def create_campaign_post(
     topic: str | None = None,
     post_types: dict[str, str] | None = None,
     text_only: bool = False,
+    context: str | None = None,
 ) -> dict[str, Any]:
     """Propose one post into a campaign, as a draft the operator promotes.
 
     The media is named by Library asset id - never by filesystem path, which is
     not a caller's to know - and the copy passes the same no-links rule every
     MCP copy write passes: the campaign carries the link itself.
+
+    `context` is working notes that are never posted, settable here because the
+    pass that creates a post is the one that knows why. A run that writes the
+    words and leaves the pictures for later can say so once, on the way in,
+    rather than creating the post and editing it to explain itself.
     """
     from trendrelay_api.campaign_autopilot_api import (  # noqa: PLC0415
         QueueItemCreate,
@@ -882,6 +888,8 @@ def create_campaign_post(
         thread=thread or [],
         topic=topic,
         post_type_overrides=post_types or {},
+        # No link check on this one - see write_post_copy. It is not posted.
+        context=context or "",
     )
     item = create_queue_item(
         session, workspace_id, campaign_id, body,

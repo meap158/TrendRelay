@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.autopilot_models import CampaignAutopilot
@@ -1055,7 +1055,11 @@ def duplicate_campaign(
         destination_ids[destination.id] = made.id
 
     queue = list(session.scalars(
-        select(CampaignQueueItem).where(
+        # Asked for here because `_copied` below reads every column, and one of
+        # them - the posts' working notes - is deferred: left to itself the
+        # copy would fetch them a row at a time, which is a query per post in
+        # the campaign being duplicated.
+        select(CampaignQueueItem).options(undefer(CampaignQueueItem.context)).where(
             CampaignQueueItem.campaign_id == original.id,
             CampaignQueueItem.workspace_id == workspace_id,
         )

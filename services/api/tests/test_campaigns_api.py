@@ -985,3 +985,65 @@ def test_reordering_is_not_an_edit_of_the_campaigns_it_moves() -> None:
 
     assert after == before
     assert listed_names(workspace_id) == ["Second", "First"]
+
+
+def test_duplicating_a_campaign_carries_its_posts_working_notes() -> None:
+    """The notes are part of how a post was built, so a campaign duplicated to
+    run a variant keeps them - and reads them with the posts rather than one
+    query at a time, which is what a deferred column does if nobody asks."""
+    from sqlalchemy import event as sa_event
+
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+
+    workspace_id = create_workspace()
+    campaign_id = named_campaign(workspace_id, "Original")
+    for index in range(4):
+        response = asyncio.run(
+            request(
+                "POST",
+                f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/queue",
+                json={
+                    "video_path": rf"S:\media\clip{index}.mp4",
+                    "body": "Copy.",
+                    "context": f"Why post {index} exists.",
+                },
+            )
+        )
+        assert response.status_code == 201, response.text
+
+    statements: list[str] = []
+
+    def record(_conn, _cursor, statement, _params, _context, _many) -> None:
+        statements.append(statement)
+
+    sa_event.listen(engine, "before_cursor_execute", record)
+    try:
+        duplicated = asyncio.run(
+            request(
+                "POST",
+                f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/duplicate",
+                json={"name": "Variant"},
+            )
+        )
+    finally:
+        sa_event.remove(engine, "before_cursor_execute", record)
+
+    assert duplicated.status_code == 201, duplicated.text
+    new_id = duplicated.json()["campaign"]["id"]
+
+    with TestingSession() as session:
+        copied = session.scalars(
+            select(CampaignQueueItem)
+            .where(CampaignQueueItem.campaign_id == new_id)
+            .order_by(CampaignQueueItem.position)
+        ).all()
+        assert [item.context for item in copied] == [
+            f"Why post {index} exists." for index in range(4)
+        ]
+
+    # One read of the notes, with the posts - not one per post.
+    note_reads = [
+        statement for statement in statements
+        if "campaign_queue_items.context" in statement
+    ]
+    assert len(note_reads) == 1, note_reads

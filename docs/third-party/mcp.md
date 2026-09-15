@@ -85,6 +85,30 @@ They write through the same helper the interface's own edit route uses
 (`apply_queue_item_edits`), so a caption an assistant writes is validated and
 stored exactly as one a person types, and the two surfaces cannot drift.
 
+### Working notes, which are never posted
+
+`write_post_copy` also takes `context`, and `create_campaign_post` takes it on
+the way in. It is the one field here that no network ever sees, and it exists
+for posts built over more than one pass: the run that writes the words says
+what it was going for and what is still missing, and the run that attaches the
+pictures tomorrow reads it instead of guessing. Every single-post read hands it
+back, `get_post_context` included.
+
+Two rules make it worth having rather than a second place for the same facts:
+
+- **Do not restate the record.** The product, its description, the asset's
+  transcript, the offer match and the campaign's brief are all readable through
+  `get_post_context`. Copying any of them into the notes only makes a version
+  that goes stale.
+- **Links are allowed here**, unlike every copy field above, which refuses a
+  URL because the campaign routes the affiliate link itself. These notes are
+  not posted, so a reference the next pass needs is just a reference.
+
+The queue listing never carries the text - a post's row says `has_context` and
+nothing more - so reading a campaign's queue stays the same size whether or not
+its posts carry notes.
+
+
 ## The second surface: media in, and a proposed post
 
 An assistant can bring an image into the workspace and propose a post made

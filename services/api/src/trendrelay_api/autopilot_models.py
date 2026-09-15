@@ -365,7 +365,14 @@ class CampaignQueueItem(Base):
     #: it, `test_a_posts_working_notes_never_reach_the_network` holds that, and
     #: the link rules the copy fields carry do not apply to it - a URL in a
     #: working note is a reference, not something about to be posted.
-    context: Mapped[str] = mapped_column(Text, default="")
+    #:
+    #: Deferred, because almost nothing wants it. The scheduler, the runner and
+    #: the queue list all read whole rows of this table and none of them reads
+    #: this column; loading paragraphs on every pass over a queue of hundreds,
+    #: to answer questions about captions and posting times, is why this is the
+    #: one field here that has to be asked for. The list gets its `has_context`
+    #: flag from a length query instead - see `_queue_views`.
+    context: Mapped[str] = mapped_column(Text, default="", deferred=True)
     #: A human pin. Empty lets smart mode choose from current evidence.
     offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     #: Latest explainable matcher result, shown in Campaigns and retained so a
