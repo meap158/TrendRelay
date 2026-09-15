@@ -227,15 +227,48 @@ code, ignore `music_asset_id` and file the video without its credit.
   render/autocreate/draft carry it). Styles: `.music-picker*` in
   `media-library.css` (shared), `.story-music` in `storytelling.css`.
 
+### Stage E - suggestions, and the gaps the first four left (2026-09-15)
+
+- **Music offered from the piece, before a search.** `music_suggestions.py`
+  turns what is being made - a pacing's mood and tempo, the clips' names and
+  tags, a narration's script - into the searches an operator would have typed,
+  plus the workspace's own tracks that share a word with it.
+  `POST .../media/library/music/suggestions` takes the clips as ids and reads
+  their titles and tags here. The picker opens on a Suggested tab when there
+  is anything to go on. Words come from the shared tokeniser
+  (`campaign_offer_matcher.tokens`) less a filler list, so a suggestion is
+  scored on what the rest of the app would score it on.
+- **Reasons travel as parts, never as sentences.** `Reason(kind, words, mood,
+  bpm)`; `apps/web/lib/music-reasons.ts` words them and every locale carries
+  the phrases and the four moods. Composing English on the server is the gap
+  `lib/i18n/effects.ts` exists to close - do not reintroduce it.
+- **A template's own track says it has no recorded licence.**
+  `Template.music_license` is empty on all five and the AutoCut dialog says so
+  beside the Music field. See `docs/autocut-music.md`, "What licence these
+  carry": these are extracted from the operator's own reference videos and the
+  music inside those came from elsewhere again. Labelled, deliberately not
+  blocked. Fill `music_license` with a real SPDX id to retire it properly.
+- **The Library's detail pane shows a file's terms** - licence badge, the
+  credit every post will carry, a link to the licence text. Keyed on either
+  field: anything this app rendered has a credit and no licence of its own,
+  which is correct and was briefly invisible.
+- `license_label` is worded once, in `openverse_music.licence_label`, and sent
+  on both search results and asset views.
+
 ### Still open
 
-- The Library page itself does not yet show an asset's licence or credit;
-  the picker and the asset view carry them.
-- Ducking levels are constants in `renderer.py`; no operator control.
+- Ducking levels are constants in `renderer.py` with no operator control, and
+  they were only ever checked against synthetic tones - never a real narration
+  over a real track. If an operator reports the bed sitting wrong, that is the
+  first thing to doubt. One "how loud is the music" control would serve better
+  than exposing four compressor parameters.
 - **Worth taking from editly later** (details in `docs/third-party/editly.md`):
   more `xfade` transitions, eased whips via `xfade=transition=custom` with an
   easeOutExpo expression, `acrossfade` curves, no transition after the last
   clip, 0.5 s default transition length.
+- Nothing in the music work has been seen in a browser. The web dev server has
+  been down for every session that built it; it is covered by tests, types and
+  lint only.
 
 ## Shopee listing counts corrected (2026-09-06)
 
