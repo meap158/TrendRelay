@@ -395,6 +395,10 @@ def test_the_setup_card_says_what_is_missing_and_what_the_test_does(configured, 
     assert by_id["library"]["status"] == "ready"
     assert by_id["bot-token"]["status"] == "ready"
     assert by_id["chat"]["status"] == "ready"
+    # Whether a card can carry a way back to the app is said here rather
+    # than discovered as a button that is quietly never there.
+    assert by_id["app-link"]["status"] in ("ready", "optional")
+    assert "PUBLIC_WEB_URL" in by_id["app-link"]["detail"]
     # The token is described, never returned; the chat id is not a secret.
     assert set(report["configured_secret_names"]) == {telegram.BOT_TOKEN_ENV, telegram.CHAT_ID_ENV}
     assert "A" * 35 not in str(report)

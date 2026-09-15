@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from trendrelay_api import tool_settings
+from trendrelay_api.config import get_settings
 from trendrelay_api.env_store import masked_value
 from trendrelay_api.integrations.telegram import (
     BOT_TOKEN_ENV,
@@ -28,6 +29,17 @@ def _requirement(
     identifier: str, label: str, status: str, detail: str
 ) -> dict[str, str]:
     return {"id": identifier, "label": label, "status": status, "detail": detail}
+
+
+def _app_link_works() -> bool:
+    """Whether a card can carry a button back to the app.
+
+    The same test the cards apply, asked here so the answer is on the setup
+    screen rather than discovered as a button that is quietly never there.
+    """
+    from trendrelay_api.approval_notices import app_link
+
+    return app_link("any") is not None
 
 
 def setup_report() -> dict[str, Any]:
@@ -75,6 +87,20 @@ def setup_report() -> dict[str, Any]:
                 if saved_chat
                 else "The chat the messages go to. Write to your bot once, or "
                 "add it to a group, then read the chat id - the notes say how.",
+            ),
+            _requirement(
+                "app-link",
+                "Link back to the app",
+                "ready" if _app_link_works() else "optional",
+                "PUBLIC_WEB_URL is an address a phone can open, so each card "
+                "carries an Open in app button."
+                if _app_link_works()
+                else "PUBLIC_WEB_URL is "
+                f"{get_settings().public_web_url or 'not set'}, which a phone "
+                "cannot open, so the cards carry no Open in app button. "
+                "Telegram refuses a button to an address like that - and the "
+                "message with it - so it is left off rather than risked. "
+                "Approving and dismissing work either way.",
             ),
         ],
         "configured_secret_names": configured_names,

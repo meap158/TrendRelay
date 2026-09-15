@@ -68,6 +68,12 @@ approval inbox offers under it:
 | 🚫 Dismiss | the execution is cancelled, freeing its slot and its queue item |
 | ↗ Open in app | a link to the campaign's inbox, for anything the card cannot do (editing the words) |
 
+The last one appears only when `PUBLIC_WEB_URL` is an address a phone could
+open. Telegram refuses a button pointing at `localhost` or a private address,
+and refuses the message carrying it, so the button is left off rather than
+risked; the Telegram card in Tools says which of the two you have. Approving
+and dismissing work either way.
+
 **The language.** The card's own words - its buttons, what it says once
 decided, why a press was refused, the due date - are written in the
 campaign's post language, in any of the seven the interface speaks; a
