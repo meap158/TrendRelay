@@ -21,6 +21,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLibraryAssets } from "../../lib/use-library-assets";
+import { contextKey as keyOf, hasSomethingToSuggest } from "../../lib/music-context";
+import type { MusicContext } from "../../lib/music-context";
 import { reasonText } from "../../lib/music-reasons";
 import type { MusicReason } from "../../lib/music-reasons";
 import { useT } from "../i18n-provider";
@@ -43,16 +45,6 @@ export type MusicChoice = {
 /** A Library row, as the assets endpoint serialises it. Suggested rows carry
     a reason; the ones a search returned have nothing to explain. */
 type AudioRow = MusicChoice & { media_kind: string; reason?: MusicReason };
-
-/** What is being made, for music to be offered before anybody searches: a
-    narration's script, a pacing's mood and tempo, the clips (by id - the
-    server reads their titles and tags). Every field optional. */
-export type MusicContext = {
-  text?: string;
-  mood?: string;
-  bpm?: number | null;
-  assetIds?: string[];
-};
 
 /** The offer for a piece: the searches run and why, the Library's own
     matches, and the tracks those searches found, each with its reason. */
@@ -227,16 +219,11 @@ export function MusicPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   // The piece as a string, so a context object rebuilt on every render of
-  // the dialog does not re-ask; only a change in what it says does.
-  const contextKey = JSON.stringify({
-    text: context?.text?.trim() ?? "",
-    mood: context?.mood ?? "",
-    bpm: context?.bpm ?? null,
-    assetIds: context?.assetIds ?? [],
-  });
-  const hasContext = Boolean(
-    context && (context.text?.trim() || context.mood || context.assetIds?.length),
-  );
+  // the dialog does not re-ask; only a change in what it says does. The key
+  // is the request itself, so the effect below parses it back rather than
+  // closing over an object that is new every time.
+  const contextKey = keyOf(context);
+  const hasContext = hasSomethingToSuggest(context);
   const [tab, setTab] = useState<"suggested" | "library" | "find">(
     hasContext ? "suggested" : "library",
   );
@@ -249,9 +236,6 @@ export function MusicPicker({
   useEffect(() => {
     if (!open || !hasContext) return;
     const mine = ++suggestionRun.current;
-    const parsed = JSON.parse(contextKey) as {
-      text: string; mood: string; bpm: number | null; assetIds: string[];
-    };
     // Slow on purpose. Each ask is up to three searches of a public API, and
     // the thing that changes most here is a script somebody is still writing -
     // at a search box's reflexes that is a few calls a sentence, for a list
@@ -261,9 +245,8 @@ export function MusicPicker({
       void apiFetch(`/api/workspaces/${workspaceId}/media/library/music/suggestions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: parsed.text, mood: parsed.mood, bpm: parsed.bpm, asset_ids: parsed.assetIds,
-        }),
+        // The key is the request, so it is sent as it stands.
+        body: contextKey,
       })
         .then((response) => response.json().then((body) => ({ ok: response.ok, body })))
         .then(({ ok, body }) => {
