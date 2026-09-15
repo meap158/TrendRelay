@@ -754,6 +754,22 @@ export const fr: Messages = {
       medium: "Une partie du post correspond à ce produit. Suffisant pour publier sans surveillance, mais à vérifier.",
       low: "Peu de choses dans le post correspondent à ce produit. Il retient le post pour votre approbation à tous les niveaux d'autorité, y compris autonome, et n'est jamais choisi automatiquement.",
     },
+    context: {
+      label: "Contexte",
+      hint: "Notes pour la prochaine passe · jamais publiées",
+      hintEmpty: "Notes pour la prochaine passe · jamais publiées · vide",
+      heldHint: "Pourquoi ce post est ainsi · jamais publié",
+      opening: "Ouverture des notes…",
+      none: "Aucune note n'a été laissée sur ce post.",
+      placeholder:
+        "Ce que la passe suivante doit savoir - l'angle essayé, le plan qui manque, pourquoi une formule a été écartée.",
+      field: "Contexte de ce post",
+      mark: "Contient des notes de travail",
+      markHelp: "Contient des notes de travail, jamais publiées. Ouvrez Modifier pour les lire.",
+      note:
+        "Conservées avec le post et envoyées à aucun réseau. Le produit, sa description et la transcription du média sont déjà enregistrés - ceci est pour ce que rien d'autre n'enregistre.",
+      failed: "Ces notes n'ont pas pu être ouvertes.",
+    },
     state: {
       draft: "mise de côté",
       approved: "en rotation",

@@ -744,6 +744,22 @@ export const vi: Messages = {
       medium: "Một phần bài viết khớp với sản phẩm này. Đủ để đăng tự động, nhưng nên xem lại.",
       low: "Rất ít nội dung khớp với sản phẩm này. Nó giữ bài lại chờ bạn duyệt ở mọi mức thẩm quyền, kể cả tự trị, và không bao giờ được chọn tự động.",
     },
+    context: {
+      label: "Ngữ cảnh",
+      hint: "Ghi chú cho lượt sau · không bao giờ đăng",
+      hintEmpty: "Ghi chú cho lượt sau · không bao giờ đăng · trống",
+      heldHint: "Vì sao bài này như vậy · không bao giờ đăng",
+      opening: "Đang mở ghi chú…",
+      none: "Bài này chưa có ghi chú nào.",
+      placeholder:
+        "Điều lượt sau cần biết - hướng đang thử, cảnh còn thiếu, vì sao bỏ một câu chữ.",
+      field: "Ngữ cảnh cho bài này",
+      mark: "Có ghi chú làm việc",
+      markHelp: "Có ghi chú làm việc, không bao giờ được đăng. Mở Sửa để đọc.",
+      note:
+        "Được giữ cùng bài viết và không gửi tới mạng nào. Sản phẩm, mô tả và bản ghi lời của tệp đều đã được lưu - chỗ này dành cho những gì không nơi nào khác ghi lại.",
+      failed: "Không mở được ghi chú này.",
+    },
     state: {
       draft: "đang giữ lại",
       approved: "đang luân phiên",

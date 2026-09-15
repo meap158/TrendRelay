@@ -2191,6 +2191,9 @@ export function AutopilotPanel({
    */
   const [editingContext, setEditingContext] = useState<string | null>(null);
   const [loadingContext, setLoadingContext] = useState(false);
+  /** Notes read for held posts, by the queue post they were frozen from.
+      Keyed rather than single, because an approver opens several cards. */
+  const [heldNotes, setHeldNotes] = useState<Record<string, string>>({});
   const [composed, setComposed] = useState<ComposedPost | null>(null);
   // Two panes: Posts is what goes out, Queue & setup is everything behind it.
   //
@@ -3123,9 +3126,28 @@ export function AutopilotPanel({
       );
       setEditingContext(body.context ?? "");
     } catch (reason) {
-      fail(explainFailure(reason, "Those notes could not be opened."));
+      fail(explainFailure(reason, t("autopilot.context.failed")));
     } finally {
       setLoadingContext(false);
+    }
+  }
+
+  /**
+   * The same notes, for the post an approver is looking at.
+   *
+   * Reached through the queue post the execution was frozen from, so the held
+   * list carries no notes of its own: one approval card opening them is one
+   * request, and a page of held posts that nobody expands is none.
+   */
+  async function loadHeldContext(queueItemId: string) {
+    if (heldNotes[queueItemId] !== undefined) return;
+    try {
+      const body = await json<{ context: string }>(
+        await apiFetch(`${base}/queue/${queueItemId}/context`),
+      );
+      setHeldNotes((current) => ({ ...current, [queueItemId]: body.context ?? "" }));
+    } catch (reason) {
+      fail(explainFailure(reason, t("autopilot.context.failed")));
     }
   }
 
@@ -4458,6 +4480,40 @@ export function AutopilotPanel({
                         </p>
                       )}
                       <p className="autopilot-note" role="status">{item.held_reason}</p>
+                      {/* Why the post is the way it is, for the person being
+                          asked to approve it. Read-only and shut: the notes
+                          belong to the queued post and are edited there, and
+                          an approver deciding on the words should not have a
+                          paragraph of reasoning pushed in front of them
+                          before they have read the post itself. */}
+                      {item.queue_item_id && (
+                        <details
+                          className="campaign-context compact"
+                          onToggle={(event) => {
+                            if (event.currentTarget.open) {
+                              void loadHeldContext(item.queue_item_id!);
+                            }
+                          }}
+                        >
+                          <summary>
+                            <span>{t("autopilot.context.label")}</span>
+                            <small>{t("autopilot.context.heldHint")}</small>
+                          </summary>
+                          {heldNotes[item.queue_item_id] === undefined ? (
+                            <p className="campaign-context-wait" role="status">
+                              {t("autopilot.context.opening")}
+                            </p>
+                          ) : heldNotes[item.queue_item_id] ? (
+                            <pre className="campaign-context-read">
+                              {heldNotes[item.queue_item_id]}
+                            </pre>
+                          ) : (
+                            <p className="campaign-context-wait">
+                              {t("autopilot.context.none")}
+                            </p>
+                          )}
+                        </details>
+                      )}
                       {canEdit && (
                         <>
                           <span className="campaign-exception-actions">
@@ -5361,10 +5417,10 @@ export function AutopilotPanel({
                 {item.has_context && (
                   <span
                     className="campaign-queue-context-mark"
-                    title="Has working notes, which are never posted. Open Edit to read them."
+                    title={t("autopilot.context.markHelp")}
                   >
                     <span aria-hidden="true">✎</span>
-                    <span className="sr-only">Has working notes</span>
+                    <span className="sr-only">{t("autopilot.context.mark")}</span>
                   </span>
                 )}
                 {canEdit && (
@@ -6180,28 +6236,25 @@ export function AutopilotPanel({
               }}
             >
               <summary>
-                <span>Context</span>
+                <span>{t("autopilot.context.label")}</span>
                 <small>
                   {editing.has_context || (editingContext ?? "").trim()
-                    ? "Notes for the next pass · never posted"
-                    : "Notes for the next pass · never posted · empty"}
+                    ? t("autopilot.context.hint")
+                    : t("autopilot.context.hintEmpty")}
                 </small>
               </summary>
               {editingContext === null ? (
                 <p className="campaign-context-wait" role="status">
-                  {loadingContext ? "Opening…" : "Opening the notes…"}
+                  {t("autopilot.context.opening")}
                 </p>
               ) : (
                 <label>
-                  <span className="sr-only">Context for this post</span>
+                  <span className="sr-only">{t("autopilot.context.field")}</span>
                   <textarea
                     rows={5}
                     maxLength={8000}
                     value={editingContext}
-                    placeholder={
-                      "What a later pass needs to know - the angle being tried, "
-                      + "the shot still missing, why a phrase was dropped."
-                    }
+                    placeholder={t("autopilot.context.placeholder")}
                     onChange={(event) => setEditingContext(event.target.value)}
                   />
                 </label>
@@ -6209,11 +6262,7 @@ export function AutopilotPanel({
               {/* Said once, here, rather than repeated beside the field: the
                   product, its description and the transcript are all on the
                   record already, and a copy of them here would only drift. */}
-              <p className="campaign-context-note">
-                Kept with the post and never sent to any network. The product,
-                its description and the asset&rsquo;s transcript are already on
-                the record - this is for what nothing else records.
-              </p>
+              <p className="campaign-context-note">{t("autopilot.context.note")}</p>
             </details>
           </form>
           </Dialog>

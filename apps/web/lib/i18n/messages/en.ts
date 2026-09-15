@@ -748,6 +748,22 @@ export const en = {
       medium: "Some of the post matches this product. Enough to post unattended, but worth a look.",
       low: "Little in the post matches this product. It holds the post for your approval at every authority level, autonomous included, and is never chosen automatically.",
     },
+    context: {
+      label: "Context",
+      hint: "Notes for the next pass · never posted",
+      hintEmpty: "Notes for the next pass · never posted · empty",
+      heldHint: "Why this post is the way it is · never posted",
+      opening: "Opening the notes…",
+      none: "No notes were left on this post.",
+      placeholder:
+        "What a later pass needs to know - the angle being tried, the shot still missing, why a phrase was dropped.",
+      field: "Context for this post",
+      mark: "Has working notes",
+      markHelp: "Has working notes, which are never posted. Open Edit to read them.",
+      note:
+        "Kept with the post and never sent to any network. The product, its description and the asset's transcript are already on the record - this is for what nothing else records.",
+      failed: "Those notes could not be opened.",
+    },
     state: {
       draft: "held back",
       approved: "in rotation",

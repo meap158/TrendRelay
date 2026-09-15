@@ -1377,6 +1377,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-context > label, .campaign-context-wait, .campaign-context-note { margin: 0; padding: 0 10px; }
 .campaign-context textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
 .campaign-context-wait { color: var(--muted); font-size: 11px; }
+/* The approver's copy: the same notes, read-only and tighter, under a post
+   that is being decided on rather than written. */
+.campaign-context.compact > summary { padding: 6px 8px; font-size: 11px; }
+.campaign-context-read { margin: 0; padding: 0 8px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .campaign-context-note { padding-bottom: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 /* Dashed, so a reader who scans the queue sees at a glance that this mark is
    not one of the states the badges beside it report. */
