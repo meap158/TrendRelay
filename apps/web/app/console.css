@@ -878,7 +878,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* Not a positioning context. The explanation is anchored to the block of text
    instead, so leaving relative here would make the icon the containing block
    and "as wide as the text" resolve to the width of the icon. */
-.connection-info { display: inline-flex; align-items: center; margin-inline-start: 4px; vertical-align: -2px; color: var(--muted); cursor: help; }
+.connection-info { display: inline-flex; align-items: center; margin-inline-start: 4px; vertical-align: -2px; color: var(--muted); }
 .connection-info:hover, .connection-info:focus { color: var(--link); }
 .connection-info:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 50%; }
 /* Anchored to the icon's leading edge, not centred on it. Centred, a 290px
@@ -1384,7 +1384,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-context-note { padding-bottom: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 /* Dashed, so a reader who scans the queue sees at a glance that this mark is
    not one of the states the badges beside it report. */
-.campaign-queue-context-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 10px; cursor: help; }
+.campaign-queue-context-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 10px; }
 .campaign-composed-part { display: grid; gap: 3px; }
 .campaign-composed-part > b { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 .campaign-composed-refused { margin: 0; color: var(--warn); font-size: 10px; line-height: 1.45; }
@@ -1522,7 +1522,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-graduation { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 /* The Autonomous unlock progress beside the Authority label: a small chip, the
    full count and what still has to resolve on its hover. */
-.autopilot-authority-hint { margin-inline-start: 6px; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 500; white-space: nowrap; cursor: help; border-block-end: 1px dotted var(--line-strong); }
+.autopilot-authority-hint { margin-inline-start: 6px; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 500; white-space: nowrap; border-block-end: 1px dotted var(--line-strong); }
 /* The column is fixed so every row's title starts at the same place; the frame
    inside it is not, so a clip is shown in its own shape.
    
@@ -2226,7 +2226,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* Where else these approvals land. Not a control - the switch is in the
    campaign's settings with the rest of the connection - so it is drawn as a
    fact the row states, in the same chip shape the rest of the console uses. */
-.autopilot-telegram { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 12px; font-weight: 600; cursor: help; }
+.autopilot-telegram { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 12px; font-weight: 600; }
 .autopilot-telegram svg { color: var(--link); }
 .autopilot-telegram:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 /* Keep the paired selectors inside the mobile card. This must follow the

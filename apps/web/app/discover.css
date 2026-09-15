@@ -110,7 +110,7 @@
 .discovery-feed-body b { color: var(--link); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 /* Says the region control above did not reach this row. Quiet, because it is a
    qualification on the row rather than a property of it. */
-.discovery-feed-body i { margin-inline-start: 5px; padding: 1px 5px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 9px; font-style: normal; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; cursor: help; }
+.discovery-feed-body i { margin-inline-start: 5px; padding: 1px 5px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 9px; font-style: normal; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .discovery-feed-metric { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .discovery-feed-actions { display: flex; align-items: center; gap: 6px; }
 .discovery-feed-actions a { display: inline-flex; color: var(--muted); }

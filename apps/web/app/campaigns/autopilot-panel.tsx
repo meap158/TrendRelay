@@ -4084,21 +4084,23 @@ export function AutopilotPanel({
                 {/* The unlock progress, where the choice is made rather than
                     only where a refused switch would have explained it: the
                     chip says how close Autonomous is, and its hover carries the
-                    full count and what still has to resolve. */}
+                    full count and what still has to resolve. Through the
+                    tooltip rather than a `title`, which the browser draws about
+                    a second after the pointer stops. */}
                 {autopilot.graduation && autopilot.authority !== "autonomous" && (
-                  <em
-                    className="autopilot-authority-hint"
-                    title={autopilot.graduation.ready
-                      ? "This campaign has earned Autonomous - switch to it here and only weakly matched products will wait."
-                      : `Autonomous unlocks at ${autopilot.graduation.required} provider-confirmed posts - ${autopilot.graduation.published} so far`
-                        + (autopilot.graduation.unresolved
-                          ? `, with ${autopilot.graduation.unresolved} uncertain deliver${autopilot.graduation.unresolved === 1 ? "y" : "ies"} to resolve first.`
-                          : ".")}
+                  <Tooltip content={autopilot.graduation.ready
+                    ? "This campaign has earned Autonomous - switch to it here and only weakly matched products will wait."
+                    : `Autonomous unlocks at ${autopilot.graduation.required} provider-confirmed posts - ${autopilot.graduation.published} so far`
+                      + (autopilot.graduation.unresolved
+                        ? `, with ${autopilot.graduation.unresolved} uncertain deliver${autopilot.graduation.unresolved === 1 ? "y" : "ies"} to resolve first.`
+                        : ".")}
                   >
-                    {autopilot.graduation.ready
-                      ? "Autonomous ready"
-                      : `${autopilot.graduation.published}/${autopilot.graduation.required} to Autonomous`}
-                  </em>
+                    <em className="autopilot-authority-hint" tabIndex={0} role="note">
+                      {autopilot.graduation.ready
+                        ? "Autonomous ready"
+                        : `${autopilot.graduation.published}/${autopilot.graduation.required} to Autonomous`}
+                    </em>
+                  </Tooltip>
                 )}
               </span>
               {/* A listbox rather than a native select, for the descriptions.

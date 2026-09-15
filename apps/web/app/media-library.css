@@ -10,7 +10,7 @@
 .library-heading label { display: grid; gap: 5px; min-width: 230px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .library-search input, .library-import input, .library-import textarea, .library-compact-form input, .library-compact-form textarea, .library-enrichment input, .library-enrichment textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
 .library-status-dots { display: flex; gap: 3px; align-items: center; }
-.library-status-dot { position: relative; display: grid; width: 20px; height: 20px; place-items: center; border-radius: var(--radius-sm); cursor: help; }
+.library-status-dot { position: relative; display: grid; width: 20px; height: 20px; place-items: center; border-radius: var(--radius-sm); }
 .library-status-dot.ready { color: var(--green); background: var(--green-dark); }
 .library-status-dot.setup { color: var(--warn); background: var(--warn-bg); }
 .library-status-dot.warning { color: var(--red); background: var(--bad-bg); }

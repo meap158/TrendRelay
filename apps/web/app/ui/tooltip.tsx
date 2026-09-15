@@ -67,9 +67,15 @@ export function Tooltip({
     >
       {cloneElement(children, {
         "aria-describedby": describedBy,
-        // Also gives touch and browser-native fallback contexts a hint when
-        // the custom surface is unavailable.
-        title: children.props.title ?? content,
+        // No `title` of our own. It used to carry the same sentence as a
+        // native fallback, which meant the browser drew a second bubble about
+        // a second after this one - the same words, in a different place, over
+        // the top of what was already being read. The surface below is plain
+        // CSS on hover and focus, so there is no context where it fails and
+        // the title would have been the only hint; `aria-describedby` is what
+        // carries it where it is not drawn at all. A title the caller sets
+        // itself is left alone.
+        title: children.props.title,
       })}
       <span className="ui-tooltip-content" id={id} role="tooltip">
         {content}
