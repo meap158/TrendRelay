@@ -457,6 +457,16 @@ export function MediaPicker({
   );
 }
 
+/**
+ * How many pictures a row of dots can still say something about.
+ *
+ * Every one of these networks marks a gallery with a dot per picture, and
+ * every one of them stops somewhere: past about ten the row is a smear that
+ * answers neither "where am I" nor "how many are there". A TikTok carousel
+ * takes thirty-five, so the fraction stays for the long ones.
+ */
+const COUNTABLE_DOTS = 10;
+
 /** Which icon stands for each action, and how big this surface draws it.
     The rails themselves are in `preview-surfaces.ts`; this is only the
     alphabet they are written in. */
@@ -614,6 +624,43 @@ export function PostPreview({
     // rather than bouncing through a default nobody chose.
     if (width && height) setMeasured(width / height);
   };
+  /**
+   * One step through the gallery, drawn twice over.
+   *
+   * A full-bleed surface puts the steps in a row with the dots, above the
+   * caption; a feed card puts them at the middle of the picture's two edges.
+   * Both are how those surfaces actually do it, and the button itself is the
+   * same button - so it is written once here rather than twice below.
+   */
+  const stepButton = (edge: "start" | "end") => (
+    <button
+      type="button"
+      className={`post-preview-step ${edge}`}
+      aria-label={edge === "start" ? t("publish.moveEarlier") : t("publish.moveLater")}
+      disabled={edge === "start" ? frame === 0 : frame >= frames.length - 1}
+      onClick={() => setFrame((current) => (edge === "start"
+        ? Math.max(0, current - 1)
+        : Math.min(frames.length - 1, current + 1)))}
+    >{edge === "start" ? "‹" : "›"}</button>
+  );
+  /* Which picture of the gallery is showing. A dot each, the way every one of
+     these networks says it - References/Posts/tiktok-photo_carousel_desktop.png
+     has five under the pictures. Past ten they stop being countable and a
+     TikTok carousel takes thirty-five, so a long one keeps the figure. */
+  const position = frames.length <= COUNTABLE_DOTS ? (
+    <span className="post-preview-dots" aria-hidden="true">
+      {frames.map((source, index) => (
+        <i
+          key={`${source}-${index}`}
+          className={index === Math.min(frame, frames.length - 1) ? "here" : undefined}
+        />
+      ))}
+    </span>
+  ) : (
+    <em className="post-preview-count">
+      {Math.min(frame, frames.length - 1) + 1} / {frames.length}
+    </em>
+  );
   const showsTitle = showsTitleProp
     ?? (platform === "youtube" || platform === "reddit" || platform === "pinterest");
   /**
@@ -727,6 +774,13 @@ export function PostPreview({
                 })}
               </div>
             ) : null}
+            {!story && frames.length > 1 && (
+              <div className="post-preview-steps">
+                {stepButton("start")}
+                {position}
+                {stepButton("end")}
+              </div>
+            )}
             {!story && (
               <div className="preview-surface-foot">
                 {account}
@@ -751,28 +805,16 @@ export function PostPreview({
           // eslint-disable-next-line @next/next/no-img-element
           <img key={source} src={source} alt="" aria-hidden="true" className="preview-preload" />
         ))}
-        {/* Stepped rather than counted. The count alone says a carousel exists;
-            being able to move through it is what answers whether the third
-            frame still makes sense without the first. */}
-        {frames.length > 1 && (
+        {/* A feed card is stepped at the middle of the picture's own edges,
+            with the dots under it. The full-bleed surfaces put both in one row
+            above the caption, and do it inside the surface above - laid out
+            rather than offset from the bottom, because the caption they have
+            to clear is one line some days and three the next. */}
+        {frames.length > 1 && !overlaid && (
           <>
-            <em className="post-preview-count">
-              {Math.min(frame, frames.length - 1) + 1} / {frames.length}
-            </em>
-            <button
-              type="button"
-              className="post-preview-step start"
-              aria-label={t("publish.moveEarlier")}
-              disabled={frame === 0}
-              onClick={() => setFrame((current) => Math.max(0, current - 1))}
-            >&#8249;</button>
-            <button
-              type="button"
-              className="post-preview-step end"
-              aria-label={t("publish.moveLater")}
-              disabled={frame >= frames.length - 1}
-              onClick={() => setFrame((current) => Math.min(frames.length - 1, current + 1))}
-            >&#8250;</button>
+            {position}
+            {stepButton("start")}
+            {stepButton("end")}
           </>
         )}
         </div>

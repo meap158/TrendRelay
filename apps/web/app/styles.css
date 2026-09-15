@@ -715,6 +715,26 @@ nav strong { color: var(--text); }
 .post-preview-step.end { inset-inline-end: 6px; }
 .post-preview-step:disabled { opacity: .35; cursor: not-allowed; }
 .post-preview-count { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; border-radius: 999px; padding: 1px 7px; background: rgba(20, 28, 38, .78); color: var(--on-ink); font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
+/* A dot per picture, under the gallery, which is where every one of these
+   networks puts it - a fraction in the corner was ours and nobody else's.
+   Shadowed rather than boxed: they sit on the picture, and a picture can be
+   any colour. */
+.post-preview-dots { position: absolute; inset-block-end: 8px; inset-inline-start: 50%; display: flex; gap: 4px; transform: translateX(-50%); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
+.post-preview-dots i { inline-size: 5px; block-size: 5px; border-radius: 50%; background: rgba(255, 255, 255, .5); }
+.post-preview-dots i.here { background: var(--on-media); }
+/* On a full-bleed surface the steps and the dots are one row above the
+   caption, as References/Posts/tiktok-photo_carousel_desktop.png shows. A row
+   in the surface's own layout rather than an offset from the frame's bottom:
+   the caption it has to clear is one line some days, three and a badge the
+   next, and no fixed offset clears both. The surface itself takes no clicks,
+   so the row takes its own back. */
+.post-preview-steps { display: flex; gap: 10px; align-items: center; justify-content: center; padding-block-end: 8px; pointer-events: auto; }
+.post-preview-steps .post-preview-dots,
+.post-preview-steps .post-preview-count { position: static; transform: none; }
+.post-preview-steps .post-preview-step { position: static; inline-size: 20px; block-size: 20px; font-size: 12px; transform: none; background: rgba(20, 28, 38, .45); }
+/* Black behind a full-bleed surface, like the app it is standing in for. The
+   panel grey reads as a page around the picture; these surfaces have none. */
+.post-preview:has(.preview-surface) .post-preview-frame { background: var(--ink); }
 /* Fetched, never seen. A neighbouring carousel frame is loaded so that stepping
    to it reads from cache instead of starting a request and blanking the box.
    Given a size rather than display:none so the load is never skipped. */
