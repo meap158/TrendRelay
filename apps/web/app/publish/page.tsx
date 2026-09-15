@@ -4150,10 +4150,19 @@ export default function PublishPage() {
               });
             }}
           />
-          {previewPlatform && (
-            <article>
-              <div className="preview-head">
-                <h2>{t("publish.howItWillLook")}</h2>
+          {/* Always drawn, destination or not. The panel used to appear only
+              once something had been chosen, so the page answered "what am I
+              making" at every moment except the one where nobody knew yet -
+              and everything below it jumped up a section when it went. What it
+              cannot do without a destination is draw a network's chrome: a
+              default rail is the single mistake `SURFACE_FURNITURE` exists to
+              prevent, so it says what it is waiting for instead. */}
+          <article>
+            <div className="preview-head">
+              <h2>{t("publish.howItWillLook")}</h2>
+              {/* Nothing to set until there is something to draw: a width
+                  toggle over an empty frame changes the size of a message. */}
+              {previewPlatform && (
                 <div className="preview-head-controls">
                   {/* Only where there is a choice to make. One destination
                       needs no picker, and a dropdown with one option in it is
@@ -4182,50 +4191,61 @@ export default function PublishPage() {
                     label={t("publish.previewWidthLabel")}
                   />
                 </div>
-              </div>
-              <PostPreview
-                width={previewWidth}
-                avatar={previewAccount?.avatar ?? null}
-                // The clip is already chosen - it is in the field above this
-                // panel - so the panel shows it rather than asking a second
-                // time. The gate belongs to surfaces that list media, where
-                // it stops every clip scrolled past being read.
-                autoPlay
-                platform={previewPlatform}
-                postTypeLabel={previewType?.label ?? "Post"}
-                handle={previewHandle}
-                caption={caption}
-                title={title}
-                thumbnail={thumbnail}
-                // From the engines' own limits, which is what decides it:
-                // a network has a title when it has a title limit.
-                showsTitle={chosenLimits.some((entry) =>
-                  entry.platform === previewPlatform && entry.title !== null)}
-                source={previewSource}
-                sourceIsImage={wantsImages}
-                aiDisclosed={madeWithAi}
-                carousel={carouselSources}
-                wantsCarousel={wantsImages}
-              />
-              {/* What the removed "What will be sent" card said that this one
-                  did not: which file is playing. The panels showed the same
-                  clip, but only one of them promised it was the cut that
-                  actually uploads. A carousel is not played and has no cut, so
-                  it is described as what it is rather than borrowing the
-                  wording for a clip. */}
-              <p className="privacy-note">
-                {wantsImages
-                  ? "Showing the pictures this delivery will upload, in the order they are swiped. "
-                  : mediaUrl
-                    ? "Playing the public URL the engine will fetch. "
-                    : "Playing the local file this delivery will upload — the blurred cut "
-                      + "where one replaced the original. "}
-                A rehearsal of the caption and {wantsImages ? "pictures" : "frame"}{" "}against
-                this network&apos;s shape, not a render of what{" "}
-                {deliveringNames || activeProvider?.label} will produce.
+              )}
+            </div>
+            {previewPlatform ? (
+              <>
+                <PostPreview
+                  width={previewWidth}
+                  avatar={previewAccount?.avatar ?? null}
+                  // The clip is already chosen - it is in the field above this
+                  // panel - so the panel shows it rather than asking a second
+                  // time. The gate belongs to surfaces that list media, where
+                  // it stops every clip scrolled past being read.
+                  autoPlay
+                  platform={previewPlatform}
+                  postTypeLabel={previewType?.label ?? "Post"}
+                  handle={previewHandle}
+                  caption={caption}
+                  title={title}
+                  thumbnail={thumbnail}
+                  // From the engines' own limits, which is what decides it:
+                  // a network has a title when it has a title limit.
+                  showsTitle={chosenLimits.some((entry) =>
+                    entry.platform === previewPlatform && entry.title !== null)}
+                  source={previewSource}
+                  sourceIsImage={wantsImages}
+                  aiDisclosed={madeWithAi}
+                  carousel={carouselSources}
+                  wantsCarousel={wantsImages}
+                />
+                {/* What the removed "What will be sent" card said that this one
+                    did not: which file is playing. The panels showed the same
+                    clip, but only one of them promised it was the cut that
+                    actually uploads. A carousel is not played and has no cut, so
+                    it is described as what it is rather than borrowing the
+                    wording for a clip. */}
+                <p className="privacy-note">
+                  {wantsImages
+                    ? "Showing the pictures this delivery will upload, in the order they are swiped. "
+                    : mediaUrl
+                      ? "Playing the public URL the engine will fetch. "
+                      : "Playing the local file this delivery will upload — the blurred cut "
+                        + "where one replaced the original. "}
+                  A rehearsal of the caption and {wantsImages ? "pictures" : "frame"}{" "}against
+                  this network&apos;s shape, not a render of what{" "}
+                  {deliveringNames || activeProvider?.label} will produce.
+                </p>
+              </>
+            ) : (
+              <p className="preview-empty">
+                Choose a destination and the post is drawn here in that
+                network&apos;s own chrome — its buttons, the room it leaves the
+                caption, and whatever it stamps on the post — so the caption is
+                read where it will actually be read.
               </p>
-            </article>
-          )}
+            )}
+          </article>
           {preview && (
           <article>
             <h2>{t("publish.dryRunPlan")}</h2>

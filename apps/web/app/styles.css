@@ -605,6 +605,11 @@ nav strong { color: var(--text); }
    widening the row. The width of an account's name is not a layout. */
 .preview-head-controls .preview-destination { flex: 1 1 auto; min-inline-size: 0; }
 .preview-head-controls > :last-child { flex: 0 0 auto; }
+/* What the panel says before a destination exists. A dashed box rather than a
+   bare line: it holds the space the preview will take, so choosing a
+   destination fills a frame that was already there instead of pushing
+   everything under it down the page. */
+.preview-empty { display: grid; align-content: center; min-block-size: 180px; margin: 0; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); color: var(--muted); font-size: 0.78rem; line-height: 1.5; text-align: center; }
 .post-preview { --preview-max-height: min(56vh, 440px); display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
 /* A phone is the width these networks are read at, so it is the default and
    the narrower of the two. Capped rather than stretched: a preview as wide
