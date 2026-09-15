@@ -12,6 +12,7 @@ import {
   MoreHorizontal,
   MoreVertical,
   Music2,
+  Repeat2,
   Send,
   ThumbsDown,
   ThumbsUp,
@@ -28,7 +29,7 @@ import { createPortal } from "react-dom";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
 import {
-  SURFACE_FURNITURE, aiBadgeLabel, audioLine, type RailAction,
+  SURFACE_FURNITURE, aiBadgeLabel, audioLine, feedActions, type RailAction,
 } from "./preview-surfaces";
 import {
   AssetFilters,
@@ -477,6 +478,7 @@ const RAIL_ICONS: Record<RailAction, readonly [LucideIcon, number]> = {
   comment: [MessageCircle, 20],
   send: [Send, 20],
   share: [Forward, 20],
+  repost: [Repeat2, 20],
   save: [Bookmark, 20],
   more: [MoreHorizontal, 18],
   menu: [MoreVertical, 18],
@@ -671,6 +673,7 @@ export function PostPreview({
    * this table exists to stop.
    */
   const furniture = SURFACE_FURNITURE[platform];
+  const feedRail = feedActions(platform);
   const sound = audioLine(platform, handle, Boolean(sourceIsImage));
   const aiBadge = aiBadgeLabel(platform, Boolean(aiDisclosed));
   const account = (
@@ -817,6 +820,19 @@ export function PostPreview({
             {stepButton("end")}
           </>
         )}
+        </div>
+      )}
+      {/* The row a feed post's caption actually sits under. Only where one has
+          been read off a real post - `feedActions` - and never on a surface
+          that carries its rail over the media instead. Decorative like the
+          rail above it: these are the network's buttons, drawn so the caption
+          is judged from where it will really start, not offered to press. */}
+      {!overlaid && !story && !copyOnly && feedRail && (
+        <div className="post-preview-actions" aria-hidden="true">
+          {feedRail.map((action) => {
+            const [Icon, size] = RAIL_ICONS[action];
+            return <i key={action} data-action={action}><Icon size={size} /></i>;
+          })}
         </div>
       )}
       {story ? (

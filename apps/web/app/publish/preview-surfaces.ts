@@ -31,6 +31,7 @@ export type RailAction =
   | "comment"
   | "send"
   | "share"
+  | "repost"
   | "save"
   | "more"
   | "menu";
@@ -38,6 +39,20 @@ export type RailAction =
 export type SurfaceFurniture = {
   /** Top to bottom, as the network stacks them. */
   rail: readonly RailAction[];
+  /**
+   * The bar a *feed* post carries, left to right, where one has been read.
+   *
+   * Not the same thing as `rail`, and not a fallback for it. A Reel's rail is
+   * a column floating over the video; a feed post's is a row between the
+   * picture and the words, and the two do not hold the same buttons - the
+   * Reel's "more" lives up beside the account on a feed post, not in the bar.
+   *
+   * Only Instagram so far, from
+   * `References/Posts/instagram-photo_carousel_desktop.png`. The same rule as
+   * everything else here: a network whose bar nobody has read draws none,
+   * rather than borrowing the one below it.
+   */
+  feedRail?: readonly RailAction[];
   /** What the audio line says. The same original sound is named four ways. */
   audio: (handle: string) => string;
   /**
@@ -68,6 +83,10 @@ export const SURFACE_FURNITURE: Record<string, SurfaceFurniture> = {
   // React, reply, send on, keep, more.
   instagram: {
     rail: ["heart", "comment", "send", "save", "menu"],
+    // Like, comment, repost, send - and save pushed to the far end, which is
+    // how the saved reference draws it. No "more" in the row: Instagram puts
+    // that up beside the account, next to Follow.
+    feedRail: ["heart", "comment", "repost", "send", "save"],
     audio: (handle) => `${handle} · Original audio`,
   },
   // Like, comment, share, more. No save: Facebook keeps that in the menu.
@@ -124,4 +143,20 @@ export function audioLine(
 export function aiBadgeLabel(platform: string, declared: boolean): string | null {
   if (!declared) return null;
   return SURFACE_FURNITURE[platform]?.aiBadge ?? null;
+}
+
+/**
+ * The row of buttons a feed post sits above, or nothing.
+ *
+ * A picture post is not read full-bleed, so it has no rail over it - and until
+ * now it had no furniture at all, which made the caption sit straight under
+ * the picture in a way no network does. On Instagram a row of five buttons is
+ * what actually separates the two, and a caption previewed without it is
+ * previewed higher up the card than it will ever appear.
+ *
+ * Absent for the three whose feed post nobody has saved a picture of, and
+ * absent for every full-bleed surface, which carries `rail` instead.
+ */
+export function feedActions(platform: string): readonly RailAction[] | null {
+  return SURFACE_FURNITURE[platform]?.feedRail ?? null;
 }

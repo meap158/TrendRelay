@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  SURFACE_FURNITURE, aiBadgeLabel, audioLine,
+  SURFACE_FURNITURE, aiBadgeLabel, audioLine, feedActions,
 } from "../app/publish/preview-surfaces.ts";
 
 test("no two of these surfaces draw the same rail", () => {
@@ -84,6 +84,24 @@ test("a network whose stamp nobody has read previews without one", () => {
   // be chrome somebody writes a caption around and never sees.
   for (const platform of ["instagram", "facebook", "youtube", "threads"]) {
     assert.equal(aiBadgeLabel(platform, true), null);
+  }
+});
+
+test("an Instagram feed post carries its own row, which is not the Reel's rail", () => {
+  // Read off References/Posts/instagram-photo_carousel_desktop.png: like,
+  // comment, repost, send, and save alone at the far end. The Reel rail beside
+  // it ends in "menu"; this row has none, because Instagram puts that up with
+  // the account next to Follow rather than in the bar.
+  assert.deepEqual([...feedActions("instagram")!], ["heart", "comment", "repost", "send", "save"]);
+  assert.notDeepEqual([...feedActions("instagram")!], [...SURFACE_FURNITURE.instagram.rail]);
+});
+
+test("a feed post nobody has saved a picture of draws no row", () => {
+  // The same rule the rails follow, for the same reason: Facebook's feed post
+  // does not hold Instagram's five buttons, and guessing which it holds would
+  // be chrome somebody writes a caption around and never sees.
+  for (const platform of ["facebook", "tiktok", "youtube", "threads"]) {
+    assert.equal(feedActions(platform), null);
   }
 });
 

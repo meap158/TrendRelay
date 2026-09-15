@@ -722,6 +722,14 @@ nav strong { color: var(--text); }
 .post-preview-dots { position: absolute; inset-block-end: 8px; inset-inline-start: 50%; display: flex; gap: 4px; transform: translateX(-50%); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
 .post-preview-dots i { inline-size: 5px; block-size: 5px; border-radius: 50%; background: rgba(255, 255, 255, .5); }
 .post-preview-dots i.here { background: var(--on-media); }
+/* The row a feed post's caption sits under, from
+   References/Posts/instagram-photo_carousel_desktop.png: outlined buttons in a
+   row, evenly spaced, with save alone at the far end. Not interactive and not
+   reachable - it is the network's furniture drawn so the caption is read from
+   where it will really start, which is under this and not under the picture. */
+.post-preview-actions { display: flex; gap: 16px; align-items: center; padding: 8px 2px 2px; color: var(--text); }
+.post-preview-actions i { display: grid; place-items: center; }
+.post-preview-actions i[data-action="save"] { margin-inline-start: auto; }
 /* On a full-bleed surface the steps and the dots are one row above the
    caption, as References/Posts/tiktok-photo_carousel_desktop.png shows. A row
    in the surface's own layout rather than an offset from the frame's bottom:
