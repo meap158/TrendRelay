@@ -19,7 +19,9 @@ import dynamic from "next/dynamic";
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, MessageCircle, Share2 } from "lucide-react";
+import {
+  Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, MessageCircle, Send, Share2,
+} from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { readTabSnapshot, refreshTabSnapshot } from "../../lib/tab-snapshots";
@@ -582,6 +584,27 @@ function compatiblePostTypes(destination: Destination, item: QueueItem) {
   const ordinary = choices.filter((kind) => kind.id === "post");
   return ordinary.length ? ordinary : choices.slice(0, 1);
 }
+
+/**
+ * What Delivery offers, in the order it offers it.
+ *
+ * Paired with its explanation rather than left as three loose options: the
+ * three differ in who presses publish and when, which the labels alone cannot
+ * carry - "Publish now, at the posting time" has been read as both. Message
+ * keys rather than strings, because these are translated and a sentence that
+ * explains a translated label has to travel with it.
+ */
+const DELIVERIES = ["draft", "schedule", "now"] as const;
+const DELIVERY_LABEL: Record<(typeof DELIVERIES)[number], string> = {
+  draft: "autopilot.deliveryDraft",
+  schedule: "autopilot.deliverySchedule",
+  now: "autopilot.deliveryNow",
+};
+const DELIVERY_HELP: Record<(typeof DELIVERIES)[number], string> = {
+  draft: "autopilot.deliveryDraftHelp",
+  schedule: "autopilot.deliveryScheduleHelp",
+  now: "autopilot.deliveryNowHelp",
+};
 
 type Autopilot = {
   enabled: boolean;
@@ -3395,6 +3418,23 @@ export function AutopilotPanel({
 
   const unmet = ready.rows.filter((row) => !row.met);
 
+  /* What the two dials in the header currently mean, for the hover beside
+     each of them. Read from the same tables the lists are built from, so the
+     explanation and the option it explains cannot come apart. */
+  const authorityHelp = AUTHORITIES
+    .find(([value]) => value === autopilot.authority)?.[2] ?? "";
+  const deliveryHelp = t(DELIVERY_HELP[autopilot.delivery]);
+  /* What the Telegram chip says when it is hovered. Names the language
+     because that is the part somebody changes and then forgets: the cards
+     speak the campaign's language unless this campaign chose another. */
+  const telegramLanguage = LOCALES.find((item) => item.code === (
+    autopilot.approvals_telegram_language ?? autopilot.post_language
+  ))?.label;
+  const telegramNote = "Every post waiting for approval also goes to the "
+    + "Telegram chat as a card with Approve and Dismiss on it. A press there "
+    + "decides it here, and is recorded as your decision"
+    + (telegramLanguage ? `. The cards are written in ${telegramLanguage}.` : ".");
+
   /**
    * Open a work area, fetching whatever that area needs to be worth looking at.
    *
@@ -4046,6 +4086,16 @@ export function AutopilotPanel({
             <label className="autopilot-delivery">
               <span>
                 Authority
+                {/* What the chosen level does, on the dial rather than only
+                    inside the open list: the answer is wanted before the list
+                    is opened, and a permanent line of prose under two selects
+                    would cost a row of the header to say one sentence. */}
+                <Tooltip content={authorityHelp}>
+                  <i className="autopilot-what" tabIndex={0} role="note"
+                    aria-label="What this authority level does">
+                    <Info size={12} aria-hidden="true" />
+                  </i>
+                </Tooltip>
                 {/* The unlock progress, where the choice is made rather than
                     only where a refused switch would have explained it: the
                     chip says how close Autonomous is, and its hover carries the
@@ -4072,30 +4122,55 @@ export function AutopilotPanel({
                 onChange={(event) =>
                   void save({ authority: event.target.value as Autopilot["authority"] })}
               >
-                {AUTHORITIES.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                {/* The hover on each row, so the list explains itself while
+                    it is open rather than only after a choice is made. */}
+                {AUTHORITIES.map(([value, label, help]) => (
+                  <option key={value} value={value} title={help}>{label}</option>
                 ))}
               </Select>
             </label>
             <label className="autopilot-delivery">
-              <span>{t("autopilot.delivery")}</span>
+              <span>
+                {t("autopilot.delivery")}
+                <Tooltip content={deliveryHelp}>
+                  <i className="autopilot-what" tabIndex={0} role="note"
+                    aria-label="What this delivery does">
+                    <Info size={12} aria-hidden="true" />
+                  </i>
+                </Tooltip>
+              </span>
               <Select
                 value={autopilot.delivery}
                 disabled={!canEdit}
                 onChange={(event) =>
                   void save({ delivery: event.target.value as Autopilot["delivery"] })}
               >
-                <option value="draft">{t("autopilot.deliveryDraft")}</option>
-                <option value="schedule">{t("autopilot.deliverySchedule")}</option>
-                {/* The column and the engines have always allowed this; only
-                    the dropdown did not, so "Planned · publish now" was a badge
-                    for a state nothing could reach. Chosen before the engine is
-                    handed anything, which is what keeps it simple: there is no
-                    scheduled job to modify, so there is no second post to
-                    make. */}
-                <option value="now">{t("autopilot.deliveryNow")}</option>
+                {/* The third one is the reason this is a list of three rather
+                    than two: the column and the engines have always allowed
+                    publish-now, and only the dropdown did not, so "Planned ·
+                    publish now" was a badge for a state nothing could reach. */}
+                {DELIVERIES.map((value) => (
+                  <option key={value} value={value} title={t(DELIVERY_HELP[value])}>
+                    {t(DELIVERY_LABEL[value])}
+                  </option>
+                ))}
               </Select>
             </label>
+            {/* The third thing that decides what approval feels like, beside
+                the two that decide what it is: a held post also reaches a
+                phone. A chip rather than a fourth control - the switch for it
+                is in the campaign's settings with the rest of the connection,
+                and repeating it here would put the same decision in two
+                places. Shown only when the campaign asked for it, so the row
+                stays three things wide for everybody else. */}
+            {autopilot.approvals_telegram && (
+              <Tooltip content={telegramNote}>
+                <span className="autopilot-telegram" tabIndex={0} role="note">
+                  <Send size={12} aria-hidden="true" />
+                  Telegram
+                </span>
+              </Tooltip>
+            )}
           <Switch
             checked={autopilot.enabled}
             disabled={!canEdit || campaignStatus === "archived"}

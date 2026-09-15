@@ -1286,8 +1286,8 @@ export default function CampaignsPage() {
             </div>
             <label>Authority
               <Select name="authority" defaultValue="run_by_exception">
-                {AUTHORITIES.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                {AUTHORITIES.map(([value, label, help]) => (
+                  <option key={value} value={value} title={help}>{label}</option>
                 ))}
               </Select>
               <small>How much of the posting runs without you.</small>

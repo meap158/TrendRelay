@@ -2210,7 +2210,19 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    two answers, not a form. */
 .autopilot-run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .autopilot-delivery { display: flex; align-items: center; gap: 8px; margin: 0; }
-.autopilot-delivery > span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.autopilot-delivery > span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; font-weight: 600; }
+/* What the chosen option does, on hover beside the dial's own name. An icon
+   rather than a line of prose under the row: the header is three controls on
+   one line, and a sentence each would cost three rows to answer a question
+   asked once. The list itself carries the same text per option. */
+.autopilot-what { display: inline-grid; place-items: center; color: var(--muted-soft); cursor: help; }
+.autopilot-what:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+/* Where else these approvals land. Not a control - the switch is in the
+   campaign's settings with the rest of the connection - so it is drawn as a
+   fact the row states, in the same chip shape the rest of the console uses. */
+.autopilot-telegram { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 12px; font-weight: 600; cursor: help; }
+.autopilot-telegram svg { color: var(--link); }
+.autopilot-telegram:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 /* Keep the paired selectors inside the mobile card. This must follow the
    desktop flex rule above so the cascade cannot restore their min-content
    width after the narrow-screen layout has already opted into stacking. */
