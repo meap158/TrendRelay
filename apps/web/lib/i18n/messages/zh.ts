@@ -777,6 +777,8 @@ export const zh: Messages = {
     scopeAll: "全部 ({count})",
     noArchived: "暂无已归档的广告系列。",
     noActive: "没有进行中的广告系列。",
+    reorderHint: "拖动即可重新排序，或按住 Alt 键并使用上下方向键。",
+    reorderFailed: "无法保存该顺序。",
     archivedAvailable: "没有进行中的广告系列。已归档的可在上方查看。",
     archivedHiddenHelp: "已归档的广告系列不会出现在日常操作中，除非你选择查看或恢复它们。",
     viewArchived: "查看归档 ({count})",
