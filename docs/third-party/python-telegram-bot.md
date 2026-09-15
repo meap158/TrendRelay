@@ -74,6 +74,12 @@ and refuses the message carrying it, so the button is left off rather than
 risked; the Telegram card in Tools says which of the two you have. Approving
 and dismissing work either way.
 
+**The notes.** A post carries working notes that are never posted - the angle
+being tried, the shot still missing - and the app's approval inbox shows them
+to whoever is deciding. The card does too, under a heading, cut at three
+hundred characters: the same decision should not have less behind it because
+it is being made on a phone.
+
 **The language.** The card's own words - its buttons, what it says once
 decided, why a press was refused, the due date - are written in the
 campaign's post language, in any of the seven the interface speaks; a
