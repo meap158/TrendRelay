@@ -29,6 +29,7 @@ import { AUTHORITIES } from "./authority-options";
 
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import { HoverPreview } from "../ui/hover-preview";
 import { SegmentedControl } from "../ui/segmented";
 import { FilterChipStrip } from "../ui/filter-strip";
 import { ActionIcon } from "../ui/action-icons";
@@ -584,6 +585,44 @@ function compatiblePostTypes(destination: Destination, item: QueueItem) {
   if (photo.length) return photo;
   const ordinary = choices.filter((kind) => kind.id === "post");
   return ordinary.length ? ordinary : choices.slice(0, 1);
+}
+
+/**
+ * One frame of a carousel in the edit dialog, hovered to see it whole.
+ *
+ * Its own component for its own state: the card is drawn at the picture's
+ * shape, and the shape is not known until the thumbnail has loaded. Eight
+ * frames measure eight times, and a shared number would be whichever one
+ * finished last.
+ */
+function CarouselFrame({ src, index, count }: {
+  src: string; index: number; count: number;
+}) {
+  const [ratio, setRatio] = useState(1);
+  const position = `Picture ${index + 1} of ${count}`;
+  return (
+    <HoverPreview
+      label={`Preview ${position.toLowerCase()}`}
+      ratio={ratio}
+      className="campaign-edit-media-frame"
+      media={(
+        // eslint-disable-next-line @next/next/no-img-element -- preview URL
+        <img src={src} alt={`Larger view of ${position.toLowerCase()}`} />
+      )}
+      caption={<strong>{position}</strong>}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- preview URL */}
+      <img
+        role="listitem"
+        src={src}
+        alt={position}
+        onLoad={(event) => {
+          const { naturalWidth, naturalHeight } = event.currentTarget;
+          if (naturalWidth && naturalHeight) setRatio(naturalWidth / naturalHeight);
+        }}
+      />
+    </HoverPreview>
+  );
 }
 
 /**
@@ -5928,10 +5967,19 @@ export function AutopilotPanel({
                 return (
                   <div className="campaign-edit-media-strip" role="list"
                     aria-label="Pictures in this carousel, in posting order">
+                    {/* Hovered rather than only listed. Eight frames of the
+                        same shoot are eight near-identical 64px squares, and
+                        which one leads and which one is third is exactly what
+                        this dialog is open to decide - the download queue
+                        already answers that on hover, so this is the same
+                        control rather than a second way of doing it. */}
                     {images.map((path, index) => (
-                      // eslint-disable-next-line @next/next/no-img-element -- authenticated preview URL
-                      <img key={`${path}-${index}`} role="listitem" src={media(path)}
-                        alt={`Picture ${index + 1} of ${images.length}`} />
+                      <CarouselFrame
+                        key={`${path}-${index}`}
+                        src={media(path)}
+                        index={index}
+                        count={images.length}
+                      />
                     ))}
                   </div>
                 );

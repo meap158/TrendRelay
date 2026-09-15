@@ -327,22 +327,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .job-error { color: var(--red); }
 .artifact-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--radius-sm); background: #fafafa; border: 1px solid var(--line); }
 .download-artifact-thumbnail { display: block; width: 42px; height: 42px; border-radius: 5px; object-fit: cover; background: var(--panel-raised); }
-.download-artifact-preview-trigger { display: block; width: 42px; height: 42px; border: 0; border-radius: 5px; padding: 0; background: transparent; cursor: zoom-in; }
-.download-artifact-preview-trigger:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-/* Portalled to the viewport because the desktop download queue scrolls inside
-   its card. A tooltip kept in the row is clipped by that scroll boundary. */
-.download-artifact-preview-tooltip { box-sizing: content-box; position: fixed; z-index: 180; display: grid; max-width: calc(100vw - 18px); max-height: calc(100vh - 18px); overflow: hidden; border: 1px solid rgb(255 255 255 / 22%); border-radius: var(--radius); background: var(--ink); box-shadow: 0 14px 38px rgb(17 31 44 / 30%); pointer-events: none; }
-.download-artifact-preview-media { display: grid; width: 100%; place-items: center; overflow: hidden; background: var(--ink); }
-/* The stage is already the still's measured aspect ratio, so cover fills the
-   rounded frame without cropping—matching the Campaigns thumbnail rule. */
-.download-artifact-preview-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.download-artifact-preview-meta { display: grid; min-width: 0; gap: 2px; border-top: 1px solid rgb(255 255 255 / 14%); padding: 7px 9px 8px; color: var(--on-ink); background: var(--ink-raised); text-align: start; }
-.download-artifact-preview-meta strong { display: -webkit-box; overflow: hidden; font-size: 11px; font-weight: 650; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
-.download-artifact-preview-meta small { overflow: hidden; color: rgb(255 255 255 / 66%); font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
-@media (hover: none) {
-  .download-artifact-preview-trigger { cursor: pointer; }
-  .download-artifact-preview-tooltip { box-shadow: 0 8px 24px rgb(17 31 44 / 26%); }
-}
 /* A placeholder that looks placed rather than broken. The glyph is what
    says "a picture belongs here"; an empty dashed box says "a picture failed
    to arrive here", which was true for one of the three states and wrong for
@@ -1918,6 +1902,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-edit-media-video { display: block; width: 100%; max-height: 300px; border-radius: var(--radius-sm); background: var(--ink); object-fit: contain; }
 .campaign-edit-media-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .campaign-edit-media-strip img { height: 110px; flex: none; border-radius: var(--radius-sm); object-fit: cover; }
+/* Each frame is a hover trigger now, so the button is the flex item and
+   the picture inside it is not. The size stays on the picture; what moves
+   here is only what a flex row needs from its own children. */
+.campaign-edit-media-strip .campaign-edit-media-frame { flex: none; border-radius: var(--radius-sm); }
 .campaign-media-picker { display: grid; gap: 10px; }
 
 /* Posting time: the compact rotation-or-locked row in the post editor. The

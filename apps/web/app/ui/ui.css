@@ -185,6 +185,29 @@ a.ui-button { text-decoration: none; }
 .ui-button-pair > .ui-button:hover:not(:disabled),
 .ui-button-pair > .ui-button:focus-visible { position: relative; z-index: 1; }
 
+/* A thumbnail that shows the whole picture while it is hovered. Each surface
+   sizes its own thumbnail through the trigger's extra class; everything here
+   is the card, which is the same card wherever it opens. */
+.ui-hover-preview-trigger { display: block; border: 0; padding: 0; background: transparent; cursor: zoom-in; }
+.ui-hover-preview-trigger:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+/* Portalled to the viewport: the thumbnail sits in a scrolling queue on one
+   surface and inside a dialog on another, and a card clipped by either is
+   worse than no card. Fixed, so the coordinates it was given still mean what
+   they meant when they were measured. */
+.ui-hover-preview { box-sizing: content-box; position: fixed; z-index: 180; display: grid; max-width: calc(100vw - 18px); max-height: calc(100vh - 18px); overflow: hidden; border: 1px solid rgb(255 255 255 / 22%); border-radius: var(--radius); background: var(--ink); box-shadow: 0 14px 38px rgb(17 31 44 / 30%); pointer-events: none; }
+.ui-hover-preview-media { display: grid; width: 100%; place-items: center; overflow: hidden; background: var(--ink); }
+/* The stage is already the picture's measured shape, so filling it crops
+   nothing. */
+.ui-hover-preview-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ui-hover-preview-meta { display: grid; min-width: 0; gap: 2px; border-top: 1px solid rgb(255 255 255 / 14%); padding: 7px 9px 8px; color: var(--on-ink); background: var(--ink-raised); text-align: start; }
+.ui-hover-preview-meta strong { display: -webkit-box; overflow: hidden; font-size: 11px; font-weight: 650; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.ui-hover-preview-meta small { overflow: hidden; color: rgb(255 255 255 / 66%); font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+/* Where there is no hover, the press that opens it is an ordinary press. */
+@media (hover: none) {
+  .ui-hover-preview-trigger { cursor: pointer; }
+  .ui-hover-preview { box-shadow: 0 8px 24px rgb(17 31 44 / 26%); }
+}
+
 /* Explanations for dense action rows. The trigger remains the real control;
    this wrapper only positions a hint and never replaces its accessible name. */
 .ui-tooltip { position: relative; display: inline-flex; max-width: 100%; }

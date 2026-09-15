@@ -3,14 +3,14 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { File as FileIcon, ImageOff, RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { useT } from "./i18n-provider";
 import { Button, buttonClass } from "./ui/button";
 import { Dialog } from "./ui/dialog";
+import { HoverPreview } from "./ui/hover-preview";
 import { LoadingMark } from "./ui/loading-mark";
 import { WaitingBlock } from "./ui/waiting-block";
 import { ActionIcon } from "./ui/action-icons";
@@ -135,17 +135,9 @@ function DownloadArtifactThumbnail({
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   resolveAsset: (artifact: Artifact) => Promise<DownloadLibraryAsset>;
 }) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const metadataLoading = useRef(false);
-  const tooltipId = useId();
   const [asset, setAsset] = useState<DownloadLibraryAsset | null>(null);
   const [previewRatio, setPreviewRatio] = useState(16 / 9);
-  const [previewPosition, setPreviewPosition] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    mediaHeight: number;
-  } | null>(null);
   const previewable = /\.(?:mp4|m4v|mov|webm|mkv|jpe?g|png|webp|gif)$/i.test(artifact.path);
   const source = previewable
     ? `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(artifact.path)}${artifact.sha256 ? `&sha256=${artifact.sha256}` : ""}`
@@ -158,63 +150,38 @@ function DownloadArtifactThumbnail({
     apiFetch,
   );
 
-  function showPreview() {
-    const trigger = triggerRef.current;
-    if (!trigger || !objectUrl) return;
-    const rect = trigger.getBoundingClientRect();
-    const compact = window.innerWidth <= 640;
-    const maxWidth = compact ? Math.min(188, window.innerWidth - 16) : 260;
-    const maxMediaHeight = compact
-      ? Math.min(250, window.innerHeight - 104)
-      : Math.min(320, window.innerHeight - 104);
-    let width = maxWidth;
-    let mediaHeight = width / previewRatio;
-    if (mediaHeight > maxMediaHeight) {
-      mediaHeight = maxMediaHeight;
-      width = mediaHeight * previewRatio;
-    }
-    // Two compact metadata lines below the frame. The estimate is used only
-    // to keep the portalled card inside the viewport; content remains auto-sized.
-    const estimatedHeight = mediaHeight + 58;
-    const gap = 10;
-    const left = rect.right + gap + width <= window.innerWidth - 8
-      ? rect.right + gap
-      : Math.max(8, rect.left - gap - width);
-    const top = Math.min(
-      Math.max(8, rect.top + rect.height / 2 - estimatedHeight / 2),
-      Math.max(8, window.innerHeight - estimatedHeight - 8),
-    );
-    setPreviewPosition({ left, top, width, mediaHeight });
-    // The screenshot appears immediately. Metadata is one small authenticated
-    // read, only on intent, and shares the cache with both row actions.
-    if (!asset && artifact.sha256 && !metadataLoading.current) {
-      metadataLoading.current = true;
-      void resolveAsset(artifact)
-        .then(setAsset)
-        .catch(() => undefined)
-        .finally(() => { metadataLoading.current = false; });
-    }
+  /**
+   * The title and creator, read once and only when somebody asks to see it.
+   *
+   * One small authenticated read, shared with both row actions through the
+   * same cache, rather than a fetch per row on a page that draws many.
+   */
+  function loadMetadata() {
+    if (asset || !artifact.sha256 || metadataLoading.current) return;
+    metadataLoading.current = true;
+    void resolveAsset(artifact)
+      .then(setAsset)
+      .catch(() => undefined)
+      .finally(() => { metadataLoading.current = false; });
   }
 
   if (objectUrl) {
     return (
-      <button
-        type="button"
-        ref={triggerRef}
-        className="download-artifact-preview-trigger"
-        aria-label={`Preview ${artifact.name}`}
-        aria-describedby={previewPosition ? tooltipId : undefined}
-        aria-expanded={Boolean(previewPosition)}
-        onMouseEnter={showPreview}
-        onMouseLeave={() => setPreviewPosition(null)}
-        onFocus={showPreview}
-        onBlur={() => setPreviewPosition(null)}
-        onClick={showPreview}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          setPreviewPosition(null);
-          event.currentTarget.blur();
-        }}
+      <HoverPreview
+        label={`Preview ${artifact.name}`}
+        ratio={previewRatio}
+        onOpen={loadMetadata}
+        media={(
+          // Reuses the same object URL as the thumbnail: no second request.
+          // eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL
+          <img src={objectUrl} alt={`Preview of ${asset?.title ?? artifact.name}`} />
+        )}
+        caption={(
+          <>
+            <strong>{asset?.title ?? artifact.name}</strong>
+            {asset?.creator && <small>{asset.creator}</small>}
+          </>
+        )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL */}
         <img
@@ -229,33 +196,7 @@ function DownloadArtifactThumbnail({
             }
           }}
         />
-        {previewPosition && createPortal(
-          <span
-            id={tooltipId}
-            role="tooltip"
-            className="download-artifact-preview-tooltip"
-            style={{
-              left: previewPosition.left,
-              top: previewPosition.top,
-              width: previewPosition.width,
-            }}
-          >
-            <span
-              className="download-artifact-preview-media"
-              style={{ height: previewPosition.mediaHeight }}
-            >
-              {/* Reuses the same object URL as the thumbnail: no second media request. */}
-              {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL */}
-              <img src={objectUrl} alt={`Preview of ${asset?.title ?? artifact.name}`} />
-            </span>
-            <span className="download-artifact-preview-meta">
-              <strong>{asset?.title ?? artifact.name}</strong>
-              {asset?.creator && <small>{asset.creator}</small>}
-            </span>
-          </span>,
-          document.body,
-        )}
-      </button>
+      </HoverPreview>
     );
   }
 
