@@ -40,6 +40,17 @@ export type SurfaceFurniture = {
   rail: readonly RailAction[];
   /** What the audio line says. The same original sound is named four ways. */
   audio: (handle: string) => string;
+  /**
+   * What this network stamps on a post declared as AI-generated, if anything.
+   *
+   * Only TikTok here, and only because a real one has been read:
+   * `References/Posts/tiktok-photo_carousel_desktop.png` carries "Contains
+   * AI-generated media" as a pill under the caption. The other three label
+   * synthetic media too and word it differently, and none of them is in the
+   * reference set - so they are left blank rather than guessed at, the same
+   * rule the rails follow.
+   */
+  aiBadge?: string;
   /** TikTok addresses an account by its @; the others use the name as given. */
   at?: boolean;
   /** Facebook sets its audio in a pill rather than printing it on the video. */
@@ -69,6 +80,7 @@ export const SURFACE_FURNITURE: Record<string, SurfaceFurniture> = {
   tiktok: {
     rail: ["heart", "comment", "save", "share"],
     audio: (handle) => `original sound · ${handle}`,
+    aiBadge: "Contains AI-generated media",
     at: true,
   },
   // The only one of the four that can be voted down.
@@ -98,4 +110,18 @@ export function audioLine(
   const furniture = SURFACE_FURNITURE[platform];
   if (!furniture || pictures) return null;
   return furniture.audio(handle || "your account");
+}
+
+/**
+ * The synthetic-media stamp this post will carry, or nothing.
+ *
+ * Shown only when the disclosure is actually switched on, because the badge is
+ * a consequence of that box rather than of the media: the same pictures
+ * publish without it when nobody declares them. And only where the wording has
+ * been read off a real post - see `aiBadge` - so a network whose label we have
+ * not seen previews without one instead of with an invented phrase.
+ */
+export function aiBadgeLabel(platform: string, declared: boolean): string | null {
+  if (!declared) return null;
+  return SURFACE_FURNITURE[platform]?.aiBadge ?? null;
 }

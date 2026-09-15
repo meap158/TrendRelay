@@ -457,6 +457,14 @@ export default function PublishPage() {
    * this was previously wired straight to the carousel with nobody asked.
    */
   const [addMusic, setAddMusic] = useState(true);
+  /**
+   * Whether this post declares its media as AI-generated.
+   *
+   * State rather than a bare form field, because the preview draws the stamp
+   * the network adds for it - and a stamp that only appeared at submit would
+   * be chrome the caption was never read against.
+   */
+  const [madeWithAi, setMadeWithAi] = useState(false);
   const [title, setTitle] = useState("");
   // The clock is read when the schedule pane opens, so a slot never drifts past.
   const [now, setNow] = useState(() => new Date());
@@ -1565,7 +1573,7 @@ export default function PublishPage() {
       date: new Date(localDate).toISOString(),
       delivery,
       schedule: delivery === "schedule",
-      made_with_ai: form.get("made_with_ai") === "on",
+      made_with_ai: madeWithAi,
       // Only meaningful on a picture post to a network that scores one, and
       // sent as the default otherwise so a post that was never asked the
       // question behaves as it always did.
@@ -4054,7 +4062,12 @@ export default function PublishPage() {
           )}
 
           <label className="checkbox-row">
-            <input name="made_with_ai" type="checkbox" /> {t("publish.discloseAi")}
+            <input
+              name="made_with_ai"
+              type="checkbox"
+              checked={madeWithAi}
+              onChange={(event) => setMadeWithAi(event.target.checked)}
+            /> {t("publish.discloseAi")}
             <small>Sets each platform&apos;s synthetic-media flag where the engine exposes one.</small>
           </label>
 
@@ -4190,6 +4203,7 @@ export default function PublishPage() {
                   entry.platform === previewPlatform && entry.title !== null)}
                 source={previewSource}
                 sourceIsImage={wantsImages}
+                aiDisclosed={madeWithAi}
                 carousel={carouselSources}
                 wantsCarousel={wantsImages}
               />

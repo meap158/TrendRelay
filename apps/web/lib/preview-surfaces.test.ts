@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { SURFACE_FURNITURE, audioLine } from "../app/publish/preview-surfaces.ts";
+import {
+  SURFACE_FURNITURE, aiBadgeLabel, audioLine,
+} from "../app/publish/preview-surfaces.ts";
 
 test("no two of these surfaces draw the same rail", () => {
   // The bug this replaces was one rail - Instagram's - drawn over all four.
@@ -67,6 +69,22 @@ test("an unnamed account still reads as a sentence", () => {
 
 test("a network with no furniture is named no sound either", () => {
   assert.equal(audioLine("threads", "nona", false), null);
+});
+
+test("the AI stamp appears because the post declares itself, not because of its media", () => {
+  // The wording is read off the same saved carousel. Undeclared is the whole
+  // difference: the identical pictures publish with no stamp at all.
+  assert.equal(aiBadgeLabel("tiktok", true), "Contains AI-generated media");
+  assert.equal(aiBadgeLabel("tiktok", false), null);
+});
+
+test("a network whose stamp nobody has read previews without one", () => {
+  // These three label synthetic media and word it their own way, and no
+  // reference here shows it. An invented phrase is worse than none: it would
+  // be chrome somebody writes a caption around and never sees.
+  for (const platform of ["instagram", "facebook", "youtube", "threads"]) {
+    assert.equal(aiBadgeLabel(platform, true), null);
+  }
 });
 
 test("a network nobody has drawn gets no rail rather than a borrowed one", () => {

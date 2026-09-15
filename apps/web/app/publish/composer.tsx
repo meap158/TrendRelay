@@ -27,7 +27,9 @@ import { type CSSProperties, memo, useEffect, useMemo, useRef, useState } from "
 import { createPortal } from "react-dom";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
-import { SURFACE_FURNITURE, audioLine, type RailAction } from "./preview-surfaces";
+import {
+  SURFACE_FURNITURE, aiBadgeLabel, audioLine, type RailAction,
+} from "./preview-surfaces";
 import {
   AssetFilters,
   type AssetFacets,
@@ -487,6 +489,7 @@ export function PostPreview({
   thumbnail,
   source,
   sourceIsImage,
+  aiDisclosed,
   autoPlay,
   carousel,
   wantsCarousel,
@@ -521,6 +524,15 @@ export function PostPreview({
   source?: string;
   /** True when `source` is an image: a carousel frame rather than a clip. */
   sourceIsImage?: boolean;
+  /**
+   * Whether this post declares its media as AI-generated.
+   *
+   * The networks stamp a post that says so, and the stamp sits with the
+   * caption - so a caption written to clear the chrome has to be read with it
+   * there. From the disclosure the operator set, not from how the media was
+   * made: the same pictures publish unstamped when nobody declares them.
+   */
+  aiDisclosed?: boolean;
   /**
    * Play the clip without waiting to be asked.
    *
@@ -613,6 +625,7 @@ export function PostPreview({
    */
   const furniture = SURFACE_FURNITURE[platform];
   const sound = audioLine(platform, handle, Boolean(sourceIsImage));
+  const aiBadge = aiBadgeLabel(platform, Boolean(aiDisclosed));
   const account = (
     <span className="preview-surface-who">
       {/* The account's own picture where its engine sends one, and the
@@ -726,6 +739,10 @@ export function PostPreview({
                     {sound}
                   </span>
                 )}
+                {/* The stamp the network adds when the post declares itself,
+                    drawn where that network puts it - under the caption, which
+                    is the space a caption written to the limit competes for. */}
+                {aiBadge && <span className="preview-surface-ai">{aiBadge}</span>}
               </div>
             )}
           </div>

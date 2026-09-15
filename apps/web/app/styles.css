@@ -681,6 +681,10 @@ nav strong { color: var(--text); }
 .preview-surface-audio { display: flex; gap: 5px; align-items: center; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 /* Facebook sets the sound in a pill; the others print it on the video. */
 .preview-surface-audio.chip { justify-self: start; max-inline-size: 100%; margin-block-start: 2px; padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, .45); text-shadow: none; }
+/* The synthetic-media stamp, drawn as its network draws it: a pill under the
+   caption rather than a line of the caption. Sized and shaded from
+   References/Posts/tiktok-photo_carousel_desktop.png. */
+.preview-surface-ai { justify-self: start; max-inline-size: 100%; margin-block-start: 2px; overflow: hidden; padding: 3px 8px; border-radius: 4px; background: rgba(255, 255, 255, .18); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; text-shadow: none; }
 
 /* How each width frames a full-bleed surface.
 
