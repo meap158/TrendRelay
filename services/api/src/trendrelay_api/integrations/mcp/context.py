@@ -794,7 +794,7 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
             "title": item.title,
         },
         "needs": missing,
-        "queue_item": _queue_view(item),
+        "queue_item": _queue_view(item, with_context=True),
     }
 
 

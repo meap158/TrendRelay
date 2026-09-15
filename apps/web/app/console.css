@@ -1368,6 +1368,19 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-composed-head > strong { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-composed-title { margin: 0; font-size: 11px; font-weight: 600; }
 .campaign-composed-text { margin: 0; max-height: 13em; overflow: auto; padding: 7px 8px; border-radius: var(--radius-sm); background: var(--panel-raised); font: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Working notes. Shut it costs one line at the foot of the editor, which is
+   the point: this is the only thing in that dialog that is not the post, and
+   most edits never open it. */
+.campaign-context { border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); }
+.campaign-context > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.campaign-context > summary small { color: var(--muted); font-weight: 500; }
+.campaign-context > label, .campaign-context-wait, .campaign-context-note { margin: 0; padding: 0 10px; }
+.campaign-context textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
+.campaign-context-wait { color: var(--muted); font-size: 11px; }
+.campaign-context-note { padding-bottom: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+/* Dashed, so a reader who scans the queue sees at a glance that this mark is
+   not one of the states the badges beside it report. */
+.campaign-queue-context-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 10px; cursor: help; }
 .campaign-composed-part { display: grid; gap: 3px; }
 .campaign-composed-part > b { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 .campaign-composed-refused { margin: 0; color: var(--warn); font-size: 10px; line-height: 1.45; }

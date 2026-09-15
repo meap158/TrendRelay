@@ -2751,3 +2751,97 @@ def test_a_post_with_no_library_identity_names_no_cut(workspace) -> None:
     assert made.json()["item"]["media_version"] is None
     assert made.json()["item"]["asset_hashtags"] == []
 
+
+# --- working notes that are never posted ---------------------------------------
+
+SECRET_NOTE = "PHASE-ONE-NOTE copy written, still needs the unboxing shot"
+
+
+def _post_with_notes(workspace_id: str, campaign_id: str) -> dict:
+    item = request(
+        "POST", f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    ).json()["item"]
+    saved = request(
+        "PATCH",
+        f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/queue/{item['id']}",
+        json={"context": SECRET_NOTE},
+    )
+    assert saved.status_code == 200, saved.text
+    return saved.json()["item"]
+
+
+def test_a_post_keeps_working_notes_and_hands_them_back(workspace) -> None:
+    """The point of the field: what one phase knew, the next one can read."""
+    campaign_id = campaign(workspace)
+    saved = _post_with_notes(workspace, campaign_id)
+
+    # The answer to the edit carries them - whoever just wrote them is reading.
+    assert saved["context"] == SECRET_NOTE
+    assert saved["has_context"] is True
+
+    read = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        f"/queue/{saved['id']}/context",
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["context"] == SECRET_NOTE
+
+
+def test_the_queue_says_a_post_has_notes_without_carrying_them(workspace) -> None:
+    """A campaign's queue runs to hundreds of posts and the rows show none of
+    the text, so the list must not pay for it. It marks which posts have notes
+    and stops there; the editor asks for the one post it opens."""
+    campaign_id = campaign(workspace)
+    noted = _post_with_notes(workspace, campaign_id)
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\other.mp4", "body": "No notes here."},
+    )
+
+    queue = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+    ).json()["queue"]
+    by_id = {item["id"]: item for item in queue}
+
+    assert by_id[noted["id"]]["has_context"] is True
+    assert "context" not in by_id[noted["id"]]
+    assert all(item["has_context"] is False for item in queue if item["id"] != noted["id"])
+
+
+def test_notes_are_not_evidence_and_do_not_rerank_the_products(workspace) -> None:
+    """Writing a note must not spend a matcher pass. The matcher reads the
+    copy, the hashtags and the media; a note is none of those, and re-ranking
+    on every jotted line would also rewrite a match somebody had settled."""
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    ).json()["item"]
+    with TestingSession() as session:
+        before = session.get(CampaignQueueItem, item["id"]).offer_match
+
+    request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item['id']}",
+        json={"context": "An angle worth trying next time."},
+    )
+
+    with TestingSession() as session:
+        assert session.get(CampaignQueueItem, item["id"]).offer_match == before
+
+
+def test_clearing_the_notes_empties_them_rather_than_leaving_whitespace(workspace) -> None:
+    campaign_id = campaign(workspace)
+    saved = _post_with_notes(workspace, campaign_id)
+
+    cleared = request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{saved['id']}",
+        json={"context": "   \n  "},
+    )
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["item"]["context"] == ""
+    assert cleared.json()["item"]["has_context"] is False

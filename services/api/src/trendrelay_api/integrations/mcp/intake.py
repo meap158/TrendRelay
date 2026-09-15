@@ -891,7 +891,7 @@ def create_campaign_post(
         state="draft",
     )
     session.commit()
-    view = _queue_view(item)
+    view = _queue_view(item, with_context=True)
     view["carousel_warnings"] = carousel_warnings
     view["note"] = (
         # Where the pictures land leads, when it is not everywhere. A post the

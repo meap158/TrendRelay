@@ -482,7 +482,13 @@ def build_server(workspace_id: str) -> FastMCP:
             "an empty string clears it. `post_types` maps campaign destination "
             "ids to format ids (for example reel, story or short); omitted "
             "accounts inherit their campaign default. A field left unset is "
-            "not changed."
+            "not changed. `context` is working notes that are NEVER posted: "
+            "use it to leave the next pass what it needs - the angle being "
+            "tried, the shot still missing, a decision and why - when a post "
+            "is built over several phases, such as copy now and pictures "
+            "later. Do not restate the product, its description, the "
+            "transcript or the offer match there; those are already readable "
+            "through get_post_context. An empty string clears it."
         ),
     )
     def write_post_copy(
@@ -496,6 +502,7 @@ def build_server(workspace_id: str) -> FastMCP:
         bio_hint: str | None = None,
         topic: str | None = None,
         post_types: dict[str, str] | None = None,
+        context: str | None = None,
     ) -> dict[str, Any]:
         return _call(
             "write_post_copy",
@@ -504,6 +511,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 caption=caption, first_comment=first_comment,
                 thread=thread, hashtags=hashtags, title=title, disclosure=disclosure,
                 bio_hint=bio_hint, topic=topic, post_types=post_types,
+                context=context,
             ),
         )
 

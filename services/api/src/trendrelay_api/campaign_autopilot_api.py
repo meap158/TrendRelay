@@ -354,6 +354,11 @@ class QueueItemUpdate(BaseModel):
     disclosure: str | None = Field(default=None, max_length=300)
     bio_hint: str | None = Field(default=None, max_length=120)
     post_type_overrides: dict[str, str] | None = Field(default=None, max_length=50)
+    #: Working notes that are never posted - the angle being tried, the shot
+    #: still missing, what a later phase needs to know. Bounded generously but
+    #: bounded: this is a note somebody or something reads, not a place to
+    #: mirror the product catalogue, which is already on the record.
+    context: str | None = Field(default=None, max_length=8000)
 
     @field_validator("topic")
     @classmethod
@@ -589,13 +594,24 @@ def _media_version_view(cut: MediaAssetVersion | None) -> dict[str, Any]:
     }
 
 
-def _queue_view(item: CampaignQueueItem, *, library: LibraryCut | None = None) -> dict[str, Any]:
+def _queue_view(
+    item: CampaignQueueItem,
+    *,
+    library: LibraryCut | None = None,
+    with_context: bool = False,
+) -> dict[str, Any]:
     """One queue item as the interface reads it.
 
     `library` is the item's asset and the cut it publishes, from
     `_library_cuts`; None for an item with no Library identity. Only a video
     post names its cut - effects render cuts of a video, and a carousel's
     stills are chosen as they are.
+
+    `with_context` carries the post's working notes. Off for a list: a queue
+    runs to hundreds of posts and these notes are paragraphs, so sending them
+    all to draw rows that show none of them would be the largest thing in the
+    response and the least read. The rows get `has_context` instead, which is
+    all they draw, and the editor asks for the text of the one post it opens.
     """
     asset, cut = library if library else (None, None)
     carries_video = bool(item.video_path) and not item.image_paths and not item.text_only
@@ -643,15 +659,34 @@ def _queue_view(item: CampaignQueueItem, *, library: LibraryCut | None = None) -
         # of, and offer the tags, without a second read of the Library.
         "media_version": _media_version_view(cut) if asset and carries_video else None,
         "asset_hashtags": list(asset.hashtags or []) if asset else [],
+        # Whether there are working notes, not what they say. A row marks the
+        # posts that carry reasoning somebody left behind; that is the whole
+        # of what a list needs to know, and it costs a boolean.
+        "has_context": bool(item.context),
+        **({"context": item.context or ""} if with_context else {}),
     }
 
 
 def _queue_views(
-    session: Session, items: list[CampaignQueueItem], workspace_id: str,
+    session: Session,
+    items: list[CampaignQueueItem],
+    workspace_id: str,
+    *,
+    with_context: bool = False,
 ) -> list[dict[str, Any]]:
-    """The whole queue, with each item's Library cut read in two queries, not two each."""
+    """The whole queue, with each item's Library cut read in two queries, not two each.
+
+    `with_context` is for the one-item answers that go back to whoever just
+    wrote a post - never for the queue itself, which is the response this
+    argument exists to keep small.
+    """
     cuts = _library_cuts(session, workspace_id, items)
-    return [_queue_view(item, library=cuts.get(item.asset_id or "")) for item in items]
+    return [
+        _queue_view(
+            item, library=cuts.get(item.asset_id or ""), with_context=with_context,
+        )
+        for item in items
+    ]
 
 
 def _validated_post_type_overrides(
@@ -1665,6 +1700,39 @@ def assign_queue_item_slot(
     }
 
 
+@router.get("/{campaign_id}/queue/{item_id}/context")
+def read_queue_item_context(
+    workspace_id: str,
+    campaign_id: str,
+    item_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The working notes on one post, read when something opens them.
+
+    Its own route rather than a field on the queue: these are paragraphs, one
+    post's worth is wanted at a time, and a campaign's queue runs to hundreds
+    of posts. Sending every note to draw a list that shows none of them would
+    make the notes the largest part of the heaviest response in the app.
+
+    Anyone who can see the campaign can read them. They are the reasoning
+    behind a post rather than a separate secret, and an approver who cannot
+    see why a post is the way it is is being asked to approve less than the
+    person who wrote it saw.
+    """
+    membership(session, workspace_id, user.id)
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    return {"context": item.context or "", "updated_at": item.updated_at}
+
+
 @router.patch("/{campaign_id}/queue/{item_id}")
 def update_queue_item(
     workspace_id: str,
@@ -1693,7 +1761,9 @@ def update_queue_item(
                 "campaign.queue_item_approved", "campaign_queue_item", item.id, {},
             )
     apply_queue_item_edits(session, workspace_id, campaign_id, item, body)
-    return {"item": _queue_views(session, [item], workspace_id)[0]}
+    # With the notes, because this answer goes back to whoever just edited
+    # this post - one item, and they may have just written them.
+    return {"item": _queue_views(session, [item], workspace_id, with_context=True)[0]}
 
 
 def apply_queue_item_edits(
@@ -1731,6 +1801,12 @@ def apply_queue_item_edits(
         item.disclosure = (body.disclosure or "").strip() or None
     if "bio_hint" in body.model_fields_set:
         item.bio_hint = (body.bio_hint or "").strip() or None
+    # Deliberately outside the match refresh below. Working notes are not
+    # evidence: the matcher ranks products against the copy, the hashtags and
+    # the media, and re-ranking every time somebody jots a line would spend a
+    # matcher pass on a field the matcher does not read.
+    if "context" in body.model_fields_set:
+        item.context = (body.context or "").strip()
     if "post_type_overrides" in body.model_fields_set:
         item.post_type_overrides = _validated_post_type_overrides(
             session, workspace_id, campaign_id, body.post_type_overrides or {},

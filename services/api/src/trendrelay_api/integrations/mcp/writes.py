@@ -63,12 +63,22 @@ def write_post_copy(
     bio_hint: str | None = None,
     topic: str | None = None,
     post_types: dict[str, str] | None = None,
+    context: str | None = None,
 ) -> dict[str, Any]:
     """Set any of a post's copy fields, leaving the rest and its state alone.
 
     A field left as None is not touched, so an assistant filling in a caption
     does not blank a first comment the operator already wrote. Returns the
-    post's updated queue view.
+    post's updated queue view, including the working notes.
+
+    `context` is the one field here that is never posted. It is where the
+    reasoning goes when a post is built over more than one pass - what this
+    pass was trying, what the next one still needs - so a later phase picks up
+    where this one stopped instead of guessing. Everything already on the
+    record belongs on the record, not here: the product and its description,
+    the asset's transcript, the offer match and the campaign's own settings
+    are all readable without it, and copying them in only makes a second
+    version to go stale.
     """
     from trendrelay_api.campaign_autopilot_api import (
         QueueItemUpdate,
@@ -123,16 +133,22 @@ def write_post_copy(
         # Destination id -> format id. Sparse by design: omitted destinations
         # keep inheriting their campaign default.
         fields["post_type_overrides"] = post_types
+    if context is not None:
+        # No link check, unlike every field above it: those are refused a URL
+        # because the campaign routes the affiliate link itself and a second
+        # one would go out with the post. This one does not go out at all, so
+        # a reference somebody needs next time is just a reference.
+        fields["context"] = context
     if not fields:
         raise ValueError(
             "Provide at least one of caption, first_comment, thread, hashtags, title, "
-            "disclosure, bio_hint, topic or post_types."
+            "disclosure, bio_hint, topic, post_types or context."
         )
 
     update = QueueItemUpdate(**fields)
     apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
     session.commit()
-    return _queue_view(item)
+    return _queue_view(item, with_context=True)
 
 
 def set_post_media(
@@ -193,7 +209,7 @@ def set_post_media(
         update = QueueItemUpdate(video_path="", image_paths=[], text_only=True)
         apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
         session.commit()
-        view = _queue_view(item)
+        view = _queue_view(item, with_context=True)
         view["note"] = (
             "Now a copy-only post: it publishes as words alone. Still a "
             "draft; the operator promotes it in the app."
@@ -242,7 +258,7 @@ def set_post_media(
     )
     apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
     session.commit()
-    view = _queue_view(item)
+    view = _queue_view(item, with_context=True)
     # The same answer `create_campaign_post` gives, because it is the same
     # question. A gallery assembled in one call was told which of the
     # campaign's accounts could carry it; one grown a picture at a time was
@@ -327,7 +343,7 @@ def pin_post_slot(
     if release:
         release_pin(item)
         session.commit()
-        view = _queue_view(item)
+        view = _queue_view(item, with_context=True)
         view["note"] = (
             "Unlocked. The post flows with the rotation again and takes the "
             "next open slot in its turn."
@@ -356,7 +372,7 @@ def pin_post_slot(
 
     chosen = pin_item_to_slot(session, autopilot, item, day=target_day, at=at)
     session.commit()
-    view = _queue_view(item)
+    view = _queue_view(item, with_context=True)
     others = [
         entry for entry in day_slots(
             session, autopilot, day=target_day, exclude_item_id=item.id

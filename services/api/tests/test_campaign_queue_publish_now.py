@@ -308,3 +308,54 @@ def test_api_publish_single_queue_item(workspace_with_campaign: dict[str, Any]) 
     data = resp.json()
     assert len(data["published"]) == 1
     assert data["item_id"] == item_id
+
+
+def test_a_posts_working_notes_never_reach_the_network(
+    workspace_with_campaign: dict[str, Any]
+) -> None:
+    """The guarantee the context field is sold on.
+
+    Payloads are built field by field rather than from the row, so nothing
+    carries the notes by accident today - but "by accident" is exactly what a
+    later change does, and the cost of finding out from a published post is
+    that it has already been published. This publishes a post whose notes say
+    something unmistakable and reads the frozen execution - the caption, the
+    thread, every stored column - for any trace of it.
+    """
+    ws_id = workspace_with_campaign["workspace_id"]
+    camp_id = workspace_with_campaign["campaign_id"]
+    item_id = workspace_with_campaign["item_id"]
+    note = "WORKING-NOTE-DO-NOT-POST: second pass still owes the unboxing shot"
+
+    with SessionFactory() as session:
+        item = session.get(CampaignQueueItem, item_id)
+        assert item is not None
+        item.context = note
+        session.commit()
+
+    now = datetime(2026, 8, 30, 10, 0, 0, tzinfo=UTC)
+    with SessionFactory() as session:
+        result = publish_queue_item_now(session, ws_id, camp_id, item_id, now=now)
+        session.commit()
+        assert len(result["published"]) == 1
+
+        execution = session.get(
+            PublicationExecution, result["published"][0]["execution_id"]
+        )
+        assert execution is not None
+        # Every column of the row that goes out, not just the caption: the
+        # note must not have reached the thread, the first comment, the
+        # disclosure or anything else frozen with the post.
+        frozen = {
+            column.name: getattr(execution, column.name)
+            for column in execution.__table__.columns
+        }
+        assert note not in repr(frozen)
+        # And the post still published normally, so this is not passing
+        # because nothing happened.
+        assert execution.caption
+
+    # The note is still on the post afterwards - publishing does not consume
+    # it, because the next phase may still need what it says.
+    with SessionFactory() as session:
+        assert session.get(CampaignQueueItem, item_id).context == note

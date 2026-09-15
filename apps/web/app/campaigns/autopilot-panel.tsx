@@ -539,6 +539,14 @@ type QueueItem = {
   };
   media_version?: MediaVersionInfo | null;
   asset_hashtags?: string[];
+  /**
+   * Whether this post carries working notes - never what they say.
+   *
+   * The queue runs to hundreds of posts and a row shows none of the text, so
+   * the list is sent the flag and nothing else. The editor asks for the notes
+   * of the one post it opens.
+   */
+  has_context?: boolean;
 };
 
 /**
@@ -2173,6 +2181,16 @@ export function AutopilotPanel({
   // shows the campaign's text and clearing it is how you go back to it.
   const [editingDisclosure, setEditingDisclosure] = useState("");
   const [editingBioHint, setEditingBioHint] = useState("");
+  /**
+   * The open post's working notes, or null for "not asked for yet".
+   *
+   * Null is the load-bearing state, not merely an empty start. The notes are
+   * fetched when somebody opens the section, and only a loaded value is sent
+   * back on save - so closing the editor without ever looking at them cannot
+   * write an empty string over a paragraph a previous phase left behind.
+   */
+  const [editingContext, setEditingContext] = useState<string | null>(null);
+  const [loadingContext, setLoadingContext] = useState(false);
   const [composed, setComposed] = useState<ComposedPost | null>(null);
   // Two panes: Posts is what goes out, Queue & setup is everything behind it.
   //
@@ -3084,7 +3102,31 @@ export function AutopilotPanel({
     setSwappingMedia(false);
     setSlotDay("");
     setSlotOptions(null);
+    setEditingContext(null);
+    setLoadingContext(false);
     openEditorWording(item);
+  }
+
+  /**
+   * Read the open post's working notes, once, when somebody asks to see them.
+   *
+   * Not with the post: a queue of several hundred would carry every note to
+   * draw a list that shows none of them. Not on opening the editor either -
+   * most edits are to the copy, and the notes are paragraphs nobody asked for.
+   */
+  async function loadPostContext(item: QueueItem) {
+    if (editingContext !== null || loadingContext) return;
+    setLoadingContext(true);
+    try {
+      const body = await json<{ context: string }>(
+        await apiFetch(`${base}/queue/${item.id}/context`),
+      );
+      setEditingContext(body.context ?? "");
+    } catch (reason) {
+      fail(explainFailure(reason, "Those notes could not be opened."));
+    } finally {
+      setLoadingContext(false);
+    }
   }
 
   /** Read one day's slots for the editor's picker. */
@@ -5312,6 +5354,19 @@ export function AutopilotPanel({
                     ? t("autopilot.state.needsCopy")
                     : t(`autopilot.state.${item.state}`)}
                 </Badge>
+                {/* A mark, not a badge and not a column: it says only that
+                    somebody left notes on this post, which is all a row can
+                    usefully carry about paragraphs it does not show. The
+                    notes themselves are one click away, in the editor. */}
+                {item.has_context && (
+                  <span
+                    className="campaign-queue-context-mark"
+                    title="Has working notes, which are never posted. Open Edit to read them."
+                  >
+                    <span aria-hidden="true">✎</span>
+                    <span className="sr-only">Has working notes</span>
+                  </span>
+                )}
                 {canEdit && (
                   <div className="campaign-queue-actions">
                     {item.state !== "approved" && (
@@ -5592,6 +5647,10 @@ export function AutopilotPanel({
                   disclosure: editingDisclosure.trim() || null,
                   bio_hint: editingBioHint.trim() || null,
                   post_type_overrides: editingPostTypes,
+                  // Only when the notes were actually opened. Absent leaves
+                  // them exactly as they were, so editing a caption cannot
+                  // wipe what an earlier phase wrote down.
+                  ...(editingContext !== null ? { context: editingContext } : {}),
                   // Only when a replacement was staged: an absent field
                   // leaves the media exactly as it was, which is what saving
                   // this form has always meant.
@@ -6108,6 +6167,54 @@ export function AutopilotPanel({
                 </ul>
               )}
             </section>
+
+            {/* Working notes: the one thing in this dialog that is not the
+                post. Last, and closed, because that is what it is worth on an
+                ordinary edit - and one summary line when shut, so the form
+                above it is not pushed down by a box most edits never open.
+                Opening it is what fetches the text. */}
+            <details
+              className="campaign-context"
+              onToggle={(event) => {
+                if (event.currentTarget.open) void loadPostContext(editing);
+              }}
+            >
+              <summary>
+                <span>Context</span>
+                <small>
+                  {editing.has_context || (editingContext ?? "").trim()
+                    ? "Notes for the next pass · never posted"
+                    : "Notes for the next pass · never posted · empty"}
+                </small>
+              </summary>
+              {editingContext === null ? (
+                <p className="campaign-context-wait" role="status">
+                  {loadingContext ? "Opening…" : "Opening the notes…"}
+                </p>
+              ) : (
+                <label>
+                  <span className="sr-only">Context for this post</span>
+                  <textarea
+                    rows={5}
+                    maxLength={8000}
+                    value={editingContext}
+                    placeholder={
+                      "What a later pass needs to know - the angle being tried, "
+                      + "the shot still missing, why a phrase was dropped."
+                    }
+                    onChange={(event) => setEditingContext(event.target.value)}
+                  />
+                </label>
+              )}
+              {/* Said once, here, rather than repeated beside the field: the
+                  product, its description and the transcript are all on the
+                  record already, and a copy of them here would only drift. */}
+              <p className="campaign-context-note">
+                Kept with the post and never sent to any network. The product,
+                its description and the asset&rsquo;s transcript are already on
+                the record - this is for what nothing else records.
+              </p>
+            </details>
           </form>
           </Dialog>
         )}

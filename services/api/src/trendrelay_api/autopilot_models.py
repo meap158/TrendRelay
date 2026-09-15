@@ -25,6 +25,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -345,6 +346,26 @@ class CampaignQueueItem(Base):
     #: disclosure at all.
     disclosure: Mapped[str | None] = mapped_column(String(300))
     bio_hint: Mapped[str | None] = mapped_column(String(120))
+    #: Working notes about this post that are never posted.
+    #:
+    #: A post is often built in more than one sitting - the copy written now,
+    #: the pictures chosen this evening, a second pass tomorrow - and until
+    #: now there was nowhere for the reasoning to live in between. It went in
+    #: the caption and had to be taken out again, or it stayed in whichever
+    #: chat window happened to produce it and was gone by the next phase.
+    #:
+    #: Deliberately free-form and deliberately not evidence. Everything the
+    #: campaign already knows - the product, its description, the asset's
+    #: transcript, the offer match - is on the record and readable without
+    #: this field; repeating any of it here would only create a second copy
+    #: to drift. What belongs here is what nothing else records: the angle
+    #: being tried, the shot still missing, the reason a phrase was dropped.
+    #:
+    #: It never reaches a network. Nothing that builds a publish payload reads
+    #: it, `test_a_posts_working_notes_never_reach_the_network` holds that, and
+    #: the link rules the copy fields carry do not apply to it - a URL in a
+    #: working note is a reference, not something about to be posted.
+    context: Mapped[str] = mapped_column(Text, default="")
     #: A human pin. Empty lets smart mode choose from current evidence.
     offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     #: Latest explainable matcher result, shown in Campaigns and retained so a
