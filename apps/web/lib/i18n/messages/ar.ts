@@ -786,6 +786,8 @@ export const ar: Messages = {
     scopeAll: "الكل ({count})",
     noArchived: "لا توجد حملات مؤرشفة.",
     noActive: "لا توجد حملات نشطة.",
+    reorderHint: "اسحب لإعادة الترتيب، أو اضغط Alt مع السهم لأعلى أو لأسفل.",
+    reorderFailed: "تعذّر حفظ هذا الترتيب.",
     archivedAvailable: "لا توجد حملات نشطة. الحملات المؤرشفة متاحة أعلاه.",
     archivedHiddenHelp: "تظل الحملات المؤرشفة مخفية من العمل اليومي حتى تختار مراجعتها أو استعادتها.",
     viewArchived: "عرض المؤرشفة ({count})",

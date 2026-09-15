@@ -784,3 +784,204 @@ def test_an_explicit_disclosure_survives_a_language_change() -> None:
     )
 
     assert autopilot_of(campaign_id).disclosure == "Mon propre texte"
+
+
+def named_campaign(workspace_id: str, name: str) -> str:
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns",
+            json={
+                "name": name,
+                "objective": "Validate purchase intent",
+                "audience": "Frequent travelers",
+                "languages": ["en"],
+            },
+        )
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["campaign"]["id"]
+
+
+def listed_names(workspace_id: str) -> list[str]:
+    response = asyncio.run(request("GET", f"/api/workspaces/{workspace_id}/campaigns"))
+    assert response.status_code == 200, response.text
+    return [item["name"] for item in response.json()["campaigns"]]
+
+
+def test_a_new_campaign_opens_at_the_top_of_the_list() -> None:
+    """Where it was when the list was sorted by what had been touched last.
+
+    It is the thing just made and the one about to be worked on, so a list that
+    put it ninth would mean scrolling to find what you just created.
+    """
+    workspace_id = create_workspace()
+    for name in ("First", "Second", "Third"):
+        named_campaign(workspace_id, name)
+
+    assert listed_names(workspace_id) == ["Third", "Second", "First"]
+
+
+def test_the_order_holds_when_a_campaign_is_edited() -> None:
+    """The bug this column exists for.
+
+    Sorted by `updated_at`, opening a campaign's settings moved it to the top -
+    so the list rearranged itself under somebody who had learned where things
+    were. Editing changes the campaign, not its place.
+    """
+    workspace_id = create_workspace()
+    first = named_campaign(workspace_id, "First")
+    named_campaign(workspace_id, "Second")
+    named_campaign(workspace_id, "Third")
+
+    edited = update_campaign(
+        workspace_id, first, name="First", objective="Something else entirely",
+    )
+
+    assert edited.status_code == 200, edited.text
+    assert listed_names(workspace_id) == ["Third", "Second", "First"]
+
+
+def test_campaigns_are_listed_in_the_order_they_were_dragged_into() -> None:
+    workspace_id = create_workspace()
+    first = named_campaign(workspace_id, "First")
+    second = named_campaign(workspace_id, "Second")
+    third = named_campaign(workspace_id, "Third")
+
+    moved = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/order",
+            json={"campaign_ids": [first, third, second]},
+        )
+    )
+
+    assert moved.status_code == 200, moved.text
+    assert listed_names(workspace_id) == ["First", "Third", "Second"]
+    # And it survives the next read, which is the whole point of storing it.
+    assert listed_names(workspace_id) == ["First", "Third", "Second"]
+
+
+def test_a_partial_order_leaves_the_campaigns_it_did_not_name_behind_it() -> None:
+    """A sidebar filtered to the unarchived ones sends only what it showed.
+
+    The archived campaign it never listed cannot be dropped from the order, and
+    must not be silently promoted above the ones that were named either.
+    """
+    workspace_id = create_workspace()
+    first = named_campaign(workspace_id, "First")
+    second = named_campaign(workspace_id, "Second")
+    third = named_campaign(workspace_id, "Third")
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/order",
+            json={"campaign_ids": [third, first]},
+        )
+    )
+
+    assert response.status_code == 200, response.text
+    assert listed_names(workspace_id) == ["Third", "First", "Second"]
+    assert second in response.json()["campaign_ids"]
+
+
+def test_a_reorder_naming_a_campaign_from_another_workspace_is_refused() -> None:
+    workspace_id = create_workspace()
+    mine = named_campaign(workspace_id, "Mine")
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/order",
+            json={"campaign_ids": [mine, "campaign_somewhere_else"]},
+        )
+    )
+
+    assert response.status_code == 404, response.text
+    assert "campaign_somewhere_else" in response.json()["detail"]
+
+
+def test_reordering_does_not_answer_as_a_campaign_called_order() -> None:
+    """`/order` is declared above `/{campaign_id}`, and has to stay there.
+
+    Below it, "order" reads as a campaign id and a reorder is answered with a
+    404 about a campaign nobody asked about.
+    """
+    workspace_id = create_workspace()
+    campaign_id = named_campaign(workspace_id, "Only one")
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/order",
+            json={"campaign_ids": [campaign_id]},
+        )
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["campaign_ids"] == [campaign_id]
+
+
+def test_a_campaign_named_twice_in_one_order_is_placed_once() -> None:
+    """A drag that starts and ends on the same row can send it twice.
+
+    Placed at its first mention and not again, because the alternative is a
+    campaign holding two positions and every row after it shifted by one.
+    """
+    workspace_id = create_workspace()
+    first = named_campaign(workspace_id, "First")
+    second = named_campaign(workspace_id, "Second")
+    third = named_campaign(workspace_id, "Third")
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/order",
+            json={"campaign_ids": [third, first, third, second]},
+        )
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["campaign_ids"] == [third, first, second]
+    assert listed_names(workspace_id) == ["Third", "First", "Second"]
+
+
+def test_reordering_is_not_an_edit_of_the_campaigns_it_moves() -> None:
+    """`updated_at` is the tie-break the order falls back on, and it is also
+    what "when was this last changed" means to everything else. Moving a row in
+    a list is neither, so it must leave both alone."""
+    workspace_id = create_workspace()
+    first = named_campaign(workspace_id, "First")
+    second = named_campaign(workspace_id, "Second")
+
+    with TestingSession() as session:
+        before = {
+            item.id: item.updated_at
+            for item in session.scalars(
+                select(campaigns_api.Campaign).where(
+                    campaigns_api.Campaign.workspace_id == workspace_id
+                )
+            )
+        }
+
+    asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/order",
+            json={"campaign_ids": [second, first]},
+        )
+    )
+
+    with TestingSession() as session:
+        after = {
+            item.id: item.updated_at
+            for item in session.scalars(
+                select(campaigns_api.Campaign).where(
+                    campaigns_api.Campaign.workspace_id == workspace_id
+                )
+            )
+        }
+
+    assert after == before
+    assert listed_names(workspace_id) == ["Second", "First"]

@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
@@ -349,6 +349,7 @@ def _campaign(item: Campaign) -> dict[str, Any]:
         "languages": item.languages,
         "affiliate_url": item.affiliate_url,
         "status": item.status,
+        "position": item.position,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
@@ -423,7 +424,11 @@ def list_campaigns(
     items = session.scalars(
         select(Campaign)
         .where(Campaign.workspace_id == workspace_id)
-        .order_by(Campaign.updated_at.desc())
+        # The workspace's own order, with the same tie-break a queue uses. Not
+        # `updated_at`: sorting by it meant the list rearranged itself whenever
+        # a campaign was edited, which is the one thing a list somebody reads
+        # by position must not do.
+        .order_by(Campaign.position, Campaign.updated_at.desc())
     ).all()
     # One grouped query for the whole list rather than a count per row. An offer
     # can be tagged to several campaigns, so these counts overlap and do not sum
@@ -484,6 +489,14 @@ def create_campaign(
         )
         if not offer:
             raise HTTPException(status_code=422, detail="Affiliate offer is unavailable.")
+    # A new campaign opens at the top, where it was when the list was sorted by
+    # what had been touched most recently - it is the thing just made, and the
+    # one about to be worked on. Above whatever is there rather than at some
+    # fixed number, so it stays first even after the order has been rearranged
+    # into negative ground.
+    highest = session.scalar(
+        select(func.min(Campaign.position)).where(Campaign.workspace_id == workspace_id)
+    )
     item = Campaign(
         workspace_id=workspace_id,
         name=body.name,
@@ -496,6 +509,7 @@ def create_campaign(
             if offer
             else str(body.affiliate_url) if body.affiliate_url else None
         ),
+        position=(highest - 1) if highest is not None else 0,
         created_by=user.id,
     )
     session.add(item)
@@ -617,6 +631,74 @@ def _store_signals(
         stored.append(describe_signal(signal, at=collected))
     session.flush()
     return stored
+
+
+class CampaignOrder(BaseModel):
+    """The workspace's campaigns, in the order they should be listed."""
+
+    #: Every campaign the caller could see, in their new order. A partial list
+    #: is accepted - a sidebar filtered to the unarchived ones sends what it
+    #: was showing - and the ones left out keep their place relative to each
+    #: other, after the ones named here.
+    campaign_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+@router.post("/order")
+def reorder_campaigns(
+    workspace_id: str,
+    body: CampaignOrder,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Put the campaign list in the order somebody dragged it into.
+
+    Declared above `/{campaign_id}`, which would otherwise match "order" as a
+    campaign id and answer a reorder with a 404 for a campaign nobody asked
+    about.
+
+    The whole list is renumbered from zero on every save rather than the moved
+    row being given a number between its new neighbours. Renumbering is one
+    statement per row on a table that holds tens of rows, and it cannot run out
+    of room between two positions the way a gap scheme eventually does.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor"})
+    items = session.scalars(
+        select(Campaign)
+        .where(Campaign.workspace_id == workspace_id)
+        .order_by(Campaign.position, Campaign.updated_at.desc())
+    ).all()
+    by_id = {item.id: item for item in items}
+    unknown = [item for item in body.campaign_ids if item not in by_id]
+    if unknown:
+        raise HTTPException(
+            status_code=404,
+            detail="No such campaign in this workspace: " + ", ".join(unknown[:5]),
+        )
+    # Named first, in the order given; then everything else in the order it
+    # already had. Duplicates in the request are ignored after the first.
+    wanted = list(dict.fromkeys(body.campaign_ids))
+    named = [by_id[campaign_id] for campaign_id in wanted]
+    remaining = [item for item in items if item.id not in set(wanted)]
+    ordered = [*named, *remaining]
+    for position, item in enumerate(ordered):
+        if item.position != position:
+            item.position = position
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "campaign.reordered",
+        "workspace",
+        workspace_id,
+        {"count": len(body.campaign_ids)},
+    )
+    # Flushed, not committed: the session dependency commits on the way out,
+    # the way every other route in this file leaves it. Committing here would
+    # settle the audit row separately from the positions it describes.
+    session.flush()
+    return {"campaign_ids": [item.id for item in ordered]}
 
 
 @router.post("/{campaign_id}")
