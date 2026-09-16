@@ -1015,17 +1015,21 @@ def build_server(workspace_id: str) -> FastMCP:
     @server.tool(
         name="set_post_media",
         description=(
-            "Attach or replace a DRAFT post's media from Library assets: one "
-            "video asset id, or several image asset ids as a carousel. The "
-            "other half of drafting a post before its media exists - upload "
-            "with upload_media, wait for get_import_status, then attach "
-            "here. Pass append=true to add pictures onto the post's existing "
-            "carousel one upload at a time instead of replacing the whole "
-            "package (a video always stands alone). Pass text_only=true "
-            "with no assets to make the draft a deliberate copy-only post "
-            "that publishes as words alone. Refused on a post "
-            "already in rotation; changing what a promoted post publishes is "
-            "the operator's act in the app."
+            "Attach or replace a post's still-missing media from Library "
+            "assets: one video asset id, or several image asset ids as a "
+            "carousel. The other half of drafting a post before its media "
+            "exists - upload with upload_media, wait for get_import_status, "
+            "then attach here. Pass append=true to add pictures onto the "
+            "post's existing carousel one upload at a time instead of "
+            "replacing the whole package (a video always stands alone). "
+            "Pass text_only=true with no assets to make it a deliberate "
+            "copy-only post that publishes as words alone. Works on a draft "
+            "or on a post already approved into rotation, as long as it is "
+            "still waiting for its first media - the scheduler has been "
+            "skipping it either way. Refused once a post carries media (or "
+            "was approved copy-only): an operator who approved a post with "
+            "its media already decided is the one who changes it, in the "
+            "app."
         ),
     )
     def set_post_media(

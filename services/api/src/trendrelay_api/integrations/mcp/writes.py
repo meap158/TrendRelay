@@ -159,17 +159,23 @@ def set_post_media(
     append: bool = False,
     text_only: bool = False,
 ) -> dict[str, Any]:
-    """Attach or replace a draft post's media, from Library assets.
+    """Attach or replace a post's still-missing media, from Library assets.
 
     The other half of writing a post in two visits: `create_campaign_post`
     with no assets drafts the words, an upload brings the clip into the
     Library, and this puts the two together. One video or a set of pictures,
     the queue's own package rule.
 
-    Drafts only. A post in the rotation is one the operator promoted with its
-    media in view, and swapping what publishes underneath that decision is
-    theirs to do in the app - the same line that keeps approval out of an
-    assistant's hands.
+    Media it does not yet have, whatever the post's state. A post already
+    carrying media is a different refusal below: an operator who approved a
+    post with its media in view decided on that media, and swapping it out
+    from under that decision is theirs to do in the app, not an assistant's.
+    A post still waiting for its first media never had anything to review -
+    approving it only says the words are ready, the way approving a draft
+    that names `media_later` always has - so the same write that reaches a
+    draft reaches one already promoted into the rotation. Either way the
+    scheduler has been skipping it since it was frozen; this is what lets it
+    stop.
     """
     from trendrelay_api.campaign_autopilot_api import (
         QueueItemUpdate,
@@ -192,10 +198,20 @@ def set_post_media(
     )
     if not item:
         raise LookupError(f"No queue item {item_id!r} in this workspace.")
-    if item.state != "draft":
+    if item.state not in ("draft", "approved"):
         raise ValueError(
-            "Only a draft's media can be set from here. This post is "
-            f"{item.state}; ask the operator to change its media in the app."
+            f"This post is {item.state}; ask the operator to change its "
+            "media in the app."
+        )
+    has_media = bool(item.video_path) or bool(item.image_paths)
+    if item.state == "approved" and (has_media or item.text_only):
+        # The one case still refused for an approved post: media it already
+        # has, or a copy-only shape it was promoted with. Both are choices an
+        # operator made with the post in front of them, and this tool only
+        # ever fills a gap that was never reviewed - it does not reopen one.
+        raise ValueError(
+            "This post is already approved with its media decided. Ask the "
+            "operator to change it in the app."
         )
     if text_only:
         # The deliberate no-media shape: the words are the whole post. An
@@ -206,11 +222,15 @@ def set_post_media(
                 "text_only carries no assets and nothing to append. Send it "
                 "alone to make this a copy-only post."
             )
+        was_approved = item.state == "approved"
         update = QueueItemUpdate(video_path="", image_paths=[], text_only=True)
         apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
         session.commit()
         view = _queue_view(item, with_context=True)
         view["note"] = (
+            "Now a copy-only post: it publishes as words alone. Already "
+            "approved, so it joins the rotation as it stands."
+            if was_approved else
             "Now a copy-only post: it publishes as words alone. Still a "
             "draft; the operator promotes it in the app."
         )
@@ -249,6 +269,7 @@ def set_post_media(
             f"would make {len(pictures)}. Send fewer, or replace the package "
             "instead of appending to it."
         )
+    was_approved = item.state == "approved"
     update = QueueItemUpdate(
         video_path=media.get("video_path", ""),
         image_paths=media.get("image_paths", []),
@@ -284,8 +305,13 @@ def set_post_media(
             if carousel_warnings
             else ""
         )
-        + "Media attached. The post is still a draft; the operator promotes it "
-        "into the rotation in the app."
+        + (
+            "Media attached. It was already approved, so it now joins the "
+            "rotation as it stands."
+            if was_approved else
+            "Media attached. The post is still a draft; the operator "
+            "promotes it into the rotation in the app."
+        )
     )
     return view
 

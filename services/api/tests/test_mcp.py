@@ -2481,22 +2481,82 @@ def test_a_gallery_cannot_grow_past_what_any_network_takes(session) -> None:
         intake.create_campaign_post(session, "ws", "camp", names, caption="Too many.")
 
 
-def test_set_post_media_refuses_a_post_already_in_rotation(session) -> None:
-    """Changing what a promoted post publishes is the operator's act."""
+def test_set_post_media_completes_a_media_less_post_already_approved(session) -> None:
+    """The gap it fills is the same gap whether or not somebody has already
+    approved the words around it.
+
+    A post drafted words-first and then approved before its media arrived is
+    not one an operator reviewed with the media in view - there was none to
+    review - so the refusal that protects a promoted post's reviewed media
+    does not apply to a promoted post that never had any. The scheduler has
+    been skipping it either way; this is what lets it stop.
+    """
     from trendrelay_api.integrations.mcp import intake, writes
 
     _video_asset(session)
     view = intake.create_campaign_post(session, "ws", "camp", [], caption="Soon.")
-    item = session.scalar(
-        __import__("sqlalchemy").select(CampaignQueueItem).where(
-            CampaignQueueItem.id == view["id"],
-        )
+    session.get(CampaignQueueItem, view["id"]).state = "approved"
+    session.commit()
+
+    done = writes.set_post_media(session, "ws", view["id"], ["clip1"])
+
+    assert done["video_path"] == r"S:\media\clip.mp4"
+    # No promotion to say, because there was none left to do.
+    assert "joins the rotation as it stands" in done["note"]
+    assert "the operator promotes" not in done["note"]
+
+
+def test_set_post_media_refuses_a_post_already_carrying_media(session) -> None:
+    """The refusal that does still apply: media an operator approved in view.
+
+    Swapping what a promoted post publishes underneath that decision is
+    theirs to do in the app, not an assistant's - whether the post was
+    promoted as a draft with media already attached, or reaches this call
+    with media from an earlier pass of set_post_media itself.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _video_asset(session)
+    view = intake.create_campaign_post(
+        session, "ws", "camp", ["clip1"], caption="Ready.",
     )
-    item.state = "approved"
+    session.get(CampaignQueueItem, view["id"]).state = "approved"
     session.commit()
 
     with pytest.raises(ValueError, match="operator"):
         writes.set_post_media(session, "ws", view["id"], ["clip1"])
+
+
+def test_set_post_media_refuses_a_post_approved_copy_only(session) -> None:
+    """The other reviewed shape: no media because none was wanted, decided
+    with the post in front of an operator rather than left open."""
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    view = intake.create_campaign_post(
+        session, "ws", "camp", [], caption="Words alone.", text_only=True,
+    )
+    session.get(CampaignQueueItem, view["id"]).state = "approved"
+    session.commit()
+
+    with pytest.raises(ValueError, match="operator"):
+        writes.set_post_media(session, "ws", view["id"], ["clip1"])
+
+
+def test_set_post_media_refuses_a_paused_or_retired_post(session) -> None:
+    """States neither "still waiting for its first media" nor "an operator's
+    reviewed choice" covers - a post the runner backed out of, or one the
+    campaign is done with - stay out of reach regardless of what media, if
+    any, the row carries."""
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _video_asset(session)
+    for state in ("paused", "retired"):
+        view = intake.create_campaign_post(session, "ws", "camp", [], caption="c")
+        session.get(CampaignQueueItem, view["id"]).state = state
+        session.commit()
+
+        with pytest.raises(ValueError, match="operator"):
+            writes.set_post_media(session, "ws", view["id"], ["clip1"])
 
 
 def test_upload_media_takes_a_video_the_image_door_refuses(monkeypatch, tmp_path) -> None:
