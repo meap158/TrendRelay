@@ -5606,7 +5606,52 @@ export function AutopilotPanel({
                     </span>
                   )}
                 </span>
-                {canEdit && (
+                {/* One shared row for the rehearsal and the actions, rather
+                    than two stacked full-width ones. Closed, the rehearsal is
+                    a single short line with nothing to its right; the actions
+                    row was a single line with nothing to its left - each one
+                    half a line's worth of content claiming a whole line.
+                    Nested in the copy column the rehearsal was 140px wider
+                    than the track holding it, so an open one drew straight
+                    over the status badge and the buttons - which is why it
+                    still gets its own full-width row, just one shared with
+                    the actions instead of a second row to itself. */}
+                <div className="campaign-queue-footer">
+                  <QueueRehearsal
+                    item={item}
+                    outings={outings.get(item.id) ?? []}
+                    workspaceId={workspaceId}
+                    apiFetch={apiFetch}
+                    destinations={destinations}
+                    slots={slots}
+                    /* In the order the scheduler applies them. Copy comes
+                       before everything: an unwritten post is skipped whatever
+                       else is true of it, and guessing "another post holds
+                       every slot" at a post that was never a candidate sent
+                       somebody looking for a scheduling problem that was
+                       really an empty caption. */
+                    noPlanReason={item.needs_copy
+                      ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
+                      : item.needs_media
+                        ? "Not scheduled: no media yet. Attach a video or pictures and this post joins the rotation."
+                        : item.state !== "approved"
+                          ? "Held back: add it to the rotation and the plan appears here."
+                          : !destinations.length
+                            ? "Nowhere to post it yet. Add an account."
+                            : !hasPostingTimes
+                              ? "No posting times yet. Add one and the plan appears here."
+                              : preview
+                                // Says which window is full, and that being
+                                // outside it is normal. "Every slot is taken by
+                                // another post" describes a queue larger than
+                                // the outlook - which is most queues - but reads
+                                // as a fault, so a full week of correct planning
+                                // looked like dozens of posts going nowhere.
+                                ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
+                                  + "already full. It stays in rotation and takes the first free slot after that."
+                                : "Loading the plan…"}
+                  />
+                  {canEdit && (
                   <div className="campaign-queue-actions">
                     {item.state !== "approved" && (
                       <Button variant="secondary" size="sm"
@@ -5634,9 +5679,9 @@ export function AutopilotPanel({
                         Publish now
                       </Button>
                     </Tooltip>
+                    <Button variant="quiet" size="sm"
+                      onClick={() => openPostEditor(item)}>Edit</Button>
                     <span className="campaign-queue-secondary-actions">
-                      <Button variant="quiet" size="sm"
-                        onClick={() => openPostEditor(item)}>Edit</Button>
                       <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
                         onClick={() => void loadRecommendations(item)}>
                         {item.offer_ids.length ? "Edit products" : "Review products"}
@@ -5664,12 +5709,6 @@ export function AutopilotPanel({
                       variant="quiet"
                       items={[
                         {
-                          id: "edit-content",
-                          label: "Edit",
-                          description: "Change the post copy or media.",
-                          icon: <ActionIcon name="edit" />,
-                        },
-                        {
                           id: "review-products",
                           label: item.offer_ids.length ? "Edit products" : "Review products",
                           description: "Inspect the products and affiliate links for this post.",
@@ -5685,9 +5724,7 @@ export function AutopilotPanel({
                         },
                       ]}
                       onSelect={(action) => {
-                        if (action === "edit-content") {
-                          openPostEditor(item);
-                        } else if (action === "review-products") {
+                        if (action === "review-products") {
                           void loadRecommendations(item);
                         } else if (action === "delete") {
                           void run("drop", async () => {
@@ -5700,45 +5737,8 @@ export function AutopilotPanel({
                       }}
                     />
                   </div>
-                )}
-                {/* A row of its own, spanning every column. Nested in the copy
-                    column it was 140px wider than the track holding it, so an
-                    open rehearsal drew straight over the status badge and the
-                    buttons beside it. */}
-                <QueueRehearsal
-                  item={item}
-                  outings={outings.get(item.id) ?? []}
-                  workspaceId={workspaceId}
-                  apiFetch={apiFetch}
-                  destinations={destinations}
-                  slots={slots}
-                  /* In the order the scheduler applies them. Copy comes
-                     before everything: an unwritten post is skipped whatever
-                     else is true of it, and guessing "another post holds
-                     every slot" at a post that was never a candidate sent
-                     somebody looking for a scheduling problem that was
-                     really an empty caption. */
-                  noPlanReason={item.needs_copy
-                    ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
-                    : item.needs_media
-                      ? "Not scheduled: no media yet. Attach a video or pictures and this post joins the rotation."
-                      : item.state !== "approved"
-                        ? "Held back: add it to the rotation and the plan appears here."
-                        : !destinations.length
-                          ? "Nowhere to post it yet. Add an account."
-                          : !hasPostingTimes
-                            ? "No posting times yet. Add one and the plan appears here."
-                            : preview
-                              // Says which window is full, and that being
-                              // outside it is normal. "Every slot is taken by
-                              // another post" describes a queue larger than
-                              // the outlook - which is most queues - but reads
-                              // as a fault, so a full week of correct planning
-                              // looked like dozens of posts going nowhere.
-                              ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
-                                + "already full. It stays in rotation and takes the first free slot after that."
-                              : "Loading the plan…"}
-                />
+                  )}
+                </div>
               </li>
             ))}
           </ul>

@@ -1417,12 +1417,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    instead of leaving the following cells in the thumbnail's narrow track. */
 .autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr) auto; }
 .autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr) auto; }
-/* The rehearsal, on its own row spanning every column. It holds a post preview
-   at its natural size, wider than the copy track that used to contain it - so
-   opening one drew across the status badge and the buttons beside it rather
-   than pushing them anywhere. Matched as the row's own `details` rather than by
-   its class, which belongs to another stylesheet. */
-.autopilot-queue > li > details { grid-column: 1 / -1; min-inline-size: 0; }
 /* The same bar the Library carries above its grid, in the same shape: a
    two-state box, what is picked, and the actions the rows already offer. */
 /* Tall enough for the buttons before they are there.
@@ -1814,8 +1808,22 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    under half the row on the widest screen there is, let alone a narrower
    one. A held-back action bar had nowhere to shrink to. Giving it the row
    below instead costs one more line, sized to what four buttons actually
-   need, and hands the copy column back the whole width above it. */
-.campaign-queue-actions { grid-column: 1 / -1; display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
+   need, and hands the copy column back the whole width above it.
+
+   That row then sat beside the rehearsal's own, each claiming the full width
+   for a line that used less than half of it - the rehearsal closed is one
+   short summary, the actions are a handful of buttons, and neither had a
+   reason to push the other down. `.campaign-queue-footer` gives the two of
+   them one row instead of one each, the rehearsal on the start edge and the
+   actions on the end. */
+.campaign-queue-footer { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 6px 10px; }
+/* Open, the rehearsal still wants the row to itself - it holds a post preview
+   at its natural size, wider than the copy track that used to contain it, and
+   wider than the actions beside it leave room for. `min-inline-size: 0` lets
+   it shrink for that; the margin `styles.css` gives it above assumed it was
+   still stacked under the actions rather than beside them. */
+.campaign-queue-footer > .campaign-row-rehearsal { flex: 1 1 auto; min-inline-size: 0; margin-block-start: 0; }
+.campaign-queue-actions { flex: 0 0 auto; display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
 .campaign-queue-secondary-actions { display: contents; }
 .campaign-queue-actions [data-destructive-icon="true"]:hover,
 .campaign-queue-actions [data-destructive-icon="true"]:focus-visible {
