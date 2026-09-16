@@ -10,7 +10,7 @@ it is not.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -314,6 +314,145 @@ def test_past_the_card_limit_the_rest_are_one_line_with_a_count(session, chat, m
     assert note == f"Announced {approval_notices.CARDS_PER_PASS} posts on Telegram."
     assert len(chat["sent"]) == approval_notices.CARDS_PER_PASS + 1
     assert "3 more waiting in the inbox." in chat["sent"][-1]["text"]
+
+
+# --- overdue ---------------------------------------------------------------------
+
+
+def _overdue_row(session, identifier: str, *, at, campaign_id: str = "camp", **overrides):
+    """A held post already frozen, its own due time set directly rather than
+    reached by advancing a clock through a planning pass."""
+    fields: dict = {
+        "workspace_id": "ws",
+        "campaign_id": campaign_id,
+        "state": "proposed",
+        "scheduled_at": at,
+        "platform": "youtube",
+        "destination_label": "youtube account",
+        "caption": "Three ways to pull a better espresso.",
+        "media_path": "clip.mp4",
+        "held_reason": "Waiting for approval.",
+        "held_reason_code": "hold_waiting",
+    }
+    fields.update(overrides)
+    row = PublicationExecution(id=identifier, created_by="user-1", **fields)
+    session.add(row)
+    session.commit()
+    return row
+
+
+def test_a_card_left_alone_says_nothing_about_being_overdue() -> None:
+    item = {"destination": "acct", "caption": "x", "at": None, "reason": ""}
+    assert "overdue" not in approval_notices.card_text("Launch", item).casefold()
+
+
+def test_an_overdue_card_leads_with_that_fact() -> None:
+    """Telegram's own notification preview shows a message's first line, so
+    the one new thing this send says has to be that line."""
+    item = {
+        "destination": "acct", "caption": "x",
+        "at": datetime(2026, 8, 10, 12, 0, tzinfo=UTC), "reason": "",
+    }
+    text = approval_notices.card_text("Launch", item, overdue=True)
+    assert text.startswith("⏰ Still waiting")
+    assert "Mon 10 Aug, 12:00" in text.splitlines()[0]
+
+
+def test_an_overdue_card_says_nothing_extra_with_no_due_time_to_name() -> None:
+    """`overdue=True` is a fact about a `scheduled_at` this never has without
+    one being past - but a caller passing the flag on a copy with no time at
+    all should get the ordinary card back, not a sentence missing its noun."""
+    item = {"destination": "acct", "caption": "x", "at": None, "reason": ""}
+    text = approval_notices.card_text("Launch", item, overdue=True)
+    assert "overdue" not in text.casefold() and text.startswith("<b>Launch</b>")
+
+
+def test_a_held_post_is_reminded_once_its_own_time_has_passed(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    execution = _overdue_row(session, "exec-late", at=due)
+
+    note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(minutes=1))
+    session.commit()
+
+    assert note == "Reminded about 1 overdue post on Telegram."
+    [card] = chat["sent"]
+    assert card["text"].startswith("⏰ Still waiting")
+    assert card["buttons"][0][0]["callback"] == f"apr:{execution.id}"
+    session.refresh(execution)
+    # SQLite gives a naive datetime back on refresh - the same wall clock,
+    # its tzinfo the query already used and discarded.
+    assert execution.overdue_notified_at == (due + timedelta(minutes=1)).replace(tzinfo=None)
+
+
+def test_nothing_is_overdue_before_its_own_due_time(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    _overdue_row(session, "exec-not-yet", at=due)
+
+    note = approval_notices.announce_overdue(session, pilot, now=due - timedelta(minutes=1))
+
+    assert note == "" and chat["sent"] == []
+
+
+def test_the_reminder_is_sent_once_and_never_repeated(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    _overdue_row(session, "exec-once", at=due)
+    later = due + timedelta(hours=1)
+
+    first = approval_notices.announce_overdue(session, pilot, now=later)
+    session.commit()
+    second = approval_notices.announce_overdue(session, pilot, now=later + timedelta(hours=5))
+
+    assert first == "Reminded about 1 overdue post on Telegram."
+    assert second == ""
+    assert len(chat["sent"]) == 1
+
+
+def test_a_campaign_that_never_asked_for_telegram_is_never_reminded(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=False)
+    due = NOW + timedelta(hours=3)
+    _overdue_row(session, "exec-quiet", at=due)
+
+    note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(hours=1))
+
+    assert note == "" and chat["sent"] == []
+
+
+def test_past_the_card_limit_the_overdue_rest_are_one_line_with_a_count(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    for index in range(approval_notices.CARDS_PER_PASS + 3):
+        _overdue_row(session, f"exec-late-{index}", at=due)
+
+    note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(hours=1))
+
+    assert note == f"Reminded about {approval_notices.CARDS_PER_PASS} overdue posts on Telegram."
+    assert len(chat["sent"]) == approval_notices.CARDS_PER_PASS + 1
+    assert "3 more overdue, waiting in the inbox." in chat["sent"][-1]["text"]
+
+
+def test_a_planning_pass_reminds_about_a_post_held_on_an_earlier_one(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """The pass that reminds does not need to have held anything itself -
+    the whole point is a post frozen well before today still gets told
+    about once today's clock runs past its own due time."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+    [execution] = session.scalars(select(PublicationExecution)).all()
+    # Re-selected after a commit, so SQLite hands the naive form back - this
+    # workspace deals only in UTC, so putting it back is exact.
+    due = execution.scheduled_at.replace(tzinfo=UTC)
+
+    result = run_campaign(session, pilot, now=due + timedelta(hours=1))
+
+    assert "Reminded about 1 overdue post on Telegram." in result["note"]
+    assert len(chat["sent"]) == 2, "the first hold and the overdue reminder"
+    assert chat["sent"][1]["text"].startswith("⏰ Still waiting")
 
 
 # --- the press ------------------------------------------------------------------

@@ -180,6 +180,16 @@ class PublicationExecution(Base):
     #: card can put it in the campaign's own language rather than repeating
     #: the server's. `approval_words` holds the words for each key.
     held_reason_code: Mapped[str | None] = mapped_column(String(40))
+    #: When this held post was told about on Telegram a second time, because
+    #: its own due time had passed with nobody having decided it yet.
+    #:
+    #: `announce_held` already sends one card the moment a post is frozen -
+    #: usually well before its due time, since a campaign holds the next slot
+    #: in front of somebody ahead of the clock. Once, on purpose: a post
+    #: re-announced every tick it sits overdue would turn one missed deadline
+    #: into a chat nobody wants notifications from. Null on every row frozen
+    #: before this column existed and on anything never sent a second time.
+    overdue_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: Timestamped native-performance snapshots, filled by the measurement
     #: phase. Declared now so measuring needs no migration.
     performance_snapshots: Mapped[list[dict[str, Any]]] = mapped_column(

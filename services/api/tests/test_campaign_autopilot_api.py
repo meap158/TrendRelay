@@ -132,6 +132,30 @@ def _held(workspace_id: str, campaign_id: str, identifier: str, **overrides):
     return identifier
 
 
+def test_the_inbox_puts_what_missed_its_own_due_time_first(workspace) -> None:
+    """Longest overdue leads, what is still ahead follows soonest-first, and
+    a post with no due time at all trails behind both."""
+    campaign_id = campaign(workspace)
+    now = datetime.now(UTC)
+    # Added out of order, and out of created_at order too, so a pass would
+    # only line up by accident if it were still sorting on that.
+    _held(workspace, campaign_id, "not-yet-soon", scheduled_at=now + timedelta(hours=1))
+    _held(workspace, campaign_id, "barely-late", scheduled_at=now - timedelta(minutes=5))
+    _held(workspace, campaign_id, "no-due-time", scheduled_at=None)
+    _held(workspace, campaign_id, "hours-late", scheduled_at=now - timedelta(hours=3))
+    _held(workspace, campaign_id, "not-yet-later", scheduled_at=now + timedelta(days=1))
+
+    response = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/exceptions",
+    )
+
+    assert response.status_code == 200, response.text
+    order = [item["id"] for item in response.json()["exceptions"]]
+    assert order == [
+        "hours-late", "barely-late", "not-yet-soon", "not-yet-later", "no-due-time",
+    ]
+
+
 def test_approving_a_batch_needs_the_same_confirmation_one_post_does(workspace) -> None:
     campaign_id = campaign(workspace)
     _held(workspace, campaign_id, "exec-1")
@@ -2750,6 +2774,7 @@ def test_a_post_with_no_library_identity_names_no_cut(workspace) -> None:
     assert made.status_code == 201, made.text
     assert made.json()["item"]["media_version"] is None
     assert made.json()["item"]["asset_hashtags"] == []
+
 
 
 # --- working notes that are never posted ---------------------------------------

@@ -901,6 +901,17 @@ def run_campaign(
             from trendrelay_api.approval_notices import announce_held
 
             note = f"{note} {announce_held(session, autopilot, held)}"
+    if autopilot.approvals_telegram:
+        # Asked every tick, not only one that held something new: the posts
+        # this looks for are the opposite of new - they were frozen and
+        # announced minutes, hours or days ago, are still `proposed`, and
+        # their own due time has now passed. `held` above never contains
+        # them, because it is only what became `proposed` this minute.
+        from trendrelay_api.approval_notices import announce_overdue
+
+        overdue_note = announce_overdue(session, autopilot, now=moment)
+        if overdue_note:
+            note = f"{note} {overdue_note}"
     if deferred:
         # Named as waiting rather than as a problem, because it is one: the
         # quota returns and the post is still there.

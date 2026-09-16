@@ -50,9 +50,11 @@ import type { SortState } from "../ui/sortable-header";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { Select } from "../ui/select";
 import { SearchSelect } from "../ui/search-select";
-import { useT } from "../i18n-provider";
+import { useLocale, useT } from "../i18n-provider";
 import { effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
+import { isOverdue } from "../../lib/overdue";
+import { relativeTime } from "../../lib/relative-time";
 import { EffectEditor } from "../library/effect-editor";
 import { ActionMenu, type ActionMenuItem } from "../ui/action-menu";
 import {
@@ -1078,6 +1080,20 @@ function placementTone(placement: string): "good" | "neutral" | "warn" {
 }
 
 /**
+ * "Overdue · 23 minutes ago", or just "Overdue" past a week nobody named it.
+ *
+ * `relativeTime` already says how long ago in every language this ships in,
+ * pluralised the way each of them actually pluralises - Russian's three
+ * forms, Arabic's dual - so this borrows it rather than templating a second,
+ * worse copy of the same arithmetic. It answers `null` past a week, which
+ * reads fine on its own: a post is not less overdue for being old news.
+ */
+function overdueLabel(scheduledAt: string, locale: string): string {
+  const said = relativeTime(scheduledAt, { locale, now: Date.now() });
+  return said ? `Overdue · ${said}` : "Overdue";
+}
+
+/**
  * The timeline as a month, the way Buffer and Zernio show the same posts.
  *
  * The list answers "what exactly went out"; the calendar answers "how does
@@ -1838,6 +1854,7 @@ export function AutopilotPanel({
       post and what has posted is one story in one place. */
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const [autopilot, setAutopilot] = useState<Autopilot | null>(null);
   /**
    * Whether the first load failed, as opposed to not having finished.
@@ -2333,6 +2350,16 @@ export function AutopilotPanel({
   const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
   /** Held posts picked for one approval. Empty means nothing is selected. */
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /**
+   * How many held posts have missed their own posting time.
+   *
+   * Read fresh on every render rather than kept in state of its own: the
+   * clock that makes this change is not one this component owns, so there
+   * is no event to set it from - the list itself already re-renders often
+   * enough (the poll below, any decision made on a row) that the count
+   * drifts by at most that long behind the real one.
+   */
+  const overdueCount = exceptions.filter((item) => isOverdue(item.scheduled_at)).length;
   /**
    * What the last batch did, per post, because a total is not an answer.
    *
@@ -4373,7 +4400,7 @@ export function AutopilotPanel({
           id="campaign-approvals"
           eyebrow="Approval"
           title="Needs your approval"
-          aside={<Badge tone="warn">{exceptions.length} held</Badge>}
+          aside={<Badge tone={overdueCount > 0 ? "bad" : "warn"}>{exceptions.length} held</Badge>}
         >
           {/* "Nothing is published until you approve it" is rule 6 of the
               posting strategy, on the same screen. What is left is the part
@@ -4405,6 +4432,10 @@ export function AutopilotPanel({
             return (
               <p className="autopilot-approval-summary" role="status">
                 <strong>{waiting}</strong> waiting for you
+                {overdueCount > 0 && (
+                  <> · <strong>{overdueCount}</strong>{" "}
+                    {overdueCount === 1 ? "past its own posting time" : "past their own posting time"}</>
+                )}
                 {ready > 0 && <> · <strong>{ready}</strong> ready to post</>}
                 {needsCopy > 0 && (
                   <> · <strong>{needsCopy}</strong>{" "}
@@ -4497,6 +4528,15 @@ export function AutopilotPanel({
                     {item.scheduled_at
                       ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
                       : ""}</small>
+                  {/* The one thing this row most needs to say, ahead of
+                      where the link goes: a post still sitting here past its
+                      own posting time did not fail quietly, it is waiting on
+                      exactly this decision. */}
+                  {item.scheduled_at && isOverdue(item.scheduled_at) && (
+                    <Badge tone="bad" title={`Due ${new Date(item.scheduled_at).toLocaleString()}`}>
+                      {overdueLabel(item.scheduled_at, locale)}
+                    </Badge>
+                  )}
                   {item.placement && (
                     <Badge tone={placementTone(item.placement)}>
                       {t(`autopilot.placement.${item.placement}`)}

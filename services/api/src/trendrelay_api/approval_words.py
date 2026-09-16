@@ -35,6 +35,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "This was the test card. Nothing was decided. Pressed by {who}.",
         "notes": "Notes",
         "see_the_app": "see the app",
+        "more_overdue": "{count} more overdue, waiting in the inbox.",
+        "overdue_notice": "⏰ Still waiting — this was due {when}.",
         "hold_waiting": (
             "Waiting for approval: this exact frozen post reaches its engine only after a person "
             "approves it."
@@ -71,6 +73,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "Đây là thẻ thử. Không có gì được quyết định. {who} đã bấm.",
         "notes": "Ghi chú",
         "see_the_app": "xem trong ứng dụng",
+        "more_overdue": "Còn {count} bài quá hạn nữa đang chờ trong hộp duyệt.",
+        "overdue_notice": "⏰ Vẫn đang chờ duyệt — bài này đến hạn lúc {when}.",
         "hold_waiting": (
             "Đang chờ duyệt: đúng bài đã chốt này chỉ được gửi đi sau khi có người duyệt."
         ),
@@ -106,6 +110,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "これはテストカードです。何も決定されていません。{who} が押しました。",
         "notes": "メモ",
         "see_the_app": "アプリを確認してください",
+        "more_overdue": "他に{count}件が期限超過で受信箱に待機中です。",
+        "overdue_notice": "⏰ まだ承認待ちです — 予定は{when}でした。",
         "hold_waiting": "承認待ち: この確定済みの投稿は、人が承認した後にのみ配信されます。",
         "hold_low_pinned": (
             "この投稿に固定された商品は、内容との一致度が低いものでした。このまま投稿するなら承認、"
@@ -139,6 +145,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "C'était la carte de test. Rien n'a été décidé. Appuyé par {who}.",
         "notes": "Notes",
         "see_the_app": "voir l'app",
+        "more_overdue": "{count} de plus en retard, en attente dans la boîte.",
+        "overdue_notice": "⏰ Toujours en attente — c'était prévu pour {when}.",
         "hold_waiting": (
             "En attente d'approbation : ce post figé ne part vers son moteur qu'après "
             "l'approbation d'une personne."
@@ -176,6 +184,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "这是测试卡片。没有做出任何决定。由 {who} 按下。",
         "notes": "备注",
         "see_the_app": "请查看应用",
+        "more_overdue": "还有 {count} 条已超时，正在收件箱中等待。",
+        "overdue_notice": "⏰ 仍在等待批准——原定于 {when}。",
         "hold_waiting": "等待批准：这条已冻结的帖子只有在有人批准后才会送往发布引擎。",
         "hold_low_pinned": (
             "固定到这条帖子的商品与内容的匹配度较低。批准则照常发布，或改为固定另一个商品。"
@@ -207,6 +217,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "Это была тестовая карточка. Ничего не решено. Нажал(а): {who}.",
         "notes": "Заметки",
         "see_the_app": "см. приложение",
+        "more_overdue": "Ещё {count} просрочены и ждут во входящих.",
+        "overdue_notice": "⏰ Всё ещё ждёт — было назначено на {when}.",
         "hold_waiting": (
             "Ожидает одобрения: этот зафиксированный пост уйдёт в публикацию только после того, "
             "как его одобрит человек."
@@ -243,6 +255,8 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "هذه بطاقة تجريبية. لم يُتّخذ أي قرار. ضغطها {who}.",
         "notes": "ملاحظات",
         "see_the_app": "راجع التطبيق",
+        "more_overdue": "{count} أخرى تجاوزت الموعد وتنتظر في صندوق الموافقات.",
+        "overdue_notice": "⏰ لا يزال بانتظار الموافقة — كان موعده {when}.",
         "hold_waiting": (
             "في انتظار الموافقة: هذا المنشور المجمَّد لا يصل إلى محرّك النشر إلا بعد موافقة شخص."
         ),

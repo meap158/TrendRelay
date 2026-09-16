@@ -3178,6 +3178,32 @@ def run_autopilot_now(
     return result
 
 
+def _overdue_first(rows: list[PublicationExecution], *, now: datetime | None = None) -> list[PublicationExecution]:
+    """The inbox in the order an approver should work it.
+
+    What has already missed its own due time comes first, longest overdue
+    at the very top; what is still ahead follows, soonest next; a post with
+    no due time at all - nothing today freezes without one, but a row from
+    before this ever mattered should not vanish - comes last, oldest first.
+
+    Read from `created_at` and reordered here rather than in the query,
+    because SQLite's `DateTime(timezone=True)` gives back a naive value and
+    comparing it against an aware `now` in SQL is exactly the trap
+    `campaign_scheduler._as_utc` exists to dodge in Python.
+    """
+    from trendrelay_api.campaign_scheduler import _as_utc
+
+    moment = now or datetime.now(UTC)
+
+    def key(row: PublicationExecution) -> tuple[int, datetime]:
+        at = _as_utc(row.scheduled_at)
+        if at is None:
+            return (2, _as_utc(row.created_at) or moment)
+        return (0, at) if at <= moment else (1, at)
+
+    return sorted(rows, key=key)
+
+
 def _execution_view(item: PublicationExecution) -> dict[str, Any]:
     from trendrelay_api.integrations.publishing import thread_deliverable
 
@@ -3528,7 +3554,7 @@ def list_autopilot_exceptions(
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
-    """Everything waiting on a person, oldest first, with the reason on it."""
+    """Everything waiting on a person, what missed its own due time first."""
     membership(session, workspace_id, user.id)
     _campaign(session, workspace_id, campaign_id)
     rows = session.scalars(
@@ -3540,7 +3566,7 @@ def list_autopilot_exceptions(
         )
         .order_by(PublicationExecution.created_at)
     ).all()
-    return {"exceptions": [_execution_view(item) for item in rows]}
+    return {"exceptions": [_execution_view(item) for item in _overdue_first(rows)]}
 
 
 @router.post("/{campaign_id}/autopilot/executions/{execution_id}/approve")

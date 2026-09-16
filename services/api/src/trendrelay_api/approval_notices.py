@@ -128,6 +128,7 @@ def app_link(campaign_id: str) -> str | None:
 
 def card_text(
     campaign_name: str, item: dict[str, Any], *, zone: str | None = None, language: str = "en",
+    overdue: bool = False,
 ) -> str:
     """One held post as a message: where, when, the words, why it waits.
 
@@ -135,6 +136,12 @@ def card_text(
     them to whoever is deciding - they are the one thing about a held post
     that lives nowhere else - and a card that left them out would be the
     same decision made with less in front of it.
+
+    `overdue` marks a card sent a second time, because the post's own due
+    time has since passed - see `announce_overdue`. Put first, ahead of even
+    the campaign's name: Telegram's own notification preview shows a
+    message's first line, and the one new fact this send exists to carry is
+    that the clock ran out, not which campaign it was already clear was late.
     """
     where = html.escape(str(item.get("destination") or "an account"))
     when = _when(item.get("at"), zone, language)
@@ -146,13 +153,18 @@ def card_text(
     network = words.platform_name(str(item.get("platform") or ""))
     if network and network.casefold() in str(item.get("destination") or "").casefold():
         network = ""
-    lines = [
+    lines: list[str] = []
+    if overdue and when:
+        lines.extend([
+            html.escape(words.say(language, "overdue_notice", when=when)), "",
+        ])
+    lines.extend([
         f"<b>{html.escape(campaign_name)}</b>"
         + (f" · {html.escape(network)}" if network else "")
         + f" · {where}"
         + (f" · {html.escape(when)}" if when else ""),
         "",
-    ]
+    ])
     caption = _excerpt(str(item.get("caption") or ""))
     if caption:
         lines.extend([html.escape(caption), ""])
@@ -312,6 +324,91 @@ def announce_executions(
         if execution.state == "proposed"
     ]
     return announce_held(session, autopilot, held)
+
+
+def announce_overdue(
+    session: Session, autopilot: CampaignAutopilot, *, now: datetime | None = None,
+) -> str:
+    """Tell the approver once more, the first time a held post is found late.
+
+    `announce_held` sends a card the moment a post is frozen for a person -
+    usually well ahead of its own due time, since a campaign holds the next
+    slot in front of somebody before the clock gets there. A card sent early
+    says nothing once the clock catches up to it: Telegram does not remind on
+    its own, and a chat with any traffic buries that first card under
+    whatever came after it. This is the one follow-up a held post ever gets -
+    once, the first tick its `scheduled_at` is found in the past - so a
+    missed deadline is something the approver was told, rather than a
+    silence nobody chose.
+
+    Called every tick regardless of what that tick held, because the posts
+    this looks for are not new: they were frozen minutes, hours or days ago
+    and are still `proposed` now that their own time has run out. Never
+    raises, for the reason `announce_held` does not either: the post stays
+    held in the app whichever way the chat goes.
+    """
+    if not autopilot.approvals_telegram:
+        return ""
+    moment = now or datetime.now(UTC)
+    from trendrelay_api.integrations import telegram
+
+    if not telegram.ready():
+        return ""
+    overdue = session.scalars(
+        select(PublicationExecution)
+        .where(
+            PublicationExecution.workspace_id == autopilot.workspace_id,
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state == "proposed",
+            PublicationExecution.scheduled_at.is_not(None),
+            PublicationExecution.scheduled_at < moment,
+            PublicationExecution.overdue_notified_at.is_(None),
+        )
+        .order_by(PublicationExecution.scheduled_at)
+    ).all()
+    if not overdue:
+        return ""
+    campaign = session.get(Campaign, autopilot.campaign_id)
+    workspace = session.get(Workspace, autopilot.workspace_id)
+    name = campaign.name if campaign else "Campaign"
+    zone = workspace.timezone if workspace else None
+    language = card_language(autopilot)
+    sent = 0
+    try:
+        for execution in overdue[:CARDS_PER_PASS]:
+            item = {
+                "destination": execution.destination_label,
+                "caption": execution.caption,
+                "at": execution.scheduled_at,
+                "platform": execution.platform,
+                "reason": execution.held_reason,
+                "reason_code": execution.held_reason_code,
+            }
+            # Text only, with the same buttons the first card had: a press
+            # here decides the execution by its id, not by which message
+            # carried it, so this settles it exactly as the original card or
+            # the inbox would. Re-uploading the pictures a second time would
+            # be the loud part of this message, not the useful part - the
+            # useful part is the one new fact, which is that time ran out.
+            telegram.send_message(
+                card_text(name, item, zone=zone, language=language, overdue=True),
+                buttons=card_buttons(execution.id, autopilot.campaign_id, language=language),
+            )
+            execution.overdue_notified_at = moment
+            sent += 1
+        rest = len(overdue) - sent
+        if rest > 0:
+            link = app_link(autopilot.campaign_id)
+            telegram.send_message(
+                f"<b>{html.escape(name)}</b> · "
+                + html.escape(words.say(language, "more_overdue", count=rest)),
+                buttons=[[{"label": words.say(language, "open_app"), "url": link}]] if link else None,
+            )
+    except telegram.TelegramUnavailable as error:
+        if sent:
+            return f"Reminded about {sent} of {len(overdue)} overdue post(s) on Telegram; then: {error}"
+        return f"Not reminded on Telegram: {error}"
+    return f"Reminded about {sent} overdue post{'' if sent == 1 else 's'} on Telegram."
 
 
 # --- a press ---------------------------------------------------------------------
