@@ -1371,10 +1371,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-context-read { margin: 0; padding: 0 8px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .campaign-context-note { padding-bottom: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 /* One grid cell for the badge and the mark together - see the comment in
-   the component. `.autopilot-queue > li` is templated for exactly five
-   columns (checkbox, thumbnail, copy, status, actions); a bare wrapper with
-   no width of its own so it costs the grid nothing beyond what the badge
-   already did. */
+   the component. `.autopilot-queue > li` gives status its own trailing
+   column, after checkbox, thumbnail and copy; a bare wrapper with no width
+   of its own so it costs the grid nothing beyond what the badge already did.
+   Actions are not one of these columns - see the comment on
+   `.campaign-queue-actions` for why they get the row under this one instead. */
 .campaign-queue-status { display: inline-flex; align-items: center; gap: 4px; }
 /* Dashed, so a reader who scans the queue sees at a glance that this mark is
    not one of the states the badges beside it report. */
@@ -1392,21 +1393,30 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    do, said at the end of the list rather than beside the save itself. */
 .campaign-product-actions-note { display: block; margin-block-start: 10px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
 
-.autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+/* A container, not just a grid: this list sits beside the 280px campaign
+   sidebar (`.campaign-layout`, itself gapped 16px, inside a page whose `main`
+   caps at 1240px), so its own rendered width runs about 332px behind the
+   browser's and never exceeds 944px no matter how wide the screen. The rules
+   below that answer "is this row narrow" - hiding the secondary actions
+   behind their menu, tightening the padding - need the row's own width for
+   that question, not the viewport's: at an ordinary 900-1150px window this
+   row is already 570-820px, wanting the same compact treatment a much
+   narrower *browser* used to need to trigger it. */
+.autopilot-destinations, .autopilot-queue { container-type: inline-size; display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .autopilot-destinations > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 /* The start border is three pixels on every row, not only the striped
    states: draft and approved recolour it, and rows without a stripe keeping
    the one-pixel edge sat their checkboxes two pixels left of everyone
    else's. */
-.autopilot-queue > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-inline-start-width: 3px; border-radius: var(--radius-sm); background: var(--panel); }
-/* A fifth column only when the rows are selectable. Widening the template
-   unconditionally would leave an empty column for a reader who cannot edit,
-   and the checkbox is not rendered for them at all. */
-.autopilot-queue.selectable > li { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+.autopilot-queue > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-inline-start-width: 3px; border-radius: var(--radius-sm); background: var(--panel); }
+/* One more column only when the rows are selectable, for the checkbox.
+   Widening the template unconditionally would leave an empty column for a
+   reader who cannot edit, and the checkbox is not rendered for them at all. */
+.autopilot-queue.selectable > li { grid-template-columns: auto auto minmax(0, 1fr) auto; }
 /* Copy-only rows omit the media cell entirely. Give that room to the copy
    instead of leaving the following cells in the thumbnail's narrow track. */
-.autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr) auto auto; }
-.autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.autopilot-queue > li.copy-only { grid-template-columns: minmax(0, 1fr) auto; }
+.autopilot-queue.selectable > li.copy-only { grid-template-columns: auto minmax(0, 1fr) auto; }
 /* The rehearsal, on its own row spanning every column. It holds a post preview
    at its natural size, wider than the copy track that used to contain it - so
    opening one drew across the status badge and the buttons beside it rather
@@ -1790,7 +1800,22 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .timeline-media-strip .timeline-media { max-width: 110px; max-height: 110px; object-fit: cover; }
 .autopilot-queue > li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue > li.approved { border-inline-start: 3px solid var(--green); }
-.campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
+/* Its own row, spanning every column, on every screen this list is ever
+   drawn at - not a trailing column beside the copy.
+   `.autopilot-queue > li`'s copy column is the only flexible track in the
+   row; every other column (checkbox, thumbnail, status, and this one) is
+   sized to its own content and never gives an inch back. Actions held one of
+   those fixed columns until this - three buttons and an icon, a good 280px
+   that the copy column paid for out of whatever was left. And there was
+   never much left: the page's `main` caps at 1240px, so even with the whole
+   width to itself this row tops out at 944px (see the comment on the list's
+   base rule) - at that ceiling, checkbox, thumbnail, status and actions
+   together already ran past 500px, leaving the post's own title and copy
+   under half the row on the widest screen there is, let alone a narrower
+   one. A held-back action bar had nowhere to shrink to. Giving it the row
+   below instead costs one more line, sized to what four buttons actually
+   need, and hands the copy column back the whole width above it. */
+.campaign-queue-actions { grid-column: 1 / -1; display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
 .campaign-queue-secondary-actions { display: contents; }
 .campaign-queue-actions [data-destructive-icon="true"]:hover,
 .campaign-queue-actions [data-destructive-icon="true"]:focus-visible {
@@ -1800,17 +1825,25 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 }
 .campaign-queue-actions > .campaign-queue-compact-actions { display: none; }
 
-/* A compact queue is easier to scan than a row of equally loud commands.
-   Below this width, four buttons leave the post itself only a few characters
-   per line and make every card several lines taller. Keep the immediate action
-   visible and progressively disclose the secondary commands through the same
-   keyboard- and touch-friendly action menu used elsewhere in the app. */
-@media (max-width: 820px) {
+/* A calmer row on a phone, not a wider one for the copy - the copy column's
+   width is settled above, by the actions row having its own line - see the
+   comment on `.campaign-queue-actions`. This is the narrower, separate
+   question of how many buttons belong on that line at once: five (approve,
+   publish, edit, products, delete) reads fine at a desk, but on an actual
+   phone-width row - the reason this is `@container` and not `@media`; a row
+   this narrow usually means a phone regardless of what the browser window is
+   doing - it is a wrapped, uneven mess before anyone taps anything. Keep the
+   one immediate action in reach and fold the rest into the same
+   keyboard- and touch-friendly menu used elsewhere in the app. */
+@container (max-width: 820px) {
   .autopilot-queue { gap: 6px; }
   .autopilot-queue > li { gap: 8px; padding: 8px; }
   .autopilot-queue-copy { -webkit-line-clamp: 1; }
   .campaign-queue-secondary-actions { display: none; }
   .campaign-queue-actions > .campaign-queue-compact-actions { display: inline-flex; }
+}
+@container (max-width: 700px) {
+  .autopilot-destinations > li { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
 .autopilot-account-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
@@ -1836,42 +1869,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-preview-products > strong { margin-inline-end: 2px; }
 .autopilot-preview small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
+/* The queue and destinations rules that used to live here moved to the
+   `@container` block above the 820px one - same reasoning, same list. What
+   stays here is genuinely about the viewport: these dialogs are not pinned
+   beside the campaign sidebar, so the browser's own width is the right thing
+   to ask. */
 @media (max-width: 700px) {
-  .autopilot-destinations > li { grid-template-columns: minmax(0, 1fr) auto; }
-  /* Keep identity, copy and state on the first row. The old two-column rule
-     lost to the more-specific selectable template, then forced both state and
-     actions onto separate full-width rows. This explicit compact template
-     preserves the thumbnail and spends only one extra line on actions. */
-  .autopilot-queue.selectable > li {
-    grid-template-columns: auto auto minmax(0, 1fr) auto;
-  }
-  .autopilot-queue:not(.selectable) > li {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-  .autopilot-queue.selectable > li.copy-only {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-  .autopilot-queue:not(.selectable) > li.copy-only {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  /* The badge's own slot in the compact 4-column template - now the
-     wrapper that carries the badge and the context mark together, since
-     the mark is no longer a fifth top-level child to place. */
-  .autopilot-queue > li > .campaign-queue-status { grid-column: auto; justify-self: start; }
-  .autopilot-queue.selectable > li > .campaign-queue-actions {
-    grid-column: 3 / -1;
-    justify-content: flex-start;
-  }
-  .autopilot-queue:not(.selectable) > li > .campaign-queue-actions {
-    grid-column: 2 / -1;
-    justify-content: flex-start;
-  }
-  .autopilot-queue.selectable > li.copy-only > .campaign-queue-actions {
-    grid-column: 2 / -1;
-  }
-  .autopilot-queue:not(.selectable) > li.copy-only > .campaign-queue-actions {
-    grid-column: 1 / -1;
-  }
   .campaign-mode-options { grid-template-columns: 1fr; }
   .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }
