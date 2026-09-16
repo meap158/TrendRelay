@@ -138,8 +138,18 @@ def card_text(
     """
     where = html.escape(str(item.get("destination") or "an account"))
     when = _when(item.get("at"), zone, language)
+    # Which network, ahead of which account on it. An account's label is
+    # whatever its owner called it - "anisenpaitok" says nothing about where
+    # it posts - and where the words are going is the first thing an approver
+    # wants of them. Left out when the label already says it, so a card never
+    # reads "TikTok · tiktok main".
+    network = words.platform_name(str(item.get("platform") or ""))
+    if network and network.casefold() in str(item.get("destination") or "").casefold():
+        network = ""
     lines = [
-        f"<b>{html.escape(campaign_name)}</b> · {where}"
+        f"<b>{html.escape(campaign_name)}</b>"
+        + (f" · {html.escape(network)}" if network else "")
+        + f" · {where}"
         + (f" · {html.escape(when)}" if when else ""),
         "",
     ]
@@ -153,7 +163,15 @@ def card_text(
             html.escape(notes),
             "",
         ])
-    reason = str(item.get("reason") or "").strip()
+    # The card's language for a reason it knows, the stored sentence for one
+    # frozen before the reasons had keys - still English, and still better
+    # than a card that says nothing about why the post is waiting.
+    code = str(item.get("reason_code") or "").strip()
+    reason = (
+        words.say(language, code)
+        if code in words.WORDS["en"]
+        else str(item.get("reason") or "").strip()
+    )
     if reason:
         lines.append(f"<i>{html.escape(reason)}</i>")
     return "\n".join(lines).rstrip()
@@ -283,7 +301,9 @@ def announce_executions(
             "destination": execution.destination_label,
             "caption": execution.caption,
             "at": execution.scheduled_at,
+            "platform": execution.platform,
             "reason": execution.held_reason,
+            "reason_code": execution.held_reason_code,
             "image_paths": list(execution.image_paths or []),
             "video_path": execution.media_path,
             "queue_item_id": execution.queue_item_id,

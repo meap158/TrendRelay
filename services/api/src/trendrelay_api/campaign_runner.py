@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import approval_words as words
 from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
 from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.campaign_scheduler import (
@@ -292,7 +293,14 @@ def finalization_problems(
 
 
 def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | None:
-    """Why this post must wait for a person, or None to proceed.
+    """Which sentence says why this post must wait, or None to proceed.
+
+    A key rather than the sentence itself. The same reason is read in two
+    places that do not share a language: the app, in whatever the reader set,
+    and the Telegram card, in the campaign's own - and a card that carried
+    Vietnamese buttons over an English explanation was answering "why is this
+    waiting?" in a language its approver had not asked for. The words for
+    each key live in `approval_words`, beside the rest of what a card says.
 
     Approval before an engine is the pipeline's rule, not one authority
     level's: below earned autonomy, every frozen post waits in the inbox and
@@ -315,25 +323,11 @@ def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | Non
         # product could get this far - so a campaign that never pinned anything
         # was told to go and change a pin it had not made.
         if post.offer_selection == "queue item override":
-            return (
-                "A product pinned to this post matched its content with low "
-                "confidence. Approve to post it anyway, or pin a different one."
-            )
+            return "hold_low_pinned"
         if post.offer_selection == "campaign manual offer":
-            return (
-                "This campaign's one product matched this content with low "
-                "confidence. Approve to post it anyway, or change the product "
-                "in the campaign's settings."
-            )
-        return (
-            "Smart matching found nothing here that fits this post well, so "
-            "the best available product is attached. Approve to post it, or "
-            "pin a product to this post yourself."
-        )
-    return (
-        "Waiting for approval: this exact frozen post reaches its engine "
-        "only after a person approves it."
-    )
+            return "hold_low_campaign"
+        return "hold_low_smart"
+    return "hold_waiting"
 
 
 #: What a held post says, and therefore what changing it has to reach.
@@ -833,7 +827,12 @@ def run_campaign(
             # slot and its queue item, so approving it later delivers exactly
             # what was planned now.
             execution.state = "proposed"
-            execution.held_reason = hold
+            # The key and the sentence it stands for. The key is what a card
+            # says in the campaign's language; the sentence is English, kept
+            # because the app reads it and because a reason written down is
+            # still a reason when nobody has a table to look it up in.
+            execution.held_reason_code = hold
+            execution.held_reason = words.say("en", hold)
             execution.updated_at = moment
             reserved.append(post)
             held.append({
@@ -843,6 +842,9 @@ def run_campaign(
                 # say which account and which post without reading the
                 # execution back.
                 "destination": destination.label,
+                # And which network it is going to, which the account's own
+                # label often does not say.
+                "platform": destination.platform,
                 "caption": post.caption,
                 "image_paths": list(post.image_paths or ()),
                 "video_path": post.video_path or None,
@@ -851,7 +853,8 @@ def run_campaign(
                 # lives nowhere else.
                 "queue_item_id": post.queue_item_id,
                 "at": post.at,
-                "reason": hold,
+                "reason": execution.held_reason,
+                "reason_code": hold,
             })
             continue
         try:

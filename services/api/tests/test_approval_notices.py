@@ -17,6 +17,7 @@ from sqlalchemy import select
 from contextlib import nullcontext
 
 from trendrelay_api import approval_notices
+from trendrelay_api import approval_words as words
 from trendrelay_api.campaign_runner import run_campaign
 from trendrelay_api.integrations import telegram
 from trendrelay_api.models import AuditEvent
@@ -422,3 +423,101 @@ def test_the_poll_reads_from_where_it_left_off_and_moves_on_per_press(session, m
     assert seen == [41]
     assert handled == 1 and answered == ["apr:gone"]
     assert offsets == [42, 43]
+
+
+def test_the_card_names_the_network_a_post_is_going_to() -> None:
+    """An account label is whatever its owner typed. "anisenpaitok" does not
+    say where it posts, and where it posts is the first thing an approver
+    wants of the words underneath."""
+    item = {
+        "destination": "anisenpaitok",
+        "platform": "tiktok",
+        "caption": "c",
+        "at": None,
+    }
+
+    text = approval_notices.card_text("Storytelling", item, language="vi")
+
+    assert text.startswith(f"<b>Storytelling</b> · TikTok · anisenpaitok")
+
+
+def test_the_network_is_left_out_when_the_account_already_says_it() -> None:
+    # Otherwise a card reads "TikTok · tiktok main", which is the same word
+    # twice for a reader who only needed it once.
+    item = {"destination": "tiktok main", "platform": "tiktok", "caption": "c", "at": None}
+
+    text = approval_notices.card_text("Launch", item)
+
+    assert text.startswith(f"<b>Launch</b> · tiktok main")
+
+
+def test_an_unnamed_network_is_still_named() -> None:
+    # Better a card that says `bluesky2` than one that quietly drops where a
+    # post is going because nobody has added the proper name yet.
+    item = {"destination": "an account", "platform": "bluesky2", "caption": "c", "at": None}
+
+    assert "bluesky2" in approval_notices.card_text("Launch", item)
+
+
+def test_why_a_post_waits_is_said_in_the_campaign_s_language() -> None:
+    """The line the whole card was missing.
+
+    Its buttons, its labels and its dates were already the campaign's; the
+    one sentence explaining why the post is sitting there was the server's
+    English underneath all of them.
+    """
+    item = {
+        "destination": "anisenpaitok",
+        "caption": "c",
+        "at": None,
+        "reason": "Waiting for approval: this exact frozen post reaches its engine "
+                  "only after a person approves it.",
+        "reason_code": "hold_waiting",
+    }
+
+    vietnamese = approval_notices.card_text("Storytelling", item, language="vi")
+    english = approval_notices.card_text("Storytelling", item, language="en")
+
+    assert words.say("vi", "hold_waiting") in vietnamese
+    assert "Waiting for approval" not in vietnamese
+    assert "Waiting for approval" in english
+
+
+def test_a_post_held_before_the_reasons_had_keys_still_says_why() -> None:
+    # Rows frozen before the key column existed carry the sentence and no
+    # code. English is not what that reader asked for, but it is the reason.
+    item = {
+        "destination": "acct", "caption": "c", "at": None,
+        "reason": "Waiting for approval.", "reason_code": None,
+    }
+
+    assert "Waiting for approval." in approval_notices.card_text("Launch", item, language="vi")
+
+
+def test_a_reason_key_nothing_recognises_falls_back_to_the_sentence() -> None:
+    item = {
+        "destination": "acct", "caption": "c", "at": None,
+        "reason": "Waiting for approval.", "reason_code": "hold_from_the_future",
+    }
+
+    assert "Waiting for approval." in approval_notices.card_text("Launch", item, language="vi")
+
+
+def test_a_real_run_holds_a_post_in_words_its_approver_reads(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """End to end, which is where this was noticed: a Vietnamese campaign's
+    card carried Vietnamese buttons over an English explanation of why the
+    post was sitting there. The runner freezes the reason as a key now, and
+    the card looks the words up in the language it is being read in."""
+    execution = held_one(
+        session, tmp_path, engine_stub, approvals_telegram=True, post_language="vi",
+    )
+
+    assert execution.held_reason_code == "hold_waiting"
+    # The sentence is kept beside the key, because the app reads it.
+    assert "Waiting for approval" in execution.held_reason
+
+    [card] = chat["sent"]
+    assert words.say("vi", "hold_waiting") in card["text"]
+    assert "Waiting for approval" not in card["text"]

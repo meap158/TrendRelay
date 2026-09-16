@@ -172,6 +172,14 @@ class PublicationExecution(Base):
     #: Why a `proposed` execution is waiting for a person - the sentence the
     #: exception inbox shows. Empty on anything that was never held.
     held_reason: Mapped[str | None] = mapped_column(String(500))
+    #: The same reason as a key, for the surfaces that do not read English.
+    #:
+    #: The sentence above is kept as it always was - the app reads it, and a
+    #: row frozen before this column existed still has to be able to say why
+    #: it is waiting. This names which of the reasons it is, so a Telegram
+    #: card can put it in the campaign's own language rather than repeating
+    #: the server's. `approval_words` holds the words for each key.
+    held_reason_code: Mapped[str | None] = mapped_column(String(40))
     #: Timestamped native-performance snapshots, filled by the measurement
     #: phase. Declared now so measuring needs no migration.
     performance_snapshots: Mapped[list[dict[str, Any]]] = mapped_column(

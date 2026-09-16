@@ -35,6 +35,22 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "This was the test card. Nothing was decided. Pressed by {who}.",
         "notes": "Notes",
         "see_the_app": "see the app",
+        "hold_waiting": (
+            "Waiting for approval: this exact frozen post reaches its engine only after a person "
+            "approves it."
+        ),
+        "hold_low_pinned": (
+            "A product pinned to this post matched its content with low confidence. Approve to "
+            "post it anyway, or pin a different one."
+        ),
+        "hold_low_campaign": (
+            "This campaign's one product matched this content with low confidence. Approve to post "
+            "it anyway, or change the product in the campaign's settings."
+        ),
+        "hold_low_smart": (
+            "Smart matching found nothing here that fits this post well, so the best available "
+            "product is attached. Approve to post it, or pin a product to this post yourself."
+        ),
     },
     "vi": {
         "approve": "✅ Duyệt",
@@ -55,6 +71,21 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "Đây là thẻ thử. Không có gì được quyết định. {who} đã bấm.",
         "notes": "Ghi chú",
         "see_the_app": "xem trong ứng dụng",
+        "hold_waiting": (
+            "Đang chờ duyệt: đúng bài đã chốt này chỉ được gửi đi sau khi có người duyệt."
+        ),
+        "hold_low_pinned": (
+            "Sản phẩm được ghim cho bài này khớp với nội dung ở mức thấp. Duyệt để vẫn đăng, hoặc "
+            "ghim một sản phẩm khác."
+        ),
+        "hold_low_campaign": (
+            "Sản phẩm duy nhất của chiến dịch khớp với nội dung này ở mức thấp. Duyệt để vẫn đăng, "
+            "hoặc đổi sản phẩm trong cài đặt chiến dịch."
+        ),
+        "hold_low_smart": (
+            "Ghép thông minh không tìm được sản phẩm nào thật sự hợp với bài này, nên sản phẩm khả "
+            "dĩ nhất được đính kèm. Duyệt để đăng, hoặc tự ghim một sản phẩm cho bài."
+        ),
     },
     "ja": {
         "approve": "✅ 承認",
@@ -75,6 +106,19 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "これはテストカードです。何も決定されていません。{who} が押しました。",
         "notes": "メモ",
         "see_the_app": "アプリを確認してください",
+        "hold_waiting": "承認待ち: この確定済みの投稿は、人が承認した後にのみ配信されます。",
+        "hold_low_pinned": (
+            "この投稿に固定された商品は、内容との一致度が低いものでした。このまま投稿するなら承認、"
+            "別の商品を固定することもできます。"
+        ),
+        "hold_low_campaign": (
+            "このキャンペーンの唯一の商品は、この内容との一致度が低いものでした。このまま投稿するな"
+            "ら承認、キャンペーン設定で商品を変更することもできます。"
+        ),
+        "hold_low_smart": (
+            "スマートマッチングはこの投稿に本当に合う商品を見つけられず、手元で最も近いものを添付し"
+            "ています。承認して投稿するか、自分で商品を固定してください。"
+        ),
     },
     "fr": {
         "approve": "✅ Approuver",
@@ -95,6 +139,23 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "C'était la carte de test. Rien n'a été décidé. Appuyé par {who}.",
         "notes": "Notes",
         "see_the_app": "voir l'app",
+        "hold_waiting": (
+            "En attente d'approbation : ce post figé ne part vers son moteur qu'après "
+            "l'approbation d'une personne."
+        ),
+        "hold_low_pinned": (
+            "Un produit épinglé à ce post correspond peu à son contenu. Approuvez pour le publier "
+            "quand même, ou épinglez-en un autre."
+        ),
+        "hold_low_campaign": (
+            "L'unique produit de cette campagne correspond peu à ce contenu. Approuvez pour le "
+            "publier quand même, ou changez le produit dans les réglages de la campagne."
+        ),
+        "hold_low_smart": (
+            "L'association intelligente n'a rien trouvé qui convienne vraiment ici, donc le "
+            "meilleur produit disponible est joint. Approuvez pour publier, ou épinglez vous-même "
+            "un produit."
+        ),
     },
     "zh": {
         "approve": "✅ 批准",
@@ -115,6 +176,17 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "这是测试卡片。没有做出任何决定。由 {who} 按下。",
         "notes": "备注",
         "see_the_app": "请查看应用",
+        "hold_waiting": "等待批准：这条已冻结的帖子只有在有人批准后才会送往发布引擎。",
+        "hold_low_pinned": (
+            "固定到这条帖子的商品与内容的匹配度较低。批准则照常发布，或改为固定另一个商品。"
+        ),
+        "hold_low_campaign": (
+            "本活动的唯一商品与此内容的匹配度较低。批准则照常发布，或在活动设置中更换商品。"
+        ),
+        "hold_low_smart": (
+            "智能匹配没有找到真正合适的商品，因此附上了现有最接近的一个。批准即可发布，或自己为这条"
+            "帖子固定一个商品。"
+        ),
     },
     "ru": {
         "approve": "✅ Одобрить",
@@ -135,6 +207,22 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "Это была тестовая карточка. Ничего не решено. Нажал(а): {who}.",
         "notes": "Заметки",
         "see_the_app": "см. приложение",
+        "hold_waiting": (
+            "Ожидает одобрения: этот зафиксированный пост уйдёт в публикацию только после того, "
+            "как его одобрит человек."
+        ),
+        "hold_low_pinned": (
+            "Товар, закреплённый за этим постом, слабо совпал с его содержанием. Одобрите, чтобы "
+            "опубликовать как есть, или закрепите другой."
+        ),
+        "hold_low_campaign": (
+            "Единственный товар этой кампании слабо совпал с этим содержанием. Одобрите, чтобы "
+            "опубликовать как есть, или смените товар в настройках кампании."
+        ),
+        "hold_low_smart": (
+            "Умный подбор не нашёл здесь ничего действительно подходящего, поэтому приложен лучший "
+            "из доступных. Одобрите публикацию или закрепите товар сами."
+        ),
     },
     "ar": {
         "approve": "✅ موافقة",
@@ -155,8 +243,59 @@ WORDS: dict[str, dict[str, str]] = {
         "test_answer": "هذه بطاقة تجريبية. لم يُتّخذ أي قرار. ضغطها {who}.",
         "notes": "ملاحظات",
         "see_the_app": "راجع التطبيق",
+        "hold_waiting": (
+            "في انتظار الموافقة: هذا المنشور المجمَّد لا يصل إلى محرّك النشر إلا بعد موافقة شخص."
+        ),
+        "hold_low_pinned": (
+            "المنتج المثبَّت على هذا المنشور تطابق مع محتواه بثقة منخفضة. وافق لنشره كما هو، أو "
+            "ثبّت منتجًا آخر."
+        ),
+        "hold_low_campaign": (
+            "منتج هذه الحملة الوحيد تطابق مع هذا المحتوى بثقة منخفضة. وافق لنشره كما هو، أو غيّر "
+            "المنتج في إعدادات الحملة."
+        ),
+        "hold_low_smart": (
+            "لم تجد المطابقة الذكية هنا ما يناسب فعلًا، لذا أُرفق أفضل المتاح. وافق لنشره، أو ثبّت "
+            "منتجًا بنفسك."
+        ),
     },
 }
+
+#: What each network is called, so a card names the place a post is going.
+#:
+#: Not translated: these are the names the networks call themselves, and an
+#: approver looking for the TikTok account is looking for the word TikTok
+#: whatever language the rest of the card is in. Level with the interface's
+#: own labels, so the card and the app name a destination the same way.
+PLATFORMS: dict[str, str] = {
+    "tiktok": "TikTok",
+    "instagram": "Instagram",
+    "youtube": "YouTube",
+    "facebook": "Facebook",
+    "twitter": "X / Twitter",
+    "linkedin": "LinkedIn",
+    "threads": "Threads",
+    "pinterest": "Pinterest",
+    "reddit": "Reddit",
+    "bluesky": "Bluesky",
+    "mastodon": "Mastodon",
+    "telegram": "Telegram",
+    "googlebusiness": "Google Business",
+    "douyin": "Douyin",
+}
+
+
+def platform_name(platform: str | None) -> str:
+    """A network's own name, or the id itself for one nothing has named yet.
+
+    An unknown id is shown rather than swallowed: a card that silently drops
+    where a post is going is worse than one that says `bluesky2` while
+    somebody adds the proper name here.
+    """
+    if not platform:
+        return ""
+    return PLATFORMS.get(platform, platform)
+
 
 #: Short weekday names, so a due time reads in the card's language rather
 #: than in the server's locale. Monday first, as `datetime.weekday` counts.
