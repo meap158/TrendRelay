@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Maximize2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Lightbox } from "../ui/lightbox";
 import { useOpaqueMedia } from "../../lib/media-preview";
 
 /**
@@ -87,17 +89,114 @@ export function TimelinePlayer({ src, title }: { src: string; title: string }) {
  * no argument for treating the two differently: both are this workspace's own
  * media, shown back to it.
  */
-export function TimelineImage({ src, path }: { src: string; path: string }) {
+function TimelineImage({ src, path, label, onReady, onOpen }: {
+  src: string;
+  path: string;
+  /** What this picture is - its alt text, and the lightbox's name for it. */
+  label: string;
+  /** Hands the read bytes up, so the full-size view can show them again. */
+  onReady: (path: string, objectUrl: string) => void;
+  onOpen: () => void;
+}) {
   const wrapper = useRef<HTMLSpanElement>(null);
   const seen = useSeen(wrapper);
   const { objectUrl, problem } = useOpaqueMedia(src, path, "image/jpeg", seen);
 
+  useEffect(() => {
+    if (objectUrl) onReady(path, objectUrl);
+  }, [objectUrl, path, onReady]);
+
   return (
     <span ref={wrapper} className="timeline-media-slot">
-      {problem
-        ? <span className="campaign-pipeline-reason">{problem}</span>
-        // eslint-disable-next-line @next/next/no-img-element
-        : objectUrl ? <img className="timeline-media" src={objectUrl} alt={path} /> : null}
+      {problem && <span className="campaign-pipeline-reason">{problem}</span>}
+      {objectUrl && (
+        // A button rather than a click handler on the picture, which is what
+        // the Library's own thumbnail is: reachable by keyboard, and saying
+        // what it does when it gets there.
+        <button type="button" className="timeline-media-zoom"
+          aria-label={`${label} - view full size`} title="View full size"
+          onClick={onOpen}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="timeline-media" src={objectUrl} alt={label} />
+          <span className="timeline-media-zoom-mark" aria-hidden="true">
+            <Maximize2 size={12} />
+          </span>
+        </button>
+      )}
     </span>
+  );
+}
+
+/**
+ * The pictures a carousel went out as, any one of which opens full size.
+ *
+ * Eight frames at 110px are eight thumbnails of the same shoot, and which one
+ * led is not a question a thumbnail answers - which is the same question the
+ * Library answers with a lightbox, so this answers it with that lightbox
+ * rather than a second way of looking at a picture.
+ *
+ * The blobs stay with the frames that read them and are lent upward: these
+ * bytes are already here, and reading the file a second time to fill the
+ * dialog would be a second request for a picture the page is showing.
+ */
+export function TimelineCarousel({ images }: {
+  images: { path: string; src: string }[];
+}) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [openAt, setOpenAt] = useState<number | null>(null);
+
+  // Keyed by path rather than by index, and bailing when it already holds the
+  // URL: the frames report on every render of a strip that re-renders with the
+  // timeline around it, and a new object each time would loop.
+  const remember = useCallback((path: string, objectUrl: string) => {
+    setUrls((known) => (known[path] === objectUrl ? known : { ...known, [path]: objectUrl }));
+  }, []);
+
+  const labelFor = (index: number) => `Picture ${index + 1} of ${images.length}`;
+
+  // Arrows page through the set, the way they do over the Library's own
+  // lightbox. Bound only while it is open, so the timeline underneath keeps
+  // its own keys the rest of the time.
+  useEffect(() => {
+    if (openAt === null) return;
+    function step(event: KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      setOpenAt((index) => {
+        if (index === null) return index;
+        const next = index + (event.key === "ArrowLeft" ? -1 : 1);
+        return next < 0 || next >= images.length ? index : next;
+      });
+    }
+    window.addEventListener("keydown", step);
+    return () => window.removeEventListener("keydown", step);
+  }, [openAt, images.length]);
+
+  return (
+    <div className="timeline-media-strip">
+      {images.map((image, index) => (
+        <TimelineImage
+          key={`${image.path}-${index}`}
+          src={image.src}
+          path={image.path}
+          label={labelFor(index)}
+          onReady={remember}
+          onOpen={() => setOpenAt(index)}
+        />
+      ))}
+      {openAt !== null && (
+        <Lightbox
+          open
+          /* Empty while a frame the strip has not read yet is opened - the
+             dark stage holds and the picture joins it, which is the state the
+             lightbox is already written for. */
+          src={urls[images[openAt]?.path ?? ""] ?? ""}
+          alt={labelFor(openAt)}
+          onClose={() => setOpenAt(null)}
+          onPrevious={openAt > 0 ? () => setOpenAt(openAt - 1) : undefined}
+          onNext={openAt < images.length - 1 ? () => setOpenAt(openAt + 1) : undefined}
+        />
+      )}
+    </div>
   );
 }

@@ -71,7 +71,7 @@ const CaptionEditor = dynamic(() => import("../library/caption-editor").then((m)
 const OfferPicker = dynamic(() => import("../publish/offer-picker").then((m) => m.OfferPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("../library/bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const BatchTranscribe = dynamic(() => import("../library/batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
-import { TimelineImage, TimelinePlayer } from "./timeline-player";
+import { TimelineCarousel, TimelinePlayer } from "./timeline-player";
 import { CampaignAnalytics } from "./campaign-analytics";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { profileUrl } from "../../lib/social-profile";
@@ -7637,15 +7637,12 @@ export function AutopilotPanel({
                                 />
                               )}
                               {!entry.video_path && entry.image_paths.length > 0 && (
-                                <div className="timeline-media-strip">
-                                  {entry.image_paths.map((path) => (
-                                    <TimelineImage
-                                      key={path}
-                                      src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`}
-                                      path={path}
-                                    />
-                                  ))}
-                                </div>
+                                <TimelineCarousel
+                                  images={entry.image_paths.map((path) => ({
+                                    path,
+                                    src: `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`,
+                                  }))}
+                                />
                               )}
                               <strong>Post content</strong>
                               <pre>{entry.caption}</pre>

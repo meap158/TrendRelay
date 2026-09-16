@@ -1792,6 +1792,17 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .timeline-media { max-width: 240px; max-height: 180px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #000; }
 .timeline-media-strip { display: flex; flex-wrap: wrap; gap: 6px; }
 .timeline-media-strip .timeline-media { max-width: 110px; max-height: 110px; object-fit: cover; }
+/* A frame that opens, marked the way the Library marks its own. Eight frames
+   of one shoot at 110px are a record that something went out, not a look at
+   what did - and the corner mark waits for a hover because a strip that
+   announced eight of them at once would be louder than the pictures. */
+.timeline-media-zoom { position: relative; display: block; border: 0; padding: 0; background: transparent; cursor: zoom-in; }
+.timeline-media-zoom-mark { position: absolute; inset-block-end: 5px; inset-inline-end: 5px; display: grid; place-items: center; inline-size: 20px; block-size: 20px; border-radius: 999px; color: var(--on-media); background: color-mix(in srgb, var(--ink) 55%, transparent); opacity: 0; transition: opacity .12s ease; }
+.timeline-media-zoom:hover .timeline-media-zoom-mark,
+.timeline-media-zoom:focus-visible .timeline-media-zoom-mark { opacity: 1; }
+/* Nothing hovers on a touch screen, so the mark simply stays. */
+@media (hover: none) { .timeline-media-zoom-mark { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .timeline-media-zoom-mark { transition: none; } }
 .autopilot-queue > li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue > li.approved { border-inline-start: 3px solid var(--green); }
 /* Its own row, spanning every column, on every screen this list is ever
