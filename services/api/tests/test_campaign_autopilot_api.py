@@ -1598,6 +1598,51 @@ def test_copy_somebody_wrote_is_not_marked_as_needing_writing(workspace) -> None
     assert item["body"] == "Real copy."
 
 
+def test_a_post_waiting_for_media_is_marked_the_same_approved_or_not(workspace) -> None:
+    """The wait `set_post_media` exists to end is the same wait whichever
+    side of approval a post is on - so the interface has to be able to say
+    so on both, not only on a draft."""
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    draft = request("POST", f"{base}/queue", json={
+        "media_later": True, "body": "Words are ready.",
+    }).json()["item"]
+    assert draft["needs_media"] is True
+    assert draft["needs_copy"] is False
+
+    approved = request(
+        "PATCH", f"{base}/queue/{draft['id']}", json={"state": "approved"},
+    ).json()["item"]
+
+    # Promoting it decided nothing about the media it still does not have.
+    assert approved["needs_media"] is True
+    assert approved["state"] == "approved"
+
+
+def test_media_that_has_arrived_is_not_marked_as_still_waited_for(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4", "body": "Real copy.",
+    }).json()["item"]
+
+    assert item["needs_media"] is False
+
+
+def test_a_deliberate_copy_only_post_is_not_marked_as_waiting_for_media(workspace) -> None:
+    """No media because none was wanted is a decision, not a gap."""
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    item = request("POST", f"{base}/queue", json={
+        "text_only": True, "body": "Words alone.",
+    }).json()["item"]
+
+    assert item["needs_media"] is False
+
+
 # --- matching before anything is queued ----------------------------------------
 #
 # The composer shows the fitting products per row while media is being chosen,

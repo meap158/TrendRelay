@@ -636,6 +636,15 @@ def _queue_view(
         # So the interface can mark a package that still needs writing rather
         # than showing the placeholder as though somebody meant it.
         "needs_copy": item.body == PLACEHOLDER_BODY,
+        # The other half of the same wait. No media because none has arrived,
+        # not because none was wanted (that is `text_only`) - the shape
+        # `set_post_media` exists to complete, whether the post is still a
+        # draft or was approved before its media did. The scheduler skips
+        # both exactly alike, so the interface marks them alike rather than
+        # showing an approved post as though it could actually go out.
+        "needs_media": (
+            not item.text_only and not item.video_path and not item.image_paths
+        ),
         "title": item.title,
         "body": item.body,
         "hashtags": item.hashtags,

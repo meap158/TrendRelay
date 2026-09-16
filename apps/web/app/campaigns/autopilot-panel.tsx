@@ -515,6 +515,10 @@ type QueueItem = {
   post_type_overrides: Record<string, string>;
   /** The body is still the placeholder nobody wrote; the card says so. */
   needs_copy: boolean;
+  /** Not text_only, and no video or pictures have arrived yet - the wait
+      set_post_media exists to end, whether this post is a draft or was
+      approved before its media was. */
+  needs_media: boolean;
   title: string | null;
   body: string;
   hashtags: string[];
@@ -1882,11 +1886,16 @@ export function AutopilotPanel({
   /**
    * The tag a row wears, by the same rule its badge follows.
    *
-   * `needs_copy` wins over the stored state there, so it wins here too - a
-   * chip and the badge it stands for must never disagree about which pile a
-   * post is in.
+   * `needs_copy` wins over `needs_media`, which wins over the stored state -
+   * so it wins here too, in the same order: a chip and the badge it stands
+   * for must never disagree about which pile a post is in. Copy first
+   * because it is usually written before media in the words-first flow, and
+   * because a post with neither is more naturally described by what to do
+   * about it first.
    */
-  const tagOf = (item: QueueItem) => (item.needs_copy ? "needsCopy" : item.state);
+  const tagOf = (item: QueueItem) => (
+    item.needs_copy ? "needsCopy" : item.needs_media ? "needsMedia" : item.state
+  );
 
   const [queueTag, setQueueTag] = usePersistedState<string>(
     "campaigns.queueTag", "all", (value): value is string => typeof value === "string",
@@ -1907,6 +1916,7 @@ export function AutopilotPanel({
    */
   const QUEUE_TAGS: { key: string; tone: string }[] = [
     { key: "needsCopy", tone: "chip-warn" },
+    { key: "needsMedia", tone: "chip-warn" },
     { key: "approved", tone: "chip-good" },
     { key: "draft", tone: "chip-neutral" },
     { key: "paused", tone: "chip-neutral" },
@@ -3681,6 +3691,11 @@ export function AutopilotPanel({
       openPostEditor(item);
       return;
     }
+    if (item.needs_media) {
+      fail("This post has no media attached. Attach a video or pictures before publishing.");
+      openPostEditor(item);
+      return;
+    }
 
     const postedMap = item.last_posted_by_destination || {};
     const postedDests = destinations.filter((d) => Boolean(postedMap[d.id]));
@@ -4426,9 +4441,12 @@ export function AutopilotPanel({
             const waiting = exceptions.length;
             const ready = autopilot.queue_ready;
             const needsCopy = queue.filter((item) => item.needs_copy).length;
-            const needsMedia = queue.filter((item) =>
-              !item.needs_copy && !item.text_only
-              && !item.video_path && !item.image_paths.length).length;
+            // A post can lack both at once; `needs_copy` already claims it
+            // above, so this counts what still needs media once copy is
+            // written for - the same precedence `tagOf` gives the row's tag.
+            const needsMedia = queue.filter(
+              (item) => !item.needs_copy && item.needs_media,
+            ).length;
             return (
               <p className="autopilot-approval-summary" role="status">
                 <strong>{waiting}</strong> waiting for you
@@ -5560,15 +5578,19 @@ export function AutopilotPanel({
                     the badge. */}
                 <span className="campaign-queue-status">
                   <Badge
-                    tone={item.needs_copy
+                    tone={item.needs_copy || item.needs_media
                       ? "warn" : item.state === "approved" ? "good" : "neutral"}
                     title={item.needs_copy
                       ? t("autopilot.state.help.needsCopy")
-                      : t(`autopilot.state.help.${item.state}`)}
+                      : item.needs_media
+                        ? t("autopilot.state.help.needsMedia")
+                        : t(`autopilot.state.help.${item.state}`)}
                   >
                     {item.needs_copy
                       ? t("autopilot.state.needsCopy")
-                      : t(`autopilot.state.${item.state}`)}
+                      : item.needs_media
+                        ? t("autopilot.state.needsMedia")
+                        : t(`autopilot.state.${item.state}`)}
                   </Badge>
                   {/* A mark, not a badge and not a column: it says only that
                       somebody left notes on this post, which is all a row can
@@ -5698,22 +5720,24 @@ export function AutopilotPanel({
                      really an empty caption. */
                   noPlanReason={item.needs_copy
                     ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
-                    : item.state !== "approved"
-                      ? "Held back: add it to the rotation and the plan appears here."
-                      : !destinations.length
-                        ? "Nowhere to post it yet. Add an account."
-                        : !hasPostingTimes
-                          ? "No posting times yet. Add one and the plan appears here."
-                          : preview
-                            // Says which window is full, and that being
-                            // outside it is normal. "Every slot is taken by
-                            // another post" describes a queue larger than
-                            // the outlook - which is most queues - but reads
-                            // as a fault, so a full week of correct planning
-                            // looked like dozens of posts going nowhere.
-                            ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
-                              + "already full. It stays in rotation and takes the first free slot after that."
-                            : "Loading the plan…"}
+                    : item.needs_media
+                      ? "Not scheduled: no media yet. Attach a video or pictures and this post joins the rotation."
+                      : item.state !== "approved"
+                        ? "Held back: add it to the rotation and the plan appears here."
+                        : !destinations.length
+                          ? "Nowhere to post it yet. Add an account."
+                          : !hasPostingTimes
+                            ? "No posting times yet. Add one and the plan appears here."
+                            : preview
+                              // Says which window is full, and that being
+                              // outside it is normal. "Every slot is taken by
+                              // another post" describes a queue larger than
+                              // the outlook - which is most queues - but reads
+                              // as a fault, so a full week of correct planning
+                              // looked like dozens of posts going nowhere.
+                              ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
+                                + "already full. It stays in rotation and takes the first free slot after that."
+                              : "Loading the plan…"}
                 />
               </li>
             ))}
