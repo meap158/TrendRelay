@@ -650,7 +650,14 @@ nav strong { color: var(--text); }
    these surfaces the account, the caption and the actions float on the
    video, and where they sit is exactly what somebody is checking when they
    ask whether a long caption will clear the buttons. */
-.preview-surface { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto; pointer-events: none; }
+/* One column, the frame's own width. Left to `auto` the column sized itself
+   to its widest child and overflowed the frame: in a narrow preview the
+   caption's own minimum plus the gutter it leaves the rail came to more
+   than the picture is wide, so the column grew, the rail was pushed out
+   past the clipped edge and the steps row centred itself on a box wider
+   than the one anybody can see - which is what put the dots and their
+   arrows off to the right. */
+.preview-surface { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto; pointer-events: none; }
 /* A wash under the bottom half only. The furniture is white and the video
    underneath it is whatever it is; without this a pale frame swallows the
    handle and the caption, which is the one thing this is drawn to show. */
