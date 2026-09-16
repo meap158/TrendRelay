@@ -2788,7 +2788,7 @@ def test_the_needs_media_sop_teaches_one_post_at_a_time() -> None:
         "get_import_status", "set_post_media",
     ):
         assert tool in prose, tool
-    assert "Do not batch across posts" in prose
+    assert "never across posts" in prose
     # Where the brief for the images lives - the one thing about a held post
     # that is written nowhere else.
     assert "queue_item.context" in prose
@@ -2796,6 +2796,27 @@ def test_the_needs_media_sop_teaches_one_post_at_a_time() -> None:
     # And the live consequence that separates this from drafting: a post that
     # was already approved goes out once it is completed.
     assert "joins the rotation" in prose
+
+
+def test_the_needs_media_sop_rules_out_a_collage_and_a_stall() -> None:
+    """The two ways the loop goes wrong once it is otherwise right.
+
+    An image model asked for eight scenes returns one sheet of eight unless
+    told not to, and a carousel of one panel grid shows everything at once and
+    reads as nothing. The other is a run that stops: a single card that came
+    out wrong is one regeneration of that card, and a post nobody can finish
+    is a line in the report rather than the end of the queue.
+    """
+    prose = " ".join(sops.get_sop("campaigns.fill-needs-media")["markdown"].split())
+
+    assert "never a collage" in prose
+    # Checked before any of it is uploaded, because an import per picture is
+    # what a bad batch costs.
+    assert "Verify the set before uploading" in prose
+    assert "regenerate that scene" in prose
+    # And the queue keeps moving between posts.
+    assert "take the next one straight away" in prose.lower()
+    assert "not ask whether to continue" in prose
 
 
 def test_a_post_of_nothing_is_refused_with_the_way_in(session) -> None:

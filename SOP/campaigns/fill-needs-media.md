@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the needs-media queue one post at a time - read that post's own brief, make or find exactly its pictures, upload each, attach them to that exact post, and only then move to the next.
-version: 1
+summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes in one batch as separate images, check them, upload each, attach them to that exact post, and take the next straight away.
+version: 2
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -74,15 +74,18 @@ next:
 ```
 needs-media post
   → read that post's brief
-  → make exactly its images, one per scene
+  → generate its scenes in one batch, one image each, never a collage
+  → check the set; regenerate only a scene that drifted
   → upload each, keeping the order
-  → attach them to that exact post
+  → attach them all to that exact post
   → confirm what landed
-  → next post
+  → next post, straight away
 ```
 
-**Do not batch across posts.** Generating forty images for five posts and
-attaching them afterwards is the failure this ordering exists to prevent:
+**Batch within a post, never across posts.** One post's eight scenes are one
+batch - ask for all eight at once rather than round-tripping the model eight
+times. Five posts' forty scenes are not: generating them together and
+attaching them afterwards is the failure this ordering exists to prevent -
 scenes drift between posts, an upload fails in the middle and its slot is no
 longer identifiable, and nothing on the record says which picture belonged to
 which caption. One post's pictures are only ever meaningful next to that post's
@@ -91,6 +94,14 @@ words.
 Keep the `item_id` of the post you are on in front of you for the whole of its
 loop. Every call in it - `get_post_context`, `set_post_media` - takes that id,
 and nothing else in the queue should be touched until that post is whole.
+
+**Then take the next one straight away.** The queue is worked continuously:
+the moment a post's media is attached and confirmed, fetch the next
+`none yet` item and begin its loop. Do not stop to summarise between posts, do
+not ask whether to continue, and do not wait for anything but the calls this
+loop makes. Report once, at the end of the run - or the moment something is
+genuinely blocked, which is a different thing from a scene that came out
+wrong.
 
 ## 4. Read the post's own brief before making anything
 
@@ -118,6 +129,37 @@ report.
 One image per scene, in the order the brief lists them. The order is the swipe
 order and the first image is the cover, so the sequence is part of the meaning,
 not an implementation detail.
+
+**Separate files, never a collage.** Eight scenes are eight images at the
+brief's own aspect - usually 9:16, full-bleed - and not one picture with eight
+panels in it. A carousel is swiped: a grid of eight thumbnails is a single card
+that shows all of it at once and reads as none of it. An image model asked for
+"eight scenes" will happily return one sheet of eight, so say the shape in the
+prompt and check it in the result.
+
+**Verify the set before uploading any of it.** Uploading is where a mistake
+becomes expensive - an import per picture, then a package to unpick - so look
+first, at the whole batch:
+
+- the count matches the brief exactly;
+- each file is one scene, not a panel grid or a contact sheet;
+- the aspect is the one the brief names, on every file;
+- the style lock holds across the set - the same hand, palette and treatment,
+  so eight cards read as one post rather than eight;
+- anything written inside an image is in the campaign's language and spelled
+  correctly.
+
+**When one scene drifts, regenerate that scene.** A single card that came out
+wrong - the wrong aspect, a panel grid, a face that does not match the rest -
+is one regeneration of that scene, keeping the other seven and their order.
+Do not throw the batch away and start the post again over one card, and do not
+park the whole post at the first wrong one: both spend work already done.
+
+A scene that will not come right after a couple of attempts is where that
+stops. Leave that one post untouched - a set you would not publish is worse
+attached than missing - note which post and which scene, and move on to the
+next item. One post nobody could finish is not a reason to stop the queue; it
+is a line in the report at the end.
 
 How many a carousel may hold is the receiving network's own figure: X swipes
 through 4, Instagram and Facebook 10, LinkedIn 20, TikTok 35. `list_campaigns`
@@ -148,9 +190,12 @@ image another worker claimed first, returns a `job_id` instead: poll
 `get_import_status` with every outstanding job id in one call, not one per
 round, and wait for `all_done`.
 
-If a scene fails to import, do not attach a short set and do not substitute a
-similar Library picture. Name the scene that failed, say the post is still
-incomplete, and either retry that one scene or stop and ask.
+If a scene fails to import, retry that one scene - the same narrow repair a
+scene that drifted gets in step 5, for the same reason. Do not attach a short
+set, do not substitute a similar Library picture, and do not re-upload the
+seven that landed. If it will not import after a couple of attempts, name the
+post and the scene, leave the post as it is, and carry on with the rest of the
+queue rather than stopping the run for it.
 
 ## 7. Attach them to that exact post
 
@@ -181,8 +226,9 @@ Re-read the post - `get_post_context`, or the next page of
 `list_campaign_posts` - and check `media_kind` now reads `carousel` (or
 `video`). Only then start the next post.
 
-When the run ends, say plainly: how many posts you filled, how many pictures
-each got, which posts joined the rotation because they were already approved,
-which are still drafts waiting for the operator, and anything left unfinished
-with the reason. A fresh `list_campaign_posts(media="none yet")` is the
-completion evidence; the number it returns is the backlog that remains.
+When the run ends - not between posts - say plainly: how many posts you filled,
+how many pictures each got, which posts joined the rotation because they were
+already approved, which are still drafts waiting for the operator, and every
+post left unfinished with the scene that stopped it. A fresh
+`list_campaign_posts(media="none yet")` is the completion evidence; the number
+it returns is the backlog that remains.

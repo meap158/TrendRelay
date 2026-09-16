@@ -131,16 +131,24 @@ at a time:
 2. For the first post, `get_post_context(item_id=...)`: `queue_item.context`
    carries the brief a previous pass left - how many cards, the style, the
    scene list - and `current_copy.caption` is what the pictures belong to.
-3. Generate exactly the scenes that brief names, in its order.
-4. `upload_media` once per scene, keeping one result slot per scene.
-5. `set_post_media(item_id=<that same post>, asset_ids=[...])` in scene order,
+3. Generate exactly the scenes that brief names, in its order, as one batch of
+   **separate images** at the brief's aspect - never one collage of panels.
+4. Check the set before uploading any of it: the count, one scene per file,
+   the aspect, the style holding across the set. A scene that came out wrong
+   is one regeneration of that scene, not a restart of the post.
+5. `upload_media` once per scene, keeping one result slot per scene.
+6. `set_post_media(item_id=<that same post>, asset_ids=[...])` in scene order,
    or `append=true` one scene at a time. Read back `carousel_warnings`.
-6. Confirm `media_kind` now reads `carousel`, then start the next post.
+7. Confirm `media_kind` now reads `carousel`, then fetch the next `none yet`
+   item and start its loop straight away.
 
-Finish each post before starting the next. A batch of images generated across
-several posts loses track of which belongs where, and no record afterwards can
-put them back. Completing a post that was **already approved** puts it into the
-rotation with no further approval - say which posts that applied to.
+Finish each post before starting the next, and keep the queue moving: no
+summary between posts, no asking whether to continue. A batch of images
+generated across several posts loses track of which belongs where, and no
+record afterwards can put them back. One post nobody can finish is a line in
+the closing report, not a reason to stop the run. Completing a post that was
+**already approved** puts it into the rotation with no further approval - say
+which posts that applied to.
 
 The upload validates the actual file signature on attachment, URL, and base64
 routes. JPEG, PNG, and WebP images are capped at 25 MB; MP4, MOV, WebM, and MKV
