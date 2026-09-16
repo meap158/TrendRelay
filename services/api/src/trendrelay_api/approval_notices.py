@@ -128,7 +128,7 @@ def app_link(campaign_id: str) -> str | None:
 
 def card_text(
     campaign_name: str, item: dict[str, Any], *, zone: str | None = None, language: str = "en",
-    overdue: bool = False,
+    overdue: bool = False, decided: str | None = None,
 ) -> str:
     """One held post as a message: where, when, the words, why it waits.
 
@@ -142,6 +142,14 @@ def card_text(
     the campaign's name: Telegram's own notification preview shows a
     message's first line, and the one new fact this send exists to carry is
     that the clock ran out, not which campaign it was already clear was late.
+
+    `decided` is the other end of the same card, after a press: it stands in
+    for the waiting line rather than adding to it, so the message a decision
+    leaves behind is still the post - who, where, the words, the notes - with
+    what happened to it in place of why it was waiting, not a single line
+    that has forgotten what it was about. Passed in already built and already
+    escaped, the way `approve_execution`'s own `{who}` already is by the time
+    it reaches here - escaping it twice would show `&amp;` for an `&`.
     """
     where = html.escape(str(item.get("destination") or "an account"))
     when = _when(item.get("at"), zone, language)
@@ -175,6 +183,10 @@ def card_text(
             html.escape(notes),
             "",
         ])
+    if decided is not None:
+        if decided:
+            lines.append(f"<i>{decided}</i>")
+        return "\n".join(lines).rstrip()
     # The card's language for a reason it knows, the stored sentence for one
     # frozen before the reasons had keys - still English, and still better
     # than a card that says nothing about why the post is waiting.
@@ -431,13 +443,22 @@ def _who(callback: dict[str, Any]) -> str:
     return f"@{handle}" if handle else (person.get("name") or f"user {person.get('id')}")
 
 
-def decide(session: Session, callback: dict[str, Any]) -> str:
-    """Carry out one press. Returns the line the message will say from now on.
+def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
+    """Carry out one press. Returns (the toast, what the message says now).
 
     The same path the inbox takes: `approve_execution` with the post's own
     checks, or the dismissal that frees the slot. Refused with a reason when
     the post is no longer held - decided in the app meanwhile, or already
     pressed - so the second press reads as a fact rather than a failure.
+
+    The two returned strings answer different questions. The toast is what
+    Telegram pops over the chat for a second - a decision and who made it,
+    short enough to read in passing. The message is what the card says from
+    now on, and a press used to write the toast's own short sentence there
+    too: "✅ Approved by @ana" replacing a card that had a caption, notes,
+    and a destination on it, so a decided post could no longer say what it
+    had been. The message keeps all of that and swaps only the line that
+    said the post was waiting - see `card_text`'s `decided`.
     """
     from trendrelay_api.campaign_autopilot_api import _omit_unsupported_thread
     from trendrelay_api.campaign_runner import approve_execution
@@ -455,7 +476,12 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
         raise PressRefused(words.say("en", "not_approver"))
     verb, execution_id = _decision(callback.get("data", ""))
     if verb == TEST:
-        return words.say("en", "test_answer", who=html.escape(_who(callback)))
+        # No execution behind this one to read the rest of the card from -
+        # the test card is built once, from nothing this function has access
+        # to (`telegram_setup.launch_action`) - so the toast is also all the
+        # message becomes, same as it always was.
+        line = words.say("en", "test_answer", who=html.escape(_who(callback)))
+        return line, line
 
     execution = session.get(PublicationExecution, execution_id)
     if execution is None:
@@ -477,6 +503,31 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
         "telegram_user_id": presser,
         "telegram_user": who,
     }
+
+    def settled(toast: str) -> tuple[str, str]:
+        """The card as it reads once this decision has landed."""
+        campaign = session.get(Campaign, execution.campaign_id)
+        workspace = session.get(Workspace, execution.workspace_id)
+        notes = ""
+        if execution.queue_item_id:
+            from trendrelay_api.autopilot_models import CampaignQueueItem
+
+            queued = session.get(CampaignQueueItem, execution.queue_item_id)
+            notes = (queued.context if queued else "") or ""
+        item = {
+            "destination": execution.destination_label,
+            "caption": execution.caption,
+            "at": execution.scheduled_at,
+            "platform": execution.platform,
+            "notes": notes,
+        }
+        message = card_text(
+            campaign.name if campaign else "Campaign", item,
+            zone=workspace.timezone if workspace else None,
+            language=language, decided=toast,
+        )
+        return toast, message
+
     if verb == DISMISS:
         execution.state = "cancelled"
         execution.reconciled_at = utc_now()
@@ -488,7 +539,7 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
              **identity},
         )
         session.commit()
-        return words.say(language, "dismissed_by", who=html.escape(who))
+        return settled(words.say(language, "dismissed_by", who=html.escape(who)))
     omitted = _omit_unsupported_thread(execution)
     publish_now = verb == APPROVE_NOW
     try:
@@ -504,21 +555,23 @@ def decide(session: Session, callback: dict[str, Any]) -> str:
     )
     session.commit()
     if execution.state == "failed":
-        return words.say(
+        return settled(words.say(
             language, "approved_but_failed", who=html.escape(who),
             reason=html.escape(execution.error or words.say(language, "see_the_app")),
-        )
-    return words.say(
+        ))
+    return settled(words.say(
         language, "approved_now_by" if publish_now else "approved_by", who=html.escape(who),
-    )
+    ))
 
 
 def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
     """One update from the poll: decide it, and rewrite the card to say so.
 
-    Returns what the card now says, or None for an update with no press in it.
-    Never raises to the loop: a refused press is answered with its reason and
-    the card is left as it was, which is the honest state.
+    Returns the toast - the short decision sentence, not the longer message
+    the card itself now carries (see `decide`) - or None for an update with
+    no press in it. Never raises to the loop: a refused press is answered
+    with its reason and the card is left as it was, which is the honest
+    state.
     """
     from trendrelay_api.integrations import telegram
 
@@ -528,13 +581,9 @@ def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
     original = ""
     try:
         with session_factory() as session:
-            outcome = decide(session, callback)
-        toast = outcome
-        text = outcome
-        original = ""
+            toast, text = decide(session, callback)
     except PressRefused as refusal:
-        outcome = str(refusal)
-        toast = outcome
+        toast = str(refusal)
         text = ""
     if text:
         telegram.settle_button(
@@ -547,7 +596,7 @@ def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
             callback["id"], chat_id=str(callback.get("chat_id")),
             message_id=None, text=original, toast=toast,
         )
-    return outcome
+    return toast
 
 
 def poll_once(session_factory: Any, *, timeout: int = 0) -> int:

@@ -367,6 +367,28 @@ def test_an_overdue_card_says_nothing_extra_with_no_due_time_to_name() -> None:
     assert "overdue" not in text.casefold() and text.startswith("<b>Launch</b>")
 
 
+def test_decided_replaces_the_wait_and_keeps_the_rest_of_the_card() -> None:
+    item = {
+        "destination": "acct", "caption": "Launch clip",
+        "at": None, "reason": "Waiting for approval.", "reason_code": "hold_waiting",
+    }
+    text = approval_notices.card_text("Launch", item, decided="✅ Approved by @ana")
+    assert text.startswith("<b>Launch</b> · acct")
+    assert "Launch clip" in text
+    assert "Waiting for approval" not in text
+    assert text.endswith("<i>✅ Approved by @ana</i>")
+
+
+def test_decided_text_is_trusted_rather_than_escaped_again() -> None:
+    """`decided` arrives already HTML-safe - `approve_execution`'s own
+    `{who}` is escaped once, by `decide`, before it ever reaches here - so
+    escaping it a second time here would turn a `&` into `&amp;amp;`."""
+    item = {"destination": "acct", "caption": "x", "at": None, "reason": ""}
+    text = approval_notices.card_text("Launch", item, decided="Approved by A &amp; B")
+    assert "Approved by A &amp; B" in text
+    assert "&amp;amp;" not in text
+
+
 def test_a_held_post_is_reminded_once_its_own_time_has_passed(session, chat) -> None:
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     due = NOW + timedelta(hours=3)
@@ -466,9 +488,11 @@ def test_a_press_approves_the_post_the_way_the_inbox_does(session, tmp_path, eng
     session.refresh(execution)
     assert execution.state == "queued"
     assert engine_stub, "approving queues the publish, as the inbox would"
-    # The card is rewritten to say so, buttons gone, and the toast says it too.
+    # The toast is the short sentence; the card the message becomes is
+    # longer, and the toast is what the buttons' `outcome` always was.
     [settled] = chat["settled"]
-    assert settled["message_id"] == 5 and settled["text"] == outcome and settled["toast"] == outcome
+    assert settled["message_id"] == 5 and settled["toast"] == outcome
+    assert settled["text"] != outcome
     # The decision is on the record with the Telegram identity beside it.
     [event] = session.scalars(
         select(AuditEvent).where(AuditEvent.action == "campaign.exception_approved")
@@ -477,6 +501,54 @@ def test_a_press_approves_the_post_the_way_the_inbox_does(session, tmp_path, eng
     assert event.detail["telegram_user"] == "@ana"
     assert event.detail["telegram_user_id"] == "42"
     assert event.detail["publish_now"] is False
+
+
+def test_a_decided_card_still_says_what_it_was_about(session, tmp_path, engine_stub, chat) -> None:
+    """The post the card was about does not leave with the buttons.
+
+    A press used to rewrite the whole message down to its decision - "✅
+    Approved by @ana" - which read the caption and the destination out of
+    the chat at the exact moment somebody most needs to check them against
+    what they just pressed. The card keeps them, and now says what happened
+    where the wait used to be.
+    """
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
+    approval_notices.handle_update(same(session), press(execution.id, "apr"))
+
+    [settled] = chat["settled"]
+    text = settled["text"]
+    assert text.startswith("<b>Launch</b> · youtube account · ")
+    assert "Three ways to pull a better espresso." in text
+    assert "Waiting for approval" not in text
+    assert text.endswith("<i>✅ Approved by @ana</i>")
+
+
+def test_a_dismissed_card_keeps_its_content_too(session, tmp_path, engine_stub, chat) -> None:
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
+    approval_notices.handle_update(same(session), press(execution.id, "dis"))
+
+    [settled] = chat["settled"]
+    assert "Three ways to pull a better espresso." in settled["text"]
+    assert settled["text"].endswith("<i>🚫 Dismissed by @ana</i>")
+
+
+def test_working_notes_ride_along_with_a_decided_card_too(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+
+    campaign_setup(session, tmp_path)
+    session.get(CampaignQueueItem, "q1").context = "The client asked for this angle."
+    session.commit()
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+    [execution] = session.scalars(select(PublicationExecution)).all()
+
+    approval_notices.handle_update(same(session), press(execution.id, "apr"))
+
+    [settled] = chat["settled"]
+    assert "The client asked for this angle." in settled["text"]
 
 
 def test_approve_and_post_now_asks_for_immediate_delivery(session, tmp_path, engine_stub, chat) -> None:
