@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign - whole, or a piece at a time - for the operator to promote.
-version: 10
+version: 11
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post, set-post-media]
 ---
@@ -29,6 +29,15 @@ every post you create arrives as a draft outside the rotation, and only the
 operator can promote it, in the app. This is not a formality to work around -
 it is the boundary. End your work by telling the operator a draft is waiting
 for their review.
+
+One thing this boundary does not forbid, and which is easy to read as a
+contradiction: giving media to a post the operator has **already** approved,
+when that post has never had any. Approving it said the words were ready - it
+decided nothing about media, because there was none to decide on - so
+completing it is finishing a job already accepted rather than approving
+anything. The post then goes out on the campaign's own schedule without
+returning to anybody, which is exactly why it is worth saying out loud when you
+report it. See "Filter on the media, not on the state" in step 4a.
 
 ## 1. Check the campaign can take what you are sending
 
@@ -239,19 +248,41 @@ outgrows an account rather than at publish time. A video cannot be appended -
 it stands alone - so swapping pictures for a clip means sending the clip
 without `append`.
 
-**Finding the draft again.** Keep the `item_id` each `create_campaign_post`
+**Finding the post again.** Keep the `item_id` each `create_campaign_post`
 returns, but losing it - the media arriving in a later conversation than the
 words did - is not a dead end. `list_campaign_posts` pages the whole queue
-whatever the state: filter `state: draft` with `media: "none yet"` for
-words-first drafts still waiting for their media, or pass `search` with words
-from the caption, and match each draft by its `caption_preview`. Every entry
-carries the `item_id` that `set_post_media` takes. Recover the existing draft
-rather than creating a second one; a duplicate post because an id was lost is
-exactly the mistake this read exists to prevent.
+whatever the state: filter `media: "none yet"` for posts still waiting for
+their media, or pass `search` with words from the caption, and match each post
+by its `caption_preview`. Every entry carries the `item_id` that
+`set_post_media` takes. Recover the existing post rather than creating a second
+one; a duplicate because an id was lost is exactly the mistake this read exists
+to prevent.
 
-Only a **draft** can be changed this way. Once the operator has promoted a post
-into the rotation they approved it with its media in view, and changing what
-publishes underneath that decision is theirs to make in the app.
+**Filter on the media, not on the state.** An `approved` post is not
+necessarily a finished one: a post written words-first can be approved before
+its pictures ever exist, because approving it said the words were ready and
+there was no media to decide on. Adding `state: draft` to the filter above
+hides every one of those, and a run that checks only drafts can report a
+campaign complete while most of its backlog is sitting in `none yet` under
+`approved`.
+
+What may be changed here turns on whether the post has media, not on whether it
+has been promoted:
+
+- **No media yet, draft or approved** - `set_post_media` attaches it. The
+  scheduler has been skipping the post either way; this is what lets it stop.
+  An approved post completed this way joins the rotation as it stands, with no
+  further approval, so say so when you report it.
+- **Already carries a video or pictures** - refused. The operator approved that
+  post with its media in view, and swapping what publishes underneath that
+  decision is theirs to make in the app.
+- **Approved and copy-only** - refused for the same reason: `text only` is a
+  decided shape, not a gap.
+- **Paused or retired** - refused; neither is a post waiting to be completed.
+
+Working a whole queue of posts that need their media - generating a set of
+images per post and attaching each set to its own post - is its own procedure:
+load `campaigns.fill-needs-media`.
 
 ## 5. Say what is waiting
 

@@ -12,8 +12,9 @@ write operation looks convenient.
 | Intended action | Canonical action | First live operation |
 | --- | --- | --- |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
+| Fill missing Campaigns media (generate a carousel per waiting post) | `campaigns.fill-needs-media` | `list_campaign_posts` |
 | Add a post with media (existing asset, new upload, or carousel) | `campaigns.add-post-with-media` | `list_campaigns` |
-| Find a post already created (recover a draft's id, attach media later) | (no SOP yet) | `list_campaign_posts` |
+| Find a post already created (recover a post's id, attach media later) | `campaigns.fill-needs-media` | `list_campaign_posts` |
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
 | Lock posts to concrete slots, or spread a batch of drafts across days | (no SOP yet) | `get_day_slots` |
 | Research products, listings, images, or attribution | (no SOP yet) | `list_products` |
@@ -53,13 +54,26 @@ replaced with a similar Library asset. For files generated in a client sandbox
 or private filesystem with no public URL, encode the file and pass `media_base64`
 (or a standard `data:<mime>;base64,<data>` URL) to `upload_media`.
 
-To find a post that already exists - most often a words-first draft from an
+To find a post that already exists - most often one written words-first in an
 earlier conversation whose id is no longer at hand - `list_campaign_posts`
 pages the whole queue whatever the state: filter by campaign, `state`
-(`draft`, `approved`, `paused`, `retired`), `media` (`none yet` finds drafts
-still waiting for theirs) or caption `search`, and each entry carries the
-`item_id` the other tools take, its state, a caption excerpt to recognise it
-by, and any locked slot. Recover the draft rather than creating a duplicate.
+(`draft`, `approved`, `paused`, `retired`), `media` (`video`, `carousel`,
+`text only`, or `none yet` for a post still waiting for its media) or caption
+`search`, and each entry carries the `item_id` the other tools take, its state,
+a caption excerpt to recognise it by, and any locked slot. Recover the post
+rather than creating a duplicate.
+
+`state` and `media` are independent, and confusing them has cost a whole run:
+**`approved` does not mean a post has media.** A post written words-first can
+be approved before its pictures exist, because approving it decides the words,
+not a media choice that was not there to make; the scheduler then skips it
+every pass, silently, exactly as it skips an empty draft. So the queue of posts
+waiting for media is `media: "none yet"` on its own - adding `state: "draft"`
+hides every approved-but-empty post, which is most of that backlog on a campaign
+written before its images existed. `set_post_media` fills either one. It is
+refused only on a post that already carries media, one approved as copy-only,
+or a paused or retired post - see `campaigns.fill-needs-media`, which is the
+procedure for working that queue post by post.
 
 For concrete timing, `get_day_slots` reads one day's openings - free, taken,
 locked or past - and `pin_post_slot` claims a named slot or, given only a day,
@@ -102,9 +116,31 @@ unlike currencies or treat pending/reversed conversions as settled earnings.
    `all_done`, then use its `asset_id` / entry in `ready`. A failed import
    creates no campaign attachment and its error must be reported.
 5. Create a new draft with `create_campaign_post(asset_ids=[...])`, or add the
-   asset to an existing text-first draft with `set_post_media`. Use
-   `append=true` only to extend an image carousel. The MCP cannot approve or
-   publish the draft; tell the operator it is waiting in Campaigns.
+   asset to a post that is still waiting for its media with `set_post_media`.
+   Use `append=true` only to extend an image carousel. The MCP cannot approve
+   or publish a draft; tell the operator it is waiting in Campaigns.
+
+### Quick path: give a queue of waiting posts their carousels
+
+When the posts already have their copy and their working notes, and what is
+missing is the pictures, load `campaigns.fill-needs-media` and work one post
+at a time:
+
+1. `list_campaign_posts(campaign_id=..., media="none yet")` - the whole media
+   backlog, drafts and approved posts alike. Do not narrow by `state`.
+2. For the first post, `get_post_context(item_id=...)`: `queue_item.context`
+   carries the brief a previous pass left - how many cards, the style, the
+   scene list - and `current_copy.caption` is what the pictures belong to.
+3. Generate exactly the scenes that brief names, in its order.
+4. `upload_media` once per scene, keeping one result slot per scene.
+5. `set_post_media(item_id=<that same post>, asset_ids=[...])` in scene order,
+   or `append=true` one scene at a time. Read back `carousel_warnings`.
+6. Confirm `media_kind` now reads `carousel`, then start the next post.
+
+Finish each post before starting the next. A batch of images generated across
+several posts loses track of which belongs where, and no record afterwards can
+put them back. Completing a post that was **already approved** puts it into the
+rotation with no further approval - say which posts that applied to.
 
 The upload validates the actual file signature on attachment, URL, and base64
 routes. JPEG, PNG, and WebP images are capped at 25 MB; MP4, MOV, WebM, and MKV

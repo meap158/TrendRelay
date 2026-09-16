@@ -527,12 +527,21 @@ def list_campaign_posts(
 ) -> dict[str, Any]:
     """Every post in the queue, whatever its state - so none is ever lost.
 
-    The listing that makes ids recoverable: a draft written words-first in an
+    The listing that makes ids recoverable: a post written words-first in an
     earlier conversation can be found again by its caption and given media,
     instead of being reachable only while the id from its create call is still
     at hand. Same compact cards and pagination as `list_posts_needing_copy`,
     plus each post's state, a caption excerpt to recognise it by, and the slot
     it is locked to if any.
+
+    `state` and `media` narrow on different things, and reading one as the
+    other is the mistake this docstring exists to head off: `approved` says a
+    person accepted the words, not that the post has media. A post drafted
+    words-first is routinely approved while `media_kind` is still `none yet` -
+    there was no media to decide on - and the scheduler passes over it every
+    tick exactly as it passes over an empty draft. The queue of posts waiting
+    for media is therefore `media="none yet"` on its own; narrowing it by
+    `state="draft"` as well hides the approved half of the same backlog.
     """
     if not 1 <= limit <= MAX_COPY_PAGE_SIZE:
         raise ValueError(

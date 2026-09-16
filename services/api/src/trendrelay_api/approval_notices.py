@@ -24,7 +24,7 @@ from __future__ import annotations
 import html
 import threading
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -297,7 +297,10 @@ def announce_held(
             telegram.send_message(
                 f"<b>{html.escape(name)}</b> · "
                 + html.escape(words.say(language, "more_waiting", count=rest)),
-                buttons=[[{"label": words.say(language, "open_app"), "url": link}]] if link else None,
+                buttons=(
+                    [[{"label": words.say(language, "open_app"), "url": link}]]
+                    if link else None
+                ),
             )
     except telegram.TelegramUnavailable as error:
         if sent:
@@ -414,11 +417,17 @@ def announce_overdue(
             telegram.send_message(
                 f"<b>{html.escape(name)}</b> · "
                 + html.escape(words.say(language, "more_overdue", count=rest)),
-                buttons=[[{"label": words.say(language, "open_app"), "url": link}]] if link else None,
+                buttons=(
+                    [[{"label": words.say(language, "open_app"), "url": link}]]
+                    if link else None
+                ),
             )
     except telegram.TelegramUnavailable as error:
         if sent:
-            return f"Reminded about {sent} of {len(overdue)} overdue post(s) on Telegram; then: {error}"
+            return (
+                f"Reminded about {sent} of {len(overdue)} overdue post(s) "
+                f"on Telegram; then: {error}"
+            )
         return f"Not reminded on Telegram: {error}"
     return f"Reminded about {sent} overdue post{'' if sent == 1 else 's'} on Telegram."
 

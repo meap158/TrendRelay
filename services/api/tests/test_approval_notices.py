@@ -442,6 +442,24 @@ def test_a_campaign_that_never_asked_for_telegram_is_never_reminded(session, cha
     assert note == "" and chat["sent"] == []
 
 
+def test_the_reminder_works_without_being_handed_a_clock(session, chat) -> None:
+    """Called with no `now`, it reads one - and used to fail doing it.
+
+    Every other test here passes `now` so the due time can be controlled,
+    and the runner passes the tick's own moment, so the default was written,
+    shipped and never once executed: it named a `UTC` this module had not
+    imported, and the first caller to leave `now` out would have got a
+    NameError instead of a reminder.
+    """
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    # Long past, whenever "now" actually is.
+    _overdue_row(session, "exec-ancient", at=datetime(2020, 1, 1, tzinfo=UTC))
+
+    note = approval_notices.announce_overdue(session, pilot)
+
+    assert note == "Reminded about 1 overdue post on Telegram."
+
+
 def test_past_the_card_limit_the_overdue_rest_are_one_line_with_a_count(session, chat) -> None:
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     due = NOW + timedelta(hours=3)

@@ -193,6 +193,7 @@ def test_the_campaign_sops_are_discovered_by_action() -> None:
         "campaigns.add-post-with-media",
         "campaigns.editorial-quality",
         "campaigns.fill-needs-copy",
+        "campaigns.fill-needs-media",
     ]
     # Whatever else is registered still has to be a catalogue row rather than a
     # whole document: the listing is read into a prompt, and the markdown is
@@ -337,6 +338,57 @@ def test_list_campaign_posts_lists_every_state_and_carries_the_lock(session) -> 
     # A placeholder body is the absence of a caption, not a caption.
     assert only["caption_preview"] is None
     assert not only["has_caption"]
+
+
+def test_the_media_backlog_holds_approved_posts_too(session) -> None:
+    """`approved` says the words were accepted, not that media exists.
+
+    An assistant narrowed the media queue to `state: draft`, found nothing,
+    and reported a campaign finished while most of its backlog sat under
+    `approved` with `media_kind: none yet` - approved before its pictures
+    existed, and skipped by the scheduler every pass since. The filters are
+    independent, and the media backlog is the media filter alone.
+    """
+    session.add(CampaignQueueItem(
+        id="q-approved-empty", workspace_id="ws", campaign_id="camp",
+        state="approved", created_by="local-admin", video_path="", title="",
+        body="Words accepted long before the pictures existed.", hashtags=[],
+        position=2, offer_ids=[], last_posted_by_destination={},
+    ))
+    session.add(CampaignQueueItem(
+        id="q-draft-empty", workspace_id="ws", campaign_id="camp", state="draft",
+        created_by="local-admin", video_path="", title="",
+        body="Still a draft, also waiting.", hashtags=[], position=3,
+        offer_ids=[], last_posted_by_destination={},
+    ))
+    session.commit()
+
+    backlog = context.list_campaign_posts(session, "ws", media="none yet")
+    assert [post["item_id"] for post in backlog["posts"]] == [
+        "q-approved-empty", "q-draft-empty",
+    ]
+    assert {post["state"] for post in backlog["posts"]} == {"approved", "draft"}
+
+    # And the narrowing that caused it, shown losing half the queue.
+    drafts_only = context.list_campaign_posts(
+        session, "ws", state="draft", media="none yet",
+    )
+    assert [post["item_id"] for post in drafts_only["posts"]] == ["q-draft-empty"]
+
+
+def test_the_listing_tells_a_reader_that_state_and_media_are_separate() -> None:
+    """Said in the tool's own description, not only in an SOP it may not load.
+
+    The description is what a connected assistant reads before it chooses its
+    filters; an SOP is what it reads once it has decided it needs a procedure.
+    The mistake happened at the first step.
+    """
+    built = server.build_server("ws")
+    tools = {tool.name: tool for tool in asyncio.run(built.list_tools())}
+    described = tools["list_campaign_posts"].description
+
+    assert "approved does NOT mean a post has media" in described
+    assert "campaigns.fill-needs-media" in described
 
 
 def test_list_campaign_posts_does_not_search_the_placeholder(session) -> None:
@@ -2697,6 +2749,53 @@ def test_the_media_sop_explains_the_file_transfer_boundary() -> None:
     assert "full pixel dimensions" in prose
     assert "returns `asset_id` immediately" in prose
     assert "Do not send a smaller WebP or downscaled retry" in prose
+
+
+def test_both_media_sops_say_approved_is_not_the_same_as_finished() -> None:
+    """The confusion an external assistant actually hit, pinned in writing.
+
+    It filtered the media queue by `state: draft`, found nothing, and called
+    the campaign done - while forty-six approved posts sat in it with no
+    media at all. Whichever of the two procedures a reader loads, it has to
+    say that `approved` decided the words and not the media.
+    """
+    for action in ("campaigns.add-post-with-media", "campaigns.fill-needs-media"):
+        prose = " ".join(sops.get_sop(action)["markdown"].split())
+
+        assert "approved" in prose.lower()
+        assert "none yet" in prose
+        # The narrowing that caused it, named as the thing not to do.
+        assert 'state: "draft"' in prose or "state: draft" in prose or (
+            'state="draft"' in prose
+        ), action
+        assert "hides" in prose, action
+
+
+def test_the_needs_media_sop_teaches_one_post_at_a_time() -> None:
+    """The loop the operator asked for, in the order they asked for it.
+
+    A needs-media post, its own images, its own upload, attached to that same
+    post, and only then the next one. Generating a batch across posts is the
+    failure this ordering exists to prevent, so the SOP has to forbid it
+    rather than merely prefer the other way.
+    """
+    sop = sops.get_sop("campaigns.fill-needs-media")
+    prose = " ".join(sop["markdown"].split())
+
+    # Every tool the loop turns on, so a reader is never left to guess one.
+    for tool in (
+        "list_campaign_posts", "get_post_context", "upload_media",
+        "get_import_status", "set_post_media",
+    ):
+        assert tool in prose, tool
+    assert "Do not batch across posts" in prose
+    # Where the brief for the images lives - the one thing about a held post
+    # that is written nowhere else.
+    assert "queue_item.context" in prose
+    assert "one per scene" in prose
+    # And the live consequence that separates this from drafting: a post that
+    # was already approved goes out once it is completed.
+    assert "joins the rotation" in prose
 
 
 def test_a_post_of_nothing_is_refused_with_the_way_in(session) -> None:
