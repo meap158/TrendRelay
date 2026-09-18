@@ -131,11 +131,15 @@ at a time:
 2. For the first post, `get_post_context(item_id=...)`: `queue_item.context`
    carries the brief a previous pass left - how many cards, the style, the
    scene list - and `current_copy.caption` is what the pictures belong to.
-3. Generate exactly the scenes that brief names, in its order, as one batch of
-   **separate images** at the brief's aspect - never one collage of panels.
+3. Generate exactly the scenes that brief names, in its order, **one image per
+   generation call** at the brief's aspect - never one call for the set, never
+   one collage of panels. Repeat the character, place and prop locks in every
+   scene's request and leave the other scenes out of it: an ask with the whole
+   sequence in view is what comes back as a sheet of panels.
 4. Check the set before uploading any of it: the count, one scene per file,
-   the aspect, the style holding across the set. A scene that came out wrong
-   is one regeneration of that scene, not a restart of the post.
+   the aspect, the style holding across the set, and the same people, place
+   and props carrying from card to card. A scene that came out wrong is one
+   regeneration of that scene, not a restart of the post.
 5. `upload_media` once per scene, keeping one result slot per scene.
 6. `set_post_media(item_id=<that same post>, asset_ids=[...])` in scene order,
    or `append=true` one scene at a time. Read back `carousel_warnings`.
