@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes in one batch as separate images, check them, upload each, attach them to that exact post, and take the next straight away.
-version: 2
+summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes in one batch as separate images that carry the same people, place and props from card to card, check them, upload each, attach them to that exact post, and take the next straight away.
+version: 3
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -137,6 +137,24 @@ that shows all of it at once and reads as none of it. An image model asked for
 "eight scenes" will happily return one sheet of eight, so say the shape in the
 prompt and check it in the result.
 
+**Separate files, one continuous story.** Separate describes the files, not the
+pictures. Eight cards that each stand alone and share only a palette are eight
+illustrations; a carousel is swiped, so each card has to carry over from the one
+before it. The same people in the same clothes, the same place, the same light,
+the same props with the same marks on them: the white bowl handed over in card
+four is the bowl being washed in card six, and the corridor is that corridor
+throughout. The style lock in the brief is the surface of this; continuity is
+the substance, and it is what makes the set a post rather than a gallery.
+
+That has to be written into the prompt, not hoped for. An image model holds no
+memory between scenes even inside one batch, so describe the recurring people,
+setting and props - age, build, hair, glasses, clothing, the colour of the thing
+being passed around - in **every** scene's prompt in the same words, not once at
+the top of the batch, and say how each scene follows the one before it. Where
+the brief already fixes those descriptions, repeat the brief's wording rather
+than paraphrasing it per scene: a paraphrase is how a character quietly becomes
+a different person halfway through a swipe.
+
 **Verify the set before uploading any of it.** Uploading is where a mistake
 becomes expensive - an import per picture, then a package to unpick - so look
 first, at the whole batch:
@@ -146,12 +164,17 @@ first, at the whole batch:
 - the aspect is the one the brief names, on every file;
 - the style lock holds across the set - the same hand, palette and treatment,
   so eight cards read as one post rather than eight;
+- the continuity holds too - the same faces, clothes, place and props from card
+  to card, and each scene recognisably following the last when they are read in
+  swipe order;
 - anything written inside an image is in the campaign's language and spelled
   correctly.
 
 **When one scene drifts, regenerate that scene.** A single card that came out
-wrong - the wrong aspect, a panel grid, a face that does not match the rest -
-is one regeneration of that scene, keeping the other seven and their order.
+wrong - the wrong aspect, a panel grid, a face that does not match the rest, a
+prop that changed colour on the way through - is one regeneration of that
+scene, prompted with the descriptions the surviving cards agree on, keeping the
+other seven and their order.
 Do not throw the batch away and start the post again over one card, and do not
 park the whole post at the first wrong one: both spend work already done.
 
