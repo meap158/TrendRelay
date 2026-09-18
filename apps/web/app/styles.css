@@ -666,8 +666,16 @@ nav strong { color: var(--text); }
 
 /* Down the right, in whichever order this network stacks them - the icons
    themselves come from SURFACE_FURNITURE, because the four surfaces that get
-   a rail do not agree on what is in it. */
-.preview-surface-rail { display: grid; gap: 14px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 10px 74px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
+   a rail do not agree on what is in it.
+
+   It ends one of its own gaps above the row beneath it, rather than a fixed
+   distance up from the frame's floor. The lift used to be 74px, read off a
+   preview 440px tall; in the campaign panel the same frame is barely 285px,
+   where 74px is a quarter of the picture and the buttons float around the
+   middle of it - far higher than TikTok draws them. The steps row and the
+   caption are laid out below this one, so hugging them puts the last button
+   just above the caption at any size, which is where the real rail sits. */
+.preview-surface-rail { display: grid; gap: 14px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 10px 14px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
 
 /* A Story wears its furniture at the top, so the wash goes there too. */
 .preview-surface.is-story::after { inset: 0 0 55%; background: linear-gradient(to top, transparent, rgba(0, 0, 0, .5)); }
