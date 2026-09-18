@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes in one batch as separate images that carry the same people, place and props from card to card, check them, upload each, attach them to that exact post, and take the next straight away.
-version: 3
+summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes one call per scene as separate images that carry the same people, place and props from card to card, check them, upload each, attach them to that exact post, and take the next straight away.
+version: 4
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -74,7 +74,7 @@ next:
 ```
 needs-media post
   → read that post's brief
-  → generate its scenes in one batch, one image each, never a collage
+  → generate one scene per call, in the brief's order, never a collage
   → check the set; regenerate only a scene that drifted
   → upload each, keeping the order
   → attach them all to that exact post
@@ -82,14 +82,17 @@ needs-media post
   → next post, straight away
 ```
 
-**Batch within a post, never across posts.** One post's eight scenes are one
-batch - ask for all eight at once rather than round-tripping the model eight
-times. Five posts' forty scenes are not: generating them together and
-attaching them afterwards is the failure this ordering exists to prevent -
-scenes drift between posts, an upload fails in the middle and its slot is no
-longer identifiable, and nothing on the record says which picture belonged to
-which caption. One post's pictures are only ever meaningful next to that post's
+**One post's scenes, never across posts.** Generate for the post you are on
+and for no other. Five posts' forty scenes made together and attached
+afterwards is the failure this ordering exists to prevent - scenes drift
+between posts, an upload fails in the middle and its slot is no longer
+identifiable, and nothing on the record says which picture belonged to which
+caption. One post's pictures are only ever meaningful next to that post's
 words.
+
+Inside the post the scenes are made one at a time as well - one generation
+call per card, not one call for the set. Step 5 says why: asking for all of
+them at once is itself what returns one sheet with all of them on it.
 
 Keep the `item_id` of the post you are on in front of you for the whole of its
 loop. Every call in it - `get_post_context`, `set_post_media` - takes that id,
@@ -137,6 +140,27 @@ that shows all of it at once and reads as none of it. An image model asked for
 "eight scenes" will happily return one sheet of eight, so say the shape in the
 prompt and check it in the result.
 
+**One generation call per scene.** Eight cards are eight separate asks, each
+for a single picture - never one call for the set, never a count parameter of
+eight. Saving the round trips is exactly what produces the panel sheet: many
+image tools read the whole conversation around the request rather than a
+prompt field alone, so an ask with all eight scenes in view is an ask that
+describes one image with eight scenes in it. The brief is the same hazard.
+`get_post_context` returns the entire sequence - "8 cards", "carousel",
+"scene 3 of 8" - and generating immediately after reading it leaves all of
+that sitting beside the request. Read the brief once, take its locks out of it
+privately - who the people are, what they wear, where they are, which props
+recur - and then ask for one scene from the locks plus that scene's own
+action, with the other seven left out of the request altogether.
+
+**Ask for a picture in the words of a picture.** "Carousel", "8-card",
+"panel", "comic strip", "storyboard" and "scene 1/8" all name a layout, and a
+model that is handed a layout draws one. Ask for what the card actually is:
+one full-frame vertical illustration, a single camera view, no borders, no
+inset pictures, no typography beyond the words the brief puts inside the
+image. The count is yours and the brief's to keep; it does not belong in the
+request.
+
 **Separate files, one continuous story.** Separate describes the files, not the
 pictures. Eight cards that each stand alone and share only a palette are eight
 illustrations; a carousel is swiped, so each card has to carry over from the one
@@ -146,18 +170,36 @@ four is the bowl being washed in card six, and the corridor is that corridor
 throughout. The style lock in the brief is the surface of this; continuity is
 the substance, and it is what makes the set a post rather than a gallery.
 
-That has to be written into the prompt, not hoped for. An image model holds no
-memory between scenes even inside one batch, so describe the recurring people,
-setting and props - age, build, hair, glasses, clothing, the colour of the thing
-being passed around - in **every** scene's prompt in the same words, not once at
-the top of the batch, and say how each scene follows the one before it. Where
-the brief already fixes those descriptions, repeat the brief's wording rather
-than paraphrasing it per scene: a paraphrase is how a character quietly becomes
-a different person halfway through a swipe.
+That has to be written into every request, not hoped for. A model carries
+nothing deliberate from one call to the next, so the recurring people, setting
+and props - age, build, hair, glasses, clothing, the colour of the thing being
+passed around - are described in **every** scene's ask, in the same words, and
+in the brief's own wording where the brief fixes them: a paraphrase is how a
+character quietly becomes a different person halfway through a swipe. What is
+repeated is the lock, not the sequence. This card's action is the only action
+in the request; the seven other scenes stay out of it, including the one
+before this card, which is described only to the extent the picture shows it.
+
+**A picture that came out wrong is not a reference.** Throw it away and ask
+again from the lock. Do not hand it back with "keep the style, change the
+scene", and do not show it to say what to avoid - a tool that can see it will
+take it as the thing being edited, and the wrong picture becomes the one being
+redrawn. Until the first card is right there is no reference to work from at
+all. Once it is right, later cards may be asked to keep its character design,
+still one camera view per request.
+
+**A contaminated session is restarted, not argued with.** After enough failed
+attempts the session's own pictures become the strongest thing in the request:
+a new post comes back drawn as the last post's people in the last post's
+street, whatever the words say. Branching does not clear it - a branch
+inherits everything before its branch point. Start a genuinely new session,
+load this SOP, take the next `none yet` post and do not replay the failed
+pictures into it. Say in the report that you did; it is a fresh start on the
+queue, not a stop.
 
 **Verify the set before uploading any of it.** Uploading is where a mistake
 becomes expensive - an import per picture, then a package to unpick - so look
-first, at the whole batch:
+first, at the whole set:
 
 - the count matches the brief exactly;
 - each file is one scene, not a panel grid or a contact sheet;
@@ -172,11 +214,11 @@ first, at the whole batch:
 
 **When one scene drifts, regenerate that scene.** A single card that came out
 wrong - the wrong aspect, a panel grid, a face that does not match the rest, a
-prop that changed colour on the way through - is one regeneration of that
-scene, prompted with the descriptions the surviving cards agree on, keeping the
-other seven and their order.
-Do not throw the batch away and start the post again over one card, and do not
-park the whole post at the first wrong one: both spend work already done.
+prop that changed colour on the way through - is one fresh ask for that scene,
+from the locks the surviving cards agree on and with the single-view guard
+said again in full, keeping the other seven and their order. Do not throw the
+set away and start the post again over one card, and do not park the whole
+post at the first wrong one: both spend work already done.
 
 A scene that will not come right after a couple of attempts is where that
 stops. Leave that one post untouched - a set you would not publish is worse
