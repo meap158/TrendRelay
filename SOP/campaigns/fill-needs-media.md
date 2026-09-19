@@ -145,18 +145,27 @@ not more because a set looked good, not fewer because one was hard. If they
 name no number, decide from the caption and say what you decided when you
 report.
 
-**Put that number on the post before you make anything.** Pass it as
-`media_target` on the first `set_post_media` call - or at
-`create_campaign_post`, when this pass is also the one creating the post. It
+**Put that number on the post before you make anything.**
+
+```
+set_post_media_target(item_id=<this post>, media_target=<the brief's number>)
+```
+
+Before, not with the first card: a post that takes its target alongside its
+first picture spends a moment holding one card and waiting for nothing, and
+on an approved post that moment is one the scheduler can publish in. The same
+number can also arrive at `create_campaign_post`, when this pass is the one
+creating the post, or as `media_target` on a `set_post_media` call. It
 is what makes a part-filled post safe: a post that says it is waiting for
 eight files is skipped by the scheduler and stays in the `unfinished` queue
 until it holds eight, so cards may be attached as they are made and nothing
 publishes a set that is still arriving. A post with no target is finished by
 the first file attached to it, which on an approved post means published.
 
-The number may be raised here later - a brief that grew - but never lowered:
+The number may be raised later - a brief that grew - but never lowered:
 lowering it declares a short set finished, which is the operator's call in the
-app. `set_post_media` refuses the attempt.
+app. Both writes refuse the attempt, and so does a target under what the post
+already holds.
 
 ## 5. Make exactly this post's images
 

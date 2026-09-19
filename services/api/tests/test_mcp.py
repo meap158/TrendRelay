@@ -126,7 +126,8 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "list_posts_needing_copy", "list_products", "list_published_posts",
         "list_sops", "pin_post_slot", "render_creation_draft",
         "set_campaign_posting_times", "set_page_posting_times",
-        "set_post_media", "set_post_products", "set_workspace_posting_times",
+        "set_post_media", "set_post_media_target", "set_post_products",
+        "set_workspace_posting_times",
         "update_creation_draft", "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure",
         "write_first_comment", "write_post_copy", "write_thread",
@@ -2900,6 +2901,57 @@ def test_an_approved_post_takes_its_carousel_a_card_at_a_time_up_to_target(
         writes.set_post_media(session, "ws", view["id"], ["img4"], append=True)
 
 
+def test_a_post_is_told_what_it_waits_for_before_it_has_any_media(session) -> None:
+    """The number has to land before the first picture does.
+
+    Set with the first card instead, there is a moment where one card is the
+    whole post - and on an approved post that moment is one the scheduler can
+    publish in. So the target is writable on a post with nothing attached,
+    which is exactly when `set_post_media` has nothing to be called with.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    view = intake.create_campaign_post(session, "ws", "camp", [], caption="Soon.")
+    session.get(CampaignQueueItem, view["id"]).state = "approved"
+    session.commit()
+
+    told = writes.set_post_media_target(session, "ws", view["id"], 8)
+
+    assert told["media_target"] == 8
+    assert told["needs_media"] is True
+    assert "0 attached" in told["note"]
+    # And the post it describes is the one the media backlog still returns.
+    from trendrelay_api.integrations.mcp import context as mcp_context
+
+    listing = mcp_context.list_campaign_posts(session, "ws", media="unfinished")
+    assert view["id"] in {post["item_id"] for post in listing["posts"]}
+
+
+def test_a_media_target_is_refused_where_the_media_is_already_decided(session) -> None:
+    """The same boundary `set_post_media` keeps, for the same reason.
+
+    Raising a target on a finished approved post would pull a live post back
+    out of the rotation - a change to media somebody accepted with the post in
+    front of them, which is the operator's to make in the app.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session)
+    done = intake.create_campaign_post(
+        session, "ws", "camp", ["img1"], caption="Finished.",
+    )
+    session.get(CampaignQueueItem, done["id"]).state = "approved"
+    copy_only = intake.create_campaign_post(
+        session, "ws", "camp", [], caption="Words alone.", text_only=True,
+    )
+    session.commit()
+
+    with pytest.raises(ValueError, match="operator"):
+        writes.set_post_media_target(session, "ws", done["id"], 8)
+    with pytest.raises(ValueError, match="copy-only"):
+        writes.set_post_media_target(session, "ws", copy_only["id"], 8)
+
+
 def test_a_media_target_can_be_raised_here_but_never_lowered(session) -> None:
     """Lowering one declares a short set finished, which is not this tool's.
 
@@ -2923,6 +2975,10 @@ def test_a_media_target_can_be_raised_here_but_never_lowered(session) -> None:
         writes.set_post_media(
             session, "ws", view["id"], ["img1"], append=True, media_target=1,
         )
+    # The same guard through the tool that writes nothing else, because the
+    # two share it rather than each having an opinion.
+    with pytest.raises(ValueError, match="lower it to 2"):
+        writes.set_post_media_target(session, "ws", view["id"], 2)
 
 
 def test_the_media_backlog_holds_posts_that_are_merely_short(session) -> None:

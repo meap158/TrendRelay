@@ -151,6 +151,102 @@ def write_post_copy(
     return _queue_view(item, with_context=True)
 
 
+def _checked_media_target(item: CampaignQueueItem, media_target: int) -> int:
+    """A media target this caller is allowed to write.
+
+    Raising one says more files are coming. Lowering one says a short set is
+    finished, and that is the single move that would let a run which could not
+    produce the eighth card publish seven and leave a record indistinguishable
+    from a post briefed for seven - so it is the operator's, in the app, where
+    the decision is visible. Shared by the two writes that can set a target so
+    they cannot come to different answers about it.
+    """
+    from trendrelay_api.integrations.publishing import MAX_CAROUSEL_IMAGES
+
+    if media_target < 1 or media_target > MAX_CAROUSEL_IMAGES:
+        raise ValueError(
+            f"A media target is between 1 and {MAX_CAROUSEL_IMAGES}; "
+            f"received {media_target}."
+        )
+    if item.media_target is not None and media_target < item.media_target:
+        raise ValueError(
+            f"This post is waiting for {item.media_target} files and this "
+            f"would lower it to {media_target}. Finish the set, or ask the "
+            "operator to change the target in the app."
+        )
+    return media_target
+
+
+def set_post_media_target(
+    session: Session,
+    workspace_id: str,
+    item_id: str,
+    media_target: int,
+) -> dict[str, Any]:
+    """Say how many files a post is waiting for, without attaching any.
+
+    The number belongs to the post before its first picture exists: a pass
+    that reads a brief for eight cards writes the eight here, and from then on
+    the post is unfinished until it holds eight - skipped by the scheduler,
+    still in the media backlog, and still fillable a card at a time. Setting
+    it with the first card instead leaves a window in which one card is the
+    whole post, which on an approved post is a window in which it publishes.
+
+    Only ever upward, and only on a post whose media is still open. What a
+    completed post carries was decided with it in view; changing the shape of
+    that decision is the operator's, in the app.
+    """
+    from trendrelay_api.campaign_autopilot_api import (
+        QueueItemUpdate,
+        _queue_view,
+        apply_queue_item_edits,
+    )
+
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise LookupError(f"No queue item {item_id!r} in this workspace.")
+    if item.state not in ("draft", "approved"):
+        raise ValueError(
+            f"This post is {item.state}; ask the operator to change its "
+            "media in the app."
+        )
+    if item.text_only:
+        raise ValueError(
+            "This post is copy-only: the words are the whole post, so it is "
+            "waiting for no media. Ask the operator if that was not intended."
+        )
+    if item.state == "approved" and item.media_is_complete:
+        raise ValueError(
+            "This post is already approved with its media decided. Ask the "
+            "operator to change it in the app."
+        )
+    target = _checked_media_target(item, media_target)
+    if target < item.media_count:
+        raise ValueError(
+            f"This post already holds {item.media_count} files, so it cannot "
+            f"be waiting for {target}. Name the number the brief asks for."
+        )
+
+    apply_queue_item_edits(
+        session, workspace_id, item.campaign_id, item,
+        QueueItemUpdate(media_target=target),
+    )
+    session.commit()
+    view = _queue_view(item, with_context=True)
+    view["note"] = (
+        f"Waiting for {target} files; {item.media_count} attached so far. "
+        "Nothing schedules or publishes this post until it holds them all."
+        if not item.media_is_complete else
+        f"Waiting for {target} files, which it now holds."
+    )
+    return view
+
+
 def set_post_media(
     session: Session,
     workspace_id: str,
@@ -276,23 +372,7 @@ def set_post_media(
             "instead of appending to it."
         )
     if media_target is not None:
-        if media_target < 1 or media_target > MAX_CAROUSEL_IMAGES:
-            raise ValueError(
-                f"A media target is between 1 and {MAX_CAROUSEL_IMAGES}; "
-                f"received {media_target}."
-            )
-        if item.media_target is not None and media_target < item.media_target:
-            # Raising a target says more cards are coming; lowering one
-            # declares a short set finished, which is the decision this tool
-            # must never make on its own. It is the only way a run that could
-            # not produce the eighth card could publish seven and call it
-            # done, and it would look, on the record, exactly like a post
-            # that was briefed for seven.
-            raise ValueError(
-                f"This post is waiting for {item.media_target} files and this "
-                f"would lower it to {media_target}. Finish the set, or ask "
-                "the operator to change the target in the app."
-            )
+        _checked_media_target(item, media_target)
     was_approved = item.state == "approved"
     update = QueueItemUpdate(
         video_path=media.get("video_path", ""),

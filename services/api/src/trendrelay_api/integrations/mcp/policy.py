@@ -158,6 +158,11 @@ EXPOSURE: dict[str, Access] = {
     # state - so the pair with the media-less create is complete without a
     # way to change what a promoted post publishes.
     "set_post_media": Access.WORKSPACE_WRITE,
+    # Saying how many files a post is waiting for attaches nothing and can
+    # only ever hold a post back: below its target the scheduler passes over
+    # it. The write that could release one - lowering the number - is refused
+    # in `writes.set_post_media_target` and left to the operator.
+    "set_post_media_target": Access.WORKSPACE_WRITE,
     # --- Creation drafts: a video saved, edited, and rendered --------------
     # Reading the kinds and the drafts is context like any other read.
     "list_creation_kinds": Access.READ,

@@ -1042,6 +1042,31 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="set_post_media_target",
+        description=(
+            "Say how many files a post is waiting for, without attaching any "
+            "- the brief's card count, written onto the post before its "
+            "first picture exists. Below that number the post is unfinished: "
+            "the scheduler passes over it, list_campaign_posts keeps "
+            "returning it under media='unfinished', and set_post_media goes "
+            "on filling it a card at a time. That is what lets a carousel be "
+            "delivered as it is made without the post publishing half-built, "
+            "so set it before generating anything rather than with the first "
+            "card. Raising it later is allowed; lowering or clearing it is "
+            "the operator's in the app, because lowering one declares a "
+            "short set finished. Refused on a post whose media is already "
+            "complete, on a copy-only post, and on a paused or retired one."
+        ),
+    )
+    def set_post_media_target(item_id: str, media_target: int) -> dict[str, Any]:
+        return _call(
+            "set_post_media_target",
+            lambda s: writes.set_post_media_target(
+                s, workspace_id, item_id, media_target
+            ),
+        )
+
+    @server.tool(
         name="set_post_media",
         description=(
             "Attach or replace a post's still-missing media from Library "
@@ -1268,6 +1293,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Media & posts": (
         "list_library_assets", "get_asset_thumbnails", "upload_image", "upload_media",
         "get_import_status", "create_campaign_post", "set_post_media",
+        "set_post_media_target",
     ),
     # Which product a post carries: read what the campaign may promote, and
     # choose among those. Its own group rather than filed under Copy, because

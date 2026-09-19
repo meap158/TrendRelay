@@ -132,7 +132,8 @@ at a time:
 2. For the first post, `get_post_context(item_id=...)`: `queue_item.context`
    carries the brief a previous pass left - how many cards, the style, the
    scene list - and `current_copy.caption` is what the pictures belong to.
-   Put the brief's card count on the post as `media_target` before making
+   Put the brief's card count on the post with
+   `set_post_media_target(item_id=..., media_target=...)` before making
    anything: a post that says how many files it is waiting for stays out of
    the rotation and in this backlog until it holds them, which is what lets
    the cards be attached one at a time.
