@@ -1914,10 +1914,19 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    rather than another item in it: the head is a line of chips and buttons,
    and a labelled field sitting among them reads as one more button. */
 .campaign-edit-media-target { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
-.campaign-edit-media-target input { inline-size: 56px; padding: 2px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums; }
-/* The consequence, after the field rather than under it - one line about the
-   post in front of them, not a paragraph of policy. */
-.campaign-edit-media-target small { flex: 1 1 200px; }
+/* Under `.autopilot-compose`, because the form it sits in sets every input to
+   the full width of itself and every label to a grid. That is right for a
+   caption and wrong for a two-digit count: the box came out as wide as the
+   dialog with its unit wrapped onto the next line. `.campaign-edit-slot-day`
+   answers the same collision with !important; this is that fix said in
+   specificity instead. */
+.autopilot-compose .campaign-edit-media-target input { inline-size: 5.5rem; min-height: 26px; padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* The line reads "Waiting for [8] files", so its words sit against the field
+   rather than stacking above it the way the form's labels do. */
+.autopilot-compose .campaign-edit-media-target > label { display: inline; color: var(--text); font-weight: 600; }
+/* The consequence, on its own line: it is about this post rather than about
+   the field, and reads as a sentence rather than as a hint beside a box. */
+.autopilot-compose .campaign-edit-media-target small { flex: 1 1 100%; color: var(--muted); font-weight: 400; }
 /* What was done to the video, as the Library's own effect tags - the same cut
    wears the same chip on both pages. The unedited file is said in grey rather
    than in the effect blue, which would claim an edit that was not made. */

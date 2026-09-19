@@ -1271,6 +1271,23 @@ const METRIC_ICON = {
 const METRIC_ORDER = ["views", "likes", "comments", "shares", "saves"] as const;
 
 /**
+ * How many files a post may be told to wait for, and the counts offered.
+ *
+ * The ceiling is the widest any network here swipes through - TikTok's
+ * thirty-five - rather than a figure of its own, and matches the queue's own
+ * `MAX_CAROUSEL_IMAGES`. What a given post may actually carry is narrower and
+ * depends on where it is going; `carousel_warnings` answers that against the
+ * accounts actually chosen, and a second limit here would only refuse numbers
+ * the publisher would have taken.
+ *
+ * The offered counts are the sizes briefs ask for, not the whole range: the
+ * field stays typable, so the list is a shortcut rather than a menu of what
+ * is allowed.
+ */
+const MAX_CAROUSEL_CARDS = 35;
+const MEDIA_TARGET_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+/**
  * Names joined the way a sentence joins them, with a tail once it gets long.
  *
  * `Intl.ListFormat` rather than commas by hand: the reader's locale decides
@@ -6058,28 +6075,55 @@ export function AutopilotPanel({
                     media rather than in its own section: it describes the
                     same package the line above describes. */}
                 {!editingCopyOnly && !editing.text_only && (
-                  <label className="campaign-edit-media-target">
-                    Waiting for
+                  <div className="campaign-edit-media-target">
+                    <label htmlFor="campaign-media-target">Waiting for</label>
+                    {/* Typed or chosen: the common counts are one click away
+                        and a brief asking for something else is still just
+                        typed in. Whole files only - a post cannot wait for
+                        two and a half pictures - so the value is rounded and
+                        held between one and the widest carousel any network
+                        here swipes through. */}
                     <input
-                      type="number" min={1} max={35}
+                      id="campaign-media-target" type="number"
+                      min={1} max={MAX_CAROUSEL_CARDS} step={1}
+                      inputMode="numeric"
+                      list="campaign-media-target-choices"
                       value={editingMediaTarget ?? ""}
                       placeholder="any"
                       onChange={(event) => {
-                        const value = Number(event.target.value);
+                        const raw = event.target.value.trim();
+                        if (!raw) {
+                          setEditingMediaTarget(null);
+                          return;
+                        }
+                        const value = Math.round(Number(raw));
+                        if (!Number.isFinite(value)) return;
                         setEditingMediaTarget(
-                          event.target.value.trim() && Number.isFinite(value)
-                            ? Math.min(35, Math.max(1, Math.round(value)))
-                            : null,
+                          Math.min(MAX_CAROUSEL_CARDS, Math.max(1, value)),
                         );
                       }} />
-                    files
+                    <datalist id="campaign-media-target-choices">
+                      {MEDIA_TARGET_CHOICES.map((count) => (
+                        <option key={count} value={count} />
+                      ))}
+                    </datalist>
+                    <span>files</span>
+                    {/* The way back to no number, which an empty field also
+                        means but nobody guesses at. */}
+                    {editingMediaTarget !== null && (
+                      <Button type="button" variant="quiet" size="sm"
+                        onClick={() => setEditingMediaTarget(null)}>
+                        Any
+                      </Button>
+                    )}
                     <small>
                       {editingMediaTarget
-                        ? `Holds ${editing.media_count}. It stays out of the `
-                          + "rotation until it holds them all."
-                        : "No number set: anything attached finishes this post."}
+                        ? `Holds ${editing.media_count} of ${editingMediaTarget}.`
+                          + " It stays out of the rotation until the set is"
+                          + " complete."
+                        : "Any number: the first file attached finishes this post."}
                     </small>
-                  </label>
+                  </div>
                 )}
               </div>
               {(() => {
