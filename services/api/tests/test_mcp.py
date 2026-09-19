@@ -2837,6 +2837,11 @@ def test_the_needs_media_sop_says_what_makes_a_card_at_a_time_safe() -> None:
 
     assert "Put that number on the post before you make anything" in prose
     assert "media_target" in prose
+    # Where a later card's reference comes from, named as the two calls that
+    # fetch it rather than as an idea about consistency.
+    assert "attached_media" in prose
+    assert "get_asset_thumbnails" in prose
+    assert "another post's card" in prose
     # The targetless case, which is the old trap and still the default.
     assert "Without a target, an approved post is attached" in prose
     assert "with the whole set" in prose
@@ -2899,6 +2904,42 @@ def test_an_approved_post_takes_its_carousel_a_card_at_a_time_up_to_target(
     _image_asset(session, asset_id="img4", path=r"S:\media\4.png")
     with pytest.raises(ValueError, match="operator"):
         writes.set_post_media(session, "ws", view["id"], ["img4"], append=True)
+
+
+def test_a_part_built_carousel_can_look_at_its_own_earlier_cards(session) -> None:
+    """The cards a new scene has to match are the ones already on the post.
+
+    They were checked before they landed and they are this post's own cast in
+    this post's own room, which is what makes them the reference - where a
+    neighbouring post's card is a neighbouring post's cast, and a rejected
+    generation is nothing at all. The queue stores file paths and
+    `get_asset_thumbnails` takes Library ids, so without this the pictures a
+    run needed most were the ones it could not name.
+    """
+    from trendrelay_api.integrations.mcp import context as mcp_context
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session, asset_id="img1", path=r"S:\media\card-one.png")
+    _image_asset(session, asset_id="img2", path=r"S:\media\card-two.png")
+    view = intake.create_campaign_post(
+        session, "ws", "camp", ["img1"], caption="Set.", media_target=8,
+    )
+    writes.set_post_media(session, "ws", view["id"], ["img2"], append=True)
+
+    context_view = mcp_context.get_post_context(session, "ws", view["id"])
+
+    assert [card["position"] for card in context_view["attached_media"]] == [1, 2]
+    assert [card["asset_id"] for card in context_view["attached_media"]] == [
+        "img1", "img2",
+    ]
+    # The last entry is the card the next scene follows, and every id here is
+    # one get_asset_thumbnails will take.
+    thumbnails = mcp_context.get_asset_thumbnails(
+        session, "ws", [context_view["attached_media"][-1]["asset_id"]],
+    )
+    assert len(thumbnails) == 1
+    # And a part-filled post still reads as one waiting for media.
+    assert context_view["needs"]["media"] is True
 
 
 def test_a_post_is_told_what_it_waits_for_before_it_has_any_media(session) -> None:

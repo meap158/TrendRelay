@@ -141,7 +141,10 @@ at a time:
    generation call** at the brief's aspect - never one call for the set, never
    one collage of panels. Repeat the character, place and prop locks in every
    scene's request and leave the other scenes out of it: an ask with the whole
-   sequence in view is what comes back as a sheet of panels.
+   sequence in view is what comes back as a sheet of panels. From the second
+   card on, work beside the post's own earlier cards: `attached_media` in the
+   post context names them in order, and `get_asset_thumbnails` fetches any of
+   them. Never another post's card, and never a generation that was rejected.
 4. Check each card as it arrives - this post's scene, one frame, the aspect,
    the cast, place and props of the cards already made - and only then
    `upload_media` it, one call per scene, keeping one result slot per scene.

@@ -55,6 +55,58 @@ def _asset_for(session: Session, item: CampaignQueueItem) -> Any | None:
     )
 
 
+def _attached_media(session: Session, item: CampaignQueueItem) -> list[dict[str, Any]]:
+    """This post's own attached files, in posting order, by Library id.
+
+    A carousel is built one card at a time, and each new card has to carry on
+    from the ones already on the post - the same faces, the same room, the
+    same props. The cards that do that are attached to this very post and were
+    checked before they landed, so they are the only pictures worth generating
+    the next one beside; another post's card is another post's cast, and a
+    generation that came out wrong is not evidence of anything. Until now
+    nothing could name them: the queue stores file paths, and the ids
+    `get_asset_thumbnails` needs live in the Library.
+
+    So the paths are resolved back to their assets here. `asset_id` is null
+    for a file that has since left the Library - the post still publishes it,
+    but there is nothing to look at - and the order is the swipe order, which
+    makes the last entry the card the next scene follows.
+    """
+    from pathlib import Path
+
+    from trendrelay_api.media_models import MediaAsset
+
+    paths = (
+        [item.video_path] if item.video_path else list(item.image_paths or [])
+    )
+    paths = [path for path in paths if path]
+    if not paths:
+        return []
+    assets = session.scalars(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == item.workspace_id,
+            MediaAsset.original_path.in_(paths),
+        )
+    ).all()
+    by_path = {asset.original_path: asset for asset in assets}
+    attached = []
+    for position, path in enumerate(paths, start=1):
+        asset = by_path.get(path)
+        entry: dict[str, Any] = {
+            "position": position,
+            "asset_id": asset.id if asset else None,
+            "kind": asset.media_kind if asset else ("video" if item.video_path else "image"),
+            "title": (asset.title if asset else None) or Path(path).name,
+        }
+        if not asset:
+            entry["note"] = (
+                "This file is no longer in the Library, so it cannot be "
+                "fetched with get_asset_thumbnails. The post still publishes it."
+            )
+        attached.append(entry)
+    return attached
+
+
 def _asset_index(session: Session, items: list[CampaignQueueItem]) -> dict[str, Any]:
     """Every asset behind a page of posts, in one query.
 
@@ -758,11 +810,10 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         ),
         # The media, for a post drafted words-first over MCP: attach it with
         # set_post_media once its upload lands. A copy-only post is whole
-        # without any - text_only was its author's decision.
-        "media": (
-            not item.video_path and not (item.image_paths or [])
-            and not item.text_only
-        ),
+        # without any - text_only was its author's decision - and a post that
+        # says how many files it is waiting for is still missing them at three
+        # of eight, which is the same wait this line has always described.
+        "media": not item.media_is_complete,
         "topic": item.topic is None and bool(topic_reach),
     }
     return {
@@ -776,6 +827,11 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "media_count": item.media_count,
         "media_target": item.media_target,
         "media_complete": item.media_is_complete,
+        # What this post already holds, in posting order and by Library id, so
+        # the next card can be made beside the cards it has to match. Pass any
+        # of these ids to get_asset_thumbnails to look at them; the last is
+        # the one the next scene follows.
+        "attached_media": _attached_media(session, item),
         "video_title": _asset_title(session, item, asset),
         #: None when the asset has left the Library or never carried a
         #: duration - which is a different answer from a clip of no length.

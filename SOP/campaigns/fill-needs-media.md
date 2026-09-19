@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the unfinished-media queue continuously, one post at a time - read that post's own brief, put its card count on the post as media_target, generate its scenes one call per scene as separate images that carry the same people, place and props from card to card, check and upload each card as it arrives, attach them to that exact post until it is complete, and take the next straight away.
-version: 6
+summary: Work the unfinished-media queue continuously, one post at a time - read that post's own brief, put its card count on the post as media_target, generate its scenes one call per scene as separate images made beside the cards already on that post, check and upload each card as it arrives, attach them to that exact post until it is complete, and take the next straight away.
+version: 7
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -91,7 +91,8 @@ unfinished post
   → read that post's brief
   → put its number of cards on the post as media_target
   → per scene, in the brief's order:
-       generate one image, never a collage
+       look at the cards already on this post
+       generate one image beside them, never a collage
        check that card; regenerate it if it drifted
        upload it, and attach it with append: true
   → confirm the post is complete
@@ -139,6 +140,11 @@ Call `get_post_context(item_id=...)`. What matters here:
   has finished this post; leave it alone and move on. `media_count` and
   `media_target` say where a part-filled post got to, and which cards are
   still owed.
+- `attached_media` - the cards already on the post, in posting order, each
+  with the Library id `get_asset_thumbnails` takes. On a post an earlier pass
+  left part-filled these are where the set's look actually lives, and they
+  outrank any description of it - including the brief's, where the two
+  disagree. Step 5 says how they are used.
 
 If the notes name a number of scenes, that number is the number of images -
 not more because a set looked good, not fewer because one was hard. If they
@@ -240,22 +246,38 @@ repeated is the lock, not the sequence. This card's action is the only action
 in the request; the seven other scenes stay out of it, including the one
 before this card, which is described only to the extent the picture shows it.
 
-**A picture that came out wrong is not a reference.** Throw it away and ask
-again from the lock. Do not hand it back with "keep the style, change the
-scene", and do not show it to say what to avoid - a tool that can see it will
-take it as the thing being edited, and the wrong picture becomes the one being
-redrawn. Until the first card is right there is no reference to work from at
-all. Once it is right, later cards may be asked to keep its character design,
-still one camera view per request.
+**The reference is this post's own cards, and nothing else.** From the second
+card on, the post itself holds the answer to what the next one has to look
+like. `get_post_context` lists what is attached, in posting order, with each
+file's Library id:
 
-**A contaminated session is restarted, not argued with.** After enough failed
-attempts the session's own pictures become the strongest thing in the request:
-a new post comes back drawn as the last post's people in the last post's
-street, whatever the words say. Branching does not clear it - a branch
-inherits everything before its branch point. Start a genuinely new session,
-load this SOP, take the next `unfinished` post and do not replay the failed
-pictures into it. Say in the report that you did; it is a fresh start on the
-queue, not a stop.
+```
+attached_media: [{position: 1, asset_id: "asset_...", ...}, ...]
+get_asset_thumbnails(asset_ids=["asset_..."])
+```
+
+Fetch the last one - the card this scene follows - and make the next card
+beside it. Fetch an earlier one too where the scene needs it: card one for a
+face that has drifted, or the card a returning prop was last seen in. They are
+this post's cards, they were checked before they landed, and they are on the
+record rather than in a conversation, so they say the same thing on the tenth
+card as on the second.
+
+Three things are never the reference, for the same reason in three forms:
+
+- **another post's card**, however good it looked. It carries another post's
+  cast, room and light into this one, which is drift with a respectable
+  excuse. A set that looked right elsewhere is not this set;
+- **a generation that came out wrong.** Throw it away and ask again from the
+  lock. Do not hand it back with "keep the style, change the scene", and do
+  not show it to say what to avoid - a tool that can see it will take it as
+  the thing being edited, and the wrong picture becomes the one being redrawn;
+- **a card that has not been checked yet.** It is a candidate, not a fact;
+  until it passes step 5's gate and is attached, the post does not have it.
+
+The first card of a post has no anchor - there is nothing attached yet - so
+the brief's locks are the whole of it, and it is checked hardest of the set.
+Everything after it has one, which is why a post is filled in order.
 
 **Check each card as it arrives, before it is uploaded.** A card is looked at
 the moment it is made, while the next one has not been asked for yet: a wrong

@@ -431,7 +431,12 @@ def build_server(workspace_id: str) -> FastMCP:
             "Everything needed to write one post's copy: the video and how long "
             "it runs, the attached product and its commission, every destination "
             "and where a follow-up lands there, the campaign brief, and any copy "
-            "already written."
+            "already written. `attached_media` lists what the post already "
+            "holds in posting order with each file's Library id, so a carousel "
+            "being built a card at a time can look at its own earlier cards "
+            "with get_asset_thumbnails and make the next one match them - "
+            "this post's cards, never another post's and never a generation "
+            "that was rejected."
         ),
     )
     def get_post_context(item_id: str) -> dict[str, Any]:
