@@ -2810,13 +2810,35 @@ def test_the_needs_media_sop_rules_out_a_collage_and_a_stall() -> None:
     prose = " ".join(sops.get_sop("campaigns.fill-needs-media")["markdown"].split())
 
     assert "never a collage" in prose
-    # Checked before any of it is uploaded, because an import per picture is
-    # what a bad batch costs.
-    assert "Verify the set before uploading" in prose
+    # Two gates, because the cards are made and uploaded one at a time: a card
+    # is checked before it costs an import, and the set is read in swipe order
+    # before it costs the post its one attach.
+    assert "Check each card as it arrives, before it is uploaded" in prose
+    assert "verify the set before attaching it" in prose.lower()
     assert "regenerate that scene" in prose
     # And the queue keeps moving between posts.
     assert "take the next one straight away" in prose.lower()
     assert "not ask whether to continue" in prose
+
+
+def test_the_needs_media_sop_says_an_approved_post_is_attached_only_once() -> None:
+    """The trap in filling a post a card at a time.
+
+    Appending per scene reads as the safer flow - each card lands as it is
+    made - and on a draft it is. On a post that was already approved the
+    first attach completes it: it joins the rotation as a one-card carousel
+    and `set_post_media` refuses every later call, leaving a live post only
+    the operator can repair and one that no longer answers the needs-media
+    filter. So the SOP has to name the state that decides it.
+    """
+    prose = " ".join(sops.get_sop("campaigns.fill-needs-media")["markdown"].split())
+
+    assert "An approved post is attached once, with the whole set" in prose
+    # The refusal an assistant would otherwise meet halfway through a post,
+    # quoted from writes.set_post_media so the two cannot drift apart.
+    assert "already approved with its media decided" in prose
+    # And the draft case, which is the one append was built for.
+    assert "still a draft" in prose.lower()
 
 
 def test_a_post_of_nothing_is_refused_with_the_way_in(session) -> None:

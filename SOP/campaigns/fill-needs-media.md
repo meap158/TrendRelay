@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes one call per scene as separate images that carry the same people, place and props from card to card, check them, upload each, attach them to that exact post, and take the next straight away.
-version: 4
+summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes one call per scene as separate images that carry the same people, place and props from card to card, check and upload each card as it arrives, attach the finished set to that exact post, and take the next straight away.
+version: 5
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -74,10 +74,11 @@ next:
 ```
 needs-media post
   → read that post's brief
-  → generate one scene per call, in the brief's order, never a collage
-  → check the set; regenerate only a scene that drifted
-  → upload each, keeping the order
-  → attach them all to that exact post
+  → per scene, in the brief's order:
+       generate one image, never a collage
+       check that card; regenerate it if it drifted
+       upload it, keeping its slot
+  → attach the set to that exact post
   → confirm what landed
   → next post, straight away
 ```
@@ -161,6 +162,26 @@ inset pictures, no typography beyond the words the brief puts inside the
 image. The count is yours and the brief's to keep; it does not belong in the
 request.
 
+**Carry the same guard into every request.** The two failures above are the
+ones that recur, so they are said again each time rather than once at the
+start of a post - by the eighth ask, the first ask is the oldest thing in the
+room. Something to this effect, with the locks from this post's own brief
+filled in:
+
+```
+Draw only the cast, clothing, location, props, style and palette this post's
+brief defines. Do not borrow people, rooms, furniture, signs, food, wardrobe,
+lighting or poses from an earlier picture or from another post; an earlier
+picture that came out wrong is not a reference. One single full-frame image
+at the brief's aspect: no collage, split panel, contact sheet, storyboard,
+inset, border or montage. No words inside the picture unless this scene names
+the words it carries. Invent no extra characters or props - where the brief
+is silent, keep it plain rather than filling it in.
+```
+
+It says what to draw before it says what not to, because a request that is
+mostly prohibitions is a request whose subject is the prohibited thing.
+
 **Separate files, one continuous story.** Separate describes the files, not the
 pictures. Eight cards that each stand alone and share only a palette are eight
 illustrations; a carousel is swiped, so each card has to carry over from the one
@@ -197,20 +218,31 @@ load this SOP, take the next `none yet` post and do not replay the failed
 pictures into it. Say in the report that you did; it is a fresh start on the
 queue, not a stop.
 
-**Verify the set before uploading any of it.** Uploading is where a mistake
-becomes expensive - an import per picture, then a package to unpick - so look
-first, at the whole set:
+**Check each card as it arrives, before it is uploaded.** A card is looked at
+the moment it is made, while the next one has not been asked for yet: a wrong
+card caught here costs one regeneration, and the same card found at the end of
+the post costs an import to unpick as well. Against the brief, every time:
+
+- it is this post's scene, and the scene that was asked for;
+- the cast and their clothes are the lock's, not a neighbouring post's;
+- the location and the carried props are the ones the set has been using;
+- the style and palette match the cards already made;
+- one frame - no panels, no borders, no inset pictures, no contact sheet;
+- the aspect is the one the brief names;
+- nothing is written inside it that this scene did not ask for, and what is
+  written is in the campaign's language and correctly spelled.
+
+A card that misses any line is not uploaded. Regenerate it and look again.
+
+**Then verify the set before attaching it.** The cards pass one at a time and
+still have to hold together, so read them in swipe order before the post is
+touched:
 
 - the count matches the brief exactly;
-- each file is one scene, not a panel grid or a contact sheet;
-- the aspect is the one the brief names, on every file;
 - the style lock holds across the set - the same hand, palette and treatment,
   so eight cards read as one post rather than eight;
 - the continuity holds too - the same faces, clothes, place and props from card
-  to card, and each scene recognisably following the last when they are read in
-  swipe order;
-- anything written inside an image is in the campaign's language and spelled
-  correctly.
+  to card, and each scene recognisably following the last.
 
 **When one scene drifts, regenerate that scene.** A single card that came out
 wrong - the wrong aspect, a panel grid, a face that does not match the rest, a
@@ -242,6 +274,15 @@ then bring the result in through the upload boundary described below and in
 `upload_media` takes exactly one file per call. There is no bulk upload: eight
 scenes are eight calls. Track one result slot per scene, in the brief's order,
 even when calls finish out of order.
+
+Upload each card as it passes its check, rather than holding the set to the
+end. An uploaded picture is in the Library and survives whatever happens to
+the session that made it, so a run that dies at scene six leaves five cards
+that can still be used; a run that held all six in the session leaves nothing.
+Uploading is not attaching, and the two are worth keeping apart in your head:
+a Library asset belongs to nobody until step 7 puts it on a post, and an
+abandoned post's uploads are Library clutter to mention in the report, not a
+half-finished post.
 
 For an image generated in the client, pass it as the `media` file input when
 the host offers one, or send the bytes as standard base64 in `media_base64`.
@@ -275,6 +316,24 @@ set wants. To grow a carousel one picture at a time instead - a scene arriving
 per upload - call `set_post_media` with `append: true` and that one asset id;
 it joins the end, which is the order it will be swiped, and you do not need to
 resend what is already attached.
+
+**An approved post is attached once, with the whole set.** Appending card by
+card is for a post that is still a draft, where nothing publishes until the
+operator says so and a half-built carousel is only half-built. On a post that
+was already approved the first attach is the only attach: it completes the
+post, which joins the rotation there and then, and every later call is refused
+with "This post is already approved with its media decided. Ask the operator
+to change it in the app." A set delivered a card at a time to an approved post
+therefore becomes a one-card post, live, that nobody but the operator can
+repair - and it has left the `media="none yet"` queue, so no later pass will
+even find it. Hold the cards in the Library until the set is complete and
+checked, then attach them in one call.
+
+This is also the answer to a post that came out short. A draft can be topped
+up later with `append: true`; an approved one cannot be touched again, so a
+set that could not be finished is left unattached entirely and named in the
+report. Attaching what there is buys nothing and spends the only attach the
+post had.
 
 A video stands alone: it cannot be appended, and a post is one clip **or** a
 set of pictures, never a mix.

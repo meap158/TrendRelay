@@ -136,13 +136,18 @@ at a time:
    one collage of panels. Repeat the character, place and prop locks in every
    scene's request and leave the other scenes out of it: an ask with the whole
    sequence in view is what comes back as a sheet of panels.
-4. Check the set before uploading any of it: the count, one scene per file,
-   the aspect, the style holding across the set, and the same people, place
-   and props carrying from card to card. A scene that came out wrong is one
-   regeneration of that scene, not a restart of the post.
-5. `upload_media` once per scene, keeping one result slot per scene.
+4. Check each card as it arrives - this post's scene, one frame, the aspect,
+   the cast, place and props of the cards already made - and only then
+   `upload_media` it, one call per scene, keeping one result slot per scene.
+   A card that came out wrong is one regeneration of that card, not a restart
+   of the post, and it is not uploaded until it passes.
+5. With the set complete, read it in swipe order: the count the brief names,
+   the style and the continuity holding from card to card.
 6. `set_post_media(item_id=<that same post>, asset_ids=[...])` in scene order,
-   or `append=true` one scene at a time. Read back `carousel_warnings`.
+   once, with the whole set. `append=true` a scene at a time is for a post
+   still in **draft**: on an already approved post the first attach completes
+   it and every later one is refused, which leaves a live one-card carousel
+   only the operator can repair. Read back `carousel_warnings`.
 7. Confirm `media_kind` now reads `carousel`, then fetch the next `none yet`
    item and start its loop straight away.
 
