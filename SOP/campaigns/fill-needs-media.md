@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the needs-media queue continuously, one post at a time - read that post's own brief, generate its scenes one call per scene as separate images that carry the same people, place and props from card to card, check and upload each card as it arrives, attach the finished set to that exact post, and take the next straight away.
-version: 5
+summary: Work the unfinished-media queue continuously, one post at a time - read that post's own brief, put its card count on the post as media_target, generate its scenes one call per scene as separate images that carry the same people, place and props from card to card, check and upload each card as it arrives, attach them to that exact post until it is complete, and take the next straight away.
+version: 6
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -24,10 +24,10 @@ nothing attached: approving it says the words are ready, and where there was no
 media to look at there was no media decision to make. The scheduler skips such
 a post every pass, silently, whether it is a draft or approved.
 
-So the working queue is the media shape, not the state:
+So the working queue is the media, not the state:
 
 ```
-list_campaign_posts(campaign_id=..., media="none yet")
+list_campaign_posts(campaign_id=..., media="unfinished")
 ```
 
 Do not add `state: "draft"` to that filter. It is the single most misleading
@@ -36,13 +36,22 @@ campaign that was written before its pictures existed is most of the backlog.
 A run that checked only drafts, found none, and reported the campaign complete
 has read past the whole job.
 
-`media` takes `video`, `carousel`, `text only`, or `none yet`. Only `none yet`
-is a gap. `text only` is a finished shape - the words are the whole post, by
-somebody's decision - and must never be "fixed" by attaching pictures to it.
+`media` takes `video`, `carousel`, `text only`, `none yet` or `unfinished`.
+`unfinished` is the backlog and the one to work from: no media at all, or
+fewer files than the post's own `media_target`. `none yet` is the narrower
+literal case - nothing attached - and stopped being the whole backlog the
+moment a post could say how much it is waiting for, because a carousel of
+three cards out of eight lists as a `carousel` and is still unpublishable.
+`text only` is a finished shape - the words are the whole post, by somebody's
+decision - and must never be "fixed" by attaching pictures to it.
+
+Every post in the listing carries `media_count`, `media_target` and
+`media_complete`, so "waiting for its first card" and "waiting for its last"
+are told apart before either is opened.
 
 Page with `limit` and `offset`, following `more` and `next_offset`. Once
-writing begins, refresh from `offset: 0`: a post you have just filled leaves
-the `none yet` result set, and everything behind it shifts forward.
+writing begins, refresh from `offset: 0`: a post you have just finished leaves
+the `unfinished` result set, and everything behind it shifts forward.
 
 ## 2. What you may change here, and what you may not
 
@@ -50,18 +59,24 @@ the `none yet` result set, and everything behind it shifts forward.
 
 | The post | `set_post_media` |
 | --- | --- |
-| `draft`, no media yet | Allowed - attach it |
-| `approved`, no media yet | Allowed - attach it; it joins the rotation as it stands |
-| Already carries a video or pictures | Refused - swapping reviewed media is the operator's, in the app |
+| `draft`, media unfinished | Allowed - attach it |
+| `approved`, media unfinished | Allowed - attach it; it joins the rotation once its media is complete |
+| Media complete already | Refused - swapping reviewed media is the operator's, in the app |
 | `approved` and copy-only (`text only`) | Refused - that shape was chosen deliberately |
 | `paused` or `retired` | Refused - neither is a post waiting to be completed |
 
-The one live consequence worth saying out loud: attaching media to an
-**approved** post completes it, and the campaign's next pass can then schedule
-and publish it without asking anyone again. Nothing else in this procedure has
-that effect - a draft stays a draft, waiting for the operator. So say which of
-the two you just did when you report, and if the operator has not asked for
-approved posts to be completed, ask before starting on those.
+"Unfinished" is the post's own answer. Without a `media_target` it means
+nothing is attached, and the first thing attached finishes the post. With one
+it means the post holds fewer files than it says it is waiting for, and it
+stays fillable until it holds them all - which is what lets a carousel be
+delivered a card at a time without the post going out half-built.
+
+The one live consequence worth saying out loud: **completing** an approved
+post's media puts it in the rotation, and the campaign's next pass can then
+schedule and publish it without asking anyone again. Nothing else in this
+procedure has that effect - a draft stays a draft, waiting for the operator.
+So say which of the two you just did when you report, and if the operator has
+not asked for approved posts to be completed, ask before starting on those.
 
 This SOP still grants no new authority: it cannot approve, promote, publish, or
 change a post that already has its media.
@@ -72,14 +87,14 @@ The loop is per post, not per phase. Take one post, finish it, then take the
 next:
 
 ```
-needs-media post
+unfinished post
   → read that post's brief
+  → put its number of cards on the post as media_target
   → per scene, in the brief's order:
        generate one image, never a collage
        check that card; regenerate it if it drifted
-       upload it, keeping its slot
-  → attach the set to that exact post
-  → confirm what landed
+       upload it, and attach it with append: true
+  → confirm the post is complete
   → next post, straight away
 ```
 
@@ -101,7 +116,7 @@ and nothing else in the queue should be touched until that post is whole.
 
 **Then take the next one straight away.** The queue is worked continuously:
 the moment a post's media is attached and confirmed, fetch the next
-`none yet` item and begin its loop. Do not stop to summarise between posts, do
+`unfinished` item and begin its loop. Do not stop to summarise between posts, do
 not ask whether to continue, and do not wait for anything but the calls this
 loop makes. Report once, at the end of the run - or the moment something is
 genuinely blocked, which is a different thing from a scene that came out
@@ -120,13 +135,28 @@ Call `get_post_context(item_id=...)`. What matters here:
   caption is the post; the images illustrate it, not the other way round.
 - `campaign` - objective, audience, markets and language, for tone and for
   anything written inside the image.
-- `media_kind` - confirm it still reads `none yet`. If it does not, another
-  pass has filled it; leave it alone and move on.
+- `media_complete` - confirm it still reads false. If it is true, another pass
+  has finished this post; leave it alone and move on. `media_count` and
+  `media_target` say where a part-filled post got to, and which cards are
+  still owed.
 
 If the notes name a number of scenes, that number is the number of images -
 not more because a set looked good, not fewer because one was hard. If they
 name no number, decide from the caption and say what you decided when you
 report.
+
+**Put that number on the post before you make anything.** Pass it as
+`media_target` on the first `set_post_media` call - or at
+`create_campaign_post`, when this pass is also the one creating the post. It
+is what makes a part-filled post safe: a post that says it is waiting for
+eight files is skipped by the scheduler and stays in the `unfinished` queue
+until it holds eight, so cards may be attached as they are made and nothing
+publishes a set that is still arriving. A post with no target is finished by
+the first file attached to it, which on an approved post means published.
+
+The number may be raised here later - a brief that grew - but never lowered:
+lowering it declares a short set finished, which is the operator's call in the
+app. `set_post_media` refuses the attempt.
 
 ## 5. Make exactly this post's images
 
@@ -214,7 +244,7 @@ attempts the session's own pictures become the strongest thing in the request:
 a new post comes back drawn as the last post's people in the last post's
 street, whatever the words say. Branching does not clear it - a branch
 inherits everything before its branch point. Start a genuinely new session,
-load this SOP, take the next `none yet` post and do not replay the failed
+load this SOP, take the next `unfinished` post and do not replay the failed
 pictures into it. Say in the report that you did; it is a fresh start on the
 queue, not a stop.
 
@@ -282,7 +312,9 @@ that can still be used; a run that held all six in the session leaves nothing.
 Uploading is not attaching, and the two are worth keeping apart in your head:
 a Library asset belongs to nobody until step 7 puts it on a post, and an
 abandoned post's uploads are Library clutter to mention in the report, not a
-half-finished post.
+half-finished post. Where the post carries a `media_target`, attach each card
+as it uploads and the two steps run together - the post itself then holds the
+progress, which is sturdier than a list of asset ids in a session.
 
 For an image generated in the client, pass it as the `media` file input when
 the host offers one, or send the bytes as standard base64 in `media_base64`.
@@ -317,23 +349,28 @@ per upload - call `set_post_media` with `append: true` and that one asset id;
 it joins the end, which is the order it will be swiped, and you do not need to
 resend what is already attached.
 
-**An approved post is attached once, with the whole set.** Appending card by
-card is for a post that is still a draft, where nothing publishes until the
-operator says so and a half-built carousel is only half-built. On a post that
-was already approved the first attach is the only attach: it completes the
-post, which joins the rotation there and then, and every later call is refused
-with "This post is already approved with its media decided. Ask the operator
-to change it in the app." A set delivered a card at a time to an approved post
-therefore becomes a one-card post, live, that nobody but the operator can
-repair - and it has left the `media="none yet"` queue, so no later pass will
-even find it. Hold the cards in the Library until the set is complete and
-checked, then attach them in one call.
+**What the target decides is whether a card may be attached alone.** A post
+carrying a `media_target` is unfinished until it holds that many files, so
+each card can be attached as it passes - `append: true` with that one asset id
+- and the post stays out of the rotation and in the `unfinished` queue the
+whole way. That is the flow to prefer: nothing is held in a session that might
+end, and the post's own record says how far it got.
 
-This is also the answer to a post that came out short. A draft can be topped
-up later with `append: true`; an approved one cannot be touched again, so a
-set that could not be finished is left unattached entirely and named in the
-report. Attaching what there is buys nothing and spends the only attach the
-post had.
+Without a target, an approved post is attached **once**, with the whole set.
+There the first attach is the only attach: it completes the post, which joins
+the rotation there and then, and every later call is refused with "This post
+is already approved with its media decided. Ask the operator to change it in
+the app." A set delivered a card at a time to such a post becomes a one-card
+post, live, that nobody but the operator can repair - and it has left the
+backlog, so no later pass will even find it. Either put a target on the post
+first, which is the point of step 4, or hold the cards in the Library until
+the set is complete and attach them in one call.
+
+A post that came out short is left as it is and named in the report. With a
+target it is simply still unfinished and the next pass can carry on filling
+it; without one, a partial attach spends the only attach the post had. Never
+lower a target to make a short set look finished - `set_post_media` refuses
+it, and the record would read as a post briefed for the number it settled for.
 
 A video stands alone: it cannot be appended, and a post is one clip **or** a
 set of pictures, never a mix.
@@ -347,12 +384,14 @@ does not have.
 ## 8. Confirm, then move on
 
 Re-read the post - `get_post_context`, or the next page of
-`list_campaign_posts` - and check `media_kind` now reads `carousel` (or
-`video`). Only then start the next post.
+`list_campaign_posts` - and check `media_complete` now reads true, with
+`media_count` equal to the brief's number. `media_kind` reading `carousel`
+says only that pictures are attached, which a post holding one of eight says
+too. Only then start the next post.
 
 When the run ends - not between posts - say plainly: how many posts you filled,
 how many pictures each got, which posts joined the rotation because they were
 already approved, which are still drafts waiting for the operator, and every
 post left unfinished with the scene that stopped it. A fresh
-`list_campaign_posts(media="none yet")` is the completion evidence; the number
+`list_campaign_posts(media="unfinished")` is the completion evidence; the number
 it returns is the backlog that remains.

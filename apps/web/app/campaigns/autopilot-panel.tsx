@@ -515,10 +515,17 @@ type QueueItem = {
   post_type_overrides: Record<string, string>;
   /** The body is still the placeholder nobody wrote; the card says so. */
   needs_copy: boolean;
-  /** Not text_only, and no video or pictures have arrived yet - the wait
-      set_post_media exists to end, whether this post is a draft or was
-      approved before its media was. */
+  /** Not text_only, and the media it is waiting for has not all arrived - the
+      wait set_post_media exists to end, whether this post is a draft or was
+      approved before its media was. A post that names a `media_target` is
+      still waiting while it is short of it: three cards of eight is as
+      unpublishable as none, and the scheduler skips both alike. */
   needs_media: boolean;
+  /** Files attached now, and how many this post says it is waiting for -
+      `null` where it names no number, which is most posts and means anything
+      attached finishes it. Together they are the "1 of 8" on the badge. */
+  media_count: number;
+  media_target: number | null;
   title: string | null;
   body: string;
   hashtags: string[];
@@ -2266,6 +2273,18 @@ export function AutopilotPanel({
    */
   const [editingCopyOnly, setEditingCopyOnly] = useState(false);
   const [swappingMedia, setSwappingMedia] = useState(false);
+  /**
+   * How many files the open post is waiting for, or null for "no number".
+   *
+   * The count a post is briefed for - eight cards, say - is the difference
+   * between a carousel that is finished and one that has started arriving,
+   * and until a post could say it, the first picture to land finished the
+   * post and put it in the rotation as a gallery of one. Null is the ordinary
+   * post, which is finished by whatever is attached to it. This is also the
+   * only place a target can be lowered: assistants may raise one while they
+   * fill a post, but declaring a short set finished is the operator's.
+   */
+  const [editingMediaTarget, setEditingMediaTarget] = useState<number | null>(null);
   // The campaign's own wording, overridden for this post. Empty means the
   // campaign's, which is why these are strings rather than nullable: the field
   // shows the campaign's text and clearing it is how you go back to it.
@@ -3046,6 +3065,7 @@ export function AutopilotPanel({
   function openEditorWording(item: QueueItem) {
     setEditingDisclosure(item.disclosure ?? "");
     setEditingBioHint(item.bio_hint ?? "");
+    setEditingMediaTarget(item.media_target);
     setComposed(null);
   }
 
@@ -5583,13 +5603,25 @@ export function AutopilotPanel({
                     title={item.needs_copy
                       ? t("autopilot.state.help.needsCopy")
                       : item.needs_media
-                        ? t("autopilot.state.help.needsMedia")
+                        // A post that says how many files it is waiting for
+                        // explains its own wait with the numbers: "none
+                        // attached" and "five of eight attached" are the same
+                        // badge and very different amounts of work left.
+                        ? item.media_target
+                          ? t("autopilot.state.help.needsMediaCount", {
+                            count: item.media_count, target: item.media_target,
+                          })
+                          : t("autopilot.state.help.needsMedia")
                         : t(`autopilot.state.help.${item.state}`)}
                   >
                     {item.needs_copy
                       ? t("autopilot.state.needsCopy")
                       : item.needs_media
-                        ? t("autopilot.state.needsMedia")
+                        ? item.media_target
+                          ? t("autopilot.state.needsMediaCount", {
+                            count: item.media_count, target: item.media_target,
+                          })
+                          : t("autopilot.state.needsMedia")
                         : t(`autopilot.state.${item.state}`)}
                   </Badge>
                   {/* A mark, not a badge and not a column: it says only that
@@ -5892,6 +5924,12 @@ export function AutopilotPanel({
                   // them exactly as they were, so editing a caption cannot
                   // wipe what an earlier phase wrote down.
                   ...(editingContext !== null ? { context: editingContext } : {}),
+                  // Sent every save, including as null: this field is shown
+                  // with its current value, so what the form says is what the
+                  // operator means - and null is the meaningful answer "stop
+                  // waiting for a number". A copy-only post waits for nothing.
+                  media_target: editingMediaRemoved || editingCopyOnly
+                    ? null : editingMediaTarget,
                   // Only when a replacement was staged: an absent field
                   // leaves the media exactly as it was, which is what saving
                   // this form has always meant.
@@ -6012,6 +6050,37 @@ export function AutopilotPanel({
                     Change from Library
                   </Button>
                 </span>
+                {/* What the post is waiting for, where it is waiting for a
+                    number of files rather than simply for something. A
+                    carousel built a card at a time is finished when it holds
+                    its cards, not when the first one lands - and this row is
+                    where that number is set, raised, or given up. Beside the
+                    media rather than in its own section: it describes the
+                    same package the line above describes. */}
+                {!editingCopyOnly && !editing.text_only && (
+                  <label className="campaign-edit-media-target">
+                    Waiting for
+                    <input
+                      type="number" min={1} max={35}
+                      value={editingMediaTarget ?? ""}
+                      placeholder="any"
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        setEditingMediaTarget(
+                          event.target.value.trim() && Number.isFinite(value)
+                            ? Math.min(35, Math.max(1, Math.round(value)))
+                            : null,
+                        );
+                      }} />
+                    files
+                    <small>
+                      {editingMediaTarget
+                        ? `Holds ${editing.media_count}. It stays out of the `
+                          + "rotation until it holds them all."
+                        : "No number set: anything attached finishes this post."}
+                    </small>
+                  </label>
+                )}
               </div>
               {(() => {
                 const media = (path: string) =>

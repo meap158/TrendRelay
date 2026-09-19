@@ -280,6 +280,13 @@ class CampaignQueueItem(Base):
             "visibility IN ('public','private')",
             name="valid_queue_visibility",
         ),
+        # Zero would say "waiting for no media", which `text_only` already
+        # records, and the scheduler reads this column to decide what may
+        # publish - so the floor is the database's rather than each write's.
+        CheckConstraint(
+            "media_target IS NULL OR media_target >= 1",
+            name="valid_queue_media_target",
+        ),
         # "Is this clip already in that campaign?", asked once per row of a
         # library filter. Both columns are indexed separately and neither is
         # selective on its own: SQLite chose the workspace index - which every
@@ -316,6 +323,22 @@ class CampaignQueueItem(Base):
     #: True only when the operator intentionally chose copy without an
     #: attachment. False with empty paths means the media is still to come.
     text_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: How many files this post is waiting for, when it says.
+    #:
+    #: Without it a post is finished the moment anything is attached, which is
+    #: right for a clip and wrong for a carousel briefed as eight pictures:
+    #: the first card completed the post, an approved one joined the rotation
+    #: as a one-card gallery, and it dropped out of the needs-media backlog
+    #: where nothing would find it again. A target separates "has media" from
+    #: "has the media it was briefed for" - see `media_count` and
+    #: `media_is_complete`, which every reader of this rule goes through.
+    #:
+    #: None is the ordinary case and keeps the old rule exactly, so a post
+    #: that never names a number behaves as it always did. It counts files,
+    #: not a shape: a video post waiting for its clip targets 1, a carousel
+    #: targets its number of cards. Which of the two it is stays the media's
+    #: own business - `video_path` and `image_paths` already say.
+    media_target: Mapped[int | None] = mapped_column(Integer)
     #: Per-account format choices for this post. A queue item can be a Reel on
     #: Instagram and a Short on YouTube, so this is keyed by destination id
     #: rather than pretending one format can describe every delivery. Missing
@@ -406,6 +429,35 @@ class CampaignQueueItem(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+    @property
+    def media_count(self) -> int:
+        """Files attached to this post right now.
+
+        A clip is one file and a carousel is its number of cards; the two are
+        never mixed on one post, so this is a count and not a pair.
+        """
+        return 1 if self.video_path else len(self.image_paths or [])
+
+    @property
+    def media_is_complete(self) -> bool:
+        """Whether this post's media is the media it is waiting for.
+
+        Copy-only posts are complete with nothing attached - that shape was
+        chosen. A post with a `media_target` is complete when it holds that
+        many files. Everything else keeps the rule that predates targets:
+        anything attached finishes it.
+
+        The single place this question is answered. The scheduler asks it to
+        decide what may go out, the queue views to say what is still waiting,
+        and `set_post_media` to decide whether a post is still a gap being
+        filled - three readers who must not be able to disagree.
+        """
+        if self.text_only:
+            return True
+        if self.media_target is not None:
+            return self.media_count >= self.media_target
+        return self.media_count > 0
 
 
 class CampaignOffer(Base):

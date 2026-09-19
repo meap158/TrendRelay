@@ -1910,6 +1910,14 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-edit-media-head strong { font-size: 12px; }
 .campaign-edit-media-head small { min-width: 160px; flex: 1 1 240px; margin-inline-end: auto; color: var(--muted); font-size: 11px; }
 .campaign-edit-media-actions { display: inline-flex; flex: none; flex-wrap: wrap; gap: 6px; }
+/* How many files this post is waiting for. A row of its own under the head
+   rather than another item in it: the head is a line of chips and buttons,
+   and a labelled field sitting among them reads as one more button. */
+.campaign-edit-media-target { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.campaign-edit-media-target input { inline-size: 56px; padding: 2px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* The consequence, after the field rather than under it - one line about the
+   post in front of them, not a paragraph of policy. */
+.campaign-edit-media-target small { flex: 1 1 200px; }
 /* What was done to the video, as the Library's own effect tags - the same cut
    wears the same chip on both pages. The unedited file is said in grey rather
    than in the effect blue, which would claim an edit that was not made. */

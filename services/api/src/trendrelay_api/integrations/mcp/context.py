@@ -396,14 +396,15 @@ def _post_summary(
         "item_id": item.id,
         "campaign_id": item.campaign_id,
         "campaign_name": campaign.name if campaign else None,
-        "media_kind": (
-            "carousel" if item.image_paths
-            else "video" if item.video_path
-            # Copy-only is a shape, not a gap: the words are the whole post.
-            else "text only" if item.text_only
-            # Drafted words-first; the scheduler skips it until media arrives.
-            else "none yet"
-        ),
+        "media_kind": _item_media_kind(item),
+        # What it holds and what it is waiting for. `media_kind` is the shape,
+        # and a carousel is a carousel at its third card as at its eighth, so
+        # the count is what says whether the set is finished. `media_target`
+        # is null where the post names no number - there anything attached
+        # finishes it, the rule that predates targets.
+        "media_count": item.media_count,
+        "media_target": item.media_target,
+        "media_complete": item.media_is_complete,
         "video_title": _asset_title(session, item, asset),
         # How long there is to say it. A seven-second cut wants its hook in the
         # first word and a minute-long one can breathe, and the assistant was
@@ -503,6 +504,14 @@ def list_posts_needing_copy(
 
 POST_STATES = ("draft", "approved", "paused", "retired")
 POST_MEDIA_KINDS = ("video", "carousel", "text only", "none yet")
+#: What `media` may narrow by. The shapes above, plus the backlog itself.
+#:
+#: "none yet" is literal - nothing attached - and stopped being the whole
+#: backlog once a post could say how much media it is waiting for: a carousel
+#: briefed as eight cards and holding three is a `carousel` by shape and still
+#: unpublishable. "unfinished" is that question asked directly, and is the
+#: filter a pass filling media should work from.
+POST_MEDIA_FILTERS = (*POST_MEDIA_KINDS, "unfinished")
 
 
 def _item_media_kind(item: CampaignQueueItem) -> str:
@@ -553,9 +562,10 @@ def list_campaign_posts(
         raise ValueError(
             f"state must be one of {', '.join(POST_STATES)}; received {state!r}."
         )
-    if media is not None and media not in POST_MEDIA_KINDS:
+    if media is not None and media not in POST_MEDIA_FILTERS:
         raise ValueError(
-            f"media must be one of {', '.join(POST_MEDIA_KINDS)}; received {media!r}."
+            f"media must be one of {', '.join(POST_MEDIA_FILTERS)}; "
+            f"received {media!r}."
         )
 
     conditions = (CampaignQueueItem.workspace_id == workspace_id,)
@@ -574,7 +584,9 @@ def list_campaign_posts(
     ).all())
     # Media shape and caption text live in JSON and free text, so these two
     # narrow in Python; the page and its total describe the narrowed list.
-    if media:
+    if media == "unfinished":
+        items = [item for item in items if not item.media_is_complete]
+    elif media:
         items = [item for item in items if _item_media_kind(item) == media]
     if search and search.strip():
         needle = search.strip().lower()
@@ -757,14 +769,13 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "item_id": item.id,
         "campaign": get_campaign_config(session, workspace_id, item.campaign_id)
         if campaign else None,
-        "media_kind": (
-            "carousel" if item.image_paths
-            else "video" if item.video_path
-            # Copy-only is a shape, not a gap: the words are the whole post.
-            else "text only" if item.text_only
-            # Drafted words-first; the scheduler skips it until media arrives.
-            else "none yet"
-        ),
+        "media_kind": _item_media_kind(item),
+        # The brief's number, where the post carries one, beside what it holds
+        # now - so a pass picking this post up knows whether it is filling an
+        # empty post or finishing a part-filled one.
+        "media_count": item.media_count,
+        "media_target": item.media_target,
+        "media_complete": item.media_is_complete,
         "video_title": _asset_title(session, item, asset),
         #: None when the asset has left the Library or never carried a
         #: duration - which is a different answer from a clip of no length.

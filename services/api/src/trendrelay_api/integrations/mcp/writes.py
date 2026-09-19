@@ -158,6 +158,7 @@ def set_post_media(
     asset_ids: list[str],
     append: bool = False,
     text_only: bool = False,
+    media_target: int | None = None,
 ) -> dict[str, Any]:
     """Attach or replace a post's still-missing media, from Library assets.
 
@@ -203,12 +204,17 @@ def set_post_media(
             f"This post is {item.state}; ask the operator to change its "
             "media in the app."
         )
-    has_media = bool(item.video_path) or bool(item.image_paths)
-    if item.state == "approved" and (has_media or item.text_only):
-        # The one case still refused for an approved post: media it already
-        # has, or a copy-only shape it was promoted with. Both are choices an
-        # operator made with the post in front of them, and this tool only
+    if item.state == "approved" and (item.media_is_complete or item.text_only):
+        # The one case still refused for an approved post: the media it ended
+        # up with, or a copy-only shape it was promoted with. Both are choices
+        # an operator made with the post in front of them, and this tool only
         # ever fills a gap that was never reviewed - it does not reopen one.
+        #
+        # "Ended up with" is the post's own answer once it names a target. A
+        # carousel briefed as eight cards and holding three is still the gap
+        # it always was: nobody has reviewed it, the scheduler is still
+        # skipping it, and refusing the fourth card would strand the post
+        # where only the app could finish it.
         raise ValueError(
             "This post is already approved with its media decided. Ask the "
             "operator to change it in the app."
@@ -269,6 +275,24 @@ def set_post_media(
             f"would make {len(pictures)}. Send fewer, or replace the package "
             "instead of appending to it."
         )
+    if media_target is not None:
+        if media_target < 1 or media_target > MAX_CAROUSEL_IMAGES:
+            raise ValueError(
+                f"A media target is between 1 and {MAX_CAROUSEL_IMAGES}; "
+                f"received {media_target}."
+            )
+        if item.media_target is not None and media_target < item.media_target:
+            # Raising a target says more cards are coming; lowering one
+            # declares a short set finished, which is the decision this tool
+            # must never make on its own. It is the only way a run that could
+            # not produce the eighth card could publish seven and call it
+            # done, and it would look, on the record, exactly like a post
+            # that was briefed for seven.
+            raise ValueError(
+                f"This post is waiting for {item.media_target} files and this "
+                f"would lower it to {media_target}. Finish the set, or ask "
+                "the operator to change the target in the app."
+            )
     was_approved = item.state == "approved"
     update = QueueItemUpdate(
         video_path=media.get("video_path", ""),
@@ -276,6 +300,7 @@ def set_post_media(
         # The lead identity stays with the first picture of the carousel when
         # appending; a replacement takes the new package's own lead.
         asset_id=item.asset_id if append and item.asset_id else assets[0].id,
+        **({"media_target": media_target} if media_target is not None else {}),
     )
     apply_queue_item_edits(session, workspace_id, item.campaign_id, item, update)
     session.commit()
@@ -306,6 +331,14 @@ def set_post_media(
             else ""
         )
         + (
+            # A post still short of its target has not been completed by this
+            # call, whatever its state - so neither of the two endings below
+            # is true of it, and saying one would be the report that hid a
+            # part-filled post in the first place.
+            f"{item.media_count} of {item.media_target} attached; this post is "
+            "still waiting for the rest and nothing will publish it until it "
+            "has them."
+            if not item.media_is_complete else
             "Media attached. It was already approved, so it now joins the "
             "rotation as it stands."
             if was_approved else

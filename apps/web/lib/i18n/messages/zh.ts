@@ -758,6 +758,7 @@ export const zh: Messages = {
       approved: "轮换中",
       needsCopy: "缺少文案",
       needsMedia: "缺少素材",
+      needsMediaCount: "素材未齐 · {count}/{target}",
       paused: "已暂停",
       retired: "已停用",
       help: {
@@ -765,6 +766,7 @@ export const zh: Messages = {
         approved: "调度器可以选用。只要休息天数已满、账号未达每日上限，它就能填补任何到期的时段。",
         needsCopy: "已批准，但文案一直没写 - 目前是占位文本。在有人写好之前，每个时段都会跳过它。",
         needsMedia: "已批准，但一直没有附上视频或图片。在附上素材之前，或改为仅发文案，每个时段都会跳过它。",
+        needsMediaCount: "这条帖子在等 {target} 个文件，目前有 {count} 个。在凑齐之前每个时段都会跳过它，所以不会以残缺的状态发出去。",
         paused: "已退出轮换：可能是你在待批列表中拒绝了它，也可能是投递失败——通常是文件被移动或修改。重新批准即可放回轮换。",
         retired: "已经用完。保留作记录，不再发布，匹配商品时也会忽略。",
       },

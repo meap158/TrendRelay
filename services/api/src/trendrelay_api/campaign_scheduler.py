@@ -918,13 +918,20 @@ def plan_campaign(
                         candidate.id, _short_source_name(candidate.title or candidate.id)
                     )
                     continue
+                # Waiting for media, in either of its two shapes: nothing
+                # attached at all, or fewer files than the post says it is
+                # waiting for. A carousel briefed as eight cards and holding
+                # three is as unpublishable as one holding none - going out
+                # would spend the post on a gallery nobody meant to publish -
+                # so both wait here. `media_is_complete` is where that is
+                # decided, for this and for the queue views alike.
+                if not candidate.media_is_complete:
+                    awaiting_media.setdefault(
+                        candidate.id,
+                        _short_source_name(candidate.title or candidate.id),
+                    )
+                    continue
                 if not candidate.video_path and not candidate.image_paths:
-                    if not candidate.text_only:
-                        awaiting_media.setdefault(
-                            candidate.id,
-                            _short_source_name(candidate.title or candidate.id),
-                        )
-                        continue
                     requested = (candidate.post_type_overrides or {}).get(
                         destination.id, destination.post_type
                     )

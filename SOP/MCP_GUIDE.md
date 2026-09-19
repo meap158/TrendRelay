@@ -126,11 +126,16 @@ When the posts already have their copy and their working notes, and what is
 missing is the pictures, load `campaigns.fill-needs-media` and work one post
 at a time:
 
-1. `list_campaign_posts(campaign_id=..., media="none yet")` - the whole media
-   backlog, drafts and approved posts alike. Do not narrow by `state`.
+1. `list_campaign_posts(campaign_id=..., media="unfinished")` - the whole media
+   backlog, drafts and approved posts alike, and posts part-filled by an
+   earlier pass. Do not narrow by `state`.
 2. For the first post, `get_post_context(item_id=...)`: `queue_item.context`
    carries the brief a previous pass left - how many cards, the style, the
    scene list - and `current_copy.caption` is what the pictures belong to.
+   Put the brief's card count on the post as `media_target` before making
+   anything: a post that says how many files it is waiting for stays out of
+   the rotation and in this backlog until it holds them, which is what lets
+   the cards be attached one at a time.
 3. Generate exactly the scenes that brief names, in its order, **one image per
    generation call** at the brief's aspect - never one call for the set, never
    one collage of panels. Repeat the character, place and prop locks in every
@@ -141,15 +146,17 @@ at a time:
    `upload_media` it, one call per scene, keeping one result slot per scene.
    A card that came out wrong is one regeneration of that card, not a restart
    of the post, and it is not uploaded until it passes.
-5. With the set complete, read it in swipe order: the count the brief names,
+5. `set_post_media(item_id=<that same post>, asset_ids=[<this card>],
+   append=true)` as each card passes, in scene order, with `media_target` on
+   the first call if step 2 did not set it. Without a target the first attach
+   completes the post - on an approved one that means published - so a
+   targetless post is instead attached once, with the whole set. Read back
+   `carousel_warnings`.
+6. With the set complete, read it in swipe order: the count the brief names,
    the style and the continuity holding from card to card.
-6. `set_post_media(item_id=<that same post>, asset_ids=[...])` in scene order,
-   once, with the whole set. `append=true` a scene at a time is for a post
-   still in **draft**: on an already approved post the first attach completes
-   it and every later one is refused, which leaves a live one-card carousel
-   only the operator can repair. Read back `carousel_warnings`.
-7. Confirm `media_kind` now reads `carousel`, then fetch the next `none yet`
-   item and start its loop straight away.
+7. Confirm `media_complete` now reads true and `media_count` matches the
+   brief, then fetch the next `unfinished` item and start its loop straight
+   away.
 
 Finish each post before starting the next, and keep the queue moving: no
 summary between posts, no asking whether to continue. A batch of images

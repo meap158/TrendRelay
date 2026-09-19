@@ -1658,6 +1658,47 @@ def test_a_post_awaiting_media_keeps_its_own_note(session) -> None:
     assert "q-empty" in note
 
 
+def test_a_carousel_short_of_its_target_waits_with_the_empty_ones(session) -> None:
+    """Three cards of eight is as unpublishable as none, and for longer.
+
+    A post that says how much media it is waiting for is not finished by the
+    first file to arrive. Without this the scheduler read "has something
+    attached" as "ready": an approved post picked up its first card, went out
+    as a one-card gallery, and the seven cards it was briefed for arrived
+    after it had already published.
+    """
+    destination(session, "d1", "tiktok")
+    slot(session, 12)
+    queue_item(
+        session, "q-part",
+        video_path="", image_paths=[r"S:\media\1.png", r"S:\media\2.png"],
+        media_target=8,
+    )
+    queue_item(session, "q-ready", position=1)
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-ready"]
+    assert "still need media attached" in note
+    assert "q-part" in note
+
+
+def test_a_carousel_that_reaches_its_target_is_scheduled(session) -> None:
+    """And the wait ends exactly there, not one card later."""
+    destination(session, "d1", "tiktok", provider="zernio")
+    slot(session, 12)
+    queue_item(
+        session, "q-full",
+        video_path="", image_paths=[r"S:\media\1.png", r"S:\media\2.png"],
+        media_target=2,
+    )
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-full"]
+    assert "still need media attached" not in note
+
+
 def test_an_explicit_text_only_post_skips_a_media_required_destination(session) -> None:
     destination(session, "d1", "youtube")
     slot(session, 12)

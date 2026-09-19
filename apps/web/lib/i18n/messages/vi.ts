@@ -769,6 +769,7 @@ export const vi: Messages = {
       approved: "đang luân phiên",
       needsCopy: "chưa có nội dung",
       needsMedia: "chưa có media",
+      needsMediaCount: "chưa đủ media · {count}/{target}",
       paused: "tạm dừng",
       retired: "ngừng dùng",
       help: {
@@ -776,6 +777,7 @@ export const vi: Messages = {
         approved: "Sẵn sàng cho bộ lập lịch. Nó có thể lấp bất kỳ khung giờ nào đến hạn, sau khi đã nghỉ đủ số ngày và tài khoản chưa chạm giới hạn mỗi ngày.",
         needsCopy: "Đã duyệt, nhưng chưa viết nội dung - một đoạn giữ chỗ đang thay thế. Nó bị bỏ qua ở mọi khung giờ cho đến khi có người viết.",
         needsMedia: "Đã duyệt, nhưng chưa gắn video hay hình ảnh nào. Nó bị bỏ qua ở mọi khung giờ cho đến khi có media được gắn, hoặc bạn đăng nó chỉ với nội dung.",
+        needsMediaCount: "Bài này đang chờ {target} tệp và hiện có {count}. Nó bị bỏ qua ở mọi khung giờ cho đến khi đủ bộ, nên không thể đăng khi còn thiếu.",
         paused: "Ngoài vòng xoay: hoặc bạn đã từ chối bài trong hộp duyệt, hoặc việc đăng đã lỗi - thường là tệp bị di chuyển hoặc thay đổi. Duyệt lại để đưa bài trở lại.",
         retired: "Đã kết thúc. Giữ lại để lưu hồ sơ, không bao giờ đăng lại, và bỏ qua khi ghép sản phẩm.",
       },

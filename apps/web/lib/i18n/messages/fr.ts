@@ -779,6 +779,7 @@ export const fr: Messages = {
       approved: "en rotation",
       needsCopy: "texte à écrire",
       needsMedia: "média à ajouter",
+      needsMediaCount: "média incomplet · {count}/{target}",
       paused: "en pause",
       retired: "retiré",
       help: {
@@ -786,6 +787,7 @@ export const fr: Messages = {
         approved: "Disponible pour le planificateur. Il peut occuper tout créneau dû, une fois le repos requis écoulé et si le compte reste sous son plafond quotidien.",
         needsCopy: "Approuvé, mais la légende n'a jamais été écrite - un texte provisoire la remplace. Il est ignoré à chaque créneau jusqu'à ce que quelqu'un l'écrive.",
         needsMedia: "Approuvé, mais aucune vidéo ni image n'a jamais été jointe. Il est ignoré à chaque créneau jusqu'à ce qu'un média soit joint, ou que vous le publiiez en texte seul.",
+        needsMediaCount: "Ce post attend {target} fichiers et n'en a que {count}. Il est ignoré à chaque créneau tant que la série n'est pas complète, pour qu'il ne parte jamais à moitié fait.",
         paused: "Hors rotation : soit vous l'avez refusé dans la file d'approbation, soit une publication a échoué - souvent un fichier déplacé ou modifié. Approuvez-le pour le remettre en rotation.",
         retired: "Terminé. Conservé pour l'historique, jamais republié, et ignoré lors de l'association des produits.",
       },

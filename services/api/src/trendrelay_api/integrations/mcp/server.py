@@ -396,8 +396,11 @@ def build_server(workspace_id: str) -> FastMCP:
             "independent: approved does NOT mean a post has media - one "
             "written words-first is often approved before its pictures exist, "
             "and the scheduler skips it exactly as it skips an empty draft. "
-            "For the media backlog filter media='none yet' alone; adding "
-            "state='draft' hides every approved-but-empty post, which is "
+            "For the media backlog filter media='unfinished' alone - no media "
+            "at all, or fewer files than the post's own media_target, which "
+            "is the whole backlog; media='none yet' is the narrower literal "
+            "case of nothing attached. Adding state='draft' to either hides "
+            "every approved-but-empty post, which is "
             "usually most of it. Each entry carries its state, a caption "
             "excerpt to recognise it by, and the slot it is locked to if any; "
             "the response paginates like list_posts_needing_copy. The "
@@ -1006,7 +1009,11 @@ def build_server(workspace_id: str) -> FastMCP:
             "built over several phases, say here what this phase did and what "
             "the next one still needs, so it does not have to guess. Do not "
             "restate the product, its description or the transcript - those "
-            "are readable through get_post_context."
+            "are readable through get_post_context. `media_target` says how "
+            "many files the post will be waiting for when that is already "
+            "known - a carousel briefed as eight cards sets 8 - and the post "
+            "then counts as needing media until it holds that many, so it "
+            "cannot publish as a part-built set."
         ),
     )
     def create_campaign_post(
@@ -1021,6 +1028,7 @@ def build_server(workspace_id: str) -> FastMCP:
         post_types: dict[str, str] | None = None,
         text_only: bool = False,
         context: str | None = None,
+        media_target: int | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_campaign_post",
@@ -1029,6 +1037,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 caption=caption, title=title, hashtags=hashtags,
                 first_comment=first_comment, thread=thread, topic=topic,
                 post_types=post_types, text_only=text_only, context=context,
+                media_target=media_target,
             ),
         )
 
@@ -1043,24 +1052,31 @@ def build_server(workspace_id: str) -> FastMCP:
             "post's existing carousel one upload at a time instead of "
             "replacing the whole package (a video always stands alone). "
             "Pass text_only=true with no assets to make it a deliberate "
-            "copy-only post that publishes as words alone. Works on a draft "
-            "or on a post already approved into rotation, as long as it is "
-            "still waiting for its first media - the scheduler has been "
-            "skipping it either way. Refused once a post carries media (or "
-            "was approved copy-only): an operator who approved a post with "
-            "its media already decided is the one who changes it, in the "
-            "app."
+            "copy-only post that publishes as words alone. Pass media_target "
+            "to say how many files this post is waiting for - a carousel "
+            "briefed as eight cards sets 8, and is then unfinished, skipped "
+            "by the scheduler and still listed as needing media until it "
+            "holds eight, so a set can be appended a card at a time without "
+            "the post going out half-built. Works on a draft or on a post "
+            "already approved into rotation while its media is still "
+            "unfinished - the scheduler has been skipping it either way. "
+            "Refused once the post's media is complete (or it was approved "
+            "copy-only): an operator who approved a post with its media "
+            "already decided is the one who changes it, in the app. A target "
+            "may be raised but not lowered here; lowering one declares a "
+            "short set finished, which is the operator's call in the app."
         ),
     )
     def set_post_media(
         item_id: str, asset_ids: list[str],
         append: bool = False, text_only: bool = False,
+        media_target: int | None = None,
     ) -> dict[str, Any]:
         return _call(
             "set_post_media",
             lambda s: writes.set_post_media(
                 s, workspace_id, item_id, asset_ids,
-                append=append, text_only=text_only,
+                append=append, text_only=text_only, media_target=media_target,
             ),
         )
 

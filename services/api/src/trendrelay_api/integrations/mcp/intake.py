@@ -803,6 +803,7 @@ def create_campaign_post(
     post_types: dict[str, str] | None = None,
     text_only: bool = False,
     context: str | None = None,
+    media_target: int | None = None,
 ) -> dict[str, Any]:
     """Propose one post into a campaign, as a draft the operator promotes.
 
@@ -814,6 +815,12 @@ def create_campaign_post(
     pass that creates a post is the one that knows why. A run that writes the
     words and leaves the pictures for later can say so once, on the way in,
     rather than creating the post and editing it to explain itself.
+
+    `media_target` is how many files those pictures will be - said here for
+    the same reason, by the pass that wrote the brief. A post that names one
+    is unfinished until it holds that many: the scheduler passes over it and
+    the queue keeps listing it as waiting, so a carousel briefed as eight
+    cards cannot go out as three of them.
     """
     from trendrelay_api.campaign_autopilot_api import (  # noqa: PLC0415
         QueueItemCreate,
@@ -880,6 +887,7 @@ def create_campaign_post(
         # it has no media because it wants none, and posts as it is.
         media_later=not assets and not text_only,
         text_only=text_only,
+        media_target=media_target,
         asset_id=assets[0].id if assets else None,
         body=caption or "",
         title=title,

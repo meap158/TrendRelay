@@ -2821,24 +2821,29 @@ def test_the_needs_media_sop_rules_out_a_collage_and_a_stall() -> None:
     assert "not ask whether to continue" in prose
 
 
-def test_the_needs_media_sop_says_an_approved_post_is_attached_only_once() -> None:
-    """The trap in filling a post a card at a time.
+def test_the_needs_media_sop_says_what_makes_a_card_at_a_time_safe() -> None:
+    """The trap in filling a post a card at a time, and the way out of it.
 
     Appending per scene reads as the safer flow - each card lands as it is
-    made - and on a draft it is. On a post that was already approved the
-    first attach completes it: it joins the rotation as a one-card carousel
-    and `set_post_media` refuses every later call, leaving a live post only
-    the operator can repair and one that no longer answers the needs-media
-    filter. So the SOP has to name the state that decides it.
+    made - and on a post with no media_target it strands the post: the first
+    attach completes it, it joins the rotation as a one-card carousel, and
+    `set_post_media` refuses every later call, leaving a live post only the
+    operator can repair. A target is what makes the same flow safe, so the
+    SOP has to say to set one before the first card, and what happens where
+    there is none.
     """
     prose = " ".join(sops.get_sop("campaigns.fill-needs-media")["markdown"].split())
 
-    assert "An approved post is attached once, with the whole set" in prose
+    assert "Put that number on the post before you make anything" in prose
+    assert "media_target" in prose
+    # The targetless case, which is the old trap and still the default.
+    assert "Without a target, an approved post is attached" in prose
+    assert "with the whole set" in prose
     # The refusal an assistant would otherwise meet halfway through a post,
     # quoted from writes.set_post_media so the two cannot drift apart.
     assert "already approved with its media decided" in prose
-    # And the draft case, which is the one append was built for.
-    assert "still a draft" in prose.lower()
+    # And the one direction a target may not be moved from here.
+    assert "never lowered" in prose or "never be lowered" in prose
 
 
 def test_a_post_of_nothing_is_refused_with_the_way_in(session) -> None:
@@ -2860,6 +2865,92 @@ def test_a_picture_can_join_the_carousel_one_upload_at_a_time(session) -> None:
     grown = writes.set_post_media(session, "ws", view["id"], ["img2"], append=True)
 
     assert grown["image_paths"] == [r"S:\media\shot.png", r"S:\media\second.png"]
+
+
+def test_an_approved_post_takes_its_carousel_a_card_at_a_time_up_to_target(
+    session,
+) -> None:
+    """The flow a target exists to make safe.
+
+    Filling a post one card at a time used to strand it: the first card
+    completed an approved post, so the second was refused as media somebody
+    had decided on, and a carousel briefed as three cards published as one.
+    With a target the post is still the gap it always was until it holds what
+    it is waiting for - and the moment it does, the refusal comes back.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    for index in range(1, 4):
+        _image_asset(session, asset_id=f"img{index}", path=rf"S:\media\{index}.png")
+    view = intake.create_campaign_post(
+        session, "ws", "camp", [], caption="Waiting.", media_target=3,
+    )
+    session.get(CampaignQueueItem, view["id"]).state = "approved"
+    session.commit()
+
+    first = writes.set_post_media(session, "ws", view["id"], ["img1"], append=True)
+    assert "1 of 3 attached" in first["note"]
+    second = writes.set_post_media(session, "ws", view["id"], ["img2"], append=True)
+    assert "2 of 3 attached" in second["note"]
+    third = writes.set_post_media(session, "ws", view["id"], ["img3"], append=True)
+    assert "joins the rotation as it stands" in third["note"]
+
+    _image_asset(session, asset_id="img4", path=r"S:\media\4.png")
+    with pytest.raises(ValueError, match="operator"):
+        writes.set_post_media(session, "ws", view["id"], ["img4"], append=True)
+
+
+def test_a_media_target_can_be_raised_here_but_never_lowered(session) -> None:
+    """Lowering one declares a short set finished, which is not this tool's.
+
+    A run that could not produce the eighth card could otherwise set the
+    target to seven and publish - and the post would read afterwards exactly
+    like one briefed for seven.
+    """
+    from trendrelay_api.integrations.mcp import intake, writes
+
+    _image_asset(session)
+    view = intake.create_campaign_post(
+        session, "ws", "camp", [], caption="Waiting.", media_target=8,
+    )
+
+    raised = writes.set_post_media(
+        session, "ws", view["id"], ["img1"], append=True, media_target=9,
+    )
+    assert raised["media_target"] == 9
+
+    with pytest.raises(ValueError, match="lower it to 1"):
+        writes.set_post_media(
+            session, "ws", view["id"], ["img1"], append=True, media_target=1,
+        )
+
+
+def test_the_media_backlog_holds_posts_that_are_merely_short(session) -> None:
+    """`none yet` stopped being the whole backlog once a post could say how
+    much it is waiting for: a carousel of three cards out of eight is a
+    `carousel` by shape and still unpublishable. `unfinished` is that
+    question asked directly."""
+    from trendrelay_api.integrations.mcp import context as mcp_context
+    from trendrelay_api.integrations.mcp import intake
+
+    _image_asset(session)
+    short = intake.create_campaign_post(
+        session, "ws", "camp", ["img1"], caption="Three of eight.", media_target=8,
+    )
+    empty = intake.create_campaign_post(session, "ws", "camp", [], caption="None.")
+
+    unfinished = mcp_context.list_campaign_posts(session, "ws", media="unfinished")
+    none_yet = mcp_context.list_campaign_posts(session, "ws", media="none yet")
+
+    assert {post["item_id"] for post in unfinished["posts"]} == {
+        short["id"], empty["id"],
+    }
+    assert {post["item_id"] for post in none_yet["posts"]} == {empty["id"]}
+    short_view = next(
+        post for post in unfinished["posts"] if post["item_id"] == short["id"]
+    )
+    assert (short_view["media_count"], short_view["media_target"]) == (1, 8)
+    assert short_view["media_complete"] is False
 
 
 def test_a_video_never_appends_because_it_stands_alone(session) -> None:

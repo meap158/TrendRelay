@@ -266,6 +266,11 @@ class QueueItemCreate(BaseModel):
     #: post is skipped by the scheduler with a note until media is attached.
     media_later: bool = False
     text_only: bool = False
+    #: How many files this post will be waiting for, where that is already
+    #: known - a carousel briefed as eight cards says eight here, and is not
+    #: finished until it holds eight. Null, the ordinary case, keeps the rule
+    #: that anything attached finishes the post.
+    media_target: int | None = Field(default=None, ge=1, le=MAX_CAROUSEL_IMAGES)
 
     @model_validator(mode="after")
     def one_kind_of_media(self) -> QueueItemCreate:
@@ -346,6 +351,12 @@ class QueueItemUpdate(BaseModel):
     image_paths: list[str] | None = Field(default=None, max_length=MAX_CAROUSEL_IMAGES)
     asset_id: str | None = Field(default=None, max_length=64)
     text_only: bool | None = None
+    #: How many files this post is waiting for, or null to stop waiting for a
+    #: number at all. A post below its target is treated as unfinished
+    #: wherever media is read: the scheduler passes over it and the queue
+    #: still lists it as needing media, so a carousel cannot publish as three
+    #: of its eight cards. Absent leaves whatever the post already says.
+    media_target: int | None = Field(default=None, ge=1, le=MAX_CAROUSEL_IMAGES)
     title: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     hashtags: list[str] | None = Field(default=None, max_length=30)
@@ -642,9 +653,16 @@ def _queue_view(
         # draft or was approved before its media did. The scheduler skips
         # both exactly alike, so the interface marks them alike rather than
         # showing an approved post as though it could actually go out.
-        "needs_media": (
-            not item.text_only and not item.video_path and not item.image_paths
-        ),
+        # A post that names a target is also waiting while it is short of it,
+        # which is the same wait seen later: three cards of eight cannot go
+        # out any more than none can.
+        "needs_media": not item.media_is_complete,
+        # What it holds and what it is waiting for, so "3 of 8" can be shown
+        # rather than a bare warning that something is missing. `media_target`
+        # is null on a post that names no number, and then `needs_media` is
+        # the old question - whether anything is attached at all.
+        "media_count": item.media_count,
+        "media_target": item.media_target,
         "title": item.title,
         "body": item.body,
         "hashtags": item.hashtags,
@@ -1378,6 +1396,7 @@ def create_queue_item(
         video_path=body.video_path.strip(),
         image_paths=[path.strip() for path in body.image_paths if path.strip()],
         text_only=body.text_only,
+        media_target=body.media_target,
         post_type_overrides=_validated_post_type_overrides(
             session, workspace_id, campaign_id, body.post_type_overrides,
             has_images=bool(body.image_paths),
@@ -1835,6 +1854,11 @@ def apply_queue_item_edits(
     the boundary is that a model may write copy, never approve it.
     """
     media_changed = _apply_media_change(session, workspace_id, campaign_id, item, body)
+    # Sent explicitly, including as null - which is how a post stops waiting
+    # for a number and goes back to the old rule, where anything attached
+    # finishes it. Absent leaves it alone, as every field here does.
+    if "media_target" in body.model_fields_set:
+        item.media_target = body.media_target
     if "title" in body.model_fields_set:
         item.title = (body.title or "").strip() or None
     if body.body is not None:
