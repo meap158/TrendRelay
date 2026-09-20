@@ -2,8 +2,8 @@
 id: campaigns.fill-needs-media
 action: campaigns.fill-needs-media
 title: Fill campaign posts that are waiting for their media
-summary: Work the unfinished-media queue continuously, one post at a time - read that post's own brief, put its card count on the post as media_target, generate its scenes one call per scene as separate images made beside the cards already on that post, check and upload each card as it arrives, attach them to that exact post until it is complete, and take the next straight away.
-version: 7
+summary: Work the unfinished-media queue continuously, one post at a time - read that post's own brief, put its card count on the post as media_target, generate that many scenes as separate full-frame images made beside the cards already on that post (a storyboard may guide them and is never attached), check and upload each card under its own number as it arrives, attach them to that exact post until it is complete, and take the next straight away.
+version: 8
 tags: [campaigns, media, carousel, needs-media]
 aliases: [fill-campaign-needs-media, campaigns.needs-media, generate-carousel-images, attach-post-media]
 ---
@@ -92,9 +92,9 @@ unfinished post
   → put its number of cards on the post as media_target
   → per scene, in the brief's order:
        look at the cards already on this post
-       generate one image beside them, never a collage
+       generate one image beside them, never a collage as the card
        check that card; regenerate it if it drifted
-       upload it, and attach it with append: true
+       upload it under its own number, and attach it with append: true
   → confirm the post is complete
   → next post, straight away
 ```
@@ -151,6 +151,13 @@ not more because a set looked good, not fewer because one was hard. If they
 name no number, decide from the caption and say what you decided when you
 report.
 
+**That number is this post's, and it is the only one.** Eight appears all
+through what follows because the posts this was written against ask for
+eight; it is an example, not a quantity. A post briefed for three cards is
+finished at three, and a pass that made it eight has made five pictures
+nobody asked for. Read the number off the post - `media_target`, or the
+brief - and carry that number through every step here.
+
 **Put that number on the post before you make anything.**
 
 ```
@@ -179,16 +186,45 @@ One image per scene, in the order the brief lists them. The order is the swipe
 order and the first image is the cover, so the sequence is part of the meaning,
 not an implementation detail.
 
-**Separate files, never a collage.** Eight scenes are eight images at the
-brief's own aspect - usually 9:16, full-bleed - and not one picture with eight
-panels in it. A carousel is swiped: a grid of eight thumbnails is a single card
-that shows all of it at once and reads as none of it. An image model asked for
-"eight scenes" will happily return one sheet of eight, so say the shape in the
-prompt and check it in the result.
+**Separate files, never a collage as the post.** Eight scenes are eight images
+at the brief's own aspect - usually 9:16, full-bleed - and not one picture with
+eight panels in it. A carousel is swiped: a grid of eight thumbnails is a
+single card that shows all of it at once and reads as none of it. An image
+model asked for "eight scenes" will happily return one sheet of eight, so say
+the shape in the ask and check it in the result.
 
-**One generation call per scene.** Eight cards are eight separate asks, each
-for a single picture - never one call for the set, never a count parameter of
-eight. Saving the round trips is exactly what produces the panel sheet: many
+**A sheet of eight is a useful thing to have made, and never the thing
+attached.** A run that could not hold a cast steady across eight separate asks
+got all eight right in one picture, because everything in one picture is drawn
+by one hand at one moment. That is worth having: a storyboard settles the
+cast, the palette, the props and the order of the scenes in a single look, and
+every card made afterwards has something to agree with. So a storyboard may be
+made deliberately, and what it is for is agreement, not delivery.
+
+What it is not is a shortcut to eight cards. Cutting one panel out of the
+sheet and padding it to 9:16 - blurred bars, mirrored edges, a stretch -
+produces a file of the right shape and a card of the wrong one: a composition
+framed for a sixth of a sheet, with its own edges invented by a filter. That
+was tried, and the set had to be made again. A panel is a reference for a
+fresh full-frame generation, never the pixels that ship.
+
+A card that came from a sheet announces itself, so the check in this step
+looks for it: bars or blur down the sides, an edge mirrored back on itself, a
+border or gutter, a panel number, a composition that stops before the frame
+does.
+
+**One file per scene. One call per scene is how you get it.** The rule is
+about the output, not the round trip: eight cards are eight independently
+composed files, and one raster holding eight scenes is a failure however it
+was asked for. A tool that genuinely returns eight separate files from one
+request satisfies this, and where such a tool is in hand a set made together
+holds its cast better than eight asks do. Everything else is a one-call-per-
+scene tool, and the first request that comes back as a single picture with
+panels in it is the proof that this one is.
+
+So the default is one ask for one picture, never a count parameter carrying
+the whole set, because saving the round trips is exactly what produces the
+panel sheet: many
 image tools read the whole conversation around the request rather than a
 prompt field alone, so an ask with all eight scenes in view is an ask that
 describes one image with eight scenes in it. The brief is the same hazard.
@@ -263,6 +299,15 @@ this post's cards, they were checked before they landed, and they are on the
 record rather than in a conversation, so they say the same thing on the tenth
 card as on the second.
 
+A storyboard, where one was made, ranks under those and over nothing else.
+Before the first card exists it is the best agreement available and may guide
+the composition; the moment a real card is checked and attached, the cards
+lead and the sheet is a sketch of what they already are. And it is shown one
+scene at a time: handed the whole sheet, a model reads the sheet as the
+instruction and returns another sheet, which is precisely what happened - so
+the panel for this scene goes in, cropped out of the rest, and the other seven
+stay out of the request exactly as their descriptions do.
+
 Three things are never the reference, for the same reason in three forms:
 
 - **another post's card**, however good it looked. It carries another post's
@@ -289,6 +334,9 @@ the post costs an import to unpick as well. Against the brief, every time:
 - the location and the carried props are the ones the set has been using;
 - the style and palette match the cards already made;
 - one frame - no panels, no borders, no inset pictures, no contact sheet;
+- it was composed at this shape rather than fitted to it: no blurred or solid
+  bars, no mirrored edge, nothing stretched, no panel number left in a corner,
+  and the picture reaching all four edges on its own;
 - the aspect is the one the brief names;
 - nothing is written inside it that this scene did not ask for, and what is
   written is in the campaign's language and correctly spelled.
@@ -335,6 +383,20 @@ then bring the result in through the upload boundary described below and in
 `upload_media` takes exactly one file per call. There is no bulk upload: eight
 scenes are eight calls. Track one result slot per scene, in the brief's order,
 even when calls finish out of order.
+
+**Give each card the scene's own number as its title.** `Card 3 of 8` on a
+post briefed for eight, `Card 3 of 5` on one briefed for five - the post's own
+number, in the `title` this call takes. It costs nothing at upload and buys
+the only check
+that can be made afterwards: `attached_media` reads back position and title
+together, so a set attached out of order says so in one line instead of being
+discovered by somebody swiping the published post. It also survives the
+session - a later pass picking the post up can see which card is which rather
+than inferring it from a filename.
+
+Keep the three columns together as you go - scene number, the file, the
+`asset_id` it came back with. That list is what step 7 attaches, and the order
+of it is the swipe order.
 
 Upload each card as it passes its check, rather than holding the set to the
 end. An uploaded picture is in the Library and survives whatever happens to
@@ -402,6 +464,22 @@ target it is simply still unfinished and the next pass can carry on filling
 it; without one, a partial attach spends the only attach the post had. Never
 lower a target to make a short set look finished - `set_post_media` refuses
 it, and the record would read as a post briefed for the number it settled for.
+
+**A refusal is not a problem to route around.** When a post's media is
+already decided, `set_post_media` says so and says who can change it. The
+answer is to say that in the report, or to ask the operator, who can open the
+post itself from the queue or from the approval card and change its media
+there. The answer is not a second post carrying the same words and the better
+pictures: that leaves the campaign holding two posts for one story, and the
+one nobody retires is the one that goes out. It happened - a "replacement"
+draft was created beside a locked post, and the campaign has carried both
+since, one of them copy-only, which its own account refuses to publish.
+
+If the operator asks for a replacement post all the same, it is theirs to ask
+for: create it as a draft, put the original's `item_id` in its `context` so
+the pair can be found again, and say in the report that the original is still
+live and still has to be retired by them. Never approve it, and never leave
+the two unlinked.
 
 A video stands alone: it cannot be appended, and a post is one clip **or** a
 set of pictures, never a mix.

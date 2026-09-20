@@ -2822,6 +2822,45 @@ def test_the_needs_media_sop_rules_out_a_collage_and_a_stall() -> None:
     assert "not ask whether to continue" in prose
 
 
+def test_the_needs_media_sop_allows_a_storyboard_and_forbids_shipping_it() -> None:
+    """What a run learned the hard way about the sheet of panels.
+
+    One picture holding every scene is drawn by one hand at one moment, so it
+    settles a cast that eight separate asks could not - which makes it worth
+    making. It is not worth attaching, and cutting panels out of it and
+    padding them to the post's aspect produced cards framed for a sixth of a
+    sheet with their edges invented by a filter. Both halves have to be in
+    writing, because the first half is what makes the second tempting.
+    """
+    prose = " ".join(sops.get_sop("campaigns.fill-needs-media")["markdown"].split())
+
+    assert "never the thing attached" in prose
+    assert "reference for a fresh full-frame generation" in prose
+    # The tells a card cut from a sheet leaves behind, in the check that
+    # happens before anything is uploaded.
+    for tell in ("blurred or solid bars", "mirrored edge", "panel number"):
+        assert tell in prose, tell
+    # And the number is the post's own, not this document's example.
+    assert "it is an example, not a quantity" in prose
+
+
+def test_the_needs_media_sop_refuses_to_fork_a_post_around_a_refusal() -> None:
+    """A locked post is answered, not worked around.
+
+    A run that met "this post is already approved with its media decided"
+    created a second post carrying the same words and the better pictures. The
+    campaign has held both ever since, and the one nobody retired is the one
+    that goes out.
+    """
+    prose = " ".join(sops.get_sop("campaigns.fill-needs-media")["markdown"].split())
+
+    assert "A refusal is not a problem to route around" in prose
+    assert "two posts for one story" in prose
+    # The ordered manifest that makes a set checkable after the fact.
+    assert "Card 3 of 8" in prose
+    assert "attached_media" in prose
+
+
 def test_the_needs_media_sop_says_what_makes_a_card_at_a_time_safe() -> None:
     """The trap in filling a post a card at a time, and the way out of it.
 

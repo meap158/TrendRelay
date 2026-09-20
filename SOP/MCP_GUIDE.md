@@ -137,19 +137,26 @@ at a time:
    anything: a post that says how many files it is waiting for stays out of
    the rotation and in this backlog until it holds them, which is what lets
    the cards be attached one at a time.
-3. Generate exactly the scenes that brief names, in its order, **one image per
-   generation call** at the brief's aspect - never one call for the set, never
-   one collage of panels. Repeat the character, place and prop locks in every
-   scene's request and leave the other scenes out of it: an ask with the whole
-   sequence in view is what comes back as a sheet of panels. From the second
-   card on, work beside the post's own earlier cards: `attached_media` in the
-   post context names them in order, and `get_asset_thumbnails` fetches any of
-   them. Never another post's card, and never a generation that was rejected.
+3. Generate exactly the scenes that brief names, in its order, **one file per
+   scene** at the brief's aspect - one generation call each unless the tool
+   genuinely returns separate files, and never one picture with the scenes as
+   panels in it. Repeat the character, place and prop locks in every scene's
+   request and leave the other scenes out of it: an ask with the whole
+   sequence in view is what comes back as a sheet of panels. A storyboard of
+   all the scenes may be made to settle the cast and the order, but it is a
+   reference and is never attached, and a panel is never cropped and padded
+   into a card - the panel guides a fresh full-frame generation. From the
+   second card on, work beside the post's own earlier cards: `attached_media`
+   in the post context names them in order, and `get_asset_thumbnails`
+   fetches any of them. Never another post's card, and never a generation
+   that was rejected.
 4. Check each card as it arrives - this post's scene, one frame, the aspect,
-   the cast, place and props of the cards already made - and only then
-   `upload_media` it, one call per scene, keeping one result slot per scene.
-   A card that came out wrong is one regeneration of that card, not a restart
-   of the post, and it is not uploaded until it passes.
+   the cast, place and props of the cards already made, and no sign of having
+   been cut from a sheet (bars, blur, a mirrored edge, a panel number) - and
+   only then `upload_media` it, one call per scene, titled with its own number
+   (`Card 3 of 8`) so the order can be read back. A card that came out wrong
+   is one regeneration of that card, not a restart of the post, and it is not
+   uploaded until it passes.
 5. `set_post_media(item_id=<that same post>, asset_ids=[<this card>],
    append=true)` as each card passes, in scene order, with `media_target` on
    the first call if step 2 did not set it. Without a target the first attach
