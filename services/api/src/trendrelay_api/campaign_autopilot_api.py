@@ -3700,6 +3700,55 @@ def edit_autopilot_execution(
     return {"execution": _execution_view(execution)}
 
 
+@router.post("/{campaign_id}/autopilot/executions/{execution_id}/refreeze")
+def refreeze_autopilot_execution(
+    workspace_id: str,
+    campaign_id: str,
+    execution_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Take this held post again from the queue post it came from.
+
+    The other half of editing a post that already has an outing waiting on it.
+    A freeze is a snapshot so that approving means approving exactly what was
+    seen - but the operator correcting the post is the person who will approve
+    it, and without this their fix reached the queue item alone: the card they
+    just replaced was still the card that published.
+
+    Media, format and words together, because a post is one thing. What the
+    outing keeps is its place: the same account, the same slot, the same
+    products. Refused once it has been decided on - after approval, what was
+    approved is what ships.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    execution = _held_execution(session, workspace_id, campaign_id, execution_id)
+    from trendrelay_api.campaign_autopilot import DisclosureMissing
+    from trendrelay_api.campaign_runner import refreeze_held
+
+    try:
+        refreeze_held(session, autopilot, execution)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except DisclosureMissing as error:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{error} The post keeps what it was frozen with until the "
+                "campaign has a disclosure to compose with."
+            ),
+        ) from error
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.exception_refrozen", "campaign", campaign_id,
+        {"execution_id": execution.id, "queue_item_id": execution.queue_item_id},
+    )
+    return {"execution": _execution_view(execution)}
+
+
 class ProductTagRequest(BaseModel):
     """Products a campaign may promote, added or removed together."""
 

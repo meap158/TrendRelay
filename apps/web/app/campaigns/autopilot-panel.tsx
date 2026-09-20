@@ -2454,6 +2454,16 @@ export function AutopilotPanel({
   // there under the overlay, and this is what sends the reader back to the
   // calendar or grid they were reading rather than stranding them in Setup.
   const [editReturn, setEditReturn] = useState<"posts" | null>(null);
+  /**
+   * The held outing this editor was opened from, when it was opened from one.
+   *
+   * A post waiting for approval is a snapshot of itself, and the editor edits
+   * the post rather than the snapshot - so an operator who fixes the media
+   * and approves would otherwise publish the cards the freeze caught. Held
+   * here so the save can take the outing again from the post it just wrote,
+   * and so the form can say that is what saving will do.
+   */
+  const [editingForHeld, setEditingForHeld] = useState<HeldExecution | null>(null);
   // The held post being rewritten before its decision, if any.
   const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
   /** Held posts picked for one approval. Empty means nothing is selected. */
@@ -3291,8 +3301,13 @@ export function AutopilotPanel({
    * A single door means the calendar chip, the drawer row and the queue row's
    * Edit button all reach the exact same form rather than three near-copies.
    */
-  function openPostEditor(item: QueueItem, from: "posts" | null = null) {
+  function openPostEditor(
+    item: QueueItem,
+    from: "posts" | null = null,
+    heldFor: HeldExecution | null = null,
+  ) {
     if (from) setEditReturn(from);
+    setEditingForHeld(heldFor);
     setOpenDay(null);
     setView("content");
     setEditing(item);
@@ -3418,6 +3433,7 @@ export function AutopilotPanel({
   /** Close the editor and return to whichever view opened it. */
   function closePostEditor() {
     setEditing(null);
+    setEditingForHeld(null);
     if (editReturn) {
       setView(editReturn);
       setEditReturn(null);
@@ -4572,7 +4588,8 @@ export function AutopilotPanel({
             <small className="campaign-approval-actions-hint">
               <strong>Approve</strong> sends it on the campaign’s schedule ·{" "}
               <strong>Publish now</strong> sends it immediately ·{" "}
-              <strong>Edit</strong> changes what it says, media stays frozen ·{" "}
+              <strong>Edit</strong> opens the post itself - words and media -
+              and takes this waiting copy again from it ·{" "}
               <strong>Skip this time</strong> frees the slot and clip; the post
               returns next cycle ·{" "}
               <strong>Decline</strong> also pauses the post, so it stops being
@@ -4677,10 +4694,13 @@ export function AutopilotPanel({
                     </small>
                   )}
                   {editingHeld?.id === item.id ? (
-                    /* The rewrite: everything the post says is the
-                       operator's to change; the media stays frozen. The
-                       approve gate still refuses an edit that removes the
-                       link or blanks the copy. */
+                    /* The rewrite, for a held post whose queue post is gone:
+                       everything it says is the operator's to change, and
+                       its media has nowhere left to be changed from. Where
+                       the post is still there, Edit opens the post itself
+                       and this form is not reached. The approve gate still
+                       refuses an edit that removes the link or blanks the
+                       copy. */
                     <form
                       className="campaign-approval-edit"
                       onSubmit={(event) => {
@@ -4803,10 +4823,29 @@ export function AutopilotPanel({
                                 }}
                               >Publish now</Button>
                             </Tooltip>
-                            <Tooltip content="Change the post copy. The selected media stays frozen.">
-                              <Button variant="quiet" size="sm"
-                                onClick={() => setEditingHeld(item)}>Edit</Button>
-                            </Tooltip>
+                            {/* The post itself, media and all, where the post
+                                is still in the queue to open - and this
+                                outing is taken again from it on save, so what
+                                gets approved is what was just fixed. A post
+                                that has left the queue has only its frozen
+                                words left to change, which is the form below
+                                and the older behaviour. */}
+                            {(() => {
+                              const row = item.queue_item_id
+                                ? queue.find((entry) => entry.id === item.queue_item_id)
+                                : undefined;
+                              return (
+                                <Tooltip content={row
+                                  ? "Edit the post itself - media, cards and copy. Saving takes this waiting copy again from it."
+                                  : "Change the post copy. The selected media stays frozen."}>
+                                  <Button variant="quiet" size="sm"
+                                    onClick={() => {
+                                      if (row) openPostEditor(row, null, item);
+                                      else setEditingHeld(item);
+                                    }}>Edit</Button>
+                                </Tooltip>
+                              );
+                            })()}
                             {/* The hold reason often points at a weak product
                                 match; this opens that post's products so the
                                 advice has a control beside it rather than
@@ -5963,7 +6002,14 @@ export function AutopilotPanel({
             size="wide"
             onClose={closePostEditor}
             title="Edit scheduled post"
-            description="Everything below is one post. The campaign adds the disclosure and the product link to it, differently on each account - what that comes to is composed underneath, exactly as each one will receive it."
+            description={editingForHeld
+              // Opened from the inbox, where the question is not "what should
+              // this post say" but "is this one going out". Said before the
+              // form rather than beside the Save, because it changes what
+              // saving means and nobody reads a caveat next to a button they
+              // have already decided to press.
+              ? `Everything below is one post. This is the post behind the copy waiting for your approval on ${editingForHeld.destination_label ?? editingForHeld.platform}: saving takes that copy again from it, media and all, and it stays waiting for you.`
+              : "Everything below is one post. The campaign adds the disclosure and the product link to it, differently on each account - what that comes to is composed underneath, exactly as each one will receive it."}
             headerAction={
               // Beside the ×, so saving does not mean scrolling a long form
               // to its end. The `form` attribute reaches the form from outside
@@ -6025,7 +6071,35 @@ export function AutopilotPanel({
                   } : {}),
                 }),
               }));
+              // Opened from the approval inbox: the post is written, and the
+              // outing waiting on it is still the snapshot taken before the
+              // edit. Taken again here, in the same press, because an
+              // operator who fixes a post and approves it means the fixed
+              // post - and a second button afterwards is a second chance to
+              // forget. The post itself is saved either way; a re-freeze
+              // that is refused says so without losing the edit.
+              const held = editingForHeld;
+              let retaken = false;
+              if (held) {
+                const response = await apiFetch(
+                  `${base}/autopilot/executions/${held.id}/refreeze`,
+                  { method: "POST", headers: { "content-type": "application/json" } },
+                );
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                  closePostEditor();
+                  throw new Error(
+                    `The post was saved, but the copy waiting for approval kept `
+                    + `what it was frozen with. ${payload?.detail ?? ""}`.trim(),
+                  );
+                }
+                retaken = true;
+              }
               closePostEditor();
+              if (retaken) {
+                return "Post updated, and the copy waiting for your approval "
+                  + "was taken again from it - media and all.";
+              }
               return editingMediaRemoved || editingCopyOnly
                 ? "Post updated as copy only. It is no longer waiting for media."
                 : editingMedia ? "Post updated, media and all." : "Campaign copy updated.";

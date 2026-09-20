@@ -224,6 +224,76 @@ def test_declining_a_held_post_stops_it_coming_back(workspace) -> None:
     assert [row["state"] for row in queue] == ["paused"]
 
 
+def test_a_held_post_is_taken_again_from_the_post_behind_it(workspace) -> None:
+    """Editing the post is how a held post's media is corrected.
+
+    The inbox edits words; the media it publishes was frozen. So the cards an
+    operator finished after the freeze reached the queue item and not the
+    outing waiting on it, and approving sent the half-built set. This is the
+    other half of the fix: the post is edited where posts are edited, and the
+    outing is taken again from it.
+    """
+    from trendrelay_api.autopilot_models import CampaignDestination
+
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    ).json()["item"]
+    with TestingSession.begin() as session:
+        session.add(CampaignDestination(
+            id="dest-1", workspace_id=workspace, campaign_id=campaign_id,
+            provider="buffer", integration_id="acct-1", platform="youtube",
+            label="youtube account", enabled=True,
+        ))
+    _held(
+        workspace, campaign_id, "exec-retake",
+        queue_item_id=item["id"], destination_id="dest-1",
+    )
+    request(
+        "PATCH", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item['id']}",
+        json={
+            "video_path": "", "asset_id": None,
+            "image_paths": [r"S:\media\card-1.png", r"S:\media\card-2.png"],
+            "body": "The whole set, finished.",
+        },
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-retake/refreeze",
+    )
+
+    assert response.status_code == 200, response.text
+    execution = response.json()["execution"]
+    assert execution["image_paths"] == [r"S:\media\card-1.png", r"S:\media\card-2.png"]
+    assert "The whole set, finished." in execution["caption"]
+    # Still waiting for the same person, on the same account.
+    assert execution["state"] == "proposed"
+
+
+def test_a_post_already_decided_is_not_taken_again(workspace) -> None:
+    """Past the decision, what was approved is what ships."""
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    ).json()["item"]
+    _held(
+        workspace, campaign_id, "exec-done",
+        queue_item_id=item["id"], state="queued",
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-done/refreeze",
+    )
+
+    assert response.status_code in (404, 409), response.text
+
+
 def test_refusing_a_batch_is_one_decision_like_approving_one(workspace) -> None:
     """Approving in one action and refusing one at a time is not a pair.
 

@@ -392,17 +392,8 @@ def recompose_held(
     because their words are not the campaign's to rewrite. So is one whose
     queue item has gone: there is no copy left to compose from.
     """
-    from trendrelay_api.autopilot_models import (
-        CampaignQueueItem,
-        bio_hint_for,
-        disclosure_for,
-    )
-    from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
-    from trendrelay_api.campaign_autopilot_api import offer_link_url
-    from trendrelay_api.integrations.publishing import (
-        first_comment_deliverable,
-        thread_deliverable,
-    )
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+    from trendrelay_api.campaign_autopilot import DisclosureMissing
 
     moment = now or datetime.now(UTC)
     query = select(PublicationExecution).where(
@@ -433,47 +424,8 @@ def recompose_held(
         if item is None or destination is None:
             kept += 1
             continue
-        # This post's own products, in its own order - trimmed to the ceiling
-        # rather than re-matched. Which product a post carries was decided when
-        # it was queued; a change to the wording is not a reason to re-decide
-        # it. Turning products off is, and drops them.
-        offers = (
-            [] if autopilot.offer_mode == "none"
-            else list(execution.offer_ids or [])[: autopilot.max_products_per_post]
-        )
-        products: list[tuple[str, str]] = []
-        for offer_id in offers:
-            link = offer_link_url(session, offer_id)
-            name = next(
-                (
-                    entry.get("product_name")
-                    for entry in (item.offer_match or {}).get("matches") or []
-                    if entry.get("offer_id") == offer_id and entry.get("product_name")
-                ),
-                None,
-            )
-            if link and name:
-                products.append((name, link))
         try:
-            post = compose_for_post(
-                platform=destination.platform,
-                body=item.body,
-                hashtags=list(item.hashtags or []),
-                products=products,
-                disclosure=disclosure_for(item, autopilot) if products else "",
-                require_disclosure=autopilot.disclose,
-                bio_hint=bio_hint_for(item, autopilot),
-                placement_override=destination.link_placement,
-                comment_deliverable=first_comment_deliverable(
-                    destination.provider, destination.platform
-                ),
-                thread_deliverable=thread_deliverable(
-                    destination.provider, destination.platform
-                ),
-                written_first_comment=item.first_comment,
-                written_thread=item.thread or (),
-                credit=attribution_for(session, autopilot.workspace_id, execution.asset_id),
-            )
+            _recompose_one(session, autopilot, execution, item, destination, now=moment)
         except DisclosureMissing:
             # The campaign asks for a disclosure and has none written. Left as
             # it was rather than rewritten into something that cannot post -
@@ -481,16 +433,162 @@ def recompose_held(
             # here means it arrived some other way.
             kept += 1
             continue
-        execution.caption = post.caption
-        execution.first_comment = post.first_comment
-        execution.thread = list(post.thread)
-        execution.placement = post.placement.placement
-        execution.offer_ids = [offer_id for offer_id, _link in zip(
-            offers, products, strict=False
-        )] if products else []
-        execution.updated_at = moment
         changed += 1
     return {"recomposed": changed, "kept": kept}
+
+
+def _recompose_one(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    execution: PublicationExecution,
+    item: CampaignQueueItem,
+    destination: CampaignDestination,
+    *,
+    now: datetime,
+) -> None:
+    """Rebuild one held post's words from its queue item and its own products.
+
+    The half of a freeze that is writing rather than choosing: the same
+    composer the plan used, over the copy the post has now. Raises
+    `DisclosureMissing` rather than writing something that cannot publish, and
+    its callers decide what that means - a sweep leaves the post alone and
+    counts it, a re-freeze somebody asked for says so.
+    """
+    from trendrelay_api.autopilot_models import bio_hint_for, disclosure_for
+    from trendrelay_api.campaign_autopilot import compose_for_post
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
+    from trendrelay_api.integrations.publishing import (
+        first_comment_deliverable,
+        thread_deliverable,
+    )
+
+    # This post's own products, in its own order - trimmed to the ceiling
+    # rather than re-matched. Which product a post carries was decided when
+    # it was queued; a change to the wording is not a reason to re-decide
+    # it. Turning products off is, and drops them.
+    offers = (
+        [] if autopilot.offer_mode == "none"
+        else list(execution.offer_ids or [])[: autopilot.max_products_per_post]
+    )
+    products: list[tuple[str, str]] = []
+    for offer_id in offers:
+        link = offer_link_url(session, offer_id)
+        name = next(
+            (
+                entry.get("product_name")
+                for entry in (item.offer_match or {}).get("matches") or []
+                if entry.get("offer_id") == offer_id and entry.get("product_name")
+            ),
+            None,
+        )
+        if link and name:
+            products.append((name, link))
+    post = compose_for_post(
+        platform=destination.platform,
+        body=item.body,
+        hashtags=list(item.hashtags or []),
+        products=products,
+        disclosure=disclosure_for(item, autopilot) if products else "",
+        require_disclosure=autopilot.disclose,
+        bio_hint=bio_hint_for(item, autopilot),
+        placement_override=destination.link_placement,
+        comment_deliverable=first_comment_deliverable(
+            destination.provider, destination.platform
+        ),
+        thread_deliverable=thread_deliverable(
+            destination.provider, destination.platform
+        ),
+        written_first_comment=item.first_comment,
+        written_thread=item.thread or (),
+        credit=attribution_for(session, autopilot.workspace_id, execution.asset_id),
+    )
+    execution.caption = post.caption
+    execution.first_comment = post.first_comment
+    execution.thread = list(post.thread)
+    execution.placement = post.placement.placement
+    execution.offer_ids = [offer_id for offer_id, _link in zip(
+        offers, products, strict=False
+    )] if products else []
+    execution.updated_at = now
+
+
+def refreeze_held(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    execution: PublicationExecution,
+    *,
+    now: datetime | None = None,
+) -> PublicationExecution:
+    """Freeze this waiting post again, from the post as it stands now.
+
+    A held post is a snapshot, and that is the point: what somebody approves
+    is what is sent, and nothing the campaign does afterwards moves it. The
+    person approving it is the one exception, and until now they could only
+    rewrite its words - so a set of cards finished after the freeze, or a
+    picture swapped for a better one, reached the queue item and not the
+    outing waiting on it. Approving still published what was frozen, which is
+    the right rule answering the wrong question: the operator was not racing
+    the campaign, they were correcting the post in front of them.
+
+    So this re-takes the media as well: the cards the post holds now, the cut
+    the Library would resolve today, and the hash delivery checks the file
+    against. The words are recomposed with them, including on a post whose
+    words were edited in the inbox - the edit and the re-freeze are the same
+    person's, minutes apart, and the second is the more recent instruction.
+
+    Only while `proposed`, and only with the queue item it came from still
+    there. Everything else about the outing is left exactly as it is: the same
+    account, the same slot, the same products in the same order.
+    """
+    from trendrelay_api.autopilot_models import CampaignQueueItem
+    from trendrelay_api.campaign_scheduler import resolve_frozen_media
+    from trendrelay_api.integrations.publishing import post_type_for_media
+
+    moment = now or datetime.now(UTC)
+    if execution.state != "proposed":
+        raise ValueError(
+            f"This post is {execution.state}; only one still waiting for a "
+            "decision can be taken again from its queue post."
+        )
+    item = (
+        session.get(CampaignQueueItem, execution.queue_item_id)
+        if execution.queue_item_id else None
+    )
+    if item is None:
+        raise ValueError(
+            "This post is no longer in the campaign's queue, so there is "
+            "nothing to take it from. Decide on it as it stands."
+        )
+    destination = session.get(CampaignDestination, execution.destination_id)
+    if destination is None:
+        raise ValueError(
+            "The account this post was frozen for has been removed from the "
+            "campaign. Skip or decline it rather than re-freezing it."
+        )
+
+    frozen = resolve_frozen_media(session, item)
+    execution.asset_id = item.asset_id
+    execution.asset_version_id = frozen.version_id
+    execution.media_path = frozen.path
+    execution.image_paths = list(item.image_paths or ())
+    execution.media_sha256 = frozen.sha256
+    execution.effect_ids = list(frozen.effect_ids or ())
+    execution.title = item.title or ""
+    # The shape decides the format: a post that was a video and is now a
+    # carousel cannot go out as the Reel its freeze named.
+    execution.post_type = post_type_for_media(
+        destination.platform,
+        (item.post_type_overrides or {}).get(destination.id, destination.post_type),
+        has_video=bool(item.video_path),
+        has_images=bool(item.image_paths),
+    )
+    _recompose_one(session, autopilot, execution, item, destination, now=moment)
+    # The words are the post's again, so the inbox edit that was protecting
+    # them is spent. Left set, the next settings sweep would skip this post
+    # to preserve an edit it no longer carries.
+    execution.edited_at = None
+    execution.updated_at = moment
+    return execution
 
 
 def _freeze_execution(

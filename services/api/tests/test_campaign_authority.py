@@ -387,6 +387,83 @@ def test_a_post_somebody_edited_is_never_rewritten(session, tmp_path, engine_stu
     assert execution.caption == "Words I wrote myself."
 
 
+def test_a_held_post_can_be_taken_again_from_its_queue_post(
+    session, tmp_path, engine_stub
+) -> None:
+    """The fix an operator makes while looking at the post they will approve.
+
+    A freeze holds what was seen, and the campaign may not move it. The person
+    approving is the exception: the cards they just finished, or the picture
+    they just swapped, reached the queue item and not the outing waiting on
+    it - so approving published what the freeze caught mid-set.
+    """
+    from trendrelay_api.campaign_runner import refreeze_held
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    frozen_slot, frozen_account = execution.scheduled_at, execution.destination_id
+    assert execution.media_path.endswith("clip.mp4")
+
+    item = session.get(CampaignQueueItem, "q1")
+    item.video_path = ""
+    item.image_paths = [r"S:\media\card-1.png", r"S:\media\card-2.png"]
+    item.body = "The whole set, finished."
+    item.title = "Finished at last"
+
+    refreeze_held(session, pilot, execution, now=NOW)
+
+    assert execution.image_paths == [r"S:\media\card-1.png", r"S:\media\card-2.png"]
+    # A carousel freezes by path, so the video's own hash goes with the video.
+    assert execution.media_path == ""
+    assert execution.media_sha256 in (None, "")
+    assert execution.title == "Finished at last"
+    assert "The whole set, finished." in execution.caption
+    # Its place in the world is not what was being corrected.
+    assert (execution.scheduled_at, execution.destination_id) == (
+        frozen_slot, frozen_account,
+    )
+
+
+def test_a_decided_post_is_never_taken_again(session, tmp_path, engine_stub) -> None:
+    """After approval, what was approved is what ships - including its media."""
+    from trendrelay_api.campaign_runner import refreeze_held
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    execution.state = "queued"
+
+    with pytest.raises(ValueError, match="waiting for a decision"):
+        refreeze_held(session, pilot, execution, now=NOW)
+
+
+def test_taking_a_post_again_clears_the_edit_that_was_protecting_it(
+    session, tmp_path, engine_stub
+) -> None:
+    """The words are the post's again, so the shield over them is spent.
+
+    Left set, the next settings sweep would skip this post to preserve an
+    inbox edit it no longer carries.
+    """
+    from trendrelay_api.campaign_runner import recompose_held, refreeze_held
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    execution.caption = "Words I wrote myself."
+    execution.edited_at = NOW
+
+    refreeze_held(session, pilot, execution, now=NOW)
+
+    assert execution.edited_at is None
+    assert execution.caption != "Words I wrote myself."
+    assert recompose_held(session, pilot, now=NOW) == {"recomposed": 1, "kept": 0}
+
+
 def test_recomposing_moves_nothing_but_the_words(session, tmp_path, engine_stub) -> None:
     """Same clip, same account, same time, same products.
 
