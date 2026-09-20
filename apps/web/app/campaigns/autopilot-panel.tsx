@@ -4270,8 +4270,23 @@ export function AutopilotPanel({
   const allDaySelected = daySelectableIds.length > 0
     && daySelectableIds.every((id) => selectedDayPosts.has(id));
   const someDaySelected = selectedDayPosts.size > 0 && !allDaySelected;
-  const deliveredCount = timeline.filter((entry) => entry.kind === "delivered").length;
+  const deliveredEntries = timeline.filter((entry) => entry.kind === "delivered");
+  const deliveredCount = deliveredEntries.length;
   const plannedCount = timeline.length - deliveredCount;
+  /**
+   * Handed over and already out, against handed over and still to come.
+   *
+   * "Delivered" counted both, which was true of the hand-off and wrong about
+   * the posts: a campaign that gave its next five to the engine in one pass
+   * read as sixteen delivered on a day it had published eleven. The rows have
+   * always said which is which - `deliveredStatus` labels one Published and
+   * the other Scheduled - so the numbers over them are read the same way
+   * rather than counted a second way.
+   */
+  const waitingCount = deliveredEntries.filter(stillToCome).length;
+  const publishedCount = deliveredEntries.filter(
+    (entry) => deliveredStatus(entry).label === "Published",
+  ).length;
   const timelineAccounts = new Set(timeline.map((entry) => entry.destination_id)).size;
   // A failed delivery is a delivery warning as much as a preflight refusal
   // is: a zero above a red row would call the list a liar.
@@ -7628,11 +7643,26 @@ export function AutopilotPanel({
          * list it landed in. */}
         {timeline.length > 0 && (
           <div className="campaign-pipeline-summary" aria-label="Campaign timeline summary">
-            {/* Three numbers that change decisions. Active days and account
+            {/* The numbers that change decisions. Active days and account
                 counts were true and useless - both already visible in the
-                rows and the tab strip. */}
-            <span><strong>{deliveredCount}</strong><small>delivered</small></span>
-            <span><strong>{plannedCount}</strong><small>planned</small></span>
+                rows and the tab strip.
+
+                Three states, not two, because a post can be out of this
+                campaign's hands without being out: published has happened,
+                scheduled is on the engine waiting for its own time, planned
+                is still here. The middle one only appears when there is one,
+                so a campaign that publishes on the spot keeps three tiles. */}
+            <span title="Already posted.">
+              <strong>{publishedCount}</strong><small>published</small>
+            </span>
+            {waitingCount > 0 && (
+              <span title="Handed to the engine, which is holding them until their own time.">
+                <strong>{waitingCount}</strong><small>scheduled</small>
+              </span>
+            )}
+            <span title="Still here: this campaign hands them over when their slot comes.">
+              <strong>{plannedCount}</strong><small>planned</small>
+            </span>
             <span className={deliveryWarnings ? "warn" : "good"}>
               <strong>{deliveryWarnings}</strong><small>delivery warnings</small>
             </span>

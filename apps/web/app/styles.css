@@ -1570,7 +1570,10 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 /* The active campaign is an operating timeline, not a second queue. Each day
    owns one rail, while every post keeps its time, destination, media and
    affiliate route in the same row. */
-.campaign-pipeline-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 14px 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+/* As many columns as there are numbers, sharing the width evenly. It said
+   five, from when there were five, so three tiles stopped two-fifths short of
+   the card and the right of the row was dead space. */
+.campaign-pipeline-summary { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); margin: 14px 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-pipeline-legend { margin: 12px 0; border-inline-start: 3px solid var(--link); padding: 7px 10px; color: var(--muted); background: var(--panel-raised); font-size: 10px; }
 .campaign-committed-pipeline { display: grid; gap: 8px; margin-block: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; background: var(--panel-raised); }
 .campaign-committed-pipeline > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
