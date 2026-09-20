@@ -3,7 +3,7 @@
 import { Maximize2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Lightbox } from "../ui/lightbox";
+import { Lightbox, useLightboxSet } from "../ui/lightbox";
 import { useOpaqueMedia } from "../../lib/media-preview";
 
 /**
@@ -143,7 +143,7 @@ export function TimelineCarousel({ images }: {
   images: { path: string; src: string }[];
 }) {
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const [openAt, setOpenAt] = useState<number | null>(null);
+  const { openAt, open, close, previous, next } = useLightboxSet(images.length);
 
   // Keyed by path rather than by index, and bailing when it already holds the
   // URL: the frames report on every render of a strip that re-renders with the
@@ -154,24 +154,6 @@ export function TimelineCarousel({ images }: {
 
   const labelFor = (index: number) => `Picture ${index + 1} of ${images.length}`;
 
-  // Arrows page through the set, the way they do over the Library's own
-  // lightbox. Bound only while it is open, so the timeline underneath keeps
-  // its own keys the rest of the time.
-  useEffect(() => {
-    if (openAt === null) return;
-    function step(event: KeyboardEvent) {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      setOpenAt((index) => {
-        if (index === null) return index;
-        const next = index + (event.key === "ArrowLeft" ? -1 : 1);
-        return next < 0 || next >= images.length ? index : next;
-      });
-    }
-    window.addEventListener("keydown", step);
-    return () => window.removeEventListener("keydown", step);
-  }, [openAt, images.length]);
-
   return (
     <div className="timeline-media-strip">
       {images.map((image, index) => (
@@ -181,7 +163,7 @@ export function TimelineCarousel({ images }: {
           path={image.path}
           label={labelFor(index)}
           onReady={remember}
-          onOpen={() => setOpenAt(index)}
+          onOpen={() => open(index)}
         />
       ))}
       {openAt !== null && (
@@ -192,9 +174,9 @@ export function TimelineCarousel({ images }: {
              lightbox is already written for. */
           src={urls[images[openAt]?.path ?? ""] ?? ""}
           alt={labelFor(openAt)}
-          onClose={() => setOpenAt(null)}
-          onPrevious={openAt > 0 ? () => setOpenAt(openAt - 1) : undefined}
-          onNext={openAt < images.length - 1 ? () => setOpenAt(openAt + 1) : undefined}
+          onClose={close}
+          onPrevious={previous}
+          onNext={next}
         />
       )}
     </div>

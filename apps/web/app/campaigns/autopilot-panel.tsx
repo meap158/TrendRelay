@@ -20,7 +20,8 @@ import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, MessageCircle, Send, Share2,
+  Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, Maximize2, MessageCircle,
+  Send, Share2,
 } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
@@ -30,6 +31,7 @@ import { AUTHORITIES } from "./authority-options";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { HoverPreview } from "../ui/hover-preview";
+import { Lightbox, useLightboxSet } from "../ui/lightbox";
 import { SegmentedControl } from "../ui/segmented";
 import { FilterChipStrip } from "../ui/filter-strip";
 import { ActionIcon } from "../ui/action-icons";
@@ -601,23 +603,32 @@ function compatiblePostTypes(destination: Destination, item: QueueItem) {
 }
 
 /**
- * One frame of a carousel in the edit dialog, hovered to see it whole.
+ * One frame of a carousel in the edit dialog: hovered to glance, pressed to
+ * look properly.
  *
  * Its own component for its own state: the card is drawn at the picture's
  * shape, and the shape is not known until the thumbnail has loaded. Eight
  * frames measure eight times, and a shared number would be whichever one
  * finished last.
+ *
+ * The hover card is a glance at a 110px frame and stays that; a press opens
+ * the same lightbox the timeline and the Library open, because deciding
+ * whether the third card of a set is the right picture is not a thing a
+ * glance settles. The corner mark is the one the timeline's frames wear, for
+ * the reason it wears it: a picture that opens should say so before it is
+ * clicked.
  */
-function CarouselFrame({ src, index, count }: {
-  src: string; index: number; count: number;
+function CarouselFrame({ src, index, count, onOpen }: {
+  src: string; index: number; count: number; onOpen: () => void;
 }) {
   const [ratio, setRatio] = useState(1);
   const position = `Picture ${index + 1} of ${count}`;
   return (
     <HoverPreview
-      label={`Preview ${position.toLowerCase()}`}
+      label={`${position} - view full size`}
       ratio={ratio}
       className="campaign-edit-media-frame"
+      onActivate={onOpen}
       media={(
         // eslint-disable-next-line @next/next/no-img-element -- preview URL
         <img src={src} alt={`Larger view of ${position.toLowerCase()}`} />
@@ -634,7 +645,58 @@ function CarouselFrame({ src, index, count }: {
           if (naturalWidth && naturalHeight) setRatio(naturalWidth / naturalHeight);
         }}
       />
+      <span className="campaign-edit-media-zoom" aria-hidden="true">
+        <Maximize2 size={12} />
+      </span>
     </HoverPreview>
+  );
+}
+
+/**
+ * The pictures this post carries, in posting order, any one of which opens
+ * full size.
+ *
+ * A component rather than a few lines in the dialog because the open frame is
+ * state, and the dialog draws this inside a branch - a video, a carousel or
+ * nothing - where a hook cannot go.
+ *
+ * The lightbox it opens is the shared one, over a dialog that is already
+ * modal. That nesting is the whole reason to use it rather than draw a
+ * second: Radix stacks the layers, so Escape closes the picture and leaves
+ * the post open, the click that dismisses the picture is not an outside click
+ * on the form underneath it, and focus returns to the frame that was pressed
+ * rather than to the top of the dialog.
+ */
+function CarouselStrip({ sources }: { sources: string[] }) {
+  const { openAt, open, close, previous, next } = useLightboxSet(sources.length);
+  return (
+    <div className="campaign-edit-media-strip" role="list"
+      aria-label="Pictures in this carousel, in posting order">
+      {/* Hovered rather than only listed. Eight frames of the same shoot are
+          eight near-identical squares, and which one leads and which one is
+          third is exactly what this dialog is open to decide - the download
+          queue already answers that on hover, so this is the same control
+          rather than a second way of doing it. */}
+      {sources.map((src, index) => (
+        <CarouselFrame
+          key={`${src}-${index}`}
+          src={src}
+          index={index}
+          count={sources.length}
+          onOpen={() => open(index)}
+        />
+      ))}
+      {openAt !== null && (
+        <Lightbox
+          open
+          src={sources[openAt] ?? ""}
+          alt={`Picture ${openAt + 1} of ${sources.length}`}
+          onClose={close}
+          onPrevious={previous}
+          onNext={next}
+        />
+      )}
+    </div>
   );
 }
 
@@ -6141,25 +6203,7 @@ export function AutopilotPanel({
                   );
                 }
                 if (!images.length) return null;
-                return (
-                  <div className="campaign-edit-media-strip" role="list"
-                    aria-label="Pictures in this carousel, in posting order">
-                    {/* Hovered rather than only listed. Eight frames of the
-                        same shoot are eight near-identical 64px squares, and
-                        which one leads and which one is third is exactly what
-                        this dialog is open to decide - the download queue
-                        already answers that on hover, so this is the same
-                        control rather than a second way of doing it. */}
-                    {images.map((path, index) => (
-                      <CarouselFrame
-                        key={`${path}-${index}`}
-                        src={media(path)}
-                        index={index}
-                        count={images.length}
-                      />
-                    ))}
-                  </div>
-                );
+                return <CarouselStrip sources={images.map(media)} />;
               })()}
             </section>
             {/* When it posts, in one compact row. The ordinary answer is the

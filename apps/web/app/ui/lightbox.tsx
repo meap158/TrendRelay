@@ -2,8 +2,57 @@
 
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { useT } from "../i18n-provider";
+
+/**
+ * Which picture of a set is open, and the arrows for walking through it.
+ *
+ * The state a strip of thumbnails needs to put one of them on the lightbox:
+ * the index that is open, the two steps to its neighbours - absent at the
+ * ends, which is how the view knows to draw one chevron rather than two - and
+ * the left and right keys, bound only while something is open so the page
+ * underneath keeps its own keys the rest of the time.
+ *
+ * A hook rather than a second lightbox: every strip that opens one wants
+ * exactly this and nothing more, and the timeline's copy and the post
+ * editor's copy would have been the same fifteen lines twice, drifting on
+ * whichever one somebody fixed first.
+ */
+export function useLightboxSet(count: number) {
+  const [openAt, setOpenAt] = useState<number | null>(null);
+
+  // The set can change under an open view - a post's media is replaced while
+  // its third card is being looked at - and an index past the end would leave
+  // the dark stage with nothing on it and no way back but Escape. Read
+  // through a clamp rather than corrected afterwards: a stored index and the
+  // set it points into are one value, and writing it back would be a render
+  // spent agreeing with itself.
+  const at = openAt === null || count === 0
+    ? null
+    : Math.min(openAt, count - 1);
+
+  useEffect(() => {
+    if (at === null) return;
+    function step(event: KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const next = (at as number) + (event.key === "ArrowLeft" ? -1 : 1);
+      if (next >= 0 && next < count) setOpenAt(next);
+    }
+    window.addEventListener("keydown", step);
+    return () => window.removeEventListener("keydown", step);
+  }, [at, count]);
+
+  return {
+    openAt: at,
+    open: (index: number) => setOpenAt(index),
+    close: () => setOpenAt(null),
+    previous: at !== null && at > 0 ? () => setOpenAt(at - 1) : undefined,
+    next: at !== null && at < count - 1 ? () => setOpenAt(at + 1) : undefined,
+  };
+}
 
 /**
  * One picture, as large as the window will take it.

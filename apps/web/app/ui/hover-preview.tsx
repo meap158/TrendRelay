@@ -31,6 +31,7 @@ export function HoverPreview({
   caption,
   className,
   onOpen,
+  onActivate,
   children,
 }: {
   /** What is being previewed, for the trigger's accessible name. */
@@ -51,6 +52,17 @@ export function HoverPreview({
    * frames wants nothing at all.
    */
   onOpen?: () => void;
+  /**
+   * What a press does, where the surface has something better to offer.
+   *
+   * The trigger is itself a button - that is how hovering is reachable by
+   * keyboard - so a surface that also wants a click cannot put a second
+   * button inside it. It says so here instead, and the card goes back to
+   * being what it is: a glance while the pointer passes. Without it a press
+   * opens the card, which is what a tap needs on a phone, where there is no
+   * hover to open it with.
+   */
+  onActivate?: () => void;
   /** The thumbnail itself. */
   children: ReactNode;
 }) {
@@ -83,8 +95,16 @@ export function HoverPreview({
       onFocus={open}
       onBlur={() => setBox(null)}
       // A tap has no hover, so the same press that would do nothing on a phone
-      // opens it instead.
-      onClick={open}
+      // opens the card instead - unless the surface has somewhere better for a
+      // press to go, in which case the card gets out of its way first.
+      onClick={() => {
+        if (!onActivate) {
+          open();
+          return;
+        }
+        setBox(null);
+        onActivate();
+      }}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         setBox(null);

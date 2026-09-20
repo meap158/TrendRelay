@@ -436,14 +436,20 @@ a.ui-button { text-decoration: none; }
 /* Darker than the dialog's wash and covering everything, because here the
    ground is not a hint that a panel is in front - it is the room the picture
    is being looked at in. */
-.ui-lightbox-overlay { position: fixed; inset: 0; z-index: 120; background: color-mix(in srgb, var(--ink) 92%, transparent); }
+/* Above a dialog (120/121), because a lightbox is opened from inside one: the
+   post editor's carousel, the Library's own panels. Both are portalled to the
+   body, so at equal layers it was the later portal that happened to win -
+   true today and one render-order change from a picture behind the form that
+   opened it. Below the toasts at 140, which say what just happened and are
+   worth seeing over anything. */
+.ui-lightbox-overlay { position: fixed; inset: 0; z-index: 132; background: color-mix(in srgb, var(--ink) 92%, transparent); }
 /* The whole viewport is the target: anywhere but the picture puts it back. */
 /* One track, capped at the window rather than sized by the picture in it -
    `minmax(0, 1fr)` and not `1fr`, because an auto track grows to its content
    and the image's `max-block-size: 100%` then measures itself against the
    height it just caused. A tall picture overflowed the screen instead of
    fitting it. */
-.ui-lightbox { position: fixed; z-index: 121; inset: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; padding: 24px; cursor: zoom-out; }
+.ui-lightbox { position: fixed; z-index: 133; inset: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; padding: 24px; cursor: zoom-out; }
 /* Fitted, never enlarged. A picture smaller than the window is shown at the
    size it is - blowing a 200px thumbnail up to fill a screen would be showing
    detail that is not in the file. */

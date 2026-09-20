@@ -1944,7 +1944,16 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* Each frame is a hover trigger now, so the button is the flex item and
    the picture inside it is not. The size stays on the picture; what moves
    here is only what a flex row needs from its own children. */
-.campaign-edit-media-strip .campaign-edit-media-frame { flex: none; border-radius: var(--radius-sm); }
+.campaign-edit-media-strip .campaign-edit-media-frame { position: relative; flex: none; border-radius: var(--radius-sm); cursor: zoom-in; }
+/* The same corner mark the timeline's frames wear, drawn the same way: a
+   picture that opens full size says so before it is clicked, and says it on
+   hover rather than sitting on every thumbnail in the strip. Always visible
+   where there is no hover to reveal it with. */
+.campaign-edit-media-zoom { position: absolute; inset-block-end: 5px; inset-inline-end: 5px; display: grid; place-items: center; inline-size: 20px; block-size: 20px; border-radius: 999px; color: var(--on-media); background: color-mix(in srgb, var(--ink) 55%, transparent); opacity: 0; transition: opacity .12s ease; }
+.campaign-edit-media-frame:hover .campaign-edit-media-zoom,
+.campaign-edit-media-frame:focus-visible .campaign-edit-media-zoom { opacity: 1; }
+@media (hover: none) { .campaign-edit-media-zoom { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .campaign-edit-media-zoom { transition: none; } }
 .campaign-media-picker { display: grid; gap: 10px; }
 
 /* Posting time: the compact rotation-or-locked row in the post editor. The
