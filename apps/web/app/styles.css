@@ -680,18 +680,10 @@ nav strong { color: var(--text); }
    caption are laid out below this one, so hugging them puts the last button
    just above the caption at any size, which is where the real rail sits. */
 .preview-surface-rail { display: grid; gap: 11px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 9px 14px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
-/* The poster's picture at the head of the column and the sound's disc at its
-   foot, which is what makes a rail read as that app's rather than as a row of
-   shapes. Both are round and both are smaller than the buttons between them,
-   so six things still clear a caption in a preview a phone's width: the rail
-   grew by two and the column got shorter, not taller. */
-.preview-surface-rail-avatar,
-.preview-surface-rail-disc { display: grid; place-items: center; inline-size: 22px; block-size: 22px; border-radius: 999px; overflow: hidden; }
-.preview-surface-rail-avatar { border: 1px solid rgba(255, 255, 255, .85); background: rgba(0, 0, 0, .35); }
-.preview-surface-rail-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
-/* The disc is a record: darker than the buttons and lit from its own centre,
-   the way every one of these apps draws the sound. */
-.preview-surface-rail-disc { background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .28) 0 22%, rgba(0, 0, 0, .55) 23%); }
+/* The sound's disc at the foot of the column, which is what ends a rail in
+   these apps. A record rather than an icon in a circle: darker than the
+   glyphs above it and lit from its own centre. */
+.preview-surface-rail-disc { display: grid; place-items: center; inline-size: 22px; block-size: 22px; border-radius: 999px; overflow: hidden; background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .28) 0 22%, rgba(0, 0, 0, .55) 23%); }
 
 /* A Story wears its furniture at the top, so the wash goes there too. */
 .preview-surface.is-story::after { inset: 0 0 55%; background: linear-gradient(to top, transparent, rgba(0, 0, 0, .5)); }

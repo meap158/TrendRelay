@@ -479,13 +479,12 @@ const COUNTABLE_DOTS = 10;
     The rails themselves are in `preview-surfaces.ts`; this is only the
     alphabet they are written in.
 
-    Two rail entries are deliberately absent: the poster's picture and the
-    sound's disc are drawn from what the post carries, not from an icon, so
-    they are handled where the rail is rendered rather than given a glyph
-    here. Excluded by name so a rail action added later still has to be
-    answered in one of the two places. */
+    One rail entry is deliberately absent: the sound's disc is drawn from
+    what the post carries, not from an icon, so it is handled where the rail
+    is rendered rather than given a glyph here. Excluded by name so a rail
+    action added later still has to be answered in one of the two places. */
 const RAIL_ICONS: Record<
-  Exclude<RailAction, "avatar" | "disc">, readonly [LucideIcon, number]
+  Exclude<RailAction, "disc">, readonly [LucideIcon, number]
 > = {
   heart: [Heart, 20],
   thumbUp: [ThumbsUp, 20],
@@ -498,6 +497,48 @@ const RAIL_ICONS: Record<
   more: [MoreHorizontal, 18],
   menu: [MoreVertical, 18],
 };
+
+/**
+ * A solid, round comment bubble with its dots punched through it.
+ *
+ * Drawn here rather than taken from the icon set, because the icon set has no
+ * such glyph and neither half of it can be faked: filling the outline bubble
+ * closes the dots into the shape, and drawing them over the fill needs a
+ * colour, which over somebody's video is whatever colour that video is. One
+ * path with an even-odd fill makes them holes, so the picture shows through
+ * them the way it does in the app.
+ *
+ * Round, because the app's is: a circle with a short tail, not the rounded
+ * rectangle the outline sets draw. Twenty-four units square like every icon
+ * beside it, so a surface can size it the same way and the rail stays one
+ * column.
+ */
+function SolidComment({ size }: { size: number }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24"
+      fill="currentColor" aria-hidden="true" focusable="false"
+    >
+      <path
+        fillRule="evenodd"
+        d={
+          // A circle of radius 8.4 about (12, 10.9), drawn the long way round
+          // from its seven o'clock to its eight, then out to a point and back
+          // - which is the tail, and is one ring with the bubble rather than
+          // a shape laid over it, because under even-odd an overlap would be
+          // a hole rather than a tail. Then a dot at each third of the width,
+          // each traced as two half-arcs, which even-odd does turn into a
+          // hole. Checked by flattening the path and filling it by hand;
+          // nothing here can be eyeballed from the numbers.
+          "M8.06 18.32A8.4 8.4 0 1 0 4.73 15.1L3 20.3Z"
+          + "M8.4 9.75a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z"
+          + "M12 9.75a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z"
+          + "M15.6 9.75a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z"
+        }
+      />
+    </svg>
+  );
+}
 
 /**
  * How the post will read on the network it is going to.
@@ -843,24 +884,10 @@ export function PostPreview({
             ) : furniture ? (
               <div className="preview-surface-rail">
                 {furniture.rail.map((action) => {
-                  // The two that are not icons. The picture at the top of the
-                  // column is the account's own, the same one the handle
-                  // below wears, and the disc at the foot is the sound - so
-                  // it is drawn only where there is a sound to name, which a
-                  // photo carousel has none of. See `audioLine`.
-                  if (action === "avatar") {
-                    return (
-                      <span key={action} className="preview-surface-rail-avatar">
-                        {avatar ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={avatar} alt="" loading="lazy"
-                            referrerPolicy="no-referrer" />
-                        ) : (
-                          <PlatformIcon platform={platform} size={12} />
-                        )}
-                      </span>
-                    );
-                  }
+                  // The one that is not an icon: the disc at the foot of the
+                  // column is the sound, so it is drawn only where there is a
+                  // sound to name - which a photo carousel has none of. See
+                  // `audioLine`.
                   if (action === "disc") {
                     return sound ? (
                       <span key={action} className="preview-surface-rail-disc">
@@ -868,8 +895,18 @@ export function PostPreview({
                       </span>
                     ) : null;
                   }
+                  // A solid app's comment bubble is drawn rather than filled:
+                  // filling the outline one closes the dots into the shape,
+                  // and the dots are how a bubble reads as comments at
+                  // nineteen pixels.
+                  if (action === "comment" && furniture.solid) {
+                    return <SolidComment key={action} size={19} />;
+                  }
                   const [Icon, size] = RAIL_ICONS[action];
-                  return <Icon key={action} size={size} />;
+                  return furniture.solid
+                    ? <Icon key={action} size={size} fill="currentColor"
+                      strokeWidth={1.25} />
+                    : <Icon key={action} size={size} />;
                 })}
               </div>
             ) : null}

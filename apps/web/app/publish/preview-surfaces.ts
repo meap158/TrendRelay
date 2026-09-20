@@ -25,13 +25,12 @@
 /** One thing on the rail, named for what it does rather than what it looks
     like: two networks call the same act "like" and draw it two ways.
 
-    Two of them are not buttons. `avatar` is the poster's own picture at the
-    top of the column and `disc` the sound's cover spinning at the bottom;
-    both are drawn from what the post already carries rather than from an icon
-    table, and both are part of how a rail reads as that app's rather than as
-    a row of shapes. A surface lists them where its own app puts them. */
+    `disc` is the odd one: the sound's cover at the foot of the column, drawn
+    from what the post carries rather than from an icon table. The poster's
+    own picture was here too and is not any more - the preview already names
+    the account twice, in the card's own heading and on the video itself, and
+    a third face bought nothing but height in a box a phone wide. */
 export type RailAction =
-  | "avatar"
   | "heart"
   | "thumbUp"
   | "thumbDown"
@@ -61,8 +60,18 @@ export type SurfaceFurniture = {
    * rather than borrowing the one below it.
    */
   /* Buttons only: a feed bar is a row of actions under a picture, with no
-     poster's face in it and no sound to spin. */
-  feedRail?: readonly Exclude<RailAction, "avatar" | "disc">[];
+     sound to spin at the end of it. */
+  feedRail?: readonly Exclude<RailAction, "disc">[];
+  /**
+   * Whether this app draws its rail as solid glyphs rather than outlines.
+   *
+   * Not decoration: an outline heart and a filled one are different apps, and
+   * on TikTok every glyph on the rail is a solid white shape - the comment
+   * bubble included, with its dots punched through it rather than drawn on
+   * it. Instagram and YouTube outline theirs, which is why this is a property
+   * of the surface and not of the action.
+   */
+  solid?: boolean;
   /** What the audio line says. The same original sound is named four ways. */
   audio: (handle: string) => string;
   /**
@@ -105,14 +114,15 @@ export const SURFACE_FURNITURE: Record<string, SurfaceFurniture> = {
     audio: () => "Original audio",
     chip: true,
   },
-  // The poster's picture, like, comment, save, more, and the sound's disc at
-  // the foot of the column - read off the app itself rather than off the
-  // desktop reference, which puts the same rail outside the video and has no
-  // room for the disc. The disc is drawn only where there is a sound to name,
-  // so a photo carousel - which has none until TikTok scores it - ends the
-  // column at "more".
+  // Like, comment, save, and the sound's disc at the foot of the column -
+  // read off the app itself rather than off the desktop reference, which puts
+  // the same rail outside the video and has no room for the disc. No "more":
+  // it lives in a long press. The disc is drawn only where there is a sound
+  // to name, so a photo carousel - which has none until TikTok scores it -
+  // ends the column at save. Solid glyphs, the way the app draws them.
   tiktok: {
-    rail: ["avatar", "heart", "comment", "save", "more", "disc"],
+    rail: ["heart", "comment", "save", "disc"],
+    solid: true,
     audio: (handle) => `original sound · ${handle}`,
     aiBadge: "Contains AI-generated media",
     at: true,
