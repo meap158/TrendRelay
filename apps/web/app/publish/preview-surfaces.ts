@@ -22,9 +22,16 @@
  * networks can be read, and tested, without rendering anything.
  */
 
-/** One button on the rail, named for what it does rather than what it looks
-    like: two networks call the same act "like" and draw it two ways. */
+/** One thing on the rail, named for what it does rather than what it looks
+    like: two networks call the same act "like" and draw it two ways.
+
+    Two of them are not buttons. `avatar` is the poster's own picture at the
+    top of the column and `disc` the sound's cover spinning at the bottom;
+    both are drawn from what the post already carries rather than from an icon
+    table, and both are part of how a rail reads as that app's rather than as
+    a row of shapes. A surface lists them where its own app puts them. */
 export type RailAction =
+  | "avatar"
   | "heart"
   | "thumbUp"
   | "thumbDown"
@@ -34,7 +41,8 @@ export type RailAction =
   | "repost"
   | "save"
   | "more"
-  | "menu";
+  | "menu"
+  | "disc";
 
 export type SurfaceFurniture = {
   /** Top to bottom, as the network stacks them. */
@@ -52,7 +60,9 @@ export type SurfaceFurniture = {
    * everything else here: a network whose bar nobody has read draws none,
    * rather than borrowing the one below it.
    */
-  feedRail?: readonly RailAction[];
+  /* Buttons only: a feed bar is a row of actions under a picture, with no
+     poster's face in it and no sound to spin. */
+  feedRail?: readonly Exclude<RailAction, "avatar" | "disc">[];
   /** What the audio line says. The same original sound is named four ways. */
   audio: (handle: string) => string;
   /**
@@ -95,9 +105,14 @@ export const SURFACE_FURNITURE: Record<string, SurfaceFurniture> = {
     audio: () => "Original audio",
     chip: true,
   },
-  // Like, comment, save, share - and no more, which lives in a long press.
+  // The poster's picture, like, comment, save, more, and the sound's disc at
+  // the foot of the column - read off the app itself rather than off the
+  // desktop reference, which puts the same rail outside the video and has no
+  // room for the disc. The disc is drawn only where there is a sound to name,
+  // so a photo carousel - which has none until TikTok scores it - ends the
+  // column at "more".
   tiktok: {
-    rail: ["heart", "comment", "save", "share"],
+    rail: ["avatar", "heart", "comment", "save", "more", "disc"],
     audio: (handle) => `original sound · ${handle}`,
     aiBadge: "Contains AI-generated media",
     at: true,
@@ -157,6 +172,8 @@ export function aiBadgeLabel(platform: string, declared: boolean): string | null
  * Absent for the three whose feed post nobody has saved a picture of, and
  * absent for every full-bleed surface, which carries `rail` instead.
  */
-export function feedActions(platform: string): readonly RailAction[] | null {
+export function feedActions(
+  platform: string,
+): readonly Exclude<RailAction, "avatar" | "disc">[] | null {
   return SURFACE_FURNITURE[platform]?.feedRail ?? null;
 }

@@ -618,7 +618,11 @@ nav strong { color: var(--text); }
 .post-preview[data-width="desktop"] { max-inline-size: none; }
 .post-preview figcaption { display: flex; align-items: center; gap: 8px; }
 .post-preview figcaption span { display: grid; gap: 1px; min-width: 0; }
-.post-preview figcaption strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.post-preview figcaption strong { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; font-weight: 500; white-space: nowrap; }
+/* The name still gets the ellipsis; the mark beside it does not shrink, which
+   is the point of putting the count there - it survives a long handle. */
+.post-preview figcaption strong > span { overflow: hidden; text-overflow: ellipsis; }
+.post-preview-kind { display: inline-flex; flex: none; gap: 3px; align-items: center; border-radius: 999px; padding: 1px 6px 1px 5px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
 .post-preview figcaption small { color: var(--muted); font-size: 11px; }
 /* The frame takes the shape of the media in it.
    `--preview-ratio` is set from the clip's own dimensions once they are known,
@@ -675,7 +679,19 @@ nav strong { color: var(--text); }
    middle of it - far higher than TikTok draws them. The steps row and the
    caption are laid out below this one, so hugging them puts the last button
    just above the caption at any size, which is where the real rail sits. */
-.preview-surface-rail { display: grid; gap: 14px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 10px 14px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
+.preview-surface-rail { display: grid; gap: 11px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 9px 14px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
+/* The poster's picture at the head of the column and the sound's disc at its
+   foot, which is what makes a rail read as that app's rather than as a row of
+   shapes. Both are round and both are smaller than the buttons between them,
+   so six things still clear a caption in a preview a phone's width: the rail
+   grew by two and the column got shorter, not taller. */
+.preview-surface-rail-avatar,
+.preview-surface-rail-disc { display: grid; place-items: center; inline-size: 22px; block-size: 22px; border-radius: 999px; overflow: hidden; }
+.preview-surface-rail-avatar { border: 1px solid rgba(255, 255, 255, .85); background: rgba(0, 0, 0, .35); }
+.preview-surface-rail-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+/* The disc is a record: darker than the buttons and lit from its own centre,
+   the way every one of these apps draws the sound. */
+.preview-surface-rail-disc { background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .28) 0 22%, rgba(0, 0, 0, .55) 23%); }
 
 /* A Story wears its furniture at the top, so the wash goes there too. */
 .preview-surface.is-story::after { inset: 0 0 55%; background: linear-gradient(to top, transparent, rgba(0, 0, 0, .5)); }
@@ -721,6 +737,24 @@ nav strong { color: var(--text); }
    shape, so there is nothing to crop away - and cropping here hid the
    edges of the very thing being judged. */
 .post-preview-frame img { width: 100%; height: 100%; object-fit: contain; }
+/* The picture is the button, filling the frame it was already filling. The
+   furniture drawn over it takes no clicks, so a press anywhere on the card
+   opens it - except on the step arrows, which are buttons of their own and
+   sit above this one. */
+.post-preview-open { position: absolute; inset: 0; display: block; border: 0; padding: 0; background: transparent; cursor: zoom-in; }
+/* The corner mark every other openable picture in the app wears, on hover and
+   always where there is no hover to reveal it with. Top corner, because the
+   surface's own furniture is drawn over this button: the rail runs down the
+   right and the handle and caption sit along the bottom, and a mark in either
+   place is a mark behind them. */
+.post-preview-open-mark { position: absolute; inset-block-start: 6px; inset-inline-start: 6px; display: grid; place-items: center; inline-size: 22px; block-size: 22px; border-radius: 999px; color: var(--on-media); background: color-mix(in srgb, var(--ink) 55%, transparent); opacity: 0; transition: opacity .12s ease; }
+.post-preview-open:hover .post-preview-open-mark,
+.post-preview-open:focus-visible .post-preview-open-mark { opacity: 1; }
+/* A Story wears its furniture at the top instead, so the mark goes to the
+   foot - which on a Story is empty, there being no caption to clear. */
+.post-preview.story .post-preview-open-mark { inset-block-start: auto; inset-block-end: 6px; }
+@media (hover: none) { .post-preview-open-mark { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .post-preview-open-mark { transition: none; } }
 /* Contain rather than cover: this frame is for judging what fits, and cropping
    the clip to fill it would hide the very edges being judged. */
 .post-preview-frame video { width: 100%; height: 100%; object-fit: contain; background: var(--ink); }

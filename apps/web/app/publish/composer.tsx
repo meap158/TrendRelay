@@ -5,9 +5,12 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Disc3,
   Forward,
   Heart,
+  Images,
   type LucideIcon,
+  Maximize2,
   MessageCircle,
   MoreHorizontal,
   MoreVertical,
@@ -24,8 +27,12 @@ import {
   opaquePreviewUrl,
   useOpaqueMedia,
 } from "../../lib/media-preview";
-import { type CSSProperties, memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState,
+} from "react";
 import { createPortal } from "react-dom";
+
+import { Lightbox } from "../ui/lightbox";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
 import {
@@ -470,8 +477,16 @@ const COUNTABLE_DOTS = 10;
 
 /** Which icon stands for each action, and how big this surface draws it.
     The rails themselves are in `preview-surfaces.ts`; this is only the
-    alphabet they are written in. */
-const RAIL_ICONS: Record<RailAction, readonly [LucideIcon, number]> = {
+    alphabet they are written in.
+
+    Two rail entries are deliberately absent: the poster's picture and the
+    sound's disc are drawn from what the post carries, not from an icon, so
+    they are handled where the rail is rendered rather than given a glyph
+    here. Excluded by name so a rail action added later still has to be
+    answered in one of the two places. */
+const RAIL_ICONS: Record<
+  Exclude<RailAction, "avatar" | "disc">, readonly [LucideIcon, number]
+> = {
   heart: [Heart, 20],
   thumbUp: [ThumbsUp, 20],
   thumbDown: [ThumbsDown, 20],
@@ -614,6 +629,30 @@ export function PostPreview({
   const [measured, setMeasured] = useState<number | null>(null);
   const frames = carousel ?? [];
   const showing = frames.length ? frames[Math.min(frame, frames.length - 1)] : source;
+  /**
+   * The picture, as large as the window will take it.
+   *
+   * A preview is a phone-sized box and a card is briefed as a full screen, so
+   * the question a carousel raises - is this the right picture, third in the
+   * swipe - is one the box cannot answer. Opened from the frame that is
+   * showing, and the chevrons step the preview itself, so closing it leaves
+   * the preview on the card that was being looked at.
+   *
+   * The bytes come from the frame below rather than a second request: these
+   * are read opaquely, and a lightbox that fetched the file again would undo
+   * the care taken over the first read.
+   */
+  const [zoomed, setZoomed] = useState(false);
+  const [frameUrls, setFrameUrls] = useState<Record<string, string>>({});
+  const rememberFrame = useCallback((src: string, objectUrl: string) => {
+    setFrameUrls((known) => (
+      known[src] === objectUrl ? known : { ...known, [src]: objectUrl }
+    ));
+  }, []);
+  /** Every picture this post is made of, which is what can be opened. */
+  const pictures = frames.length
+    ? frames
+    : (sourceIsImage && showing ? [showing] : []);
   const ratio = measured ?? (overlaid || isVideo ? defaultRatio : null);
   // The frames either side, rendered but not shown, so stepping reads from
   // cache rather than starting a fresh request and blanking the box.
@@ -706,7 +745,25 @@ export function PostPreview({
       <figcaption>
         <PlatformIcon platform={platform} size={18} />
         <span>
-          <strong>{handle || "your account"}</strong>
+          <strong>
+            {/* Its own element so the name is what gets the ellipsis: a text
+                node beside the mark cannot be clipped on its own, and a long
+                handle would have pushed the count out of the card. */}
+            <span>{handle || "your account"}</span>
+            {/* What shape of post this is, where the shape is not the usual
+                one. A carousel reads as a single picture until it is swiped,
+                and on a card in a list nobody swipes - so the count goes
+                beside the name, which is the one line every one of these
+                previews already has. A mark rather than a word: it sits in a
+                row that is already saying the network and the post type. */}
+            {pictures.length > 1 && (
+              <em className="post-preview-kind"
+                title={t("composer.carouselOfCount", { count: pictures.length })}>
+                <Images size={11} aria-hidden="true" />
+                {pictures.length}
+              </em>
+            )}
+          </strong>
           <small>{platformLabels[platform]} · {postTypeLabel}</small>
         </span>
       </figcaption>
@@ -735,10 +792,24 @@ export function PostPreview({
           <UploadPreview key={showing} source={showing} poster={thumbnail}
             onNaturalRatio={setMeasured} autoStart={autoPlay} />
         ) : showing ? (
-          <OpaqueImage alt="" src={showing} onLoad={(event) => {
-            const { naturalWidth, naturalHeight } = event.currentTarget;
-            measure(naturalWidth, naturalHeight);
-          }} />
+          // A button around the picture rather than a click handler on it:
+          // reachable by keyboard, and saying what it does when it gets
+          // there. The furniture drawn over it takes no clicks, so a press
+          // anywhere on the card opens it - except on the arrows, which are
+          // buttons of their own.
+          <button type="button" className="post-preview-open"
+            aria-label={t("composer.viewFullSize")}
+            title={t("composer.viewFullSize")}
+            onClick={() => setZoomed(true)}>
+            <OpaqueImage alt="" src={showing} onResolved={rememberFrame}
+              onLoad={(event) => {
+                const { naturalWidth, naturalHeight } = event.currentTarget;
+                measure(naturalWidth, naturalHeight);
+              }} />
+            <span className="post-preview-open-mark" aria-hidden="true">
+              <Maximize2 size={12} />
+            </span>
+          </button>
         ) : thumbnail && !wantsCarousel ? (
           // The clip's own still, and only for a post that is a clip. A
           // carousel that has no pictures yet would otherwise show a frame of
@@ -772,6 +843,31 @@ export function PostPreview({
             ) : furniture ? (
               <div className="preview-surface-rail">
                 {furniture.rail.map((action) => {
+                  // The two that are not icons. The picture at the top of the
+                  // column is the account's own, the same one the handle
+                  // below wears, and the disc at the foot is the sound - so
+                  // it is drawn only where there is a sound to name, which a
+                  // photo carousel has none of. See `audioLine`.
+                  if (action === "avatar") {
+                    return (
+                      <span key={action} className="preview-surface-rail-avatar">
+                        {avatar ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={avatar} alt="" loading="lazy"
+                            referrerPolicy="no-referrer" />
+                        ) : (
+                          <PlatformIcon platform={platform} size={12} />
+                        )}
+                      </span>
+                    );
+                  }
+                  if (action === "disc") {
+                    return sound ? (
+                      <span key={action} className="preview-surface-rail-disc">
+                        <Disc3 size={16} />
+                      </span>
+                    ) : null;
+                  }
                   const [Icon, size] = RAIL_ICONS[action];
                   return <Icon key={action} size={size} />;
                 })}
@@ -808,6 +904,26 @@ export function PostPreview({
           // eslint-disable-next-line @next/next/no-img-element
           <img key={source} src={source} alt="" aria-hidden="true" className="preview-preload" />
         ))}
+        {/* Stepping here steps the preview, so the picture on the dark ground
+            is always the one the frame below is showing - which is also how
+            its bytes are already read. One index, not two to keep in step. */}
+        {zoomed && pictures.length > 0 && (
+          <Lightbox
+            open
+            src={frameUrls[showing ?? ""] ?? ""}
+            alt={pictures.length > 1
+              ? t("composer.pictureOfCount", {
+                position: Math.min(frame, pictures.length - 1) + 1,
+                count: pictures.length,
+              })
+              : t("composer.viewFullSize")}
+            onClose={() => setZoomed(false)}
+            onPrevious={frames.length > 1 && frame > 0
+              ? () => setFrame(frame - 1) : undefined}
+            onNext={frames.length > 1 && frame < frames.length - 1
+              ? () => setFrame(frame + 1) : undefined}
+          />
+        )}
         {/* A feed card is stepped at the middle of the picture's own edges,
             with the dots under it. The full-bleed surfaces put both in one row
             above the caption, and do it inside the surface above - laid out
@@ -1894,14 +2010,26 @@ export function OpaqueImage({
   src,
   alt,
   onLoad,
+  onResolved,
 }: {
   src: string;
   alt: string;
   onLoad?: (event: React.SyntheticEvent<HTMLImageElement>) => void;
+  /**
+   * The bytes, once they are here, for a second view of the same picture.
+   *
+   * A full-size view of what this is showing must not fetch the file again:
+   * these are read opaquely on purpose, and a second plain GET for the same
+   * image would hand a grabber the thing the first read was careful about.
+   */
+  onResolved?: (src: string, objectUrl: string) => void;
 }) {
   const own = isPrivateApiSource(src);
   const { objectUrl, problem } = useOpaqueMedia(src, src, "image/jpeg", own);
   const resolved = own ? objectUrl : src;
+  useEffect(() => {
+    if (resolved) onResolved?.(src, resolved);
+  }, [resolved, src, onResolved]);
   if (!resolved) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element -- authenticated blob or already-public src

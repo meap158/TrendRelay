@@ -7,18 +7,18 @@ import { useEffect, useState } from "react";
 import { useT } from "../i18n-provider";
 
 /**
- * Which picture of a set is open, and the arrows for walking through it.
+ * Which picture of a set is open, and the steps to its neighbours.
  *
  * The state a strip of thumbnails needs to put one of them on the lightbox:
- * the index that is open, the two steps to its neighbours - absent at the
- * ends, which is how the view knows to draw one chevron rather than two - and
- * the left and right keys, bound only while something is open so the page
- * underneath keeps its own keys the rest of the time.
+ * the index that is open, and the two steps - absent at the ends, which is
+ * how the view knows to draw one chevron rather than two. The keys that walk
+ * the same set live in `Lightbox` itself, beside the arrows they stand for,
+ * so a caller that keeps its own index gets them without keeping this.
  *
  * A hook rather than a second lightbox: every strip that opens one wants
  * exactly this and nothing more, and the timeline's copy and the post
- * editor's copy would have been the same fifteen lines twice, drifting on
- * whichever one somebody fixed first.
+ * editor's copy would have been the same lines twice, drifting on whichever
+ * one somebody fixed first.
  */
 export function useLightboxSet(count: number) {
   const [openAt, setOpenAt] = useState<number | null>(null);
@@ -32,18 +32,6 @@ export function useLightboxSet(count: number) {
   const at = openAt === null || count === 0
     ? null
     : Math.min(openAt, count - 1);
-
-  useEffect(() => {
-    if (at === null) return;
-    function step(event: KeyboardEvent) {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      const next = (at as number) + (event.key === "ArrowLeft" ? -1 : 1);
-      if (next >= 0 && next < count) setOpenAt(next);
-    }
-    window.addEventListener("keydown", step);
-    return () => window.removeEventListener("keydown", step);
-  }, [at, count]);
 
   return {
     openAt: at,
@@ -105,6 +93,26 @@ export function Lightbox({
   onNext?: () => void;
 }) {
   const t = useT();
+
+  // The keys for the chevrons beside them, bound only while this is open so
+  // the page underneath keeps its own the rest of the time. Here rather than
+  // in the caller because they are the same act as the buttons: a view that
+  // draws one arrow answers one key, and neither the strip nor the preview
+  // that opens it has to know that.
+  useEffect(() => {
+    if (!open) return;
+    function step(event: KeyboardEvent) {
+      const go = event.key === "ArrowLeft" ? onPrevious
+        : event.key === "ArrowRight" ? onNext
+          : undefined;
+      if (!go) return;
+      event.preventDefault();
+      go();
+    }
+    window.addEventListener("keydown", step);
+    return () => window.removeEventListener("keydown", step);
+  }, [open, onPrevious, onNext]);
+
   return (
     <RadixDialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <RadixDialog.Portal>
