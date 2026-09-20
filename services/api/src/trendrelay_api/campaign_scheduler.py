@@ -637,6 +637,53 @@ def plan_campaign(
     held_items = {
         (execution.queue_item_id, execution.destination_id) for execution in pending
     }
+
+    # The slots somebody has already refused this post for.
+    #
+    # "Skip this time" cancels the execution, which gives the slot and the
+    # queue item back - and nothing records that the answer was about this
+    # post. So the next tick, a minute later, planned the identical post into
+    # the identical slot, froze it, and put it in front of the approver again.
+    # One post in the live database went through seven executions in under two
+    # hours that way, the dismissals thirty to ninety seconds apart. Skipping
+    # meant skipping for about thirty seconds, while the interface said the
+    # post would come back next cycle.
+    #
+    # The cancelled row is the record, and it already carries everything the
+    # answer was about: this post, this account, this moment. Freeing the slot
+    # means freeing it for something else - not for the same post to ask again
+    # - so the pairing is barred from that one moment and from nothing else.
+    # The post keeps every other slot it was eligible for, which is what
+    # "next cycle" means.
+    # A failed delivery spends the slot the same way, and for the same reason
+    # it was worth writing this down at all. The engine refusing a caption for
+    # being 660 characters long is not a refusal that gets better in sixty
+    # seconds, but the planner re-read the identical post into the identical
+    # slot on the next tick and manufactured the identical failure, minute
+    # after minute. A post that has had its turn at a moment does not get that
+    # moment again; it gets the next one. Where the failure is worth another
+    # try rather than another decision, `campaign_runner._redeliver` sends the
+    # execution itself again and no re-planning is involved.
+    spent = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state.in_(("cancelled", "failed")),
+            PublicationExecution.scheduled_at.is_not(None),
+            # The horizon is a rolling day forward; a day back covers the slot
+            # that was refused minutes ago and has not passed yet.
+            PublicationExecution.scheduled_at >= now - timedelta(days=1),
+        )
+    ).all()
+    declined = {
+        (execution.queue_item_id, execution.destination_id, _as_utc(execution.scheduled_at))
+        for execution in spent
+        if execution.state == "cancelled"
+    }
+    burned = {
+        (execution.queue_item_id, execution.destination_id, _as_utc(execution.scheduled_at))
+        for execution in spent
+        if execution.state == "failed"
+    }
     pending_per_day: dict[tuple[str, date], int] = {}
     for execution in pending:
         when = _as_utc(execution.scheduled_at)
@@ -844,6 +891,22 @@ def plan_campaign(
             eligible = [
                 item for item in eligible if (item.id, destination.id) not in held_items
             ]
+            # Already had this moment and did not take it - refused by
+            # somebody who was asked, or refused by the engine. Either way the
+            # slot stays open for anything else; see `declined` and `burned`.
+            skipped_here = [
+                item for item in eligible
+                if (item.id, destination.id, moment) in declined
+            ]
+            burned_here = [
+                item for item in eligible
+                if (item.id, destination.id, moment) in burned
+            ]
+            eligible = [
+                item for item in eligible
+                if (item.id, destination.id, moment) not in declined
+                and (item.id, destination.id, moment) not in burned
+            ]
 
             eligible = [
                 item
@@ -872,6 +935,23 @@ def plan_campaign(
                 )
             ]
             if not eligible:
+                # Ahead of the general explanation, which would reach for rest
+                # intervals and unwritten posts to account for a slot that is
+                # empty because somebody said so, or because the engine did.
+                # Both are answers about this post at this time, and they read
+                # as answers rather than as an absence.
+                if skipped_here:
+                    slot_notes.append(
+                        f"{len(skipped_here)} post(s) for {destination.label} were "
+                        "skipped for this time and come back at the next one."
+                    )
+                    continue
+                if burned_here:
+                    slot_notes.append(
+                        f"{len(burned_here)} post(s) for {destination.label} already "
+                        "tried this time and did not go out; they come back at the next one."
+                    )
+                    continue
                 slot_notes.append(_why_nothing_eligible(
                     queue,
                     approved,
@@ -982,6 +1062,20 @@ def plan_campaign(
                     slot_notes.append(
                         f"{len(spoken_for)} post(s) for {destination.label} are "
                         "waiting on an earlier one to be approved or sent."
+                    )
+                if skipped_here:
+                    # Named for the same reason as the line above it: being
+                    # skipped only matters as a reason when it is what left
+                    # the slot empty, and an operator who skipped the one post
+                    # that fit should read that rather than infer it.
+                    slot_notes.append(
+                        f"{len(skipped_here)} post(s) for {destination.label} were "
+                        "skipped for this time and come back at the next one."
+                    )
+                if burned_here:
+                    slot_notes.append(
+                        f"{len(burned_here)} post(s) for {destination.label} already "
+                        "tried this time and did not go out; they come back at the next one."
                     )
                 continue
             # Text-only posts deliberately have no file, but still freeze an

@@ -8,7 +8,7 @@ rule holds at every level: a low-confidence product never posts unattended.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -841,10 +841,26 @@ def test_a_held_post_can_be_rewritten_and_approval_covers_the_rewrite(
     assert sent.first_comment == "A comment the operator added."
 
 
-def test_a_held_slot_stays_held_and_a_dismissed_one_frees(
+def test_a_held_slot_stays_held_and_a_dismissed_one_frees_it_for_another_post(
     session, tmp_path, engine_stub
 ) -> None:
+    """Freeing the slot means freeing it for something else.
+
+    It used to mean freeing it for the same post to ask again: the cancelled
+    row recorded nothing about the answer having been about this post, so the
+    next tick a minute later planned it back into the identical slot and put
+    it in front of the approver again. One post went through seven executions
+    in under two hours that way.
+    """
     campaign_setup(session, tmp_path)
+    second = tmp_path / "other.mp4"
+    second.write_bytes(b"another clip entirely")
+    session.add(CampaignQueueItem(
+        id="q2", workspace_id="ws", campaign_id="camp", state="approved",
+        video_path=str(second), body="A second way to pull a better espresso.",
+        hashtags=["coffee"], position=1, last_posted_by_destination={},
+        created_by="user-1",
+    ))
     pilot = autopilot(session, authority="assist")
     run_campaign(session, pilot, now=NOW)
     held = executions(session)[0]
@@ -857,7 +873,43 @@ def test_a_held_slot_stays_held_and_a_dismissed_one_frees(
     held.state = "cancelled"
     session.commit()
     third = run_campaign(session, pilot, now=NOW)
+
     assert third["held"], "a dismissed execution frees its slot for a new plan"
+    [replacement] = third["held"]
+    assert replacement["execution_id"] != held.id
+    frozen = session.get(PublicationExecution, replacement["execution_id"])
+    assert frozen.queue_item_id != held.queue_item_id, (
+        "the slot goes to another post, not back to the one that was skipped"
+    )
+
+
+def test_a_skipped_post_does_not_come_straight_back_for_the_same_slot(
+    session, tmp_path, engine_stub
+) -> None:
+    """The whole of the churn, with nothing else in the queue to take the slot.
+
+    "Skip this time" promises the post comes back next cycle. It came back in
+    about thirty seconds, because the planner re-read the same eligible item
+    into the same open moment every tick.
+    """
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    held = executions(session)[0]
+    slot = held.scheduled_at
+
+    held.state = "cancelled"
+    session.commit()
+
+    # A minute later, and a minute after that.
+    for minutes in (1, 2, 3):
+        result = run_campaign(session, pilot, now=NOW + timedelta(minutes=minutes))
+        assert result["held"] == [], "the post stays skipped for the slot it was skipped from"
+
+    assert len(executions(session)) == 1, "no second execution was ever frozen"
+    assert "skipped for this time" in result["note"]
+    # And the slot is still that slot - nothing moved it.
+    assert session.get(PublicationExecution, held.id).scheduled_at == slot
 
 
 def test_approving_stale_media_fails_rather_than_delivering_it(

@@ -153,11 +153,15 @@ def offer(session, identifier: str, name: str = "Espresso kit",
 def engine_stub(monkeypatch):
     """Stand in for the publishing boundary, and record what reached it."""
     calls: list = []
+    sent: list = []
     behaviour = {"raise": None}
 
-    def fake_publish(session, autopilot, execution, *, at=None):
+    def fake_publish(session, autopilot, execution, *, at=None, delivery_override=None):
         if behaviour["raise"]:
             raise RuntimeError(behaviour["raise"])
+        # A redelivery posts now: the slot it was approved for passed while
+        # the engine was refusing connections.
+        sent.append({"at": at, "delivery_override": delivery_override})
         calls.append(execution)
         job_id = f"publish_stub{len(calls)}"
         session.add(DurableJob(
@@ -169,7 +173,7 @@ def engine_stub(monkeypatch):
         return {"id": job_id}
 
     monkeypatch.setattr(campaign_runner, "_publish_execution", fake_publish)
-    return type("Stub", (), {"calls": calls, "behaviour": behaviour})
+    return type("Stub", (), {"calls": calls, "sent": sent, "behaviour": behaviour})
 
 
 def settle_job(session, job_id: str, status: str, *, result=None, error=None) -> None:
@@ -250,9 +254,145 @@ def test_a_failed_job_counts_nothing_and_frees_its_slot(
     assert fresh.times_posted == 0, "a failed post never counts as posted"
     assert fresh.last_posted_by_destination == {}
 
-    # The slot is free again: the same plan can be made a second time.
+    # The slot is free again - for something else. The post that just had it
+    # and did not go out does not get it back a minute later: an engine that
+    # refused a caption for being invalid refuses it again, and the planner
+    # used to manufacture that same failure every tick. It comes back at the
+    # campaign's next posting time instead.
     result = run_campaign(session, pilot, now=NOW)
-    assert len(result["posts"]) == 1
+    assert result["posts"] == [] and result["held"] == []
+    assert "already tried this time" in result["note"]
+
+    second = queue_item(session, "q2", str(clip(tmp_path, name="other.mp4")))
+    taken = run_campaign(session, pilot, now=NOW)
+    assert len(taken["posts"]) == 1, "the slot itself is free for another post"
+    assert executions(session)[-1].queue_item_id == second.id
+
+
+# --- an approval survives a delivery that never reached the engine ------------
+#
+# The loop these exist for: a person approved a post, the engine could not be
+# reached, the execution settled as failed, and the failure freed the queue
+# item - so the next pass froze the identical post and asked the identical
+# person again. One post in the live database burned two approvals that way
+# inside two hours before somebody gave up and dismissed it.
+
+
+def _failed_once(session, tmp_path, engine_stub, error: str):
+    """One approved post whose delivery came back with `error`."""
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", str(clip(tmp_path)))
+    pilot = autopilot(session)
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    settle_job(session, execution.job_id, "failed", error=error)
+    return pilot, execution
+
+
+def test_an_engine_that_could_not_be_reached_is_delivered_again(
+    session, tmp_path, engine_stub
+) -> None:
+    """Nothing was posted, because nothing was sent. The decision stands."""
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "woopsocial: Could not reach api.woopsocial.com: <urlopen error [WinError 10054]>",
+    )
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    [execution] = executions(session)
+    assert outcome["redelivered"] == [execution.id]
+    assert outcome["failed"] == []
+    assert execution.state == "queued", "in flight again, not waiting on a person"
+    assert execution.delivery_attempts == 1
+    assert execution.failure_class is None
+    assert "Could not reach" in execution.error, "what went wrong is still on the record"
+    assert len(engine_stub.calls) == 2, "the same frozen record, sent a second time"
+    assert engine_stub.calls[1].id == execution.id
+    assert engine_stub.sent[1] == {"at": NOW, "delivery_override": "now"}
+
+
+def test_an_engine_that_was_full_is_delivered_again(
+    session, tmp_path, engine_stub
+) -> None:
+    """A refusal on the spot creates nothing, so the next attempt is the first
+    real one."""
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "buffer: api.buffer.com: HTTP 429 Rate limited by the engine.",
+    )
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    assert outcome["redelivered"] == [executions(session)[0].id]
+    assert executions(session)[0].state == "queued"
+
+
+def test_a_caption_the_engine_refused_is_not_delivered_again(
+    session, tmp_path, engine_stub
+) -> None:
+    """`provider` is a grab-bag: the live database files "Could not reach" and
+    "Threads allows 500 characters in a caption and this one is 660" under the
+    same class. Sending the second one again buys the same refusal forever."""
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "Threads allows 500 characters in a caption and this one is 660.",
+    )
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    assert outcome["redelivered"] == []
+    assert executions(session)[0].state == "failed"
+    assert len(engine_stub.calls) == 1
+
+
+def test_a_post_that_may_already_exist_is_never_delivered_again(
+    session, tmp_path, engine_stub
+) -> None:
+    """The one thing redelivery must never do. A timeout after the request
+    went out may have posted, and the cost of being wrong is a duplicate on
+    somebody's account."""
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "woopsocial: connection reset by peer while reading the response",
+    )
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    assert outcome["redelivered"] == [] and outcome["uncertain"]
+    assert executions(session)[0].state == "uncertain"
+    assert len(engine_stub.calls) == 1
+
+
+def test_redelivery_gives_up_rather_than_going_forever(
+    session, tmp_path, engine_stub
+) -> None:
+    """Three rounds, each behind a durable job that already made its own three
+    attempts with backoff. A host still refusing connections after that is
+    down rather than blinking, and the failure becomes a person's to look at."""
+    unreachable = "woopsocial: Could not reach api.woopsocial.com"
+    _failed_once(session, tmp_path, engine_stub, unreachable)
+
+    for attempt in range(1, 4):
+        outcome = reconcile_executions(session, now=NOW)
+        session.commit()
+        execution = executions(session)[0]
+        assert outcome["redelivered"] == [execution.id]
+        assert execution.delivery_attempts == attempt
+        settle_job(session, execution.job_id, "failed", error=unreachable)
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    execution = executions(session)[0]
+    assert outcome["redelivered"] == [] and outcome["failed"] == [execution.id]
+    assert execution.state == "failed"
+    assert execution.delivery_attempts == 3
 
 
 def test_an_ambiguous_outcome_is_held_not_retried(session, tmp_path, engine_stub) -> None:

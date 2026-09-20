@@ -31,6 +31,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -169,6 +170,21 @@ class PublicationExecution(Base):
     permalinks: Mapped[list[str]] = mapped_column(JSON, default=list)
     failure_class: Mapped[str | None] = mapped_column(String(24))
     error: Mapped[str | None] = mapped_column(String(1000))
+    #: How many times this execution's delivery has been sent again after a
+    #: failure that provably never reached the engine.
+    #:
+    #: An approval is a person's decision about this post, and a host that was
+    #: unreachable for thirty seconds is not a reason to throw it away. It was:
+    #: the execution settled as failed, which freed the queue item, and the
+    #: next pass froze the same post and asked the same person again. Two
+    #: approvals were spent that way on one post before somebody gave up and
+    #: dismissed it.
+    #:
+    #: Bounded, and narrow about what it will retry - see
+    #: `campaign_runner.redelivery_reason`. A post that may already exist is
+    #: `uncertain` and is never sent again; one the engine refused on its
+    #: merits is `failed` and would only be refused again.
+    delivery_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     #: Why a `proposed` execution is waiting for a person - the sentence the
     #: exception inbox shows. Empty on anything that was never held.
     held_reason: Mapped[str | None] = mapped_column(String(500))

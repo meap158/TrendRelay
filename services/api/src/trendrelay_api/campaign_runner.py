@@ -71,6 +71,40 @@ RATE_LIMIT_MARKERS = (
     "limit exceeded",
 )
 
+#: Error text that means the request never reached the engine at all.
+#:
+#: The distinction this draws is the whole of whether a post may be sent
+#: again. `provider` is a grab-bag - the live database has "Could not reach
+#: api.woopsocial.com" and "Threads allows 500 characters in a caption and
+#: this one is 660" filed under the same class - so the class cannot decide
+#: it. These are connection-level refusals: the name did not resolve, the
+#: socket was refused, the host was never spoken to. Nothing was posted,
+#: because nothing was sent.
+#:
+#: Deliberately not here: anything that got an answer. An HTTP 524 means the
+#: request landed and the gateway gave up waiting, which is exactly the shape
+#: of a post that exists and cannot be confirmed - `UNCERTAIN_MARKERS`'
+#: territory, not this one. When in doubt a post is not sent again, because
+#: the cost of being wrong is a duplicate on somebody's account.
+UNREACHED_MARKERS = (
+    "could not reach",
+    "connection refused",
+    "failed to establish",
+    "name or service not known",
+    "nodename nor servname",
+    "temporary failure in name resolution",
+    "getaddrinfo failed",
+    "no route to host",
+    "network is unreachable",
+)
+
+#: How many times one approved post may be delivered again before the failure
+#: is the person's to look at. Three, because the durable job behind each
+#: delivery has already made its own three attempts with backoff - so this is
+#: three rounds of that, not three requests, and a host that is still refusing
+#: connections after all of it is down rather than blinking.
+MAX_DELIVERY_ATTEMPTS = 3
+
 #: How many recent settled executions the circuit breakers look at, and the
 #: counts that trip them. Small on purpose: three auth refusals in a row is not
 #: bad luck, and every further attempt is another refusal against a provider
@@ -97,6 +131,37 @@ def _classify_failure(error: str) -> str:
     if any(marker in text for marker in ("422", "400", "refus", "invalid", "requires")):
         return "validation"
     return "provider"
+
+
+def redelivery_reason(
+    execution: PublicationExecution, failure_class: str, error: str,
+) -> str | None:
+    """Why this failed delivery may be sent again, or None when it may not.
+
+    A person approved this post. The delivery failing is not that decision
+    being wrong, and it used to be treated as though it were: the execution
+    settled as failed, which freed the queue item and the slot, and the next
+    pass froze the same post and put it back in front of the same person.
+    Approving it a second time bought the same failure and a third card.
+
+    Two things are sent again, and only these two. An engine that answered
+    "not now" refused the post on the spot, so nothing was created and the
+    next attempt is the first real one. A request that never reached the
+    engine created nothing either, because it was never spoken. Everything
+    else stays failed: a post that may exist is `uncertain` and must never be
+    sent twice, and a caption the engine refused on its merits would be
+    refused again.
+    """
+    if execution.delivery_attempts >= MAX_DELIVERY_ATTEMPTS:
+        return None
+    if failure_class == "rate_limited":
+        return "the engine was full"
+    text = (error or "").casefold()
+    if failure_class == "provider" and any(
+        marker in text for marker in UNREACHED_MARKERS
+    ):
+        return "the engine could not be reached"
+    return None
 
 
 def _file_sha256(path: Path) -> str:
@@ -1163,6 +1228,55 @@ def _apply_breakers(
         autopilot.updated_at = now
 
 
+def _redeliver(
+    session: Session, execution: PublicationExecution, *, now: datetime, reason: str,
+) -> bool:
+    """Send an already-approved post again. Returns whether it went.
+
+    The same frozen record, to the same account, with the same words - the
+    approval was about all of that and none of it has changed. Only the time
+    moves: the slot it was approved for has passed while the engine was
+    refusing connections, and a delivery scheduled into the past is either
+    refused or posted immediately anyway.
+
+    False when there is nothing to send with - no campaign behind the
+    execution, or the engine will not take the job - and the caller settles it
+    as failed exactly as it would have.
+    """
+    autopilot = (
+        session.scalar(
+            select(CampaignAutopilot).where(
+                CampaignAutopilot.campaign_id == execution.campaign_id
+            )
+        )
+        if execution.campaign_id else None
+    )
+    if autopilot is None:
+        return False
+    try:
+        job = _publish_execution(
+            session, autopilot, execution, at=now, delivery_override="now",
+        )
+    except Exception as error:  # noqa: BLE001 - a refused retry is just a failure
+        print(f"Redelivery of {execution.id} refused: {error}", flush=True)
+        return False
+    execution.job_id = job["id"]
+    execution.state = "queued"
+    execution.queued_at = now
+    execution.scheduled_at = now
+    execution.delivery_attempts += 1
+    # Cleared, because this row is no longer a failure - it is a delivery in
+    # flight. The text of what went wrong stays on `error` for the timeline.
+    execution.failure_class = None
+    execution.reconciled_at = None
+    print(
+        f"Delivering {execution.id} again ({execution.delivery_attempts} of "
+        f"{MAX_DELIVERY_ATTEMPTS}): {reason}.",
+        flush=True,
+    )
+    return True
+
+
 def reconcile_executions(
     session: Session, *, now: datetime | None = None
 ) -> dict[str, Any]:
@@ -1178,6 +1292,7 @@ def reconcile_executions(
     published: list[str] = []
     failed: list[str] = []
     uncertain: list[str] = []
+    redelivered: list[str] = []
     campaigns: set[str] = set()
     pending = session.scalars(
         select(PublicationExecution).where(PublicationExecution.state == "queued")
@@ -1228,7 +1343,10 @@ def reconcile_executions(
         )
         if autopilot:
             _apply_breakers(session, autopilot, now=moment)
-    return {"published": published, "failed": failed, "uncertain": uncertain}
+    return {
+        "published": published, "failed": failed, "uncertain": uncertain,
+        "redelivered": redelivered,
+    }
 
 
 def tick(session_factory: Any, *, now: datetime | None = None) -> dict[str, Any]:
