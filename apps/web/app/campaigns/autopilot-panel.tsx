@@ -1295,7 +1295,9 @@ function displayTitle(value: string | null): string | null {
  * own time rather than called done the moment the job returned. (A post still
  * in TrendRelay's queue is Planned, and is labelled where it is rendered.)
  */
-function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | "warn" | "neutral" | "info" } {
+function deliveredStatus(
+  entry: { status?: string | null; at: string },
+): { label: string; tone: "good" | "warn" | "neutral" | "info" } {
   if (entry.status === "failed") return { label: "Failed", tone: "warn" };
   if (entry.status === "succeeded") {
     return new Date(entry.at).getTime() <= Date.now()
@@ -1304,6 +1306,22 @@ function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | 
   }
   const raw = entry.status ?? "delivered";
   return { label: raw.charAt(0).toUpperCase() + raw.slice(1), tone: "neutral" };
+}
+
+/**
+ * Whether a delivered post is still ahead of us.
+ *
+ * A delivery that succeeded is not the same as a post that has gone out: a
+ * scheduled one sits on the engine until its own time, which is why the rows
+ * label it "Scheduled" rather than "Published". The count above them read it
+ * the other way and called those posts delivered, so a campaign whose next
+ * five outings were all handed over in one pass showed "Schedule 0 upcoming"
+ * while five posts were queued on the network for the next day. Asked of
+ * `deliveredStatus`, so the number and the row it counts cannot disagree.
+ */
+function stillToCome(item: { status?: string | null; at: string }): boolean {
+  if (item.status === "queued" || item.status === "running") return true;
+  return deliveredStatus(item).label === "Scheduled";
 }
 
 /** A big count in a small space: 1500 -> 1.5k, so a row of them stays a row. */
@@ -4468,11 +4486,13 @@ export function AutopilotPanel({
           </button>
           <button type="button" className={view === "posts" ? "active" : ""}
             onClick={() => jumpTo("schedule")}>
-            {/* Committed jobs still waiting to go out are upcoming posts too;
-                only what has already delivered or failed leaves the count. */}
+            {/* Committed jobs still waiting to go out are upcoming posts too -
+                including the ones the engine has already accepted for a time
+                that has not come yet. Only what has actually gone out, or
+                failed, leaves the count; `stillToCome` is the same reading the
+                rows below use. */}
             <span>Schedule</span><strong>{preview
-              ? preview.posts.length + preview.deployed.filter((item) =>
-                  item.status === "queued" || item.status === "running").length
+              ? preview.posts.length + preview.deployed.filter(stillToCome).length
               : Math.max(slots.length, ...destinationSlotCounts, 0)}</strong>
             <small>{preview ? "upcoming" : "posting times"}</small>
           </button>
