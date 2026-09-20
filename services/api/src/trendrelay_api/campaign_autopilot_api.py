@@ -2969,20 +2969,43 @@ def preview_autopilot(
     # Keeping their campaign provenance in PublishRequest means this survives
     # page reloads and worker restarts without a second shadow job table.
     deployed = []
+    # This campaign's own jobs, reached through its executions.
+    #
+    # Taken from the workspace's newest hundred publishing jobs before, and
+    # then filtered down to this campaign - which works only while no
+    # campaign is busy. One campaign meeting a rate limit filed six hundred
+    # jobs in the time this campaign filed none, so its five posts waiting on
+    # the engine for tomorrow were six hundred deep in a hundred-row window
+    # and the timeline showed an empty day. The count was never meant to be a
+    # workspace-wide budget; it is a page size for one campaign's list.
+    job_ids = [
+        execution.job_id
+        for execution in session.scalars(
+            select(PublicationExecution)
+            .where(
+                PublicationExecution.campaign_id == campaign_id,
+                PublicationExecution.job_id.is_not(None),
+            )
+            .order_by(PublicationExecution.created_at.desc())
+            .limit(100)
+        ).all()
+        if execution.job_id
+    ]
     jobs = session.scalars(
         select(DurableJob)
         .where(
             DurableJob.workspace_key == workspace_id,
             DurableJob.kind == "social_publish",
+            DurableJob.id.in_(job_ids) if job_ids else False,
         )
+        # Newest first, which the duplicate check below relies on: a retry
+        # files a second job for the same post and the newest tells the truth.
         .order_by(DurableJob.created_at.desc())
-        .limit(100)
-    ).all()
+    ).all() if job_ids else []
     # Deferred: campaign_runner imports this module lazily for its links, and
     # a top-level import back at it would close that circle.
     from trendrelay_api.campaign_measurement import latest_metrics
     from trendrelay_api.campaign_runner import _outcome_of
-    from trendrelay_api.publication_models import PublicationExecution
 
     # Each measured post's latest engagement, keyed by the job it rode in, so a
     # delivered row can carry its own numbers. Only posts read back have any.

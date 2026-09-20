@@ -1052,6 +1052,14 @@ def test_preview_reconnects_committed_publish_jobs_to_the_timeline(workspace) ->
 
     campaign_id = campaign(workspace)
     at = datetime.now(UTC) + timedelta(hours=2)
+    # The execution the job was filed for. Every campaign delivery has one -
+    # `_publish_execution` stamps the job's id onto it - and the timeline
+    # reaches this campaign's jobs through them, so a job without one is a
+    # shape the app does not produce.
+    _held(
+        workspace, campaign_id, "exec_campaign_timeline",
+        state="queued", job_id="publish_campaign_timeline", scheduled_at=at,
+    )
     with TestingSession.begin() as session:
         session.add(DurableJob(
             id="publish_campaign_timeline",
@@ -1089,6 +1097,71 @@ def test_preview_reconnects_committed_publish_jobs_to_the_timeline(workspace) ->
     assert deployed[0]["caption"] == "Primary content"
     assert deployed[0]["first_comment"] == "Follow-up"
     assert deployed[0]["thread"] == ["Reply"]
+
+
+def test_a_busy_campaign_does_not_empty_another_campaigns_timeline(
+    workspace,
+) -> None:
+    """The timeline is one campaign's list, not a share of the workspace's.
+
+    It used to read the workspace's newest hundred publishing jobs and then
+    keep this campaign's. That holds until something is busy: a campaign
+    meeting a rate limit filed hundreds of jobs in an hour, and a quiet
+    campaign's posts - already handed to the engine and waiting on it - were
+    hundreds deep in a hundred-row window, so its timeline showed an empty
+    day while the engine's own list showed the posts.
+    """
+    from trendrelay_api.models import DurableJob
+
+    campaign_id = campaign(workspace)
+    noisy_id = campaign(workspace)
+    at = datetime.now(UTC) + timedelta(hours=6)
+
+    _held(
+        workspace, campaign_id, "exec-quiet",
+        state="published", job_id="job-quiet", scheduled_at=at,
+    )
+    with TestingSession.begin() as session:
+        session.add(DurableJob(
+            id="job-quiet", workspace_key=workspace, kind="social_publish",
+            status="succeeded",
+            payload={"request": {
+                "workspace_id": workspace, "campaign_id": campaign_id,
+                "destination_id": "destination-1", "date": at.isoformat(),
+                "title": "Waiting on the engine", "caption": "Tomorrow's post",
+                "delivery": "schedule",
+                "targets": [{
+                    "platform": "tiktok", "integration_id": "anisenpaitok",
+                    "provider": "woopsocial", "post_type": "post",
+                }],
+            }},
+            attempt_count=1, max_attempts=3, cancellation_requested=False,
+            created_at=datetime.now(UTC) - timedelta(hours=2),
+        ))
+        # The other campaign, failing and refiling every minute since.
+        for index in range(150):
+            session.add(DurableJob(
+                id=f"job-noisy-{index}", workspace_key=workspace,
+                kind="social_publish", status="failed",
+                payload={"request": {
+                    "workspace_id": workspace, "campaign_id": noisy_id,
+                    "destination_id": "destination-9",
+                    "date": at.isoformat(), "caption": "Refused again",
+                    "targets": [],
+                }},
+                attempt_count=1, max_attempts=1, cancellation_requested=False,
+                created_at=datetime.now(UTC) - timedelta(minutes=150 - index),
+            ))
+
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    )
+
+    assert response.status_code == 200, response.text
+    deployed = response.json()["deployed"]
+    assert [item["id"] for item in deployed] == ["job-quiet"], (
+        "the quiet campaign's own post is still on its own timeline"
+    )
 
 
 def test_committed_jobs_link_to_the_post_or_the_page(workspace) -> None:
@@ -1131,6 +1204,13 @@ def test_committed_jobs_link_to_the_post_or_the_page(workspace) -> None:
                 "permalink": "https://www.threads.net/@halcyonbooks.official/post/abc",
             }]},
         ))
+    # One execution per job, which is what a retry actually leaves behind:
+    # the post was frozen twice for the same slot and each freeze filed its
+    # own job. The timeline reaches both through them and collapses them.
+    _held(workspace, campaign_id, "exec-older", state="failed",
+          job_id="job-older", scheduled_at=at)
+    _held(workspace, campaign_id, "exec-newer", state="published",
+          job_id="job-newer", scheduled_at=at)
 
     response = request(
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
