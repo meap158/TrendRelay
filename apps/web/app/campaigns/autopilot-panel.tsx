@@ -6784,9 +6784,12 @@ export function AutopilotPanel({
                         ? ` · ${accountIdentity({ account: item.connection_account })}`
                         : ""}
                       {/* Only worth saying where it is true: every destination
-                          takes video, so "video only" is the exception and
-                          "carousels too" is the news. */}
-                      {item.accepts_carousel ? " · carousels too" : ""}</small>
+                          takes video, so what this adds is that pictures can
+                          go out here as well. Said as the pair it is rather
+                          than as an aside about carousels - the line around it
+                          is facts about the account, and an afterthought read
+                          as one. */}
+                      {item.accepts_carousel ? " · video and carousels" : ""}</small>
                   </span>
                 </div>
                 {/* The decision, next to the account it applies to. Someone who
