@@ -1330,10 +1330,26 @@ def reconcile_executions(
             published.append(execution.id)
         elif job.status == "failed":
             failure_class = _classify_failure(job.last_error or "")
+            again = redelivery_reason(execution, failure_class, job.last_error or "")
             if failure_class == "uncertain":
                 execution.state = "uncertain"
                 execution.failure_class = "uncertain"
                 uncertain.append(execution.id)
+            elif again:
+                # The approval stands. Sent again rather than handed back to
+                # the person who already decided it - see `redelivery_reason`
+                # for what is narrow enough to be sent again at all.
+                sent = _redeliver(session, execution, now=moment, reason=again)
+                if sent:
+                    redelivered.append(execution.id)
+                    execution.error = (job.last_error or "")[:1000]
+                    execution.updated_at = moment
+                    continue
+                # No campaign behind it, or the engine would not take the job:
+                # it settles as failed exactly as it would have before.
+                execution.state = "failed"
+                execution.failure_class = failure_class
+                failed.append(execution.id)
             else:
                 execution.state = "failed"
                 execution.failure_class = failure_class
