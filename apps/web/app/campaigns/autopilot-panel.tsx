@@ -18,7 +18,9 @@
 import dynamic from "next/dynamic";
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,
+} from "react";
 import {
   Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, Maximize2, MessageCircle,
   Send, Share2,
@@ -775,6 +777,95 @@ function QueuePictureThumb({ asset, sources, workspaceId, apiFetch }: {
           onPrevious={previous}
           onNext={next}
         />
+      )}
+    </>
+  );
+}
+
+/**
+ * A timeline row's thumbnail: hovered to glance, pressed to look properly.
+ *
+ * The row's still could be hovered and nothing else, while the same picture
+ * inside the held-post dialog opened full size. A picture post opens its
+ * whole set in the shared lightbox through the same control the queue rows
+ * use; a video post opens its poster, which is the still the row shows - the
+ * clip itself plays in the row's "see exactly what posted" disclosure, where
+ * sound and length belong.
+ */
+function TimelineThumb({ entry, asset, workspaceId, apiFetch }: {
+  entry: TimelineEntry;
+  asset: LibraryAsset | null;
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const pictures = entry.video_path ? [] : entry.image_paths;
+  if (pictures.length > 0) {
+    return (
+      <QueuePictureThumb
+        asset={asset ? { ...asset, media_kind: "image" } : null}
+        sources={pictures.map((path) => (
+          `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+          + `?path=${encodeURIComponent(path)}`
+        ))}
+        workspaceId={workspaceId}
+        apiFetch={apiFetch}
+      />
+    );
+  }
+  if (!asset) {
+    return <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>;
+  }
+  return <PosterThumb asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />;
+}
+
+/**
+ * A video post's poster as the row's thumbnail, openable full size.
+ *
+ * Drawn from the poster bytes once fetched, in the same frame the Library's
+ * thumbnail draws, so the row keeps its shape; the frame is the trigger and
+ * the lightbox shows the same still as large as the window takes it.
+ */
+function PosterThumb({ asset, workspaceId, apiFetch }: {
+  asset: LibraryAsset;
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const hasThumbnail = asset.versions.some((version) => version.kind === "thumbnail");
+  const poster = useAssetPoster(hasThumbnail ? asset.id : null, workspaceId, apiFetch);
+  const [ratio, setRatio] = useState(9 / 16);
+  const [open, setOpen] = useState(false);
+  if (!poster) {
+    return <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />;
+  }
+  return (
+    <>
+      <HoverPreview
+        label="Video still - view full size"
+        ratio={ratio}
+        className="autopilot-queue-zoom"
+        onActivate={() => setOpen(true)}
+        media={(
+          // eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL
+          <img src={poster} alt="Larger view of the video still" />
+        )}
+      >
+        <span className="picker-thumb" style={{ "--thumb-ratio": String(ratio) } as CSSProperties}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL */}
+          <img
+            src={poster}
+            alt=""
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget;
+              if (naturalWidth && naturalHeight) setRatio(naturalWidth / naturalHeight);
+            }}
+          />
+        </span>
+        <span className="campaign-edit-media-zoom" aria-hidden="true">
+          <Maximize2 size={12} />
+        </span>
+      </HoverPreview>
+      {open && (
+        <Lightbox open src={poster} alt={asset.title || "Video still"} onClose={() => setOpen(false)} />
       )}
     </>
   );
@@ -7944,9 +8035,12 @@ export function AutopilotPanel({
                           <i aria-hidden="true" />
                         </div>
                         <div className="campaign-pipeline-thumb">
-                          {thumbnailAsset
-                            ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
-                            : <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>}
+                          <TimelineThumb
+                            entry={entry}
+                            asset={thumbnailAsset}
+                            workspaceId={workspaceId}
+                            apiFetch={apiFetch}
+                          />
                         </div>
                         <article>
                           {/* Where it went, and what carried it. The engine is

@@ -1656,6 +1656,12 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-pipeline-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: contain; }
 /* No media to measure, so it keeps the old landscape placeholder shape. */
 .campaign-pipeline-thumb-empty { inline-size: 52px; aspect-ratio: 9 / 16; }
+/* The row's still is the same control the queue row and the edit dialog use -
+   hovered to glance, pressed to open - drawn at this row's height rather than
+   the queue's, because the frame above already stands to the row. */
+.campaign-pipeline-thumb .autopilot-queue-zoom { display: grid; place-items: center; max-inline-size: 100%; }
+.campaign-pipeline-thumb .autopilot-queue-zoom .picker-thumb { cursor: zoom-in; }
+.campaign-pipeline-thumb .autopilot-queue-zoom-still { block-size: 78px; max-inline-size: 100%; }
 .campaign-pipeline-thumb .picker-thumb b { font-size: 13px; }
 .campaign-pipeline-thumb .picker-thumb i { display: none; }
 .campaign-pipeline article { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; padding: 12px 14px; }
