@@ -29,6 +29,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from trendrelay_api import approval_words as words
@@ -36,7 +37,10 @@ from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.config import get_settings
 from trendrelay_api.foundation import audit
 from trendrelay_api.models import Campaign, Workspace
-from trendrelay_api.publication_models import PublicationExecution
+from trendrelay_api.publication_models import (
+    CampaignApprovalNotice,
+    PublicationExecution,
+)
 
 #: How many held posts one planning pass sends as cards. Past this the rest
 #: are one line with a count: the point is to be told, and the inbox lists
@@ -255,10 +259,113 @@ def _notes_for(session: Session, held: list[dict[str, Any]]) -> None:
         item.setdefault("notes", notes.get(str(item.get("queue_item_id") or "")) or "")
 
 
+def _pairing(item: dict[str, Any]) -> tuple[str, str] | None:
+    """The clip-and-account a card is about, or None when it cannot be keyed.
+
+    An execution's queue item and destination are both nullable - a one-off
+    Publish post has neither - and a held post missing either is one this
+    cannot remember. Those fall through to being announced, which is the
+    behaviour there has always been for a case a campaign does not produce.
+    """
+    queue_item_id = str(item.get("queue_item_id") or "")
+    destination_id = str(item.get("destination_id") or "")
+    if not queue_item_id or not destination_id:
+        return None
+    return queue_item_id, destination_id
+
+
+def notice_for(
+    session: Session, campaign_id: str, pairing: tuple[str, str],
+) -> CampaignApprovalNotice | None:
+    """The card already sent for this clip and account, if one was."""
+    queue_item_id, destination_id = pairing
+    return session.scalar(
+        select(CampaignApprovalNotice).where(
+            CampaignApprovalNotice.campaign_id == campaign_id,
+            CampaignApprovalNotice.queue_item_id == queue_item_id,
+            CampaignApprovalNotice.destination_id == destination_id,
+        )
+    )
+
+
+def settle_notice(session: Session, execution: PublicationExecution) -> None:
+    """Mark the card for this execution's post decided, so nothing re-asks.
+
+    A dismissed post is proposed again within the minute and a failed one on
+    the next pass; both would otherwise be announced as though nobody had
+    ever been asked. The notice stays behind to say somebody was.
+    """
+    if not (execution.campaign_id and execution.queue_item_id and execution.destination_id):
+        return
+    notice = notice_for(
+        session, execution.campaign_id,
+        (execution.queue_item_id, execution.destination_id),
+    )
+    if notice is not None and notice.settled_at is None:
+        notice.settled_at = datetime.now(UTC)
+        notice.updated_at = notice.settled_at
+
+
+def clear_notice(session: Session, execution: PublicationExecution) -> None:
+    """Forget the card, because this post has now actually gone out.
+
+    The clip returns to the back of the rotation and its next outing is a new
+    posting decision, not the same one asked again - so that one is announced,
+    and the memory that would have suppressed it is spent here. The only
+    place a notice is ever removed.
+    """
+    if not (execution.campaign_id and execution.queue_item_id and execution.destination_id):
+        return
+    notice = notice_for(
+        session, execution.campaign_id,
+        (execution.queue_item_id, execution.destination_id),
+    )
+    if notice is not None:
+        session.delete(notice)
+
+
+def _repoint(
+    session: Session, notice: CampaignApprovalNotice, item: dict[str, Any],
+    autopilot: CampaignAutopilot, *, language: str,
+) -> None:
+    """Aim the card already in the chat at the post's newest execution.
+
+    The card the approver is looking at carries the id of the execution it was
+    sent for, and that row may be long settled - failed, or dismissed - with
+    the post since frozen again as a new one. Pressing it would answer "that
+    post is gone" for a post that is sitting in the inbox right now. So the
+    buttons are rewritten to decide the execution that actually exists, which
+    is what makes a press land however many times the post has been re-frozen.
+
+    Nothing is sent. A card that cannot be edited keeps the buttons it had and
+    says so in the app, which is better than a second card.
+    """
+    from trendrelay_api.integrations import telegram
+
+    execution_id = str(item.get("execution_id") or "")
+    if not execution_id or execution_id == notice.execution_id:
+        return
+    if notice.chat_id and notice.message_id is not None and notice.settled_at is None:
+        telegram.edit_card(
+            chat_id=notice.chat_id, message_id=notice.message_id,
+            buttons=card_buttons(execution_id, autopilot.campaign_id, language=language),
+        )
+    notice.execution_id = execution_id
+    notice.updated_at = datetime.now(UTC)
+
+
 def announce_held(
     session: Session, autopilot: CampaignAutopilot, held: list[dict[str, Any]],
 ) -> str:
     """Send each held post to the campaign's approver on Telegram, as a card.
+
+    Once per post, and only the first time. A post whose card already went out
+    is not announced again however often it is frozen again - a failed
+    delivery and a dismissal both settle the execution and free the queue
+    item, so the next pass re-proposes the identical post as a new row, and
+    announcing that was one post drawing four cards in three hours. The card
+    already in the chat is re-pointed at the new execution instead, so the
+    press still lands; see `_repoint`.
 
     Returns one sentence for the run's note, whichever way it went. Never
     raises: the posts are held in the app regardless, and a chat that could
@@ -276,22 +383,72 @@ def announce_held(
     name = campaign.name if campaign else "Campaign"
     zone = workspace.timezone if workspace else None
     language = card_language(autopilot)
-    _notes_for(session, held[:CARDS_PER_PASS])
+
+    # Which of these the approver has already been shown. Settled here, before
+    # a single card goes out, so a chat that fails halfway cannot re-ask about
+    # the ones it did reach.
+    fresh: list[dict[str, Any]] = []
+    known = 0
+    for item in held:
+        pairing = _pairing(item)
+        notice = notice_for(session, autopilot.campaign_id, pairing) if pairing else None
+        if notice is None:
+            fresh.append(item)
+            continue
+        known += 1
+        _repoint(session, notice, item, autopilot, language=language)
+
+    if not fresh:
+        return (
+            f"Already announced on Telegram: {known} post(s) were asked about before."
+            if known else ""
+        )
+    _notes_for(session, fresh[:CARDS_PER_PASS])
     sent = 0
     left_out: list[str] = []
     try:
-        for item in held[:CARDS_PER_PASS]:
+        for item in fresh[:CARDS_PER_PASS]:
             images, video = _media_of(item)
+            execution_id = str(item["execution_id"])
             outcome = telegram.send_card(
                 card_text(name, item, zone=zone, language=language),
                 buttons=card_buttons(
-                    str(item["execution_id"]), autopilot.campaign_id, language=language,
+                    execution_id, autopilot.campaign_id, language=language,
                 ),
                 images=images, video=video,
             )
             left_out.extend(outcome.get("skipped") or [])
+            # Written the moment the card exists, and flushed, so a failure on
+            # the next one cannot leave a card in the chat that nothing
+            # remembers - which is exactly how a post gets asked about twice.
+            #
+            # In a savepoint because the worker's tick and a request that
+            # announces - the campaign's Telegram switch - can be in this loop
+            # at the same time, and the unique index is what decides which of
+            # them owns the pairing. Losing that race means the other one has
+            # the notice, so this one has nothing left to record; it must not
+            # take the rest of the plan down for it.
+            pairing = _pairing(item)
+            if pairing:
+                try:
+                    with session.begin_nested():
+                        session.add(CampaignApprovalNotice(
+                            workspace_id=autopilot.workspace_id,
+                            campaign_id=autopilot.campaign_id,
+                            queue_item_id=pairing[0],
+                            destination_id=pairing[1],
+                            execution_id=execution_id,
+                            chat_id=str(outcome.get("chat_id") or "") or None,
+                            message_id=outcome.get("message_id"),
+                        ))
+                except IntegrityError:
+                    print(
+                        "Telegram card recorded by another pass: "
+                        f"{pairing[0]} to {pairing[1]}",
+                        flush=True,
+                    )
             sent += 1
-        rest = len(held) - sent
+        rest = len(fresh) - sent
         if rest > 0:
             link = app_link(autopilot.campaign_id)
             telegram.send_message(
@@ -304,9 +461,11 @@ def announce_held(
             )
     except telegram.TelegramUnavailable as error:
         if sent:
-            return f"Announced {sent} of {len(held)} on Telegram; then: {error}"
+            return f"Announced {sent} of {len(fresh)} on Telegram; then: {error}"
         return f"Not announced on Telegram: {error}"
     note = f"Announced {sent} post{'' if sent == 1 else 's'} on Telegram."
+    if known:
+        note = f"{note} {known} was already asked about."
     if left_out:
         # Said, because a card without its pictures is a different decision.
         note = f"{note} Media left off a card: {'; '.join(left_out[:3])}"
@@ -325,6 +484,9 @@ def announce_executions(
     held = [
         {
             "execution_id": execution.id,
+            # The pairing the announcement is remembered by, so a post the
+            # chat has already been shown is not shown again by the switch.
+            "destination_id": execution.destination_id,
             "destination": execution.destination_label,
             "caption": execution.caption,
             "at": execution.scheduled_at,
@@ -344,17 +506,25 @@ def announce_executions(
 def announce_overdue(
     session: Session, autopilot: CampaignAutopilot, *, now: datetime | None = None,
 ) -> str:
-    """Tell the approver once more, the first time a held post is found late.
+    """Say on the post's own card that its due time has passed, once.
 
     `announce_held` sends a card the moment a post is frozen for a person -
     usually well ahead of its own due time, since a campaign holds the next
     slot in front of somebody before the clock gets there. A card sent early
-    says nothing once the clock catches up to it: Telegram does not remind on
-    its own, and a chat with any traffic buries that first card under
-    whatever came after it. This is the one follow-up a held post ever gets -
-    once, the first tick its `scheduled_at` is found in the past - so a
-    missed deadline is something the approver was told, rather than a
-    silence nobody chose.
+    says nothing once the clock catches up to it, and the app never says a
+    held post is late.
+
+    This used to be a second message, and a second message is the thing a
+    post must never draw: the reminder was remembered on the execution, the
+    execution is replaced every time a delivery fails or somebody skips, and
+    a replaced execution re-armed it. So the one new fact - that time ran out
+    - is written onto the card that is already in the chat, in place, above
+    the campaign's own name. One post, one message, edited as the post's
+    situation changes.
+
+    Remembered on the notice rather than the execution, for the same reason
+    the announcement is: the notice is the thing that survives the post being
+    frozen again.
 
     Called every tick regardless of what that tick held, because the posts
     this looks for are not new: they were frozen minutes, hours or days ago
@@ -377,7 +547,6 @@ def announce_overdue(
             PublicationExecution.state == "proposed",
             PublicationExecution.scheduled_at.is_not(None),
             PublicationExecution.scheduled_at < moment,
-            PublicationExecution.overdue_notified_at.is_(None),
         )
         .order_by(PublicationExecution.scheduled_at)
     ).all()
@@ -388,48 +557,50 @@ def announce_overdue(
     name = campaign.name if campaign else "Campaign"
     zone = workspace.timezone if workspace else None
     language = card_language(autopilot)
-    sent = 0
-    try:
-        for execution in overdue[:CARDS_PER_PASS]:
-            item = {
-                "destination": execution.destination_label,
-                "caption": execution.caption,
-                "at": execution.scheduled_at,
-                "platform": execution.platform,
-                "reason": execution.held_reason,
-                "reason_code": execution.held_reason_code,
-            }
-            # Text only, with the same buttons the first card had: a press
-            # here decides the execution by its id, not by which message
-            # carried it, so this settles it exactly as the original card or
-            # the inbox would. Re-uploading the pictures a second time would
-            # be the loud part of this message, not the useful part - the
-            # useful part is the one new fact, which is that time ran out.
-            telegram.send_message(
-                card_text(name, item, zone=zone, language=language, overdue=True),
-                buttons=card_buttons(execution.id, autopilot.campaign_id, language=language),
-            )
-            execution.overdue_notified_at = moment
-            sent += 1
-        rest = len(overdue) - sent
-        if rest > 0:
-            link = app_link(autopilot.campaign_id)
-            telegram.send_message(
-                f"<b>{html.escape(name)}</b> · "
-                + html.escape(words.say(language, "more_overdue", count=rest)),
-                buttons=(
-                    [[{"label": words.say(language, "open_app"), "url": link}]]
-                    if link else None
-                ),
-            )
-    except telegram.TelegramUnavailable as error:
-        if sent:
-            return (
-                f"Reminded about {sent} of {len(overdue)} overdue post(s) "
-                f"on Telegram; then: {error}"
-            )
-        return f"Not reminded on Telegram: {error}"
-    return f"Reminded about {sent} overdue post{'' if sent == 1 else 's'} on Telegram."
+    marked = 0
+    for execution in overdue:
+        if not (execution.queue_item_id and execution.destination_id):
+            continue
+        notice = notice_for(
+            session, autopilot.campaign_id,
+            (execution.queue_item_id, execution.destination_id),
+        )
+        # No card to write on, already said, or already decided by somebody.
+        if (
+            notice is None
+            or notice.overdue_notified_at is not None
+            or notice.settled_at is not None
+            or not notice.chat_id
+            or notice.message_id is None
+        ):
+            continue
+        item = {
+            "destination": execution.destination_label,
+            "caption": execution.caption,
+            "at": execution.scheduled_at,
+            "platform": execution.platform,
+            "reason": execution.held_reason,
+            "reason_code": execution.held_reason_code,
+        }
+        # The buttons go on again pointing at the execution that is held now,
+        # which is what `_repoint` would have done anyway - an edit carrying
+        # no markup would strip them and leave a card nobody can answer.
+        changed = telegram.edit_card(
+            chat_id=notice.chat_id, message_id=notice.message_id,
+            text=card_text(name, item, zone=zone, language=language, overdue=True),
+            buttons=card_buttons(
+                execution.id, autopilot.campaign_id, language=language,
+            ),
+        )
+        if not changed:
+            continue
+        notice.execution_id = execution.id
+        notice.overdue_notified_at = moment
+        notice.updated_at = moment
+        marked += 1
+    if not marked:
+        return ""
+    return f"Marked {marked} overdue post{'' if marked == 1 else 's'} on its Telegram card."
 
 
 # --- a press ---------------------------------------------------------------------
@@ -541,6 +712,10 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
         execution.state = "cancelled"
         execution.reconciled_at = utc_now()
         execution.updated_at = utc_now()
+        # A dismissed post frees its slot and its queue item, so the next pass
+        # proposes it straight back. Settling the notice is what keeps that
+        # from arriving as a second card asking the question again.
+        settle_notice(session, execution)
         audit(
             session, None, execution.workspace_id, autopilot.created_by,
             "campaign.exception_dismissed", "campaign", execution.campaign_id or "",

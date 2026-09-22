@@ -4004,6 +4004,12 @@ def _dismiss(
     execution.state = "cancelled"
     execution.reconciled_at = utc_now()
     execution.updated_at = utc_now()
+    # Answered, wherever the answer came from. The post is proposed back on
+    # the next pass, and a Telegram card for it would be the same question a
+    # second time - see `approval_notices.settle_notice`.
+    from trendrelay_api.approval_notices import settle_notice
+
+    settle_notice(session, execution)
     paused = False
     if stop_proposing and execution.queue_item_id:
         item = session.scalar(

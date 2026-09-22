@@ -496,6 +496,57 @@ def settle_button(
         raise TelegramUnavailable(f"Telegram refused the answer: {_said(error)}") from error
 
 
+def edit_card(
+    *,
+    chat_id: str,
+    message_id: int,
+    buttons: list[list[Button]] | None = None,
+    text: str | None = None,
+) -> bool:
+    """Change a card already in the chat, without sending another one.
+
+    A held post that is frozen again - because its delivery failed, or
+    because somebody skipped it and the next pass proposed it back - is the
+    same post asking the same question, so it re-points the card that is
+    already there rather than adding a second one. The buttons carry the new
+    execution's id; the words are rewritten only when they have something new
+    to say.
+
+    Returns whether the card changed. False rather than raising when Telegram
+    will not have it: a card that could not be edited is a card that is still
+    there and still readable, and the post is held in the app either way.
+    Telegram answers "message is not modified" when the edit is a no-op, which
+    is a success that happens to have changed nothing.
+    """
+    if not chat_id or message_id is None:
+        return False
+    telegram = _telegram_module()
+    token, _chat = _settings()
+    markup = _markup(telegram, buttons)
+
+    async def go() -> bool:
+        async with telegram.Bot(token) as bot:
+            if text is not None:
+                await bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id, text=text[:MESSAGE_LIMIT],
+                    parse_mode=telegram.constants.ParseMode.HTML, reply_markup=markup,
+                    disable_web_page_preview=True,
+                )
+            else:
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id, message_id=message_id, reply_markup=markup,
+                )
+            return True
+
+    try:
+        return bool(_run(go()))
+    except Exception as error:  # noqa: BLE001 - an un-editable card is not a failure
+        if "not modified" in str(error).lower():
+            return True
+        print(f"Telegram card not updated: {_said(error)}", flush=True)
+        return False
+
+
 # --- local state: where the poll left off, and who the bot is ------------------
 
 

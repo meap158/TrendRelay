@@ -1163,6 +1163,15 @@ def approve_execution(
     execution.scheduled_at = at
     execution.held_reason = None
     execution.updated_at = moment
+    # This post has been answered. If the delivery then fails, the execution
+    # settles and frees its queue item, and the next pass freezes the same
+    # post again - so without this it would be put in front of the approver a
+    # second time as though nobody had ever decided it. Which is exactly what
+    # happened: one post drew four Telegram cards across three hours, two of
+    # them after it had already been approved.
+    from trendrelay_api.approval_notices import settle_notice
+
+    settle_notice(session, execution)
     return execution
 
 
@@ -1327,6 +1336,13 @@ def reconcile_executions(
             execution.permalinks = permalinks
             execution.published_at = moment
             record_published(session, execution, now=moment)
+            # The post went out, so the approval it needed is spent. The clip
+            # goes to the back of the rotation and its next outing is a new
+            # decision rather than the same one re-asked, so that one is
+            # announced - which is what forgetting this card allows.
+            from trendrelay_api.approval_notices import clear_notice
+
+            clear_notice(session, execution)
             published.append(execution.id)
         elif job.status == "failed":
             failure_class = _classify_failure(job.last_error or "")

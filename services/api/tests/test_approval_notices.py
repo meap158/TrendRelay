@@ -20,8 +20,12 @@ from trendrelay_api import approval_notices
 from trendrelay_api import approval_words as words
 from trendrelay_api.campaign_runner import run_campaign
 from trendrelay_api.integrations import telegram
+from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.models import AuditEvent
-from trendrelay_api.publication_models import PublicationExecution
+from trendrelay_api.publication_models import (
+    CampaignApprovalNotice,
+    PublicationExecution,
+)
 from test_campaign_authority import (  # noqa: F401 - fixtures
     NOW,
     autopilot,
@@ -36,27 +40,36 @@ def chat(monkeypatch):
     """Telegram set up, with the sends and answers captured rather than made."""
     sent: list[dict] = []
     settled: list[dict] = []
+    edited: list[dict] = []
     monkeypatch.setattr(telegram, "ready", lambda: True)
     monkeypatch.setattr(telegram, "configured_chat_id", lambda: "-100200300")
     monkeypatch.setattr(telegram, "approver_ids", lambda: set())
     monkeypatch.setattr(
         telegram, "send_message",
-        lambda text, **kwargs: sent.append({"text": text, **kwargs}) or {"message_id": len(sent)},
+        lambda text, **kwargs: sent.append({"text": text, **kwargs})
+        or {"message_id": len(sent), "chat_id": "-100200300"},
     )
     monkeypatch.setattr(
         telegram, "send_card",
         lambda text, **kwargs: sent.append({"text": text, **kwargs})
-        or {"message_id": len(sent), "media": len(kwargs.get("images") or []), "skipped": []},
+        or {
+            "message_id": len(sent), "chat_id": "-100200300",
+            "media": len(kwargs.get("images") or []), "skipped": [],
+        },
     )
     monkeypatch.setattr(
         telegram, "settle_button",
         lambda callback_id, **kwargs: settled.append({"id": callback_id, **kwargs}),
     )
     monkeypatch.setattr(
+        telegram, "edit_card",
+        lambda **kwargs: edited.append(kwargs) or True,
+    )
+    monkeypatch.setattr(
         approval_notices, "get_settings",
         lambda: type("S", (), {"public_web_url": "https://relay.example/"})(),
     )
-    return {"sent": sent, "settled": settled}
+    return {"sent": sent, "settled": settled, "edited": edited}
 
 
 def same(session):
@@ -316,12 +329,202 @@ def test_past_the_card_limit_the_rest_are_one_line_with_a_count(session, chat, m
     assert "3 more waiting in the inbox." in chat["sent"][-1]["text"]
 
 
+# --- once per post, however many times it is frozen ------------------------------
+#
+# The bug these exist for: the announcement was remembered by the execution it
+# went out for, and that is the one thing about a held post which does not
+# survive it. A failed delivery and a dismissal both settle the execution and
+# free the queue item, neither stamps the item, so the next minute's plan froze
+# the same post as a new row, found it held, and sent another card. One post
+# drew four cards across three hours - two of them after it had already been
+# approved, and the fourth after somebody had dismissed it.
+
+
+def _held(execution_id: str, **overrides) -> dict:
+    """One entry of the list a planning pass hands the announcer."""
+    item = {
+        "execution_id": execution_id,
+        "queue_item_id": "queued-1",
+        "destination_id": "dest-1",
+        "destination": "youtube account",
+        "platform": "youtube",
+        "caption": "Three ways to pull a better espresso.",
+        "at": NOW,
+        "reason": "Waiting for approval.",
+        "reason_code": "hold_waiting",
+        "image_paths": [],
+        "video_path": None,
+    }
+    item.update(overrides)
+    return item
+
+
+def test_the_same_post_frozen_again_draws_no_second_card(session, chat) -> None:
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+
+    first = approval_notices.announce_held(session, pilot, [_held("exec-1")])
+    session.commit()
+    again = approval_notices.announce_held(session, pilot, [_held("exec-2")])
+
+    assert first == "Announced 1 post on Telegram."
+    assert again == "Already announced on Telegram: 1 post(s) were asked about before."
+    assert len(chat["sent"]) == 1, "one post, one card"
+
+
+def test_the_card_already_in_the_chat_is_re_pointed_at_the_new_execution(
+    session, chat,
+) -> None:
+    """Which is what keeps the press landing.
+
+    The card carries the id of the execution it was sent for. That row is
+    settled - failed, or dismissed - by the time the post is frozen again, so
+    pressing it would answer "that post is gone" about a post sitting in the
+    inbox right now. The buttons are rewritten to decide the row that exists.
+    """
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    approval_notices.announce_held(session, pilot, [_held("exec-1")])
+    session.commit()
+
+    approval_notices.announce_held(session, pilot, [_held("exec-2")])
+
+    [edit] = chat["edited"]
+    assert edit["chat_id"] == "-100200300" and edit["message_id"] == 1
+    assert edit["buttons"][0][0]["callback"] == "apr:exec-2"
+    assert edit["buttons"][0][1]["callback"] == "dis:exec-2"
+    assert edit["buttons"][1][0]["callback"] == "now:exec-2"
+    # Re-pointed, not rewritten: the words are the same post's words.
+    assert "text" not in edit or edit["text"] is None
+    notice = approval_notices.notice_for(session, "camp", ("queued-1", "dest-1"))
+    assert notice.execution_id == "exec-2"
+
+
+def test_a_post_decided_in_the_chat_is_never_asked_about_again(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """A dismissed post is proposed straight back - within the minute, in the
+    run this was found in - and that was a second card asking a question
+    somebody had just answered."""
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
+    pilot = session.scalar(select(CampaignAutopilot))
+    approval_notices.announce_held(session, pilot, [
+        _held(execution.id, queue_item_id=execution.queue_item_id,
+              destination_id=execution.destination_id),
+    ])
+    session.commit()
+    chat["sent"].clear()
+
+    approval_notices.handle_update(same(session), press(execution.id, approval_notices.DISMISS))
+    # The next pass froze the same post again.
+    note = approval_notices.announce_held(session, pilot, [
+        _held("exec-after-dismissal", queue_item_id=execution.queue_item_id,
+              destination_id=execution.destination_id),
+    ])
+
+    assert session.get(PublicationExecution, execution.id).state == "cancelled"
+    assert chat["sent"] == [], "nothing is sent about a post already answered"
+    assert "Already announced" in note
+    notice = approval_notices.notice_for(
+        session, "camp", (execution.queue_item_id, execution.destination_id),
+    )
+    assert notice.settled_at is not None
+    # A settled card says who decided it; re-pointing it would put live
+    # buttons back over that.
+    assert chat["edited"] == []
+
+
+def test_a_post_that_actually_went_out_is_announced_again_next_time_round(
+    session, chat,
+) -> None:
+    """The clip goes back into the rotation, and its next outing is a new
+    posting decision rather than the same one re-asked. Publishing is the
+    only thing that forgets the card."""
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    approval_notices.announce_held(session, pilot, [_held("exec-1")])
+    session.commit()
+    published = PublicationExecution(
+        id="exec-1", workspace_id="ws", campaign_id="camp", state="published",
+        queue_item_id="queued-1", destination_id="dest-1", media_path="clip.mp4",
+    )
+    approval_notices.clear_notice(session, published)
+    session.commit()
+
+    note = approval_notices.announce_held(session, pilot, [_held("exec-2")])
+
+    assert note == "Announced 1 post on Telegram."
+    assert len(chat["sent"]) == 2
+
+
+def test_a_pairing_another_pass_recorded_first_does_not_fail_the_plan(
+    session, chat, monkeypatch, capsys,
+) -> None:
+    """The worker's tick and the campaign's Telegram switch can both be in
+    the announcer at once, and the unique index decides which of them owns
+    the pairing. Losing that race leaves this one nothing to record - not a
+    reason to take the rest of the plan down."""
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    session.add(CampaignApprovalNotice(
+        id="notice-theirs", workspace_id="ws", campaign_id="camp",
+        queue_item_id="queued-1", destination_id="dest-1", execution_id="exec-theirs",
+    ))
+    session.commit()
+    # Their row lands between this pass reading and this pass writing.
+    monkeypatch.setattr(approval_notices, "notice_for", lambda *a, **k: None)
+
+    note = approval_notices.announce_held(session, pilot, [_held("exec-ours")])
+
+    assert note == "Announced 1 post on Telegram."
+    assert "recorded by another pass" in capsys.readouterr().out
+    assert session.get(CampaignApprovalNotice, "notice-theirs") is not None
+
+
+def test_a_post_with_no_pairing_to_key_on_is_announced_as_it_always_was(
+    session, chat,
+) -> None:
+    """A queue item and a destination are both nullable, and a held post
+    missing either is one this cannot remember. It is announced rather than
+    swallowed - the old behaviour, for a case a campaign does not produce."""
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+
+    approval_notices.announce_held(session, pilot, [_held("exec-1", queue_item_id=None)])
+    approval_notices.announce_held(session, pilot, [_held("exec-2", queue_item_id=None)])
+
+    assert len(chat["sent"]) == 2
+
+
+def test_the_switch_does_not_re_announce_what_the_chat_has_already_seen(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """Turning Telegram on sends what is waiting. Turning it off and on again
+    used to send all of it a second time."""
+    # Held while the switch was off, which is what the switch exists to catch up on.
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=False)
+    pilot = session.scalar(select(CampaignAutopilot))
+    pilot.approvals_telegram = True
+
+    first = approval_notices.announce_executions(session, pilot, [execution])
+    session.commit()
+    again = approval_notices.announce_executions(session, pilot, [execution])
+
+    assert first == "Announced 1 post on Telegram."
+    assert "Already announced" in again
+    assert len(chat["sent"]) == 1
+
+
 # --- overdue ---------------------------------------------------------------------
 
 
-def _overdue_row(session, identifier: str, *, at, campaign_id: str = "camp", **overrides):
+def _overdue_row(
+    session, identifier: str, *, at, campaign_id: str = "camp", card: bool = True,
+    **overrides,
+):
     """A held post already frozen, its own due time set directly rather than
-    reached by advancing a clock through a planning pass."""
+    reached by advancing a clock through a planning pass.
+
+    With `card`, the notice standing for the Telegram card that went out when
+    it was frozen comes too, because the overdue pass writes on that card
+    rather than sending another one - and a post whose card was never sent
+    has nothing to write on.
+    """
     fields: dict = {
         "workspace_id": "ws",
         "campaign_id": campaign_id,
@@ -333,10 +536,23 @@ def _overdue_row(session, identifier: str, *, at, campaign_id: str = "camp", **o
         "media_path": "clip.mp4",
         "held_reason": "Waiting for approval.",
         "held_reason_code": "hold_waiting",
+        "queue_item_id": f"queued-{identifier}",
+        "destination_id": f"dest-{identifier}",
     }
     fields.update(overrides)
     row = PublicationExecution(id=identifier, created_by="user-1", **fields)
     session.add(row)
+    if card:
+        session.add(CampaignApprovalNotice(
+            id=f"notice-{identifier}",
+            workspace_id=fields["workspace_id"],
+            campaign_id=campaign_id,
+            queue_item_id=fields["queue_item_id"],
+            destination_id=fields["destination_id"],
+            execution_id=identifier,
+            chat_id="-100200300",
+            message_id=7,
+        ))
     session.commit()
     return row
 
@@ -389,22 +605,64 @@ def test_decided_text_is_trusted_rather_than_escaped_again() -> None:
     assert "&amp;amp;" not in text
 
 
-def test_a_held_post_is_reminded_once_its_own_time_has_passed(session, chat) -> None:
+def test_a_held_post_says_on_its_own_card_that_its_time_has_passed(session, chat) -> None:
+    """The one new fact goes onto the card already in the chat.
+
+    It used to be a second message, and a second message is the thing a post
+    must never draw - see the notice's own docstring for the four cards one
+    post managed before any of this was remembered anywhere that survived it.
+    """
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     due = NOW + timedelta(hours=3)
     execution = _overdue_row(session, "exec-late", at=due)
+    moment = due + timedelta(minutes=1)
 
-    note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(minutes=1))
+    note = approval_notices.announce_overdue(session, pilot, now=moment)
     session.commit()
 
-    assert note == "Reminded about 1 overdue post on Telegram."
-    [card] = chat["sent"]
-    assert card["text"].startswith("⏰ Still waiting")
-    assert card["buttons"][0][0]["callback"] == f"apr:{execution.id}"
-    session.refresh(execution)
-    # SQLite gives a naive datetime back on refresh - the same wall clock,
-    # its tzinfo the query already used and discarded.
-    assert execution.overdue_notified_at == (due + timedelta(minutes=1)).replace(tzinfo=None)
+    assert note == "Marked 1 overdue post on its Telegram card."
+    assert chat["sent"] == [], "nothing new is sent"
+    [edit] = chat["edited"]
+    assert edit["chat_id"] == "-100200300" and edit["message_id"] == 7
+    assert edit["text"].startswith("⏰ Still waiting")
+    # The buttons go back on pointing at the execution held now - an edit
+    # carrying no markup would strip them and leave a card nobody can answer.
+    assert edit["buttons"][0][0]["callback"] == f"apr:{execution.id}"
+    notice = approval_notices.notice_for(
+        session, "camp", (execution.queue_item_id, execution.destination_id),
+    )
+    # SQLite gives a naive datetime back - the same wall clock, its tzinfo
+    # the query already used and discarded.
+    assert notice.overdue_notified_at == moment.replace(tzinfo=None)
+
+
+def test_a_post_whose_card_never_went_out_is_not_marked_overdue(session, chat) -> None:
+    """There is nothing to write on. Sending one now would be a first card
+    for a post whose moment to be asked about has passed anyway."""
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    _overdue_row(session, "exec-uncarded", at=due, card=False)
+
+    note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(hours=1))
+
+    assert note == "" and chat["sent"] == [] and chat["edited"] == []
+
+
+def test_a_post_already_decided_is_not_marked_overdue(session, chat) -> None:
+    """Its card says who decided it. Writing "still waiting" over that would
+    replace the true thing with a false one."""
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    execution = _overdue_row(session, "exec-decided", at=due)
+    notice = approval_notices.notice_for(
+        session, "camp", (execution.queue_item_id, execution.destination_id),
+    )
+    notice.settled_at = due
+    session.commit()
+
+    note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(hours=1))
+
+    assert note == "" and chat["edited"] == []
 
 
 def test_nothing_is_overdue_before_its_own_due_time(session, chat) -> None:
@@ -414,10 +672,10 @@ def test_nothing_is_overdue_before_its_own_due_time(session, chat) -> None:
 
     note = approval_notices.announce_overdue(session, pilot, now=due - timedelta(minutes=1))
 
-    assert note == "" and chat["sent"] == []
+    assert note == "" and chat["sent"] == [] and chat["edited"] == []
 
 
-def test_the_reminder_is_sent_once_and_never_repeated(session, chat) -> None:
+def test_the_overdue_mark_is_made_once_and_never_repeated(session, chat) -> None:
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     due = NOW + timedelta(hours=3)
     _overdue_row(session, "exec-once", at=due)
@@ -427,9 +685,38 @@ def test_the_reminder_is_sent_once_and_never_repeated(session, chat) -> None:
     session.commit()
     second = approval_notices.announce_overdue(session, pilot, now=later + timedelta(hours=5))
 
-    assert first == "Reminded about 1 overdue post on Telegram."
+    assert first == "Marked 1 overdue post on its Telegram card."
     assert second == ""
-    assert len(chat["sent"]) == 1
+    assert len(chat["edited"]) == 1
+
+
+def test_the_overdue_mark_survives_the_post_being_frozen_again(session, chat) -> None:
+    """The thing that used to re-arm it.
+
+    It was remembered on the execution, and a failed delivery or a skip
+    replaces the execution - so every replacement got the reminder again. The
+    notice outlives the row, so the mark is made once per post however many
+    executions the post goes through.
+    """
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    due = NOW + timedelta(hours=3)
+    first_row = _overdue_row(session, "exec-first", at=due)
+    later = due + timedelta(hours=1)
+    approval_notices.announce_overdue(session, pilot, now=later)
+    session.commit()
+
+    # The delivery failed, and the next pass froze the same post again.
+    first_row.state = "failed"
+    _overdue_row(
+        session, "exec-again", at=due, card=False,
+        queue_item_id=first_row.queue_item_id,
+        destination_id=first_row.destination_id,
+    )
+
+    again = approval_notices.announce_overdue(session, pilot, now=later + timedelta(hours=2))
+
+    assert again == ""
+    assert len(chat["edited"]) == 1, "the one card was marked once"
 
 
 def test_a_campaign_that_never_asked_for_telegram_is_never_reminded(session, chat) -> None:
@@ -439,7 +726,7 @@ def test_a_campaign_that_never_asked_for_telegram_is_never_reminded(session, cha
 
     note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(hours=1))
 
-    assert note == "" and chat["sent"] == []
+    assert note == "" and chat["sent"] == [] and chat["edited"] == []
 
 
 def test_the_reminder_works_without_being_handed_a_clock(session, chat) -> None:
@@ -457,26 +744,32 @@ def test_the_reminder_works_without_being_handed_a_clock(session, chat) -> None:
 
     note = approval_notices.announce_overdue(session, pilot)
 
-    assert note == "Reminded about 1 overdue post on Telegram."
+    assert note == "Marked 1 overdue post on its Telegram card."
 
 
-def test_past_the_card_limit_the_overdue_rest_are_one_line_with_a_count(session, chat) -> None:
+def test_every_overdue_card_is_marked_because_none_of_it_is_a_new_message(
+    session, chat,
+) -> None:
+    """`CARDS_PER_PASS` capped how many messages one pass could send. Nothing
+    is sent here - each post's own card is edited in place - so there is
+    nothing to cap, and a chat's worth of late posts all say they are late."""
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     due = NOW + timedelta(hours=3)
-    for index in range(approval_notices.CARDS_PER_PASS + 3):
+    total = approval_notices.CARDS_PER_PASS + 3
+    for index in range(total):
         _overdue_row(session, f"exec-late-{index}", at=due)
 
     note = approval_notices.announce_overdue(session, pilot, now=due + timedelta(hours=1))
 
-    assert note == f"Reminded about {approval_notices.CARDS_PER_PASS} overdue posts on Telegram."
-    assert len(chat["sent"]) == approval_notices.CARDS_PER_PASS + 1
-    assert "3 more overdue, waiting in the inbox." in chat["sent"][-1]["text"]
+    assert note == f"Marked {total} overdue posts on its Telegram card."
+    assert chat["sent"] == []
+    assert len(chat["edited"]) == total
 
 
-def test_a_planning_pass_reminds_about_a_post_held_on_an_earlier_one(
+def test_a_planning_pass_marks_a_post_held_on_an_earlier_one(
     session, tmp_path, engine_stub, chat,
 ) -> None:
-    """The pass that reminds does not need to have held anything itself -
+    """The pass that marks does not need to have held anything itself -
     the whole point is a post frozen well before today still gets told
     about once today's clock runs past its own due time."""
     campaign_setup(session, tmp_path)
@@ -490,9 +783,10 @@ def test_a_planning_pass_reminds_about_a_post_held_on_an_earlier_one(
 
     result = run_campaign(session, pilot, now=due + timedelta(hours=1))
 
-    assert "Reminded about 1 overdue post on Telegram." in result["note"]
-    assert len(chat["sent"]) == 2, "the first hold and the overdue reminder"
-    assert chat["sent"][1]["text"].startswith("⏰ Still waiting")
+    assert "Marked 1 overdue post on its Telegram card." in result["note"]
+    assert len(chat["sent"]) == 1, "the first hold, and nothing since"
+    [edit] = chat["edited"]
+    assert edit["text"].startswith("⏰ Still waiting")
 
 
 # --- the press ------------------------------------------------------------------

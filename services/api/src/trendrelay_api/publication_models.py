@@ -227,3 +227,77 @@ class PublicationExecution(Base):
     created_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
+class CampaignApprovalNotice(Base):
+    """That this post was already put in front of the approver, and where.
+
+    The announcement used to be remembered by the execution it went out for,
+    which is the one thing about a held post that does not survive it. A
+    failed delivery and a dismissal both settle their execution and free the
+    queue item, and neither stamps anything on the item - so the next minute's
+    plan froze the same post into the same slot as a brand new execution,
+    found it held, and sent the approver a brand new card. Four cards for one
+    post in three hours, each asking for a decision that had already been made
+    twice.
+
+    So the memory belongs to the post, not to the row that happened to carry
+    it: this is keyed by the pairing an approver actually sees - this clip, to
+    this account, in this campaign - and outlives every execution frozen for
+    it. One card per pairing, and `message_id` is which card, so a re-proposed
+    post re-points the one that is already in the chat instead of adding to it.
+
+    Cleared when the post is finally published, because the clip goes back
+    into the rotation and its next outing is a new posting decision rather
+    than the same one asked again.
+    """
+
+    __tablename__ = "campaign_approval_notices"
+    __table_args__ = (
+        # One card per post per account. The announcer reads this on every
+        # pass that holds anything, and it is what makes a second card
+        # impossible rather than merely unlikely.
+        Index(
+            "unique_campaign_approval_notice",
+            "campaign_id",
+            "destination_id",
+            "queue_item_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("aprnotice")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    campaign_id: Mapped[str] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    #: The pairing this card is about. Both nullable in the execution they are
+    #: read from, and a held post missing either is one this cannot key on -
+    #: `announce_held` falls back to announcing it, which is the old behaviour
+    #: for a case that does not arise in practice.
+    queue_item_id: Mapped[str] = mapped_column(String(64), index=True)
+    destination_id: Mapped[str] = mapped_column(String(64), index=True)
+    #: The execution the card's buttons currently decide. Re-pointed, not
+    #: re-sent, when the post is frozen again: a press has to reach a row that
+    #: is still there, and the row it was sent for may be long settled.
+    execution_id: Mapped[str] = mapped_column(String(64), index=True)
+    #: Where the card is, so it can be edited - re-pointed, marked overdue, or
+    #: settled. Empty when the send never got far enough to have one.
+    chat_id: Mapped[str | None] = mapped_column(String(64))
+    message_id: Mapped[int | None] = mapped_column(Integer)
+    sent_at: Mapped[datetime] = mapped_column(default=utc_now)
+    #: When the card was rewritten to say the post's own due time had passed.
+    #: Once per post rather than once per execution, which is what it used to
+    #: be - and an edit rather than a second message, because a post is
+    #: announced once.
+    overdue_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: When a decision landed on this card. Kept rather than deleted: a
+    #: dismissed post is re-proposed within the minute, and a settled notice
+    #: is what stops that becoming another card.
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)

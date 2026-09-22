@@ -42,6 +42,34 @@ for by the Library's own still.
 from `approval_words`, in the seven languages the interface has, defaulting to
 the campaign's post language. The caption is quoted as written.
 
+**A post is announced once, and the card is re-pointed rather than re-sent.**
+The announcement used to be remembered by the execution it went out for,
+which is the one thing about a held post that does not survive it. A failed
+delivery and a dismissal both settle their execution and free the queue item,
+and neither stamps the item - so the next minute's plan froze the same post
+into the same slot as a new execution, found it held, and sent another card.
+One post drew four cards across three hours, two of them after it had already
+been approved and the last after somebody had dismissed it.
+
+So the memory belongs to the post rather than to the row that happened to
+carry it: `CampaignApprovalNotice` is keyed by the pairing an approver
+actually sees - this clip, to this account, in this campaign - and a unique
+index on it is what makes a second card impossible rather than merely
+unlikely. A post frozen again re-points the card already in the chat at the
+execution that now exists, because the card carries an execution id and a
+press has to reach a row that is still there; without that, pressing the card
+answers "that post is gone" about a post sitting in the inbox. A decision
+settles the notice wherever it was made, the app included, so a post that was
+answered is never asked about again. Publishing is the only thing that forgets
+a notice: the clip returns to the rotation and its next outing is a new
+posting decision rather than the same one re-asked.
+
+The overdue follow-up became part of the same rule. It was a second message,
+remembered on the execution, so every replaced execution re-armed it - the
+repeat problem wearing a different hat. It is now written onto the card that
+is already there, above the campaign's name, once per post. One post, one
+message, edited as the post's situation changes.
+
 **Long polling in the worker, not a webhook.** A press arrives as an update
 that something has to fetch. A webhook needs a public HTTPS address, which a
 local install does not have. The worker runs one thread beside its job loop
@@ -78,6 +106,12 @@ never reaches the approver's phone because it was never asked to.
 - A workspace that wants this accepts that anyone in the saved chat can
   approve its posts. That is a real widening of who may publish, and it is
   the operator's to choose per campaign, with the approvers list to narrow it.
+- A post that keeps failing to deliver is now silent after its first card. It
+  is still in the inbox, still re-proposed every pass, and the campaign's run
+  note still says what happened - but the chat, which is where the approver
+  was, no longer says it. That is the trade the once-per-post rule makes, and
+  it is the right way round: four cards asking a question already answered
+  twice taught the approver to ignore the chat, which costs more than silence.
 - The words cannot be edited from the chat. Rewriting a caption is a keyboard
   job and the link on every card opens the post in the app; the chat carries
   the decision, not the editing.
