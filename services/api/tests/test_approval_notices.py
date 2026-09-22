@@ -477,6 +477,54 @@ def test_a_pairing_another_pass_recorded_first_does_not_fail_the_plan(
     assert session.get(CampaignApprovalNotice, "notice-theirs") is not None
 
 
+def test_a_press_that_does_not_land_is_tried_again_before_it_is_given_up_on(
+    session, tmp_path, engine_stub, chat, monkeypatch,
+) -> None:
+    """SQLite is written to by the job loop at the same time, so "database is
+    locked" is the ordinary reason a decision does not land first go - and a
+    press silently dropped is the worst outcome there is, because the presser
+    has no way to know."""
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
+    monkeypatch.setattr(approval_notices, "time", type("T", (), {"sleep": staticmethod(lambda _: None)}))
+    tries: list[int] = []
+    real = approval_notices.decide
+
+    def busy_once(session_, callback):
+        tries.append(1)
+        if len(tries) == 1:
+            raise RuntimeError("database is locked")
+        return real(session_, callback)
+
+    monkeypatch.setattr(approval_notices, "decide", busy_once)
+
+    toast = approval_notices.handle_update(same(session), press(execution.id, "apr"))
+
+    assert len(tries) == 2, "tried again rather than dropped"
+    assert "Approved by @ana" in toast
+    assert session.get(PublicationExecution, execution.id).state == "queued"
+
+
+def test_a_press_that_never_lands_still_says_so_in_the_chat(
+    session, tmp_path, engine_stub, chat, monkeypatch,
+) -> None:
+    """The presser is standing in a chat waiting for the button to stop
+    spinning. An unanswered press looks exactly like a stopped worker."""
+    monkeypatch.setattr(approval_notices, "time", type("T", (), {"sleep": staticmethod(lambda _: None)}))
+
+    def never(session_, callback):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(approval_notices, "decide", never)
+
+    toast = approval_notices.handle_update(same(session), press("exec-1", "apr"))
+
+    assert toast == words.say("en", "press_failed")
+    [answered] = chat["settled"]
+    assert answered["toast"] == toast
+    # The card keeps its buttons, so the decision can still be made.
+    assert answered["message_id"] is None
+
+
 def test_a_post_with_no_pairing_to_key_on_is_announced_as_it_always_was(
     session, chat,
 ) -> None:

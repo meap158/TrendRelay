@@ -748,6 +748,16 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
     ))
 
 
+#: How many times a press is carried out again before it is given up on.
+#: The database is SQLite and the worker writes to it from the job loop at the
+#: same time, so "database is locked" is the ordinary reason a decision does
+#: not land on the first go - and a press that is silently dropped is the
+#: worst outcome there is, because the presser has no way to know.
+PRESS_ATTEMPTS = 3
+#: How long to wait between those attempts.
+PRESS_RETRY_SECONDS = 0.6
+
+
 def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
     """One update from the poll: decide it, and rewrite the card to say so.
 
@@ -756,30 +766,53 @@ def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
     no press in it. Never raises to the loop: a refused press is answered
     with its reason and the card is left as it was, which is the honest
     state.
+
+    A press is either carried out or answered. Those are the only two
+    outcomes, because the presser is standing in a chat waiting for the
+    button to stop spinning, and an unanswered press looks exactly like a
+    stopped worker. So a decision that fails for a reason that is nobody's
+    decision - the database busy under the job loop, most often - is tried
+    again before it is given up on, and giving up on it still says so in the
+    chat rather than only in a log the presser will never read.
     """
     from trendrelay_api.integrations import telegram
 
     callback = update.get("callback")
     if not callback:
         return None
-    original = ""
+    toast, text = "", ""
+    for attempt in range(PRESS_ATTEMPTS):
+        try:
+            with session_factory() as session:
+                toast, text = decide(session, callback)
+            break
+        except PressRefused as refusal:
+            # Understood and declined: the post is gone, already decided, or
+            # not finished. Trying again would refuse it again.
+            toast, text = str(refusal), ""
+            break
+        except Exception as error:  # noqa: BLE001 - the presser has to hear something
+            if attempt + 1 < PRESS_ATTEMPTS:
+                time.sleep(PRESS_RETRY_SECONDS)
+                continue
+            print(f"Telegram press not carried out: {error}", flush=True)
+            toast, text = words.say("en", "press_failed"), ""
+    # Always answered, whichever way it went: the callback is what clears the
+    # button, and an unanswered one spins until Telegram times it out.
     try:
-        with session_factory() as session:
-            toast, text = decide(session, callback)
-    except PressRefused as refusal:
-        toast = str(refusal)
-        text = ""
-    if text:
         telegram.settle_button(
             callback["id"], chat_id=str(callback.get("chat_id")),
-            message_id=callback.get("message_id"), text=text, toast=toast,
+            # Refused or failed: the card stays as it is, buttons and all, so
+            # the decision can still be made. Only a settled press rewrites it.
+            message_id=callback.get("message_id") if text else None,
+            text=text, toast=toast,
         )
-    else:
-        # Refused: the card stays as it is, and only the toast says why.
-        telegram.settle_button(
-            callback["id"], chat_id=str(callback.get("chat_id")),
-            message_id=None, text=original, toast=toast,
-        )
+    except telegram.TelegramUnavailable as error:
+        # The decision landed; only the chat did not hear it. Said here
+        # because a card still showing buttons over a decided post is the
+        # visible symptom, and a second press on it reads as "already
+        # decided" rather than doing anything twice.
+        print(f"Telegram press carried out but the card was not updated: {error}", flush=True)
     return toast
 
 
@@ -797,7 +830,9 @@ def poll_once(session_factory: Any, *, timeout: int = 0) -> int:
         except Exception as error:  # noqa: BLE001 - one press must not stop the rest
             print(f"Telegram press not handled: {error}", flush=True)
         # Advanced per update, so a crash mid-batch does not replay a press
-        # that was already carried out.
+        # that was already carried out. `handle_update` retries and answers
+        # for itself, so by here the press has had its chances and replaying
+        # it would only risk carrying it out twice.
         telegram.write_offset(int(update["update_id"]) + 1)
     return handled
 

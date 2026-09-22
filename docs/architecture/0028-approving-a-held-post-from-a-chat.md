@@ -84,6 +84,15 @@ refused. Within it, an optional list of Telegram user ids narrows further.
 That is the whole of it, and it is written in the tool's notes rather than
 implied.
 
+**A press is either carried out or answered.** Those are the only two
+outcomes, because the presser is standing in a chat waiting for the button to
+stop spinning, and an unanswered press looks exactly like a stopped worker.
+The database is SQLite and the worker writes to it from its job loop at the
+same time, so "database is locked" is the ordinary reason a decision does not
+land first go: a press is carried out again before it is given up on, and
+giving up still says so in the chat rather than only in a log the presser will
+never read.
+
 **The press is the confirmation.** Every outward action in this app carries
 `confirm_external_action`, because a request can be made by anything. A
 button on a card in a private chat is that same deliberate second act, made
