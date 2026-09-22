@@ -1599,8 +1599,26 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-exception-list li > div { display: grid; min-width: 0; gap: 1px; }
 .campaign-exception-list li > div strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-exception-list li > div small { color: var(--muted); font-size: 9px; }
-.campaign-pipeline-summary span { display: grid; gap: 1px; padding: 10px 12px; border-inline-start: 1px solid var(--line); }
-.campaign-pipeline-summary span:first-child { border-inline-start: 0; }
+/* Each tile is a button onto the posts it counts, and has to keep reading as
+   a figure rather than as a control: the type, the alignment and the borders
+   are the ones it had as a span, and what a button adds is the pointer, the
+   focus ring and somewhere for the pressed state to live. */
+.campaign-pipeline-summary > * { display: grid; gap: 1px; padding: 10px 12px; border: 0; border-inline-start: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: start; }
+.campaign-pipeline-summary > :first-child { border-inline-start: 0; }
+.campaign-pipeline-summary > button { cursor: pointer; transition: background-color .12s ease; }
+.campaign-pipeline-summary > button:hover:not(:disabled) { background: color-mix(in srgb, var(--link) 7%, transparent); }
+.campaign-pipeline-summary > button:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+/* Pressed is the one that filters the views below, so it is marked along the
+   edge they share rather than by colour alone - the numbers already use
+   colour to mean something else. */
+.campaign-pipeline-summary > button[aria-pressed="true"] { background: color-mix(in srgb, var(--link) 12%, transparent); box-shadow: inset 0 -3px 0 var(--link); }
+/* Nothing to show, so nothing to press. Still legible: a zero is an answer. */
+.campaign-pipeline-summary > button:disabled { cursor: default; }
+.campaign-pipeline-summary > button:disabled small { opacity: .75; }
+@media (prefers-reduced-motion: reduce) { .campaign-pipeline-summary > button { transition: none; } }
+/* The way back when a filter matches nothing, under the row it belongs to. */
+.campaign-pipeline-empty { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 10px 0; color: var(--muted); font-size: 11px; }
+.campaign-pipeline-empty button { border: 0; padding: 0; background: none; color: var(--link); font: inherit; text-decoration: underline; cursor: pointer; }
 .campaign-pipeline-summary strong { color: var(--text); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .campaign-pipeline-summary small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .035em; }
 .campaign-pipeline-summary .warn strong { color: var(--bad); }

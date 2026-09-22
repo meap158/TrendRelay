@@ -1064,6 +1064,8 @@ function offerDescription(offer: Offer): string {
  */
 /** How the posting timeline is drawn. */
 type TimelineView = "list" | "calendar" | "grid";
+/** Which of the summary's numbers the timeline is narrowed to, or all of it. */
+type TimelineFilter = "published" | "scheduled" | "planned" | "warnings" | null;
 
 const TAGGED_SHOWN = 6;
 
@@ -2459,6 +2461,15 @@ export function AutopilotPanel({
     oneOf<TimelineView>("list", "calendar", "grid"),
   );
   const [calendarMonth, setCalendarMonth] = useState<string | null>(null);
+  /**
+   * Which of the timeline's four numbers is being looked at, if any.
+   *
+   * Deliberately not persisted, unlike the view above it. A view is a
+   * preference - somebody who likes the calendar likes it tomorrow - and a
+   * filter is a question being asked right now; restored on the next visit it
+   * is a page with most of its posts missing and nothing obvious to blame.
+   */
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>(null);
   // Which day the calendar's "see more" opened, as YYYY-MM-DD in the reader's
   // zone. The drawer lists that day in full; the calendar cell only has room
   // for the first few.
@@ -4250,8 +4261,36 @@ export function AutopilotPanel({
       route: placementSummary(post),
     })),
   ].sort((left, right) => left.at.localeCompare(right.at)) : [];
+  /**
+   * The timeline, narrowed to whichever of the four numbers is pressed.
+   *
+   * The numbers were already the answer to "how many"; the question that
+   * follows one is "which ones", and answering it meant reading a month of
+   * rows and sorting them by eye. Pressing a number narrows the list, the grid
+   * and the calendar alike - the filter is on the entries rather than on a
+   * view, so it survives switching between them and needs no second control
+   * in each.
+   *
+   * A plain pass over an array a page long, computed where the views read it
+   * rather than cached: `timeline` is rebuilt whenever the preview is, and a
+   * memo keyed on a fresh array every render is a memo that never hits.
+   */
+  const timelineMatches = (entry: TimelineEntry): boolean => {
+    if (!timelineFilter) return true;
+    if (timelineFilter === "planned") return entry.kind === "planned";
+    if (timelineFilter === "warnings") {
+      return entry.kind === "delivered"
+        ? entry.status === "failed"
+        : Boolean(entry.problem);
+    }
+    if (entry.kind !== "delivered") return false;
+    return timelineFilter === "scheduled"
+      ? stillToCome(entry)
+      : deliveredStatus(entry).label === "Published";
+  };
+  const shownTimeline = timelineFilter ? timeline.filter(timelineMatches) : timeline;
   const timelineDays = Object.entries(
-    timeline.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
+    shownTimeline.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
       const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone });
       (days[key] ??= []).push(entry);
       return days;
@@ -4260,7 +4299,7 @@ export function AutopilotPanel({
   // Everything on the day the "see more" drawer opened, in the same zone the
   // grid grouped by, so the drawer and the cell agree on which day a post is on.
   const openDayEntries = openDay
-    ? timeline.filter(
+    ? shownTimeline.filter(
         (entry) => new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone }) === openDay,
       )
     : [];
@@ -4293,6 +4332,40 @@ export function AutopilotPanel({
   const deliveryWarnings = (preview?.problems ?? 0) + timeline.filter(
     (entry) => entry.kind === "delivered" && entry.status === "failed",
   ).length;
+  /**
+   * The four numbers, in the order a post moves through them.
+   *
+   * A table rather than four near-identical blocks of markup: they differ in
+   * a label, a count and a sentence, and written out they drifted - one gained
+   * a tooltip the others never got. Scheduled keeps its place in the row even
+   * at zero once something else is filtered, so the tiles do not reshuffle
+   * under the cursor that is using them.
+   */
+  const timelineTiles: {
+    id: Exclude<TimelineFilter, null>;
+    label: string;
+    count: number;
+    help: string;
+    tone?: string;
+  }[] = [
+    {
+      id: "published", label: "published", count: publishedCount,
+      help: "Already posted.",
+    },
+    ...(waitingCount > 0 || timelineFilter === "scheduled" ? [{
+      id: "scheduled" as const, label: "scheduled", count: waitingCount,
+      help: "Handed to the engine, which is holding them until their own time.",
+    }] : []),
+    {
+      id: "planned", label: "planned", count: plannedCount,
+      help: "Still here: this campaign hands them over when their slot comes.",
+    },
+    {
+      id: "warnings", label: "delivery warnings", count: deliveryWarnings,
+      help: "Refused by an engine, or refused before being sent.",
+      tone: deliveryWarnings ? "warn" : "good",
+    },
+  ];
 
   return (
     <div className="autopilot">
@@ -7652,20 +7725,28 @@ export function AutopilotPanel({
                 scheduled is on the engine waiting for its own time, planned
                 is still here. The middle one only appears when there is one,
                 so a campaign that publishes on the spot keeps three tiles. */}
-            <span title="Already posted.">
-              <strong>{publishedCount}</strong><small>published</small>
-            </span>
-            {waitingCount > 0 && (
-              <span title="Handed to the engine, which is holding them until their own time.">
-                <strong>{waitingCount}</strong><small>scheduled</small>
-              </span>
-            )}
-            <span title="Still here: this campaign hands them over when their slot comes.">
-              <strong>{plannedCount}</strong><small>planned</small>
-            </span>
-            <span className={deliveryWarnings ? "warn" : "good"}>
-              <strong>{deliveryWarnings}</strong><small>delivery warnings</small>
-            </span>
+            {/* Each number is the way into the posts behind it. A count
+                raises "which ones", and answering that meant reading a month
+                of rows by eye; pressing one narrows whichever view is open -
+                list, grid or calendar - because the filter is on the entries
+                rather than on a view. Pressed again, or Show all, clears it.
+
+                Real buttons, so the row is reachable by tab and says what it
+                is with `aria-pressed`, rather than a div that happens to
+                respond to a click. */}
+            {timelineTiles.map(({ id, label, count, help, tone }) => (
+              <button
+                key={id}
+                type="button"
+                className={tone ?? undefined}
+                aria-pressed={timelineFilter === id}
+                title={timelineFilter === id ? `${help} Press again to show all.` : help}
+                disabled={count === 0 && timelineFilter !== id}
+                onClick={() => setTimelineFilter(timelineFilter === id ? null : id)}
+              >
+                <strong>{count}</strong><small>{label}</small>
+              </button>
+            ))}
           </div>
         )}
         {preview?.measurement?.map((gap) => (
@@ -7685,9 +7766,21 @@ export function AutopilotPanel({
             <p className="autopilot-note" role="status">{preview.note}</p>
           )
         )}
-        {timeline.length > 0 && timelineView === "calendar" && (
+        {/* A filter that matches nothing needs a way back, and the pressed
+            tile is easy to lose in a row of four. Said once, above whichever
+            view is open, rather than as an empty state in each of the three. */}
+        {timeline.length > 0 && shownTimeline.length === 0 && (
+          <p className="campaign-pipeline-empty" role="status">
+            Nothing here is {timelineTiles.find(
+              (tile) => tile.id === timelineFilter)?.label ?? "shown"}.{" "}
+            <button type="button" onClick={() => setTimelineFilter(null)}>
+              Show all {timeline.length}
+            </button>
+          </p>
+        )}
+        {shownTimeline.length > 0 && timelineView === "calendar" && (
           <TimelineCalendar
-            entries={timeline}
+            entries={shownTimeline}
             timezone={readerZone}
             month={calendarMonth
               ?? new Date().toLocaleDateString("en-CA", {
@@ -7698,7 +7791,7 @@ export function AutopilotPanel({
             onOpenDay={setOpenDay}
           />
         )}
-        {timeline.length > 0 && timelineView === "list" && (
+        {shownTimeline.length > 0 && timelineView === "list" && (
           <div className="campaign-pipeline">
             {timelineDays.map(([day, entries]) => (
               <section className="campaign-pipeline-day" key={day}>
@@ -7950,9 +8043,9 @@ export function AutopilotPanel({
             ))}
           </div>
         )}
-        {timeline.length > 0 && timelineView === "grid" && (
+        {shownTimeline.length > 0 && timelineView === "grid" && (
           <div className="campaign-grid">
-            {timeline.map((entry) => {
+            {shownTimeline.map((entry) => {
               const destination = entry.destination ?? destinations.find(
                 (item) => item.id === entry.destination_id) ?? null;
               const platform = destination?.platform;
