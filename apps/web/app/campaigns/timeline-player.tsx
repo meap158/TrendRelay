@@ -4,6 +4,7 @@ import { Maximize2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Lightbox, useLightboxSet } from "../ui/lightbox";
+import { HoverPreview } from "../ui/hover-preview";
 import { useOpaqueMedia } from "../../lib/media-preview";
 
 /**
@@ -100,6 +101,7 @@ function TimelineImage({ src, path, label, onReady, onOpen }: {
 }) {
   const wrapper = useRef<HTMLSpanElement>(null);
   const seen = useSeen(wrapper);
+  const [ratio, setRatio] = useState(1);
   const { objectUrl, problem } = useOpaqueMedia(src, path, "image/jpeg", seen);
 
   useEffect(() => {
@@ -110,18 +112,30 @@ function TimelineImage({ src, path, label, onReady, onOpen }: {
     <span ref={wrapper} className="timeline-media-slot">
       {problem && <span className="campaign-pipeline-reason">{problem}</span>}
       {objectUrl && (
-        // A button rather than a click handler on the picture, which is what
-        // the Library's own thumbnail is: reachable by keyboard, and saying
-        // what it does when it gets there.
-        <button type="button" className="timeline-media-zoom"
-          aria-label={`${label} - view full size`} title="View full size"
-          onClick={onOpen}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="timeline-media" src={objectUrl} alt={label} />
+        <HoverPreview
+          label={`${label} - view full size`}
+          ratio={ratio}
+          className="timeline-media-zoom"
+          onActivate={onOpen}
+          media={(
+            // eslint-disable-next-line @next/next/no-img-element -- blob preview
+            <img src={objectUrl} alt={`Larger view of ${label.toLowerCase()}`} />
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- blob preview */}
+          <img
+            className="timeline-media"
+            src={objectUrl}
+            alt={label}
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget;
+              if (naturalWidth && naturalHeight) setRatio(naturalWidth / naturalHeight);
+            }}
+          />
           <span className="timeline-media-zoom-mark" aria-hidden="true">
             <Maximize2 size={12} />
           </span>
-        </button>
+        </HoverPreview>
       )}
     </span>
   );

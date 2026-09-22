@@ -1539,6 +1539,18 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
 .autopilot-queue-thumb .picker-thumb b { font-size: 12px; }
 .autopilot-queue-thumb .picker-thumb i { display: none; }
+/* A picture post's thumbnail opens its set: the dialog's zoom mark, plus a
+   count so a carousel says it is one before it is hovered. */
+.autopilot-queue-zoom { position: relative; display: block; border: 0; padding: 0; background: transparent; border-radius: var(--radius-sm); cursor: zoom-in; }
+.autopilot-queue-zoom-frame { display: block; }
+.autopilot-queue-zoom-still { display: block; block-size: 64px; max-inline-size: 84px; object-fit: cover; border-radius: var(--radius-sm); }
+/* The network's own carousel mark rather than a fraction. "1/8" answered a
+   question nobody asked of a thumbnail - which card is showing - where the
+   thing worth knowing at 84px is that there are more. The count is on the row
+   beneath it, and the mark is the one TikTok puts on the post itself. */
+.autopilot-queue-zoom-count { position: absolute; inset-block-start: 4px; inset-inline-end: 4px; display: grid; place-items: center; inline-size: 16px; block-size: 16px; border-radius: 4px; color: var(--on-media); background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.autopilot-queue-zoom:hover .campaign-edit-media-zoom,
+.autopilot-queue-zoom:focus-visible .campaign-edit-media-zoom { opacity: 1; }
 /* A placeholder that will post as-is is a warning, not body copy. */
 .autopilot-needs-copy { color: var(--warn); }
 /* `minmax(0, 1fr)` rather than the implicit `auto` column: an auto track

@@ -103,9 +103,11 @@ import {
   AssetThumbnail,
   PostPreview,
   useAssetPoster,
+  type LibraryAsset as ThumbnailAsset,
   type Slot,
 } from "../publish/composer";
 import {
+  CarouselMark,
   FeatureReach,
   PlatformIcon,
   platformLabels,
@@ -697,6 +699,84 @@ function CarouselStrip({ sources }: { sources: string[] }) {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * A queue row's thumbnail for a picture post: hovered to glance, pressed to
+ * look properly - the same control the edit dialog's carousel frames are.
+ *
+ * The row's glance used to be the Library poster alone, which for a carousel
+ * says nothing about how many pictures it holds and cannot be opened. The
+ * card now names the set the way the dialog does, and a press opens the whole
+ * set in the shared lightbox, starting at the lead picture.
+ *
+ * The poster is still what the row draws: it is the still the rest of the
+ * page shows for this post. Its shape is read from its own load, captured on
+ * the wrapper because a load event does not bubble.
+ */
+function QueuePictureThumb({ asset, sources, workspaceId, apiFetch }: {
+  asset: ThumbnailAsset | null;
+  sources: string[];
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const [ratio, setRatio] = useState(3 / 4);
+  const { openAt, open, close, previous, next } = useLightboxSet(sources.length);
+  const count = sources.length;
+  const position = (index: number) => (
+    count > 1 ? `Picture ${index + 1} of ${count}` : "Picture"
+  );
+  return (
+    <>
+      <HoverPreview
+        label={`${count > 1 ? `Carousel of ${count} pictures` : "Picture"} - view full size`}
+        ratio={ratio}
+        className="autopilot-queue-zoom"
+        onActivate={() => open(0)}
+        media={(
+          // eslint-disable-next-line @next/next/no-img-element -- preview URL
+          <img src={sources[0]} alt={`Larger view of ${position(0).toLowerCase()}`} />
+        )}
+        caption={count > 1 ? <strong>{position(0)}</strong> : undefined}
+      >
+        <span
+          className="autopilot-queue-zoom-frame"
+          onLoadCapture={(event) => {
+            const target = event.target as HTMLImageElement;
+            if (target.naturalWidth && target.naturalHeight) {
+              setRatio(target.naturalWidth / target.naturalHeight);
+            }
+          }}
+        >
+          {asset ? (
+            <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- preview URL
+            <img className="autopilot-queue-zoom-still" src={sources[0]} alt="" />
+          )}
+        </span>
+        {count > 1 && (
+          <span className="autopilot-queue-zoom-count"
+            title={`Carousel of ${count} pictures`}>
+            <CarouselMark size={11} />
+          </span>
+        )}
+        <span className="campaign-edit-media-zoom" aria-hidden="true">
+          <Maximize2 size={12} />
+        </span>
+      </HoverPreview>
+      {openAt !== null && (
+        <Lightbox
+          open
+          src={sources[openAt] ?? ""}
+          alt={position(openAt)}
+          onClose={close}
+          onPrevious={previous}
+          onNext={next}
+        />
+      )}
+    </>
   );
 }
 
@@ -4233,33 +4313,39 @@ export function AutopilotPanel({
       reason: null,
       route: null,
     })),
-    ...preview.posts.map((post): TimelineEntry => ({
-      key: `planned-${post.destination_id}-${post.queue_item_id}-${post.at}`,
-      kind: "planned",
-      queue_item_id: post.queue_item_id,
-      at: post.at,
-      title: post.title,
-      caption: post.caption,
-      first_comment: post.first_comment,
-      thread: post.thread,
-      destination: post.destination,
-      destination_id: post.destination_id,
-      status: null,
-      delivery: null,
-      metrics: null,
-      post_url: null,
-      page_url: null,
-      video_path: null,
-      image_paths: [],
-      last_error: null,
-      asset_id: post.asset_id,
-      problem: post.problem,
-      offer_ids: post.offer_ids,
-      product_details: post.product_details,
-      placement: post.placement,
-      reason: post.reason,
-      route: placementSummary(post),
-    })),
+    ...preview.posts.map((post): TimelineEntry => {
+      const queueItem = queueById.get(post.queue_item_id);
+      // The preview describes the schedule, while the queue owns the media
+      // package. Join them here so a planned carousel can be inspected in the
+      // same "what will post" disclosure as an already scheduled outing.
+      return {
+        key: `planned-${post.destination_id}-${post.queue_item_id}-${post.at}`,
+        kind: "planned",
+        queue_item_id: post.queue_item_id,
+        at: post.at,
+        title: post.title,
+        caption: post.caption,
+        first_comment: post.first_comment,
+        thread: post.thread,
+        destination: post.destination,
+        destination_id: post.destination_id,
+        status: null,
+        delivery: null,
+        metrics: null,
+        post_url: null,
+        page_url: null,
+        video_path: queueItem?.video_path || null,
+        image_paths: queueItem?.image_paths ?? [],
+        last_error: null,
+        asset_id: post.asset_id ?? queueItem?.asset_id ?? null,
+        problem: post.problem,
+        offer_ids: post.offer_ids,
+        product_details: post.product_details,
+        placement: post.placement,
+        reason: post.reason,
+        route: placementSummary(post),
+      };
+    }),
   ].sort((left, right) => left.at.localeCompare(right.at)) : [];
   /**
    * The timeline, narrowed to whichever of the four numbers is pressed.
@@ -4298,6 +4384,8 @@ export function AutopilotPanel({
   );
   // Everything on the day the "see more" drawer opened, in the same zone the
   // grid grouped by, so the drawer and the cell agree on which day a post is on.
+  // From the narrowed set, so the drawer holds what its cell was showing: a
+  // day opened while the warnings are filtered is being opened about those.
   const openDayEntries = openDay
     ? shownTimeline.filter(
         (entry) => new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone }) === openDay,
@@ -5670,7 +5758,28 @@ export function AutopilotPanel({
                     an empty play frame would imply a missing attachment. */}
                 {!item.text_only && (
                   <div className="autopilot-queue-thumb">
-                    {item.asset_id ? (
+                    {!item.video_path && item.image_paths.length > 0 ? (
+                      <QueuePictureThumb
+                        asset={item.asset_id ? {
+                          id: item.asset_id,
+                          title: item.title ?? "Queued media",
+                          original_path: "",
+                          media_kind: "image",
+                          duration_ms: null,
+                          platform: null,
+                          creator: null,
+                          width: null,
+                          height: null,
+                          versions: [{ id: `${item.asset_id}-thumbnail`, kind: "thumbnail" }],
+                        } : null}
+                        sources={item.image_paths.map((path) => (
+                          `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+                          + `?path=${encodeURIComponent(path)}`
+                        ))}
+                        workspaceId={workspaceId}
+                        apiFetch={apiFetch}
+                      />
+                    ) : item.asset_id ? (
                       <AssetThumbnail
                         asset={{
                           id: item.asset_id,
