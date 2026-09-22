@@ -1092,3 +1092,18 @@ def test_a_real_run_holds_a_post_in_words_its_approver_reads(
     [card] = chat["sent"]
     assert words.say("vi", "hold_waiting") in card["text"]
     assert "Waiting for approval" not in card["text"]
+
+
+def test_a_due_time_read_back_without_its_zone_is_still_utc() -> None:
+    """SQLite hands back naive datetimes. Treated as the machine's local
+    time, 11:00 UTC was announced as 11:00 in Bangkok - seven hours early."""
+    from datetime import datetime
+
+    naive = datetime(2026, 9, 23, 11, 0)
+    aware = datetime(2026, 9, 23, 11, 0, tzinfo=UTC)
+    item = {"destination": "anisenpaitok", "caption": "words", "at": naive}
+    said = approval_notices.card_text("Storytelling", item, zone="Asia/Bangkok")
+    assert "18:00" in said
+    assert "11:00" not in said
+    item["at"] = aware
+    assert approval_notices.card_text("Storytelling", item, zone="Asia/Bangkok") == said

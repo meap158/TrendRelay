@@ -1070,11 +1070,21 @@ def run_campaign(
         # announced minutes, hours or days ago, are still `proposed`, and
         # their own due time has now passed. `held` above never contains
         # them, because it is only what became `proposed` this minute.
-        from trendrelay_api.approval_notices import announce_overdue
+        from trendrelay_api.approval_notices import announce_overdue, announce_unannounced
 
         overdue_note = announce_overdue(session, autopilot, now=moment)
         if overdue_note:
             note = f"{note} {overdue_note}"
+        # And anything held on an earlier pass that the chat never heard of,
+        # because the send failed just then. A card is the only way the
+        # approver learns a post is waiting, so a failed send has to be a
+        # delay, not a silence. What this pass just tried is skipped: a chat
+        # that is down is asked once per pass.
+        missed_note = announce_unannounced(
+            session, autopilot, skip={str(item["execution_id"]) for item in held},
+        )
+        if missed_note:
+            note = f"{note} {missed_note}"
     if deferred:
         # Named as waiting rather than as a problem, because it is one: the
         # quota returns and the post is still there.

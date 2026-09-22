@@ -72,6 +72,12 @@ def _when(at: datetime | None, zone: str | None, language: str = "en") -> str:
     """The due time as the workspace keeps time, written as the reader writes dates."""
     if at is None:
         return ""
+    # A due time read back from SQLite has lost its zone, and a naive time
+    # converts as though it were the machine's local time - so a post held
+    # for 11:00 UTC was announced as due at 11:00 in Bangkok, seven hours
+    # early. Everything stored is UTC; say so before converting.
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=UTC)
     try:
         local = at.astimezone(ZoneInfo(zone)) if zone else at
     except (ValueError, KeyError):
@@ -501,6 +507,48 @@ def announce_executions(
         if execution.state == "proposed"
     ]
     return announce_held(session, autopilot, held)
+
+
+def announce_unannounced(
+    session: Session, autopilot: CampaignAutopilot, *, skip: set[str] | None = None,
+) -> str:
+    """Send the card for any held post the chat has never been shown.
+
+    A card is sent the moment a post is frozen, and that was the only moment
+    it was ever sent: when Telegram could not be reached just then, the run's
+    note said so once and the post sat in the inbox with nobody told. Three
+    posts were frozen that way on the evening of 22 September - the send
+    failed, and the note that said so was overwritten seven minutes later by
+    the campaign pausing itself - and the approver never heard of them.
+
+    The notice is the memory of what was announced, so its absence is the
+    list of what was not. This walks that list every pass, which is what
+    turns one failed send into a delay rather than a silence; the unique
+    index on the notice is what keeps a retry from ever sending twice. `skip`
+    names the posts this pass has already tried, so a chat that is down is
+    asked once per pass rather than twice. Posts with no pairing to remember
+    them by are left alone: announced once at the freeze, as always, because
+    a sweep could not tell them from ones it had already sent.
+    """
+    waiting = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state == "proposed",
+            PublicationExecution.queue_item_id.is_not(None),
+            PublicationExecution.destination_id.is_not(None),
+        ).order_by(PublicationExecution.scheduled_at.asc())
+    ).all()
+    missing = [
+        execution for execution in waiting
+        if execution.id not in (skip or set())
+        and notice_for(
+            session, autopilot.campaign_id,
+            (execution.queue_item_id or "", execution.destination_id or ""),
+        ) is None
+    ]
+    if not missing:
+        return ""
+    return announce_executions(session, autopilot, missing)
 
 
 def announce_overdue(

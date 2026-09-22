@@ -207,3 +207,50 @@ def test_the_autopilot_row_is_the_one_the_campaign_set_up(session) -> None:
     autopilot(session, authority="assist", approvals_telegram=True)
     session.commit()
     assert session.scalar(select(CampaignAutopilot)).approvals_telegram is True
+
+
+def test_a_card_that_could_not_be_sent_goes_out_on_the_next_pass(
+    session, tmp_path, engine_stub, chat, monkeypatch,
+) -> None:
+    """The send is the only way the approver learns a post is waiting, so a
+    send that fails has to be a delay rather than a silence. Three posts were
+    frozen on the evening of 22 September while Telegram could not be
+    reached; the run note said so once, the campaign's own breaker overwrote
+    it seven minutes later, and nobody was ever told about them."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    down = {"now": True}
+
+    def flaky(text, **kwargs):
+        if down["now"]:
+            raise telegram.TelegramUnavailable("Telegram refused the card: timed out")
+        chat["sent"].append({"text": text, **kwargs})
+        return {"message_id": len(chat["sent"]), "chat_id": "-100200300", "media": 0, "skipped": []}
+
+    monkeypatch.setattr(telegram, "send_card", flaky)
+
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+    held = _held_now(session)
+    assert held is not None, "held in the app regardless"
+    assert chat["sent"] == [] and session.scalars(select(CampaignApprovalNotice)).all() == []
+    assert "Not announced on Telegram" in pilot.last_note
+
+    # Still down a minute later: asked once, not twice, and still nothing.
+    run_campaign(session, pilot, now=NOW + timedelta(minutes=1))
+    session.commit()
+    assert chat["sent"] == []
+
+    down["now"] = False
+    run_campaign(session, pilot, now=NOW + timedelta(minutes=2))
+    session.commit()
+
+    assert len(chat["sent"]) == 1, "announced the moment the chat is back"
+    assert chat["sent"][0]["buttons"][0][0]["callback"] == f"apr:{held.id}"
+    [notice] = session.scalars(select(CampaignApprovalNotice)).all()
+    assert notice.execution_id == held.id
+    assert "Announced 1 post on Telegram" in pilot.last_note
+
+    run_campaign(session, pilot, now=NOW + timedelta(minutes=3))
+    session.commit()
+    assert len(chat["sent"]) == 1, "and never again"
