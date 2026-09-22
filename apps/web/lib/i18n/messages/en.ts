@@ -782,6 +782,7 @@ export const en = {
         needsCopy: "Approved, but the caption was never written - a placeholder stands in. It is skipped at every slot until somebody writes one.",
         needsMedia: "Approved, but no video or pictures were ever attached. It is skipped at every slot until media is attached, or you post it as copy only.",
         needsMediaCount: "This post is waiting for {target} files and holds {count}. It is skipped at every slot until the set is complete, so it cannot go out half-built.",
+        analysisPending: "Product matching has not finished yet, so no product recommendation is available for this post.",
         paused: "Out of the rotation: either you declined it in the approval inbox, or a delivery failed - usually a file that moved or changed. Approve it to put it back.",
         retired: "Finished with. Kept for the record, never posted again, and ignored when products are matched.",
       },

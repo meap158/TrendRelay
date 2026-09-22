@@ -5909,7 +5909,11 @@ export function AutopilotPanel({
                           </span>
                         ))}
                         {!ranked.length
-                          ? <em className="soft">analysis pending</em>
+                          ? (
+                            <Tooltip content={t("autopilot.state.help.analysisPending")}>
+                              <em className="soft" tabIndex={0}>product match pending</em>
+                            </Tooltip>
+                          )
                           : !attaching.length && <em className="soft">no product attached</em>}
                       </>
                     );
