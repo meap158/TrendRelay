@@ -3129,3 +3129,180 @@ def test_a_post_can_be_created_with_its_notes_already_written(workspace) -> None
         f"/queue/{created.json()['item']['id']}/context",
     )
     assert read.json()["context"] == "Pictures still to come; keep the tone dry."
+
+
+# --- a failed delivery can be put back into the rotation --------------------
+#
+# The timeline showed a column of failed rows - an engine unreachable for an
+# afternoon - and offered nothing to do about them. An uncertain delivery holds
+# its post out of the rotation for ever, by design, until a person says the
+# post did not go out; a declined post is paused until a person says so; and
+# neither of those outings is one the post has actually had.
+
+
+def _queued(workspace_id: str, campaign_id: str, identifier: str, **overrides) -> str:
+    fields: dict = {
+        "state": "approved",
+        "body": "Three ways to pull a better espresso.",
+        "hashtags": ["coffee"],
+        "position": 0,
+        "times_posted": 1,
+        "last_posted_by_destination": {"dest-1": "2026-08-01T12:00:00+00:00"},
+    }
+    fields.update(overrides)
+    with TestingSession.begin() as session:
+        session.add(CampaignQueueItem(
+            id=identifier, workspace_id=workspace_id, campaign_id=campaign_id,
+            video_path=r"S:\media\clip.mp4", created_by="owner-user", **fields,
+        ))
+    return identifier
+
+
+def _queue_item(identifier: str) -> CampaignQueueItem:
+    with TestingSession() as session:
+        item = session.get(CampaignQueueItem, identifier)
+        assert item is not None
+        session.expunge(item)
+        return item
+
+
+def test_an_uncertain_delivery_put_back_settles_and_counts_nothing(workspace) -> None:
+    """The person pressing this has checked the account. The hold is released,
+    and the outing that never happened is not one of the post's outings."""
+    campaign_id = campaign(workspace)
+    _queued(workspace, campaign_id, "q-uncertain")
+    _held(
+        workspace, campaign_id, "exec-uncertain", state="uncertain",
+        failure_class="uncertain", queue_item_id="q-uncertain", destination_id="dest-1",
+        error="woopsocial: The read operation timed out",
+    )
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-uncertain/return",
+    ).json()
+
+    assert body["returned"] is True
+    assert body["resolved_uncertain"] is True
+    assert body["already_in_rotation"] is False
+    assert body["execution"]["state"] == "failed"
+    item = _queue_item("q-uncertain")
+    assert item.state == "approved"
+    assert item.times_posted == 1, "a delivery that never happened is not an outing"
+    assert item.last_posted_by_destination == {"dest-1": "2026-08-01T12:00:00+00:00"}
+
+
+def test_a_paused_post_put_back_is_approved_again(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _queued(workspace, campaign_id, "q-paused", state="paused")
+    _held(
+        workspace, campaign_id, "exec-declined", state="cancelled",
+        queue_item_id="q-paused", destination_id="dest-1",
+    )
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-declined/return",
+    ).json()
+
+    assert body["post_unpaused"] is True
+    assert _queue_item("q-paused").state == "approved"
+
+
+def test_a_failed_post_already_in_the_rotation_says_so(workspace) -> None:
+    """Nothing stood in its way - the planner gives it its next slot on its
+    own - so the answer is a fact about the post, not a refusal."""
+    campaign_id = campaign(workspace)
+    _queued(workspace, campaign_id, "q-failed")
+    _held(
+        workspace, campaign_id, "exec-failed", state="failed",
+        failure_class="provider", queue_item_id="q-failed", destination_id="dest-1",
+    )
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-failed/return",
+    ).json()
+
+    assert body["returned"] is True
+    assert body["already_in_rotation"] is True
+
+
+def test_a_held_or_published_post_cannot_be_put_back(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-held")
+    _held(workspace, campaign_id, "exec-out", state="published")
+
+    for identifier in ("exec-held", "exec-out"):
+        response = request(
+            "POST",
+            f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+            f"/autopilot/executions/{identifier}/return",
+        )
+        assert response.status_code == 409, response.text
+
+
+def test_several_failed_posts_are_put_back_at_once_each_on_its_own(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _queued(workspace, campaign_id, "q-a")
+    _queued(workspace, campaign_id, "q-b", state="paused")
+    _held(
+        workspace, campaign_id, "exec-a", state="uncertain", failure_class="uncertain",
+        queue_item_id="q-a", destination_id="dest-1",
+    )
+    _held(
+        workspace, campaign_id, "exec-b", state="failed", failure_class="provider",
+        queue_item_id="q-b", destination_id="dest-1",
+    )
+    _held(workspace, campaign_id, "exec-still-held")
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/return",
+        json={"execution_ids": ["exec-a", "exec-b", "exec-still-held", "exec-gone"]},
+    ).json()
+
+    assert body["returned"] == 2
+    assert body["refused"] == 2
+    by_id = {row["execution_id"]: row for row in body["results"]}
+    assert by_id["exec-a"]["resolved_uncertain"] is True
+    assert by_id["exec-b"]["post_unpaused"] is True
+    assert "held" in by_id["exec-still-held"]["problem"].casefold() or by_id["exec-still-held"]["problem"]
+    assert by_id["exec-gone"]["problem"] == "Execution not found."
+
+
+def test_the_timeline_names_the_execution_behind_a_delivered_row(workspace) -> None:
+    """A delivered row is a job's row; the execution is what can be acted on,
+    so the row says which one it is and where it and its post stand."""
+    from trendrelay_api.models import DurableJob
+
+    campaign_id = campaign(workspace)
+    _queued(workspace, campaign_id, "q-row")
+    with TestingSession.begin() as session:
+        session.add(DurableJob(
+            id="job-row", workspace_key=workspace, kind="social_publish", status="failed",
+            payload={"request": {
+                "campaign_id": campaign_id, "queue_item_id": "q-row",
+                "destination_id": "dest-1", "date": "2026-08-10T12:00:00+00:00",
+                "caption": "c", "targets": [{"platform": "youtube"}],
+            }},
+            last_error="woopsocial: The read operation timed out", max_attempts=1,
+        ))
+    _held(
+        workspace, campaign_id, "exec-row", state="uncertain", failure_class="uncertain",
+        queue_item_id="q-row", destination_id="dest-1", job_id="job-row",
+    )
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview",
+    ).json()
+
+    [row] = body["deployed"]
+    assert row["execution_id"] == "exec-row"
+    assert row["execution_state"] == "uncertain"
+    assert row["queue_item_state"] == "approved"

@@ -2978,8 +2978,12 @@ def preview_autopilot(
     # the engine for tomorrow were six hundred deep in a hundred-row window
     # and the timeline showed an empty day. The count was never meant to be a
     # workspace-wide budget; it is a page size for one campaign's list.
-    job_ids = [
-        execution.job_id
+    # Kept by job, because a delivered row is a job's row and the execution
+    # behind it is what a person can act on: the timeline showed a failed
+    # delivery and offered nothing to do about it, and the thing to do is on
+    # the execution - see `return_execution_to_rotation`.
+    execution_by_job: dict[str, PublicationExecution] = {
+        execution.job_id: execution
         for execution in session.scalars(
             select(PublicationExecution)
             .where(
@@ -2990,7 +2994,8 @@ def preview_autopilot(
             .limit(100)
         ).all()
         if execution.job_id
-    ]
+    }
+    job_ids = list(execution_by_job)
     jobs = session.scalars(
         select(DurableJob)
         .where(
@@ -3043,9 +3048,17 @@ def preview_autopilot(
         _post_ids, permalinks = _outcome_of(job)
         platform = destination.platform if destination else target.get("platform")
         label = destination.label if destination else target.get("integration_id")
+        execution = execution_by_job.get(job.id)
+        queue_item = queue_by_id.get(request_payload.get("queue_item_id"))
         deployed.append({
             "id": job.id,
             "status": job.status,
+            # The row the job was delivering, and where it and its post stand
+            # now - which is what decides whether a failed row can be put back
+            # into the rotation, and what putting it back would mean.
+            "execution_id": execution.id if execution else None,
+            "execution_state": execution.state if execution else None,
+            "queue_item_state": queue_item.state if queue_item else None,
             "at": request_payload.get("date"),
             "title": request_payload.get("title"),
             "caption": request_payload.get("caption", ""),
@@ -3387,6 +3400,17 @@ class BatchDismissal(BaseModel):
     #: the post out of the rotation until somebody puts it back - otherwise a
     #: post nobody wants returns for approval every cycle, for ever.
     stop_proposing: bool = False
+
+
+class BatchReturn(BaseModel):
+    """Several delivered-and-failed posts, put back into the rotation at once.
+
+    No confirmation, for the same reason refusing needs none: nothing leaves
+    the machine. Putting a post back only makes it eligible to be planned
+    again, and a campaign that holds its posts holds this one too.
+    """
+
+    execution_ids: list[str] = Field(min_length=1, max_length=MAX_APPROVALS_PER_REQUEST)
 
 
 class ExceptionEdit(BaseModel):
@@ -4099,5 +4123,176 @@ def dismiss_autopilot_executions(
     return {
         "dismissed": dismissed,
         "refused": len(results) - dismissed,
+        "results": results,
+    }
+
+
+#: The states a delivery can have ended in. Anything else is still in
+#: flight, held, or published, and none of those is a post to put back.
+SETTLED_STATES = ("failed", "uncertain", "cancelled")
+
+
+def _settled_execution(
+    session: Session, workspace_id: str, campaign_id: str, execution_id: str
+) -> PublicationExecution:
+    execution = session.scalar(
+        select(PublicationExecution).where(
+            PublicationExecution.id == execution_id,
+            PublicationExecution.workspace_id == workspace_id,
+            PublicationExecution.campaign_id == campaign_id,
+        )
+    )
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found.")
+    if execution.state not in SETTLED_STATES:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Only a post whose delivery ended can be put back; "
+                f"this one is {execution.state}."
+            ),
+        )
+    return execution
+
+
+def _return_to_rotation(
+    session: Session,
+    request: Request,
+    workspace_id: str,
+    campaign_id: str,
+    user_id: str,
+    execution: PublicationExecution,
+) -> dict[str, Any]:
+    """Put one post whose delivery ended badly back into the rotation.
+
+    Three things can be standing between the post and its next outing, and
+    this clears whichever of them is there:
+
+    - An `uncertain` delivery holds its slot and its queue item for ever,
+      because the post may exist and nothing unattended may risk a duplicate.
+      A person saying "put it back" is the person who has checked the
+      account, so the execution settles as failed and the hold is released.
+      The campaign's own breaker counts unresolved uncertain deliveries, so
+      this is also how that count comes down.
+    - A post `paused` by a declined or failed outing stops being proposed
+      until somebody says so. This says so.
+    - Nothing at all, when the delivery simply failed and the post is already
+      approved: the planner gives it the next slot it is eligible for on its
+      own. Reported as such rather than refused, so a batch that ticked every
+      failed row is not half errors.
+
+    What this never does is count the failed outing: `times_posted`, the rest
+    interval and the rotation move only in `record_published`, on a delivery
+    the engine confirmed, so a post that never went out is not one outing
+    closer to a repeat limit that says how often it may go out.
+
+    The Telegram card for this pairing is forgotten, so the post's next outing
+    is announced afresh: somebody asked for it to come round again, and that
+    is a new decision rather than the one already answered.
+    """
+    moment = utc_now()
+    resolved = False
+    if execution.state == "uncertain":
+        execution.state = "failed"
+        execution.reconciled_at = moment
+        execution.updated_at = moment
+        resolved = True
+    unpaused = False
+    item_state: str | None = None
+    if execution.queue_item_id:
+        item = session.scalar(
+            select(CampaignQueueItem).where(
+                CampaignQueueItem.id == execution.queue_item_id,
+                CampaignQueueItem.campaign_id == campaign_id,
+                CampaignQueueItem.workspace_id == workspace_id,
+            )
+        )
+        if item is not None:
+            if item.state == "paused":
+                item.state = "approved"
+                item.updated_at = moment
+                unpaused = True
+            item_state = item.state
+    from trendrelay_api.approval_notices import clear_notice
+
+    clear_notice(session, execution)
+    audit(
+        session, request, workspace_id, user_id,
+        "campaign.execution_returned", "campaign", campaign_id,
+        {
+            "execution_id": execution.id,
+            "resolved_uncertain": resolved,
+            "post_unpaused": unpaused,
+        },
+    )
+    return {
+        "execution_id": execution.id,
+        "returned": True,
+        "destination_label": execution.destination_label,
+        "resolved_uncertain": resolved,
+        "post_unpaused": unpaused,
+        # True when there was nothing standing in the way: the post is
+        # approved and will be planned again on its own.
+        "already_in_rotation": not resolved and not unpaused and item_state == "approved",
+        "post_state": item_state,
+    }
+
+
+@router.post("/{campaign_id}/autopilot/executions/{execution_id}/return")
+def return_execution_to_rotation(
+    workspace_id: str,
+    campaign_id: str,
+    execution_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Put a post whose delivery ended badly back into the rotation."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    execution = _settled_execution(session, workspace_id, campaign_id, execution_id)
+    result = _return_to_rotation(
+        session, request, workspace_id, campaign_id, user.id, execution,
+    )
+    return {**result, "execution": _execution_view(execution)}
+
+
+@router.post("/{campaign_id}/autopilot/executions/return")
+def return_executions_to_rotation(
+    workspace_id: str,
+    campaign_id: str,
+    body: BatchReturn,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Put several failed posts back into the rotation, each judged on its own.
+
+    An engine that was unreachable for an afternoon leaves a column of failed
+    rows, and "select all" is the difference between one action and a dozen.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    results: list[dict[str, Any]] = []
+    returned = 0
+    for execution_id in dict.fromkeys(body.execution_ids):
+        try:
+            execution = _settled_execution(
+                session, workspace_id, campaign_id, execution_id
+            )
+        except HTTPException as error:
+            results.append({
+                "execution_id": execution_id,
+                "returned": False,
+                "problem": str(error.detail),
+            })
+            continue
+        results.append(_return_to_rotation(
+            session, request, workspace_id, campaign_id, user.id, execution,
+        ))
+        returned += 1
+    return {
+        "returned": returned,
+        "refused": len(results) - returned,
         "results": results,
     }
