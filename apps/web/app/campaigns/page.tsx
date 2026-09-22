@@ -231,8 +231,8 @@ function TelegramApprovalsField({
   defaultChecked: boolean;
   /** The card language chosen for this campaign; empty is the campaign's own. */
   defaultLanguage: string;
-  /** The campaign's post language, named in the default option so the reader
-      knows what "the campaign's language" resolves to right now. */
+  /** The campaign's post language, named in the default option so the
+      reader knows what "the campaign's language" resolves to right now. */
   campaignLanguage: string;
 }) {
   if (!link?.connected && !defaultChecked) return null;
@@ -262,9 +262,9 @@ function TelegramApprovalsField({
           )}
         </span>
       </label>
-      {/* The cards' language. The campaign's own is right nearly always - the
-          approver reads what the audience reads - so it is the default and is
-          named; a choice is for the approver who reads another. */}
+      {/* The cards' language. The campaign's own is right nearly always -
+          the approver reads what the audience reads - so it is the default
+          and is named; a choice is for the approver who reads another. */}
       <label>Card language
         <Select name="approvals_telegram_language" defaultValue={defaultLanguage}>
           <option value="">{own ? `Campaign language (${own})` : "Campaign language"}</option>
@@ -802,8 +802,8 @@ export default function CampaignsPage() {
       );
       await refresh(workspaceId);
       setSettingsFor(null);
-      // What it reached, not only that it saved - and where the waiting posts
-      // went if Telegram was just switched on.
+      // What it reached, not only that it saved - and where the waiting
+      // posts went if Telegram was just switched on.
       const reached = payload.held;
       const saved = reached?.recomposed
         ? `Campaign settings saved. ${reached.recomposed} waiting post${

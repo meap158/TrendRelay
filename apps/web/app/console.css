@@ -2203,11 +2203,6 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
  * settings. The rest are all here now - same fields, same order, same wording
  * as that dialog - but every one has a working default, and a first-run form
  * opening with nine more decisions is its own kind of unusable. */
-.campaign-dialog-more { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); }
-.campaign-dialog-more > summary { display: grid; gap: 2px; padding: 10px 12px; cursor: pointer; list-style: none; }
-.campaign-dialog-more > summary::-webkit-details-marker { display: none; }
-/* A chevron of its own, since the marker is suppressed - without it the row
-   reads as a heading rather than as something that opens. */
 /* A ruled-off group at the end of the posting settings: an integration the
    campaign may use, set apart from how it posts because it is a different
    kind of question - a place, not a rule. */
@@ -2215,6 +2210,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-dialog-form .campaign-dialog-integration > strong { color: var(--text); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .campaign-dialog-form .campaign-dialog-integration .campaign-dialog-connected { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font-size: 10px; font-weight: 400; }
 .campaign-dialog-form .campaign-dialog-integration .campaign-dialog-connected b { color: var(--text); font-weight: 600; }
+.campaign-dialog-more { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); }
+.campaign-dialog-more > summary { display: grid; gap: 2px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.campaign-dialog-more > summary::-webkit-details-marker { display: none; }
+/* A chevron of its own, since the marker is suppressed - without it the row
+   reads as a heading rather than as something that opens. */
 .campaign-dialog-more > summary strong { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .campaign-dialog-more > summary strong::before { content: "›"; color: var(--muted); font-size: 14px; line-height: 1; transition: transform 150ms ease; }
 .campaign-dialog-more[open] > summary strong::before { transform: rotate(90deg); }

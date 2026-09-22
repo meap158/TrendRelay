@@ -120,8 +120,8 @@ class SignalInput(BaseModel):
 
 
 def _card_language(value: str) -> str | None:
-    """The same rule the autopilot route applies: a language the Telegram cards
-    can be written in, or None for the campaign's own."""
+    """The same rule the autopilot route applies: a known language, or None
+    for the campaign's own."""
     from trendrelay_api.campaign_autopilot_api import _card_language as known_or_refused
 
     return known_or_refused(value)
@@ -240,8 +240,8 @@ class CampaignUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
     #: Whether held posts also go to Telegram as cards. None leaves it alone.
     approvals_telegram: bool | None = None
-    #: The language of those cards: a code, empty for the campaign's own post
-    #: language, None to leave it alone.
+    #: The language of those cards: a code, empty for the campaign's own
+    #: post language, None to leave it alone.
     approvals_telegram_language: str | None = Field(default=None, pattern=r"^([a-z]{2})?$")
     #: How products attach: smart matching, one fixed offer, or none at all.
     #: A package can still override it by pinning, but this is what a package
