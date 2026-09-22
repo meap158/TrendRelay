@@ -11,7 +11,7 @@ media that was frozen - by id and by hash - or the execution fails by name.
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -159,8 +159,8 @@ def engine_stub(monkeypatch):
     def fake_publish(session, autopilot, execution, *, at=None, delivery_override=None):
         if behaviour["raise"]:
             raise RuntimeError(behaviour["raise"])
-        # A redelivery posts now: the slot it was approved for passed while
-        # the engine was refusing connections.
+        # What time and what delivery each hand-off asked for, so a redelivery
+        # can be checked against the time the post was approved for.
         sent.append({"at": at, "delivery_override": delivery_override})
         calls.append(execution)
         job_id = f"publish_stub{len(calls)}"
@@ -311,7 +311,62 @@ def test_an_engine_that_could_not_be_reached_is_delivered_again(
     assert "Could not reach" in execution.error, "what went wrong is still on the record"
     assert len(engine_stub.calls) == 2, "the same frozen record, sent a second time"
     assert engine_stub.calls[1].id == execution.id
-    assert engine_stub.sent[1] == {"at": NOW, "delivery_override": "now"}
+    slot_at = NOW.replace(hour=12)
+    assert engine_stub.sent[1] == {"at": slot_at, "delivery_override": None}, (
+        "handed over again for the time it was approved for, the campaign's own way"
+    )
+    assert execution.scheduled_at.replace(tzinfo=UTC) == slot_at
+
+
+def test_a_redelivery_keeps_the_slot_the_post_was_approved_for(
+    session, tmp_path, engine_stub
+) -> None:
+    """The loop this closes: a campaign that delivers by schedule hands a post
+    over a day ahead of its slot, so a hand-off the engine never received is
+    not a slot that has passed. Sending it "now" moved the row's time, which
+    emptied the slot, and the next tick planned the next post into it and
+    asked the approver about that one too - three posts for one slot in
+    twenty minutes, two of them posted a day early."""
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", str(clip(tmp_path)))
+    queue_item(session, "q2", str(clip(tmp_path, "second.mp4", b"other bytes")))
+    pilot = autopilot(session)
+    run_campaign(session, pilot, now=NOW)
+    [first] = executions(session)
+    settle_job(
+        session, first.job_id, "failed",
+        error="woopsocial: Could not reach api.woopsocial.com: <urlopen error [WinError 10054]>",
+    )
+
+    reconcile_executions(session, now=NOW + timedelta(minutes=1))
+    run_campaign(session, pilot, now=NOW + timedelta(minutes=1))
+    session.commit()
+
+    assert [item.id for item in executions(session)] == [first.id], (
+        "the slot is still the first post's, so nothing else was planned into it"
+    )
+
+
+def test_a_redelivery_after_the_slot_has_passed_posts_now(
+    session, tmp_path, engine_stub
+) -> None:
+    """The engine was unreachable across the slot itself. A delivery scheduled
+    into the past is refused or posted immediately anyway, so it is sent now
+    and the row says so."""
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "woopsocial: Could not reach api.woopsocial.com: <urlopen error [WinError 10054]>",
+    )
+    late = NOW.replace(hour=12) + timedelta(minutes=5)
+
+    outcome = reconcile_executions(session, now=late)
+    session.commit()
+
+    [execution] = executions(session)
+    assert outcome["redelivered"] == [execution.id]
+    assert engine_stub.sent[1] == {"at": late, "delivery_override": "now"}
+    assert execution.scheduled_at.replace(tzinfo=UTC) == late
 
 
 def test_an_engine_that_was_full_is_delivered_again(

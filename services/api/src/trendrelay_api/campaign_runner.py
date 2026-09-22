@@ -1233,11 +1233,21 @@ def _redeliver(
 ) -> bool:
     """Send an already-approved post again. Returns whether it went.
 
-    The same frozen record, to the same account, with the same words - the
-    approval was about all of that and none of it has changed. Only the time
-    moves: the slot it was approved for has passed while the engine was
-    refusing connections, and a delivery scheduled into the past is either
-    refused or posted immediately anyway.
+    The same frozen record, to the same account, with the same words, for the
+    same time - the approval was about all of that and none of it has
+    changed. A campaign that delivers by schedule hands a post to the engine
+    the moment it is approved, usually a day ahead of its slot, so a hand-off
+    that never reached the engine is not a slot that has passed: the post is
+    handed over again for the time it was approved for. It used to be sent
+    "now" instead, which published tomorrow's post today - and, because the
+    row's time had moved, emptied the slot it was frozen for. The next tick
+    planned the next post into that same slot, held it, and put it in front
+    of the approver; three posts were asked about for one slot inside twenty
+    minutes, two of them posted a day early.
+
+    Only when the approved time really has passed does the time move: a
+    delivery scheduled into the past is either refused or posted immediately
+    anyway, so it is sent now and the row says so.
 
     False when there is nothing to send with - no campaign behind the
     execution, or the engine will not take the job - and the caller settles it
@@ -1253,9 +1263,13 @@ def _redeliver(
     )
     if autopilot is None:
         return False
+    scheduled = _as_utc(execution.scheduled_at)
+    ahead = scheduled is not None and scheduled > now
+    at = scheduled if ahead else now
     try:
         job = _publish_execution(
-            session, autopilot, execution, at=now, delivery_override="now",
+            session, autopilot, execution, at=at,
+            delivery_override=None if ahead else "now",
         )
     except Exception as error:  # noqa: BLE001 - a refused retry is just a failure
         print(f"Redelivery of {execution.id} refused: {error}", flush=True)
@@ -1263,7 +1277,7 @@ def _redeliver(
     execution.job_id = job["id"]
     execution.state = "queued"
     execution.queued_at = now
-    execution.scheduled_at = now
+    execution.scheduled_at = at
     execution.delivery_attempts += 1
     # Cleared, because this row is no longer a failure - it is a delivery in
     # flight. The text of what went wrong stays on `error` for the timeline.
