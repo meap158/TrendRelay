@@ -610,7 +610,12 @@ nav strong { color: var(--text); }
    destination fills a frame that was already there instead of pushing
    everything under it down the page. */
 .preview-empty { display: grid; align-content: center; min-block-size: 180px; margin: 0; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); color: var(--muted); font-size: 0.78rem; line-height: 1.5; text-align: center; }
-.post-preview { --preview-max-height: min(56vh, 440px); display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
+/* Bounded by the viewport, and floored: the frame's own furniture - the
+   rail, the handle, the caption - is drawn in pixels, and zooming the page
+   shrinks the viewport in pixels while the furniture keeps its size. Without
+   the floor a zoomed page had a frame too short for its rail, with the heart
+   pushed out of the top and the handle cut off. */
+.post-preview { --preview-max-height: max(250px, min(56vh, 440px)); display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
 /* A phone is the width these networks are read at, so it is the default and
    the narrower of the two. Capped rather than stretched: a preview as wide
    as the panel stops being a preview of anything somebody will see. */
@@ -679,7 +684,9 @@ nav strong { color: var(--text); }
    middle of it - far higher than TikTok draws them. The steps row and the
    caption are laid out below this one, so hugging them puts the last button
    just above the caption at any size, which is where the real rail sits. */
-.preview-surface-rail { display: grid; gap: 11px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 9px 14px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
+/* The gap gives before the icons do: on a frame short of room the column
+   closes up rather than losing its top item over the edge. */
+.preview-surface-rail { display: grid; gap: min(11px, 3.5%); justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 9px 14px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
 /* The sound's disc at the foot of the column, which is what ends a rail in
    these apps. A record rather than an icon in a circle: darker than the
    glyphs above it and lit from its own centre. */
@@ -1725,7 +1732,7 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-outings { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; }
 /* The same cap the approval inbox puts on its previews. These are vertical
    clips: at full width a single one is taller than the row that opened it. */
-.campaign-outings .post-preview { --preview-max-height: min(45vh, 320px); margin: 0; padding: 9px; }
+.campaign-outings .post-preview { --preview-max-height: max(250px, min(45vh, 320px)); margin: 0; padding: 9px; }
 .campaign-rehearsal-list > article { display: grid; gap: 7px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-rehearsal-list > article > header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .campaign-rehearsal-list > article > header strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

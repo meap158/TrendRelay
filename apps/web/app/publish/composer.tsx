@@ -523,7 +523,7 @@ function SolidComment({ size }: { size: number }) {
       <path
         fillRule="evenodd"
         d={
-          // A circle of radius 8.4 about (12, 10.9), drawn the long way round
+          // A circle of radius 10 about (12, 11), drawn the long way round
           // from its seven o'clock to its eight, then out to a point and back
           // - which is the tail, and is one ring with the bubble rather than
           // a shape laid over it, because under even-odd an overlap would be
@@ -531,10 +531,15 @@ function SolidComment({ size }: { size: number }) {
           // each traced as two half-arcs, which even-odd does turn into a
           // hole. Checked by flattening the path and filling it by hand;
           // nothing here can be eyeballed from the numbers.
-          "M8.06 18.32A8.4 8.4 0 1 0 4.73 15.1L3 20.3Z"
-          + "M8.4 9.75a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z"
-          + "M12 9.75a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z"
-          + "M15.6 9.75a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z"
+          //
+          // The bubble fills its box the way the heart and the bookmark
+          // beside it fill theirs. At a radius of 8.4 it was the one small
+          // thing in the column, and small enough at nineteen pixels that
+          // its edge read as blurred rather than round.
+          "M7 19.66A10 10 0 1 0 3.34 16L2.2 21.8Z"
+          + "M7.7 9.63a1.37 1.37 0 1 0 0 2.74 1.37 1.37 0 0 0 0-2.74Z"
+          + "M12 9.63a1.37 1.37 0 1 0 0 2.74 1.37 1.37 0 0 0 0-2.74Z"
+          + "M16.3 9.63a1.37 1.37 0 1 0 0 2.74 1.37 1.37 0 0 0 0-2.74Z"
         }
       />
     </svg>
@@ -899,9 +904,10 @@ export function PostPreview({
                   // A solid app's comment bubble is drawn rather than filled:
                   // filling the outline one closes the dots into the shape,
                   // and the dots are how a bubble reads as comments at
-                  // nineteen pixels.
+                  // twenty pixels. The same twenty as the icons beside it,
+                  // so the column is one weight.
                   if (action === "comment" && furniture.solid) {
-                    return <SolidComment key={action} size={19} />;
+                    return <SolidComment key={action} size={20} />;
                   }
                   const [Icon, size] = RAIL_ICONS[action];
                   return furniture.solid
