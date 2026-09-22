@@ -136,6 +136,38 @@ function platformGlyph(platform: PublishingPlatform) {
   }
 }
 
+/**
+ * The mark a network puts on a post that is more than one picture.
+ *
+ * TikTok's own, and the reason it is here rather than taken from an icon set:
+ * two solid stacked squares, the one behind offset up and right, with a gap
+ * between them so they read as a stack. The icon sets draw the same idea as
+ * two outlined rectangles, which at eleven pixels over somebody's photograph
+ * is a smudge - a filled shape survives the size and the background.
+ *
+ * The gap is a hole in the square behind rather than a line between them: a
+ * line has to be some colour, and what is under this is whatever the picture
+ * happens to be.
+ */
+export function CarouselMark({ size = 12 }: { size?: number }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24"
+      fill="currentColor" aria-hidden="true" focusable="false"
+    >
+      <path
+        fillRule="evenodd"
+        d={
+          "M11 3h7a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3Z"
+          + "M6 5.7h7a4.3 4.3 0 0 1 4.3 4.3v7a4.3 4.3 0 0 1-4.3 4.3h-7"
+          + "a4.3 4.3 0 0 1-4.3-4.3v-7a4.3 4.3 0 0 1 4.3-4.3Z"
+        }
+      />
+      <path d="M6 7h7a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3Z" />
+    </svg>
+  );
+}
+
 export function PlatformIcon({
   platform,
   size = 24,

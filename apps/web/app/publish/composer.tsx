@@ -8,7 +8,6 @@ import {
   Disc3,
   Forward,
   Heart,
-  Images,
   type LucideIcon,
   Maximize2,
   MessageCircle,
@@ -34,7 +33,9 @@ import { createPortal } from "react-dom";
 
 import { Lightbox } from "../ui/lightbox";
 
-import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
+import {
+  CarouselMark, PlatformIcon, platformLabels, type PublishingPlatform,
+} from "../publishing-icons";
 import {
   SURFACE_FURNITURE, aiBadgeLabel, audioLine, feedActions, type RailAction,
 } from "./preview-surfaces";
@@ -800,7 +801,7 @@ export function PostPreview({
             {pictures.length > 1 && (
               <em className="post-preview-kind"
                 title={t("composer.carouselOfCount", { count: pictures.length })}>
-                <Images size={11} aria-hidden="true" />
+                <CarouselMark size={11} />
                 {pictures.length}
               </em>
             )}
