@@ -1096,6 +1096,11 @@ type TimelineEntry = {
   /** Delivered rows only: what the engine did with it. */
   status: DeployedPost["status"] | null;
   delivery: DeployedPost["delivery"] | null;
+  /** Delivered rows only: the execution behind the job, and where it and
+      its post stand - what decides whether a failed row can be put back. */
+  execution_id: string | null;
+  execution_state: string | null;
+  queue_item_state: string | null;
   /** Delivered rows only: its measured engagement, once read back. */
   metrics: PostMetrics | null;
   post_url: string | null;
@@ -1147,6 +1152,14 @@ type DeployedPost = {
   queue_item_id: string | null;
   /** Resolved through the queue item, for the row's thumbnail. */
   asset_id: string | null;
+  /**
+   * The execution this job was delivering, and where it and its post stand
+   * now. A delivered row is a job's row; the execution is what a person can
+   * act on when the delivery failed - see `returnEntries`.
+   */
+  execution_id: string | null;
+  execution_state: string | null;
+  queue_item_state: string | null;
   destination_id: string | null;
   destination: PreviewPost["destination"];
   last_error: string | null;
@@ -2668,6 +2681,9 @@ export function AutopilotPanel({
   const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
   /** Held posts picked for one approval. Empty means nothing is selected. */
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** Failed timeline rows ticked to be put back into the rotation, by
+      execution id - the timeline's own "select all", beside the inbox's. */
+  const [returnPicked, setReturnPicked] = useState<Set<string>>(new Set());
   /**
    * How many held posts have missed their own posting time.
    *
@@ -3236,6 +3252,64 @@ export function AutopilotPanel({
       return body.refused
         ? `${body.approved} approved, ${body.refused} left held.`
         : `${body.approved} post${body.approved === 1 ? "" : "s"} approved.`;
+    });
+  }
+
+  /**
+   * Put failed deliveries back into the rotation, one or several at once.
+   *
+   * What stands between a failed row and its next outing is on the
+   * execution: an uncertain delivery holds its post out of the rotation
+   * until a person says the post did not go out, and a declined post is
+   * paused until a person says so. The outing that never happened is not
+   * counted against the post - the API leaves `times_posted` and the rest
+   * interval alone - so a campaign that lets a post go out more than once
+   * still owes it that many real outings.
+   *
+   * Confirmed only when a delivery ended uncertain, because that is the one
+   * case where the press can cost something: the post may already be on the
+   * account, and putting it back is saying it is not.
+   */
+  async function returnEntries(entries: TimelineEntry[]) {
+    const ids = entries.flatMap((entry) => entry.execution_id ? [entry.execution_id] : []);
+    if (!ids.length) return;
+    const uncertain = entries.filter((entry) => entry.execution_state === "uncertain").length;
+    if (uncertain && !window.confirm(
+      (uncertain === 1
+        ? "This delivery ended without an answer from the engine, so the post may already be on the account. "
+        : `${uncertain} of these deliveries ended without an answer from the engine, so the posts may already be on the account. `)
+      + "Check there first. Put "
+      + (ids.length === 1 ? "the post" : `${ids.length} posts`)
+      + " back into the rotation?"
+    )) return;
+    await run(ids.length === 1 ? `return-${ids[0]}` : "return-batch", async () => {
+      const body = await json<{
+        returned: number;
+        refused: number;
+        results: {
+          execution_id: string;
+          returned: boolean;
+          already_in_rotation?: boolean;
+          problem?: string;
+        }[];
+      }>(await apiFetch(`${base}/autopilot/executions/return`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ execution_ids: ids }),
+      }));
+      // Anything refused stays ticked: it is still there and still the
+      // thing to deal with.
+      setReturnPicked(new Set(body.results
+        .filter((row) => !row.returned)
+        .map((row) => row.execution_id)));
+      const already = body.results.filter((row) => row.already_in_rotation).length;
+      const back = body.returned - already;
+      const parts = [
+        back ? `${back} post${back === 1 ? "" : "s"} back in the rotation.` : "",
+        already ? `${already} ${already === 1 ? "was" : "were"} already in it.` : "",
+        body.refused ? `${body.refused} could not be put back.` : "",
+      ].filter(Boolean);
+      return parts.join(" ") || "Nothing to put back.";
     });
   }
 
@@ -4390,6 +4464,9 @@ export function AutopilotPanel({
       destination_id: item.destination_id,
       status: item.status,
       delivery: item.delivery,
+      execution_id: item.execution_id ?? null,
+      execution_state: item.execution_state ?? null,
+      queue_item_state: item.queue_item_state ?? null,
       metrics: item.metrics,
       post_url: item.post_url,
       page_url: item.page_url,
@@ -4422,6 +4499,9 @@ export function AutopilotPanel({
         destination_id: post.destination_id,
         status: null,
         delivery: null,
+        execution_id: null,
+        execution_state: null,
+        queue_item_state: null,
         metrics: null,
         post_url: null,
         page_url: null,
@@ -4466,6 +4546,29 @@ export function AutopilotPanel({
       : deliveredStatus(entry).label === "Published";
   };
   const shownTimeline = timelineFilter ? timeline.filter(timelineMatches) : timeline;
+  /**
+   * A failed delivery whose execution is known and settled.
+   *
+   * What stands between it and its next outing is the execution being
+   * `uncertain` - a hold nothing unattended may release - or its post being
+   * paused. A failed delivery of a post that is still approved has nothing
+   * in its way: the planner gives it the next slot on its own, and the row
+   * says so rather than offering a button that would change nothing.
+   */
+  const returnable = (entry: TimelineEntry): boolean => (
+    entry.kind === "delivered"
+    && entry.status === "failed"
+    && Boolean(entry.execution_id)
+    && ["failed", "uncertain", "cancelled"].includes(entry.execution_state ?? "")
+  );
+  const heldBack = (entry: TimelineEntry): boolean => (
+    entry.execution_state === "uncertain" || entry.queue_item_state === "paused"
+  );
+  const returnableEntries = shownTimeline.filter(
+    (entry) => returnable(entry) && heldBack(entry),
+  );
+  const allReturnPicked = returnableEntries.length > 0
+    && returnableEntries.every((entry) => returnPicked.has(entry.execution_id!));
   const timelineDays = Object.entries(
     shownTimeline.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
       const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone });
@@ -7995,6 +8098,40 @@ export function AutopilotPanel({
             onOpenDay={setOpenDay}
           />
         )}
+        {/* The timeline's own "select all", in the inbox's shape, for the
+            column of failed rows an unreachable engine leaves behind. Only
+            with something to tick together: one row has its own button. */}
+        {canEdit && timelineView === "list" && returnableEntries.length > 1 && (
+          <div className="campaign-approval-toolbar" data-active={returnPicked.size > 0 || undefined}>
+            <label className="campaign-approval-selectall">
+              <input
+                type="checkbox"
+                ref={(el) => {
+                  if (el) el.indeterminate = returnPicked.size > 0 && !allReturnPicked;
+                }}
+                checked={allReturnPicked}
+                aria-label="Select all failed posts"
+                onChange={() => setReturnPicked(allReturnPicked
+                  ? new Set()
+                  : new Set(returnableEntries.map((entry) => entry.execution_id!)))}
+              />
+              Select all {returnableEntries.length} failed
+            </label>
+            {returnPicked.size > 0 && (
+              <>
+                <strong>{returnPicked.size} selected</strong>
+                <Button variant="secondary" size="sm" busy={busy === "return-batch"}
+                  onClick={() => void returnEntries(
+                    returnableEntries.filter((entry) => returnPicked.has(entry.execution_id!)),
+                  )}>
+                  Back into rotation
+                </Button>
+                <button type="button" className="campaign-approval-clear"
+                  onClick={() => setReturnPicked(new Set())}>Clear</button>
+              </>
+            )}
+          </div>
+        )}
         {shownTimeline.length > 0 && timelineView === "list" && (
           <div className="campaign-pipeline">
             {timelineDays.map(([day, entries]) => (
@@ -8079,6 +8216,49 @@ export function AutopilotPanel({
                                   : plannedMeaning(autopilot.delivery)}>
                                 {entryIsPinned(entry) ? "Planned · locked" : "Planned"}
                               </Badge>
+                            )}
+                            {/* A failed delivery, and what can be done about
+                                it. The row used to end at the red line: the
+                                error, and nothing to press. What stands in
+                                the post's way is on the execution - see
+                                `returnEntries` - and a post with nothing in
+                                its way is told so rather than handed a button
+                                that would change nothing. */}
+                            {canEdit && returnable(entry) && (
+                              <div className="campaign-entry-actions">
+                                {heldBack(entry) ? (
+                                  <>
+                                    {returnableEntries.length > 1 && (
+                                      <label className="campaign-approval-selectall">
+                                        <input
+                                          type="checkbox"
+                                          checked={returnPicked.has(entry.execution_id!)}
+                                          aria-label="Select this post to put back into the rotation"
+                                          onChange={() => setReturnPicked((current) => {
+                                            const next = new Set(current);
+                                            if (next.has(entry.execution_id!)) next.delete(entry.execution_id!);
+                                            else next.add(entry.execution_id!);
+                                            return next;
+                                          })}
+                                        />
+                                      </label>
+                                    )}
+                                    <Tooltip content={entry.execution_state === "uncertain"
+                                      ? "The engine never answered, so the post may already be on the account. Check there first; putting it back says it is not there, and frees the post for its next slot. This outing is not counted against it."
+                                      : "The post was taken out of the rotation. Put it back and it comes round at the next slot it is eligible for. This outing is not counted against it."}>
+                                      <Button variant="quiet" size="sm"
+                                        busy={busy === `return-${entry.execution_id}`}
+                                        onClick={() => void returnEntries([entry])}>
+                                        Back into rotation
+                                      </Button>
+                                    </Tooltip>
+                                  </>
+                                ) : (
+                                  <Tooltip content="The delivery failed, but the post is still approved: it comes back at the next slot it is eligible for, and this outing is not counted against it.">
+                                    <small className="campaign-entry-note" tabIndex={0}>Still in the rotation</small>
+                                  </Tooltip>
+                                )}
+                              </div>
                             )}
                             {/* Beside the badge, which is where the grid puts
                                 the same action. It used to live in the muted

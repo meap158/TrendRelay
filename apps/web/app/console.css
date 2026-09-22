@@ -1995,6 +1995,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    the link tone as a standing state, not only a glyph swap: the colour says
    "engaged" at a glance the way a toggled filter does. */
 .campaign-entry-actions { display: inline-flex; flex: none; align-items: center; gap: 2px; }
+/* A fact about a failed row, where its button would be: the post needs
+   nothing pressed, and saying so is what stops the reader hunting for it. */
+.campaign-entry-note { padding-inline: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .campaign-entry-actions .ui-button[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--link) 45%, var(--line));
   color: var(--link);
