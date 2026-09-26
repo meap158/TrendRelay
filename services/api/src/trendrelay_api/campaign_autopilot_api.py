@@ -966,6 +966,11 @@ def save_autopilot(
 
     previous_language = autopilot.post_language
     autopilot.post_language = body.post_language
+    # A switch-on is the operator saying whatever stopped this has been dealt
+    # with, so it is the line the circuit breakers count after. Only on the
+    # flip: saving an already-running campaign is not that statement.
+    if body.enabled and not autopilot.enabled:
+        autopilot.enabled_at = utc_now()
     autopilot.enabled = body.enabled
     autopilot.offer_id = body.offer_id
     autopilot.offer_mode = (
@@ -3200,6 +3205,8 @@ def deploy_autopilot(
     was_active = campaign.status == "active"
     campaign.status = "active"
     campaign.updated_at = utc_now()
+    if not autopilot.enabled:
+        autopilot.enabled_at = utc_now()
     autopilot.enabled = True
     autopilot.updated_at = utc_now()
     result = run_campaign(session, autopilot, now=moment)

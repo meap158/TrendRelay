@@ -24,7 +24,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api import approval_words as words
-from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
+from trendrelay_api.autopilot_models import (
+    CampaignAutopilot,
+    CampaignDestination,
+    # Only ever an annotation here, and `from __future__ import annotations`
+    # keeps it one - but an annotation naming something the module has never
+    # imported is a name that does not exist the moment anything resolves it.
+    CampaignQueueItem,
+)
 from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.campaign_scheduler import (
     ScheduledPost,
@@ -144,6 +151,11 @@ MAX_DELIVERY_ATTEMPTS = 3
 BREAKER_WINDOW = 6
 AUTH_FAILURES_TO_PAUSE = 3
 UNCERTAIN_TO_PAUSE = 2
+#: How many "no room left" refusals stop the campaign. Two, because the
+#: condition is not intermittent - the second one is confirmation, not a
+#: coincidence - and every further post is another approval spent on a
+#: refusal.
+EXHAUSTED_TO_PAUSE = 2
 
 
 def _classify_failure(error: str) -> str:
@@ -1291,12 +1303,28 @@ def _apply_breakers(
 ) -> None:
     """Pause a campaign that keeps failing in ways more posts cannot fix.
 
-    Two conditions, both read from recent settled executions: repeated
+    Three conditions, all read from recent settled deliveries: repeated
     authorization refusals mean the engine no longer accepts the credentials
-    and every further post is another refusal; repeated uncertain deliveries
-    mean outcomes cannot be trusted, and posting into that is how duplicates
-    are made. Pausing is loud - the note says why - and resuming is the
-    operator's call once the cause is fixed.
+    and every further post is another refusal; an engine with no storage left
+    refuses every post identically; repeated uncertain deliveries mean
+    outcomes cannot be trusted, and posting into that is how duplicates are
+    made. Pausing is loud - the note says why - and resuming is the operator's
+    call once the cause is fixed.
+
+    The window is the last few deliveries *of any outcome*, not the last few
+    failures.
+    --------------------------------------------------------------------
+    It read failures alone, which meant nothing could ever leave it. Six
+    storage refusals from one bad evening stayed the six most recent failures
+    for as long as the campaign existed, so the breaker tripped again the
+    moment the operator switched the campaign back on - after the storage had
+    been freed, with posts publishing normally either side of it. Two went out
+    at 19:45 and the campaign was paused at 19:46 for six refusals from the
+    day before.
+
+    Counting successes into the window is what makes this a circuit breaker
+    rather than a permanent record: the engine working again is the evidence
+    that the condition has passed, and it arrives as posts that went out.
     """
     if not autopilot.enabled:
         return
@@ -1304,19 +1332,49 @@ def _apply_breakers(
         select(PublicationExecution)
         .where(
             PublicationExecution.campaign_id == autopilot.campaign_id,
-            PublicationExecution.state.in_(("failed", "uncertain")),
+            # Delivery outcomes only. `cancelled` is somebody deciding not to
+            # post, which says nothing about whether the engine is working.
+            PublicationExecution.state.in_(
+                ("failed", "uncertain", "published", "measured")
+            ),
             PublicationExecution.reconciled_at.is_not(None),
+            # Only what has happened since a person last switched this on.
+            # Before that line is history the operator has already answered by
+            # switching it on again - see `CampaignAutopilot.enabled_at`.
+            *(
+                [PublicationExecution.reconciled_at >= autopilot.enabled_at]
+                if autopilot.enabled_at else []
+            ),
         )
         .order_by(PublicationExecution.reconciled_at.desc())
         .limit(BREAKER_WINDOW)
     ).all()
     auth_failures = sum(1 for item in recent if item.failure_class == "auth")
     uncertain = sum(1 for item in recent if item.state == "uncertain")
+    exhausted = sum(
+        1 for item in recent
+        if any(marker in (item.error or "").casefold() for marker in EXHAUSTED_MARKERS)
+    )
     reason = None
     if auth_failures >= AUTH_FAILURES_TO_PAUSE:
         reason = (
             f"Paused automatically: {auth_failures} recent posts were refused as "
             "unauthorized. Reconnect the engine, then switch autopilot back on."
+        )
+    elif exhausted >= EXHAUSTED_TO_PAUSE:
+        # The third condition, and the one this campaign kept running through.
+        #
+        # An engine with no room left refuses every post identically, and none
+        # of the usual machinery treats that as a reason to stop: the delivery
+        # fails, the failure frees the queue item, the next pass freezes the
+        # same post for the next slot, and it arrives back in the approval
+        # inbox. A person approves it, it is refused again, and the queue is
+        # walked post by post for as long as the engine stays full. Eight of
+        # them came back in one evening that way.
+        reason = (
+            f"Paused automatically: {exhausted} recent posts were refused because "
+            "the engine has no storage left. Free space on the engine or raise its "
+            "limit, then switch autopilot back on."
         )
     elif uncertain >= UNCERTAIN_TO_PAUSE:
         reason = (
@@ -1327,6 +1385,34 @@ def _apply_breakers(
         autopilot.enabled = False
         autopilot.last_note = reason
         autopilot.updated_at = now
+        # Written down, because this is the only thing in the product that
+        # switches a campaign off without a person.
+        #
+        # It left no trace at all: no audit event, and `last_note` - the one
+        # place the reason lived - is rewritten by the first run after somebody
+        # switches the campaign back on. So the campaign was found off, the
+        # explanation was already gone, and the history showed nothing between
+        # the operator's own two switch-ons. It reads as the campaign turning
+        # itself off at random, which is exactly what it looked like.
+        #
+        # `actor_user_id` is whoever set the autopilot up, the same choice the
+        # Telegram path makes: no person did this, and inventing one would put
+        # a name on the record that no sign-in established. `via: breaker` is
+        # what says so.
+        from trendrelay_api.foundation import audit
+
+        audit(
+            session, None, autopilot.workspace_id, autopilot.created_by or "",
+            "campaign.autopilot_paused", "campaign", autopilot.campaign_id,
+            {
+                "via": "breaker",
+                "reason": reason,
+                "auth_failures": auth_failures,
+                "uncertain": uncertain,
+                "storage_refusals": exhausted,
+                "window": BREAKER_WINDOW,
+            },
+        )
 
 
 def _redeliver(

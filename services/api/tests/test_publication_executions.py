@@ -685,6 +685,105 @@ def test_uncertain_deliveries_pause_before_duplicates_can_pile_up(
     assert "duplicates" in pilot.last_note
 
 
+def test_a_campaign_switched_off_by_a_breaker_says_so_in_the_record(
+    session, tmp_path, engine_stub
+) -> None:
+    """The only thing in the product that switches a campaign off without a
+    person, and it left no trace at all.
+
+    No audit event, and `last_note` - the one place the reason lived - is
+    rewritten by the first run after somebody switches the campaign back on.
+    So the campaign was found off, the explanation was already gone, and the
+    history showed nothing between the operator's own two switch-ons. It reads
+    as the campaign turning itself off at random, which is what it looked like.
+    """
+    from trendrelay_api.models import AuditEvent
+
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", str(clip(tmp_path)))
+    pilot = autopilot(session)
+    full = "woopsocial: api.woopsocial.com: storage limit exceeded: current usage 1073283895"
+
+    for round_number in range(2):
+        moment = NOW.replace(day=NOW.day + round_number)
+        run_campaign(session, pilot, now=moment)
+        for execution in executions(session):
+            if execution.state == "queued":
+                settle_job(session, execution.job_id, "failed", error=full)
+        reconcile_executions(session, now=moment)
+        session.commit()
+
+    assert pilot.enabled is False
+    [event] = session.scalars(
+        select(AuditEvent).where(AuditEvent.action == "campaign.autopilot_paused")
+    ).all()
+    assert event.entity_id == pilot.campaign_id
+    assert event.detail["via"] == "breaker", "nobody pressed anything"
+    assert "no storage left" in event.detail["reason"]
+    assert event.detail["storage_refusals"] >= 2
+
+    # And the record outlives the note, which is the whole point: switching the
+    # campaign back on rewrites `last_note` and the reason is gone from it.
+    pilot.enabled = True
+    session.commit()
+    run_campaign(session, pilot, now=NOW.replace(day=NOW.day + 3))
+    session.commit()
+
+    assert "no storage left" not in (pilot.last_note or "")
+    assert session.scalars(
+        select(AuditEvent).where(AuditEvent.action == "campaign.autopilot_paused")
+    ).all(), "the history still knows"
+
+
+def test_a_fixed_engine_clears_the_breaker_instead_of_tripping_it_forever(
+    session, tmp_path, engine_stub
+) -> None:
+    """The loop the operator kept hitting: switch it on, watch it switch off.
+
+    The window read failures alone, so nothing could ever leave it. Six
+    storage refusals from one bad evening stayed the six most recent failures
+    for as long as the campaign existed, and the breaker tripped again the
+    moment the campaign was switched back on - after the storage was freed,
+    with posts publishing normally either side of it. Two went out at 19:45
+    and the campaign was paused at 19:46 for refusals from the day before.
+    """
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    pilot = autopilot(session)
+    full = "woopsocial: api.woopsocial.com: storage limit exceeded: current usage 1073283895"
+
+    def one_round(day: int, *, outcome: str) -> None:
+        queue_item(session, f"q{day}", str(clip(tmp_path, name=f"clip{day}.mp4")))
+        moment = NOW.replace(day=NOW.day + day)
+        run_campaign(session, pilot, now=moment)
+        for execution in executions(session):
+            if execution.state == "queued":
+                if outcome == "published":
+                    settle_job(session, execution.job_id, "succeeded", result={})
+                else:
+                    settle_job(session, execution.job_id, "failed", error=full)
+        reconcile_executions(session, now=moment)
+        session.commit()
+
+    for day in range(2):
+        one_round(day, outcome="failed")
+    assert pilot.enabled is False, "a full engine stops the campaign"
+
+    # The operator frees the storage and switches it back on. That switch is
+    # the statement the breaker counts after.
+    pilot.enabled = True
+    pilot.enabled_at = NOW.replace(day=NOW.day + 2)
+    session.commit()
+    for day in range(2, 6):
+        one_round(day, outcome="published")
+
+    assert pilot.enabled is True, (
+        "the engine working again is the evidence the condition has passed"
+    )
+    assert "no storage left" not in (pilot.last_note or "")
+
+
 # --- restart recovery -----------------------------------------------------------
 
 
@@ -772,3 +871,29 @@ def test_an_engine_with_no_storage_left_is_not_delivered_again(
     assert len(engine_stub.calls) == 1
 
 
+def test_a_campaign_whose_engine_is_full_stops_rather_than_walking_its_queue(
+    session, tmp_path, engine_stub
+) -> None:
+    """None of the usual machinery treated a full engine as a reason to stop.
+
+    The delivery fails, the failure frees the queue item, the next pass
+    freezes the same post for the next slot, and it arrives back in the
+    approval inbox. Approve it and it is refused again. Eight posts came back
+    in one evening that way.
+    """
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    pilot = autopilot(session)
+    full = "woopsocial: api.woopsocial.com: storage limit exceeded: current usage 1073283895"
+
+    for index in range(2):
+        queue_item(session, f"q{index}", str(clip(tmp_path, name=f"clip{index}.mp4")))
+        run_campaign(session, pilot, now=NOW + timedelta(days=index))
+        execution = [row for row in executions(session) if row.state == "queued"][0]
+        settle_job(session, execution.job_id, "failed", error=full)
+        reconcile_executions(session, now=NOW + timedelta(days=index))
+        session.commit()
+
+    assert pilot.enabled is False, "it stops instead of spending the next approval"
+    assert "no storage left" in pilot.last_note
+    assert "Free space on the engine" in pilot.last_note

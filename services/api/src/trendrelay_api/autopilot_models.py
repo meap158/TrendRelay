@@ -190,6 +190,22 @@ class CampaignAutopilot(Base):
     plan_horizon_hours: Mapped[int] = mapped_column(
         Integer, default=24, server_default="24"
     )
+    #: When a person last switched this campaign on.
+    #:
+    #: What the circuit breakers judge from. Switching a paused campaign back
+    #: on is the operator saying the cause has been dealt with, so it is also
+    #: the line the breaker counts after: deliveries from before it are
+    #: history, not evidence.
+    #:
+    #: Without it a breaker could never be cleared. It counted the most recent
+    #: failures with no bound at all, so six storage refusals from one bad
+    #: evening stayed the six most recent failures for as long as the campaign
+    #: existed, and the campaign was paused again on the first tick after
+    #: every switch-on - with posts publishing normally either side of it.
+    #:
+    #: Null on rows that predate this and on a campaign nobody has switched on
+    #: since; the breaker then reads everything, which is what it did before.
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: The whole campaign's ceiling for a rolling week, counted across every
     #: destination. None means the per-account caps are the only limit. This is
     #: the budget shape organic posting actually has - posts, not money.
