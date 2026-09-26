@@ -162,6 +162,11 @@ class AutopilotSettings(BaseModel):
     #: Whether smart matching spreads itself across the tagged products.
     rotate_products: bool = True
     daily_cap_per_account: int = Field(default=5, ge=1, le=24)
+    #: How far ahead a run fills, in hours - and so how much warning the
+    #: approver gets, because a post is announced the moment it is frozen.
+    #: Longer warns further ahead; shorter lets a queue edit reach the
+    #: schedule sooner, because nothing already frozen changes.
+    plan_horizon_hours: int = Field(default=24, ge=1, le=336)
     delivery: str = Field(default="schedule", pattern=r"^(draft|schedule|now)$")
     #: How much the campaign may do alone. Run by exception is the recommended
     #: default: proceed, and hold only what trips a rule.
@@ -998,6 +1003,7 @@ def save_autopilot(
     autopilot.repeat_posts = body.repeat_posts
     autopilot.rotate_products = body.rotate_products
     autopilot.daily_cap_per_account = body.daily_cap_per_account
+    autopilot.plan_horizon_hours = body.plan_horizon_hours
     if body.authority == "autonomous" and autopilot.authority != "autonomous":
         blocked = graduation_block(session, campaign_id)
         if blocked:

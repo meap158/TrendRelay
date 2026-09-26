@@ -926,6 +926,9 @@ type Autopilot = {
   /** Whether smart matching spreads itself across the tagged products. */
   rotate_products: boolean;
   daily_cap_per_account: number;
+  /** How far ahead a run fills, in hours - and so how much warning the
+      approver gets, because a post is announced when it is frozen. */
+  plan_horizon_hours: number;
   weekly_post_cap: number | null;
   /** The campaign's own posting times. Null lets each account inherit. */
   posting_preset_id: string | null;
@@ -3138,6 +3141,7 @@ export function AutopilotPanel({
           repeat_posts: next.repeat_posts,
           rotate_products: next.rotate_products,
           daily_cap_per_account: next.daily_cap_per_account,
+          plan_horizon_hours: next.plan_horizon_hours,
           weekly_post_cap: next.weekly_post_cap,
           posting_preset_id: next.posting_preset_id,
           delivery: next.delivery,

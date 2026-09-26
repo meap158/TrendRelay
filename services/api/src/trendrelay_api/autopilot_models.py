@@ -50,6 +50,13 @@ class CampaignAutopilot(Base):
         CheckConstraint(
             "daily_cap_per_account BETWEEN 1 AND 24", name="valid_autopilot_cap"
         ),
+        # An hour is the shortest useful reach - anything less cannot span the
+        # gap between two posting times - and a fortnight is where planning
+        # stops being planning: every post frozen that far out is a post the
+        # queue can no longer edit.
+        CheckConstraint(
+            "plan_horizon_hours BETWEEN 1 AND 336", name="valid_autopilot_horizon"
+        ),
         CheckConstraint(
             "delivery IN ('draft','schedule','now')", name="valid_autopilot_delivery"
         ),
@@ -167,6 +174,22 @@ class CampaignAutopilot(Base):
     #: same ranking asked a fairer question.
     rotate_products: Mapped[bool] = mapped_column(Boolean, default=True)
     daily_cap_per_account: Mapped[int] = mapped_column(Integer, default=5)
+    #: How far ahead a run fills, in hours - and so how much warning an
+    #: approver gets, because a post is announced the moment it is frozen.
+    #:
+    #: Was a constant every campaign shared. It is two decisions wearing one
+    #: number, and they pull opposite ways: longer means the person deciding
+    #: posts sees them further ahead, shorter means an edit to the queue
+    #: reaches the schedule sooner, because nothing already frozen changes.
+    #: Which of those matters is the campaign's own answer - a campaign whose
+    #: approver checks a chat once a day needs more warning than one run from
+    #: the desk it is queued at.
+    #:
+    #: 24 hours is what it always was, so a campaign that never touches this
+    #: behaves exactly as before.
+    plan_horizon_hours: Mapped[int] = mapped_column(
+        Integer, default=24, server_default="24"
+    )
     #: The whole campaign's ceiling for a rolling week, counted across every
     #: destination. None means the per-account caps are the only limit. This is
     #: the budget shape organic posting actually has - posts, not money.

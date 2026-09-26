@@ -1015,3 +1015,54 @@ def test_a_count_that_cannot_be_taken_does_not_fail_the_change(
     assert campaign_autopilot_api._planned_for_destination(
         session, pilot, "d1", now=NOW,
     ) == 0
+
+
+def test_how_far_ahead_a_campaign_plans_is_its_own_setting(
+    session, tmp_path, engine_stub
+) -> None:
+    """It was a constant every campaign shared, and it is two decisions in one
+    number: a post is announced for approval the moment it is frozen, so the
+    horizon is also how much warning the approver gets - while a shorter one
+    lets a queue edit reach the schedule sooner, because nothing already
+    frozen changes."""
+    campaign_setup(session, tmp_path)
+    for index in range(1, 4):
+        path = tmp_path / f"extra-{index}.mp4"
+        path.write_bytes(b"another clip entirely")
+        session.add(CampaignQueueItem(
+            id=f"q-extra-{index}", workspace_id="ws", campaign_id="camp",
+            state="approved", video_path=str(path), body=f"Another way {index}.",
+            hashtags=["coffee"], position=index, last_posted_by_destination={},
+            created_by="user-1",
+        ))
+    # Daily at 12:00, and it is 09:00: one slot inside a day, three inside three.
+    pilot = autopilot(session, authority="assist", daily_cap_per_account=24)
+
+    pilot.plan_horizon_hours = 24
+    session.commit()
+    one_day = run_campaign(session, pilot, now=NOW)
+    assert len(one_day["held"]) == 1, "the day ahead holds one posting time"
+
+    for execution in executions(session):
+        execution.state = "cancelled"
+    session.commit()
+
+    pilot.plan_horizon_hours = 72
+    session.commit()
+    three_days = run_campaign(session, pilot, now=NOW)
+
+    assert len(three_days["held"]) == 3, "three days ahead holds three"
+    # And the approver hears about all three now rather than one a day.
+    frozen = sorted(item["at"] for item in three_days["held"])
+    assert (frozen[-1] - frozen[0]).days == 2
+
+
+def test_a_campaign_that_never_set_a_horizon_plans_a_day_ahead(
+    session, tmp_path, engine_stub
+) -> None:
+    """What the shared constant was, so nothing changes under a campaign that
+    does not touch the setting."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+
+    assert pilot.plan_horizon_hours == 24

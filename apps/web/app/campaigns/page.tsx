@@ -83,6 +83,7 @@ type CampaignPolicy = {
   repeat_posts: boolean;
   rotate_products: boolean;
   daily_cap_per_account: number;
+  plan_horizon_hours: number;
   weekly_post_cap: number | null;
   authority: string;
   priority: string;
@@ -684,6 +685,7 @@ export default function CampaignsPage() {
             // without opening it gets exactly the defaults it always did.
             max_products_per_post: Number(form.get("max_products_per_post")),
             daily_cap_per_account: Number(form.get("daily_cap_per_account")),
+            plan_horizon_hours: Number(form.get("plan_horizon_hours")),
             weekly_post_cap: form.get("weekly_post_cap")
               ? Number(form.get("weekly_post_cap")) : null,
             authority: form.get("authority"),
@@ -774,6 +776,7 @@ export default function CampaignsPage() {
             ...(policy ? {
               max_products_per_post: Number(form.get("max_products_per_post")),
               daily_cap_per_account: Number(form.get("daily_cap_per_account")),
+              plan_horizon_hours: Number(form.get("plan_horizon_hours")),
               priority: form.get("priority"),
               weekly_post_cap: form.get("weekly_post_cap")
                 ? Number(form.get("weekly_post_cap")) : null,
@@ -1283,6 +1286,12 @@ export default function CampaignsPage() {
                 <input type="number" name="weekly_post_cap" min={1} max={200} placeholder="No cap" />
                 <small>Across every destination. Empty leaves the per-account caps.</small>
               </label>
+              <label>Plan ahead
+                <input type="number" name="plan_horizon_hours" min={1} max={336} defaultValue={24} />
+                <small>Hours. How far ahead posts are frozen, and so how much
+                  warning an approval gets. Shorter lets queue edits reach the
+                  schedule sooner.</small>
+              </label>
             </div>
             <label>Authority
               <Select name="authority" defaultValue="run_by_exception">
@@ -1420,6 +1429,17 @@ export default function CampaignsPage() {
                   <input type="number" name="weekly_post_cap" min={1} max={200}
                     placeholder="No cap" defaultValue={policy.weekly_post_cap ?? ""} />
                   <small>Across every destination. Empty leaves the per-account caps.</small>
+                </label>
+                {/* Two decisions in one number, and they pull opposite ways -
+                    so the help names both rather than only the one the label
+                    suggests. A post is announced for approval the moment it
+                    is frozen, which makes this the approver's warning too. */}
+                <label>Plan ahead
+                  <input type="number" name="plan_horizon_hours" min={1} max={336}
+                    defaultValue={policy.plan_horizon_hours ?? 24} />
+                  <small>Hours. How far ahead posts are frozen, and so how much
+                    warning an approval gets. Shorter lets queue edits reach the
+                    schedule sooner.</small>
                 </label>
 
               </div>

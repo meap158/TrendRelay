@@ -156,6 +156,9 @@ class CampaignCreate(BaseModel):
     #: allows and the settings dialog offers.
     max_products_per_post: int | None = Field(default=None, ge=1, le=5)
     daily_cap_per_account: int | None = Field(default=None, ge=1, le=24)
+    #: How far ahead a run freezes posts, in hours - and so how much
+    #: warning an approval gets. None leaves the column default.
+    plan_horizon_hours: int | None = Field(default=None, ge=1, le=336)
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
     authority: str | None = Field(default=None, pattern=r"^[a-z_]{4,20}$")
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
@@ -232,6 +235,9 @@ class CampaignUpdate(BaseModel):
     repeat_posts: bool | None = None
     rotate_products: bool | None = None
     daily_cap_per_account: int | None = Field(default=None, ge=1, le=24)
+    #: How far ahead a run freezes posts, in hours - and so how much
+    #: warning an approval gets. None leaves the column default.
+    plan_horizon_hours: int | None = Field(default=None, ge=1, le=336)
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
     #: Explicitly nullable and distinguishable from "not sent": no cap is a
     #: real setting, so the form says which it means.
@@ -543,6 +549,7 @@ def create_campaign(
         "disclose",
         "max_products_per_post",
         "daily_cap_per_account",
+        "plan_horizon_hours",
         "weekly_post_cap",
         "authority",
         "priority",
@@ -765,6 +772,7 @@ def update_campaign(
             "repeat_posts": body.repeat_posts,
             "rotate_products": body.rotate_products,
             "daily_cap_per_account": body.daily_cap_per_account,
+            "plan_horizon_hours": body.plan_horizon_hours,
             "authority": body.authority,
             "priority": body.priority,
             "approvals_telegram": body.approvals_telegram,

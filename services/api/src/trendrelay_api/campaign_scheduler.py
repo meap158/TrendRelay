@@ -554,6 +554,8 @@ def plan_campaign(
     comparable afterwards - and because the caption around the link differs by
     network anyway.
     """
+    if horizon is None:
+        horizon = timedelta(hours=autopilot.plan_horizon_hours or 24)
     campaign = session.get(Campaign, autopilot.campaign_id)
     if not campaign:
         return [], "The campaign no longer exists."
@@ -1641,6 +1643,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "repeat_posts": autopilot.repeat_posts,
         "rotate_products": autopilot.rotate_products,
         "daily_cap_per_account": autopilot.daily_cap_per_account,
+        "plan_horizon_hours": autopilot.plan_horizon_hours,
         "weekly_post_cap": autopilot.weekly_post_cap,
         "posting_preset_id": autopilot.posting_preset_id,
         "posts_scheduled": autopilot.posts_scheduled,
