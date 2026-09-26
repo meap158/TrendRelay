@@ -1047,3 +1047,56 @@ def test_duplicating_a_campaign_carries_its_posts_working_notes() -> None:
         if "campaign_queue_items.context" in statement
     ]
     assert len(note_reads) == 1, note_reads
+
+
+def test_the_list_says_whether_each_campaign_is_actually_running() -> None:
+    """Status and running are two different questions.
+
+    Status is where a campaign sits in its life - draft, active, archived -
+    and whether its autopilot posts is a second, independent thing. An active
+    campaign whose autopilot a circuit breaker switched off reads exactly like
+    a working one in a list that only carries status, which is how one sat
+    stopped without anybody noticing.
+    """
+    from trendrelay_api.autopilot_models import CampaignAutopilot
+
+    workspace_id = create_workspace()
+    campaign = create_campaign(workspace_id)
+
+    def row() -> dict:
+        listing = asyncio.run(
+            request("GET", f"/api/workspaces/{workspace_id}/campaigns")
+        )
+        assert listing.status_code == 200
+        return next(
+            c for c in listing.json()["campaigns"] if c["id"] == campaign["id"]
+        )
+
+    # A new campaign has an autopilot and it is off, which is the honest
+    # answer: it is not posting yet.
+    assert row()["autopilot_running"] is False
+
+    with TestingSession.begin() as session:
+        pilot = session.scalar(
+            select(CampaignAutopilot).where(
+                CampaignAutopilot.campaign_id == campaign["id"]
+            )
+        )
+        pilot.enabled = True
+
+    running = row()
+    assert running["autopilot_running"] is True
+    assert running["status"] == campaign["status"], (
+        "the switch says nothing about where the campaign sits in its life"
+    )
+
+    # And switched off again - the state a circuit breaker leaves behind.
+    with TestingSession.begin() as session:
+        pilot = session.scalar(
+            select(CampaignAutopilot).where(
+                CampaignAutopilot.campaign_id == campaign["id"]
+            )
+        )
+        pilot.enabled = False
+
+    assert row()["autopilot_running"] is False

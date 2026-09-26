@@ -72,6 +72,11 @@ type Campaign = {
   /** Posts this campaign is holding for approval right now. Only the list
       endpoint fills it in; shown on the sidebar row when there are any. */
   held_count?: number;
+  /** Whether its autopilot is switched on - a different question from
+      `status`, which is where the campaign sits in its life. Null when the
+      campaign has no autopilot at all, which is not the same as one that was
+      switched off. Only the list endpoint fills it in. */
+  autopilot_running?: boolean | null;
   /** Where it sits in the workspace's own order. The list arrives sorted by
       it; this is here so a reorder can be sent back in the same terms. */
   position?: number;
@@ -1040,6 +1045,22 @@ export default function CampaignsPage() {
                     <em className="campaign-list-held"
                       title={`${campaign.held_count} post${campaign.held_count === 1 ? "" : "s"} waiting for your approval`}
                     >{campaign.held_count}</em>
+                  )}
+                  {/* Stopped, on a campaign that is otherwise live.
+                      Deliberately not folded into the status word below: a
+                      campaign's status is where it sits in its life - draft,
+                      active, archived - and whether its autopilot runs is a
+                      second, independent thing. An active campaign whose
+                      autopilot a circuit breaker switched off reads exactly
+                      like a working one on a row that only says "active",
+                      which is how one sat stopped without anybody noticing.
+                      Only for active campaigns: a draft or an archived one is
+                      not expected to be posting, so saying it is not would be
+                      noise on every row that will never run. */}
+                  {campaign.status === "active" && campaign.autopilot_running === false && (
+                    <em className="campaign-list-stopped"
+                      title="Autopilot is switched off, so this campaign is not posting. Open it to switch it back on."
+                    ><ActionIcon name="pause" size={11} /></em>
                   )}
                 </strong>
                 {/* The language it posts in, not the market it was never asked

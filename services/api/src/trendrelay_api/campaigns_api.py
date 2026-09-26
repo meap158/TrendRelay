@@ -457,6 +457,19 @@ def list_campaigns(
             .group_by(PublicationExecution.campaign_id)
         ).all()
     )
+    # Whether each campaign's autopilot is actually running, which is not what
+    # its status says. Status is where a campaign sits in its life - draft,
+    # active, archived - and the switch is whether it posts on its own. An
+    # active campaign with its autopilot off looks identical to a working one
+    # in a list that only reads status, and that is exactly the state a
+    # circuit breaker leaves behind: the operator sees "active" on every row
+    # and no hint that one of them stopped.
+    running = dict(
+        session.execute(
+            select(CampaignAutopilot.campaign_id, CampaignAutopilot.enabled)
+            .where(CampaignAutopilot.campaign_id.in_([item.id for item in items]))
+        ).all()
+    )
     from trendrelay_api.integrations.telegram import connection_summary
 
     return {
@@ -465,6 +478,12 @@ def list_campaigns(
                 **_campaign(item),
                 "tagged_products": counts.get(item.id, 0),
                 "held_count": held_counts.get(item.id, 0),
+                # None where a campaign has no autopilot row at all: it was
+                # never set up to run, which is a different thing from having
+                # been switched off, and the sidebar says neither.
+                "autopilot_running": (
+                    bool(running[item.id]) if item.id in running else None
+                ),
             }
             for item in items
         ],

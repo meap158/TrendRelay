@@ -732,6 +732,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 /* Posts waiting for approval, at the end of the row: a small warn pill so a
    campaign that needs a person is visible without opening it. */
 .campaign-list-held { flex: none; display: inline-grid; place-items: center; margin-inline-start: auto; min-inline-size: 18px; block-size: 17px; padding: 0 5px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-size: 10px; font-weight: 700; font-style: normal; }
+/* A live campaign that is not posting. Quieter than the approval count beside
+   it - that one is asking for something, this one is stating a fact - and it
+   keeps the same `margin-inline-start: auto` so whichever appears sits at the
+   end of the row rather than shifting the name. */
+.campaign-list-stopped { flex: none; display: inline-grid; place-items: center; margin-inline-start: auto; inline-size: 17px; block-size: 17px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-style: normal; }
+.campaign-list-held + .campaign-list-stopped { margin-inline-start: 4px; }
 .campaign-list span, .campaign-list > p { color: var(--muted); font-size: 11px; }
 .campaign-create { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .campaign-create summary, .plan-create summary { color: var(--link); font-weight: 600; cursor: pointer; }

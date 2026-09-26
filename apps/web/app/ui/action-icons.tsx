@@ -19,6 +19,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Pause,
   Play,
   Plus,
   RefreshCw,
@@ -81,6 +82,9 @@ export const ACTION_ICONS = {
   reveal: Eye,
   hide: EyeOff,
   play: Play,
+  // Stopped rather than finished: a campaign whose autopilot is switched off
+  // is still there and still has its queue, it simply is not posting.
+  pause: Pause,
   // Locking a post to one posting slot, and handing it back. A pair on
   // purpose: the glyph shows the action, not the state, so the filled pin
   // always means "lock this here" and the crossed one "release it".
