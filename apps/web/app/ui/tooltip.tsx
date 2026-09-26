@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { type Alignment, tooltipAlignment } from "../../lib/tooltip-align";
+
 type TooltipTriggerProps = {
   "aria-describedby"?: string;
   title?: string;
@@ -33,21 +35,48 @@ export function Tooltip({
 }) {
   const id = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
-  const [alignment, setAlignment] = useState<"start" | "center" | "end">("center");
+  const [alignment, setAlignment] = useState<Alignment>("center");
+
+  /**
+   * What the tooltip actually has to fit inside, which is not always the window.
+   *
+   * A tooltip in a dialog, a scrolling list or any other clipped box is bound
+   * by that box, not by the viewport - and measuring the viewport says there
+   * is room where there is none. In a 1120px dialog centred on a wide screen,
+   * a control near the dialog's right edge is still hundreds of pixels from
+   * the window's, so this centred the surface and put half of it outside: the
+   * text was cut off by the dialog's own `overflow`, and because an absolutely
+   * positioned element still counts towards scrollable width, the dialog grew
+   * a horizontal scrollbar for content nobody could see.
+   *
+   * The nearest ancestor that clips is the one that decides. `clip` and
+   * `hidden` cut the surface off; `auto` and `scroll` do too, and add the
+   * scrollbar. Falls back to the viewport when nothing clips, which is what
+   * this always did and is right for a tooltip on the open page.
+   */
+  const clippingBounds = (node: HTMLElement): { left: number; right: number } => {
+    for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+      const style = window.getComputedStyle(parent);
+      const clips = `${style.overflowX} ${style.overflowY}`;
+      if (/auto|scroll|hidden|clip/.test(clips)) {
+        const box = parent.getBoundingClientRect();
+        // A box wider than the window cannot be the tighter bound.
+        return {
+          left: Math.max(0, box.left),
+          right: Math.min(window.innerWidth, box.right),
+        };
+      }
+    }
+    return { left: 0, right: window.innerWidth };
+  };
 
   const placeInsideViewport = () => {
-    const rect = wrapperRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    // The surface is at most 260px-360px wide. Near either viewport edge, anchor it
-    // to the trigger's near edge rather than centring it beyond the document
-    // and creating a horizontal scrollbar. Recomputed when it is opened so it
-    // also follows responsive reflow and keyboard focus.
-    const half = Math.min(160, Math.max(0, (window.innerWidth - 24) / 2));
-    setAlignment(rect.left + rect.width / 2 < half + 12
-      ? "start"
-      : window.innerWidth - (rect.left + rect.width / 2) < half + 12
-        ? "end"
-        : "center");
+    const node = wrapperRef.current;
+    const rect = node?.getBoundingClientRect();
+    if (!node || !rect) return;
+    // Recomputed when it is opened so it follows responsive reflow, scrolling
+    // and keyboard focus rather than whatever was true at first render.
+    setAlignment(tooltipAlignment(rect, clippingBounds(node)));
   };
 
   if (!isValidElement(children)) return children as ReactNode;
