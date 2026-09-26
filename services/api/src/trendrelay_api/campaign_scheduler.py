@@ -845,15 +845,32 @@ def plan_campaign(
                 f"{week_used} committed in the last seven days."
             )
 
-    performance = _performance(session, autopilot.workspace_id, list(destinations))
     from trendrelay_api.campaign_measurement import destination_engagement
 
+    # Measured when the answer can matter.
+    #
+    # Ranking decides which account a slot goes to, and reading what each one
+    # earned costs a scan of every execution it has ever had, for every link
+    # it has ever carried. With a single account there is nothing to decide -
+    # it wins every ordering there is - so for a caller that wants the shape
+    # alone, that scan is the largest thing a plan does and cannot change one
+    # outcome.
+    #
+    # Only for that caller, though. The ranking is also *said*: a post's
+    # reason names the axis it won on, and a campaign with one account still
+    # explains itself that way on the pages that read it. Skipping the read
+    # turned "Ranked: …" into "Unranked: …" on a page nobody was optimising,
+    # which is why this asks what the caller wants rather than only counting
+    # destinations.
+    if len(destinations) > 1 or match_products:
+        performance = _performance(session, autopilot.workspace_id, list(destinations))
+        engagement = destination_engagement(session, [item.id for item in destinations])
+    else:
+        performance, engagement = {}, {}
     ranks = rank_destinations(
         [{"id": item.id, "platform": item.platform} for item in destinations],
         performance,
-        engagement=destination_engagement(
-            session, [item.id for item in destinations]
-        ),
+        engagement=engagement,
         priority=autopilot.priority,
     )
     by_id = {item.id: item for item in destinations}
