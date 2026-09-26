@@ -209,6 +209,18 @@ def _post_type_for(execution: Any) -> str | None:
     )
 
 
+def _delivery_mode(autopilot: CampaignAutopilot, override: str | None = None) -> str:
+    """How this campaign hands a post over, with auto-draft's promise on top.
+
+    The same answer `_publish_execution` builds its request from, named once
+    so approving can ask it a question - is this delivery scheduled? - without
+    re-deriving the rule and drifting from it.
+    """
+    if autopilot.authority == "auto_draft":
+        return "draft"
+    return override or autopilot.delivery
+
+
 def _publish_execution(
     session: Session,
     autopilot: CampaignAutopilot,
@@ -228,10 +240,7 @@ def _publish_execution(
     # Auto-draft authority delivers only ever as engine drafts - its whole
     # promise - so not even an explicit publish-now overrides it. Everywhere
     # else the override is the operator's approval-time decision.
-    delivery = (
-        "draft" if autopilot.authority == "auto_draft"
-        else delivery_override or autopilot.delivery
-    )
+    delivery = _delivery_mode(autopilot, delivery_override)
     request = PublishRequest(
         workspace_id=autopilot.workspace_id,
         campaign_id=autopilot.campaign_id,
@@ -1163,6 +1172,42 @@ def approve_execution(
     at = moment if publish_now else (
         scheduled if scheduled and scheduled > moment else moment
     )
+    # An approval that arrived after the post's own time takes the campaign's
+    # next free posting time instead of the moment it was pressed.
+    #
+    # This used to clamp to now, which under scheduled delivery is not a time
+    # an engine will take: "Scheduled deliveries need a date and time in the
+    # future" refuses `now` exactly as it refuses the past. So the one thing
+    # the inbox exists for - approving a post that waited - could only fail on
+    # every post that had waited long enough to matter, and the only button
+    # that worked was the one that posts immediately, which is a different
+    # decision from the one being made.
+    #
+    # The post goes to the front of the campaign's own queue rather than out
+    # of the door: the slot is real, it is this account's, and nothing else
+    # has claimed it.
+    moved_to: datetime | None = None
+    if not publish_now and at <= moment and _delivery_mode(autopilot) == "schedule":
+        destination = (
+            session.get(CampaignDestination, execution.destination_id)
+            if execution.destination_id else None
+        )
+        from trendrelay_api.campaign_scheduler import next_open_slot
+
+        moved_to = (
+            next_open_slot(session, autopilot, destination, now=moment, ignore=execution.id)
+            if destination is not None else None
+        )
+        if moved_to is None:
+            # Said as the thing to do about it. The post stays held, which is
+            # where it can simply be approved again - or posted now, which is
+            # the decision this refuses to make on the operator's behalf.
+            raise ValueError(
+                "This post's own posting time has passed, and this account has no "
+                "free posting time in the next seven days to move it to. Use "
+                "\"Publish now\" to send it immediately, or add a posting time."
+            )
+        at = moved_to
     job = _publish_execution(
         session, autopilot, execution, at=at,
         delivery_override="now" if publish_now else None,

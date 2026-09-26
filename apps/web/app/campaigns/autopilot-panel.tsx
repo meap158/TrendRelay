@@ -2697,6 +2697,11 @@ export function AutopilotPanel({
    * drifts by at most that long behind the real one.
    */
   const overdueCount = exceptions.filter((item) => isOverdue(item.scheduled_at)).length;
+  /** How many of the *selected* posts are past their own time, so the batch
+      button can say what it is about to do rather than contradict the rows. */
+  const pickedOverdue = exceptions.filter(
+    (item) => picked.has(item.id) && isOverdue(item.scheduled_at),
+  ).length;
   /**
    * What the last batch did, per post, because a total is not an answer.
    *
@@ -4980,7 +4985,9 @@ export function AutopilotPanel({
               held posts is forty lines of instruction for four controls. */}
           {canEdit && exceptions.length > 0 && (
             <small className="campaign-approval-actions-hint">
-              <strong>Approve</strong> sends it on the campaign’s schedule ·{" "}
+              <strong>Approve</strong> sends it on the campaign’s schedule -
+              a post whose own time has passed takes the next free posting
+              time, ahead of the ones still waiting ·{" "}
               <strong>Publish now</strong> sends it immediately ·{" "}
               <strong>Edit</strong> opens the post itself - words and media -
               and takes this waiting copy again from it ·{" "}
@@ -5010,8 +5017,29 @@ export function AutopilotPanel({
               {picked.size > 0 && (
                 <>
                   <strong>{picked.size} selected</strong>
-                  <Button variant="primary" size="sm" busy={busy === "approve-batch"}
-                    onClick={() => void approvePicked()}>Approve {picked.size}</Button>
+                  {/* The batch says what it is about to do to the selection,
+                      the way each row does. A bar reading "Approve 4" over
+                      four rows all reading "Approve for next slot" is the
+                      same button describing itself two ways, and the one on
+                      the bar is the one that is wrong: none of those four can
+                      go out at a time that has passed. Mixed selections keep
+                      the plain verb and count the moved ones beside it,
+                      because that is the only honest short label for a batch
+                      doing two things. */}
+                  <Tooltip content={pickedOverdue === 0
+                    ? "Queue each of these for its scheduled campaign time."
+                    : pickedOverdue === picked.size
+                      ? "Each of these is past its own posting time. Queue them for their campaign's next free posting times, ahead of the posts still waiting."
+                      : `Queue each for its scheduled campaign time. ${pickedOverdue} are past their own time and take their campaign's next free posting time instead.`}>
+                    <Button variant="primary" size="sm" busy={busy === "approve-batch"}
+                      onClick={() => void approvePicked()}>
+                      {pickedOverdue === picked.size
+                        ? `Approve ${picked.size} for next slot`
+                        : `Approve ${picked.size}`}
+                      {pickedOverdue > 0 && pickedOverdue < picked.size
+                        ? ` · ${pickedOverdue} to next slot` : ""}
+                    </Button>
+                  </Tooltip>
                   <Button variant="secondary" size="sm" busy={busy === "approve-batch"}
                     onClick={() => void approvePicked({ publishNow: true })}>Publish now</Button>
                   <Button variant="quiet" size="sm" busy={busy === "dismiss-batch"}
@@ -5200,11 +5228,22 @@ export function AutopilotPanel({
                       {canEdit && (
                         <>
                           <span className="campaign-exception-actions">
-                            <Tooltip content="Queue this exact post for its scheduled campaign time.">
+                            {/* A post whose own time has passed cannot go out
+                                at that time, so approving it moves it to the
+                                campaign's next free posting time - ahead of
+                                everything still waiting. The button says which
+                                of the two it is about to do rather than
+                                leaving the approver to find out afterwards. */}
+                            <Tooltip content={
+                              item.scheduled_at && isOverdue(item.scheduled_at)
+                                ? "This post's own time has passed. Queue it for the campaign's next posting time, ahead of the posts still waiting."
+                                : "Queue this exact post for its scheduled campaign time."
+                            }>
                               <Button variant="primary" size="sm"
                                 busy={busy === `approve-${item.id}`}
                                 onClick={() => void decideException(item.id, "approve")}
-                              >Approve</Button>
+                              >{item.scheduled_at && isOverdue(item.scheduled_at)
+                                ? "Approve for next slot" : "Approve"}</Button>
                             </Tooltip>
                             <Tooltip content="Send this exact post immediately instead of waiting for its scheduled time.">
                               <Button variant="secondary" size="sm"

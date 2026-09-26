@@ -522,6 +522,71 @@ def _already_planned_for_slot(
     return False
 
 
+def next_open_slot(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    destination: CampaignDestination,
+    *,
+    now: datetime,
+    horizon: timedelta = timedelta(days=7),
+    ignore: str | None = None,
+) -> datetime | None:
+    """This account's soonest posting time that nothing has claimed yet.
+
+    What approving a post whose own time has passed needs, and what it had no
+    way to ask for. A held post is frozen for a moment; the approver is asked
+    about it before that moment and may well answer after it, and by then the
+    time on the post is in the past. Delivering into the past is a thing the
+    engines refuse outright - "Scheduled deliveries need a date and time in
+    the future" - so approving an overdue post could only fail, and the one
+    button that worked was the one that posts immediately.
+
+    So the post takes the next free slot instead: it goes out on the
+    campaign's own rhythm, ahead of everything still waiting, without being
+    fired at the engine the second somebody presses a button.
+
+    `ignore` is the execution being approved, whose own claim on a slot must
+    not make that slot look taken.
+
+    None when this account has no unclaimed posting time inside the horizon -
+    the caller says so rather than inventing one, because a campaign's
+    schedule is the operator's and this does not add to it.
+    """
+    from trendrelay_api.integrations import posting_slots
+
+    workspace = session.get(Workspace, autopilot.workspace_id)
+    resolved, _schedule = posting_slots.resolved_slots(
+        autopilot.workspace_id,
+        session=session,
+        page_key=destination.page_key,
+        override_preset_id=destination.posting_preset_id,
+        campaign_preset_id=autopilot.posting_preset_id,
+    )
+    moments = due_slots(
+        list(resolved), now=now, until=now + horizon,
+        timezone=workspace.timezone if workspace else "UTC",
+    )
+    # Everything this account already owns, so the approved post lands beside
+    # the plan rather than on top of a post already frozen for that minute.
+    taken = {
+        _as_utc(execution.scheduled_at)
+        for execution in session.scalars(
+            select(PublicationExecution).where(
+                PublicationExecution.destination_id == destination.id,
+                PublicationExecution.state.in_(sorted(HOLDING_STATES)),
+                PublicationExecution.scheduled_at.is_not(None),
+            )
+        ).all()
+        if execution.id != ignore
+    }
+    for moment in moments:
+        # Strictly future: a slot this very minute is the same refusal the
+        # past one was.
+        if moment > now and moment not in taken:
+            return moment
+    return None
+
+
 def plan_campaign(
     session: Session,
     autopilot: CampaignAutopilot,

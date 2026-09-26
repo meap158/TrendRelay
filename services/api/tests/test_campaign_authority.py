@@ -718,9 +718,19 @@ def test_approving_a_held_post_delivers_the_frozen_record(
     assert engine_stub[0]["execution"] is execution
 
 
-def test_approving_after_the_slot_passed_clamps_to_now(
+def test_approving_after_the_slot_passed_takes_the_next_posting_time(
     session, tmp_path, engine_stub
 ) -> None:
+    """The approver is asked before the post's time and may answer after it.
+
+    This used to clamp to the moment the button was pressed, which under
+    scheduled delivery is not a time an engine takes - "Scheduled deliveries
+    need a date and time in the future" refuses now exactly as it refuses the
+    past. So approving a post that had waited long enough to matter could only
+    fail, and the only button that worked was the one that posts immediately,
+    which is a different decision. The post goes to the front of the
+    campaign's own queue instead.
+    """
     campaign_setup(session, tmp_path)
     pilot = autopilot(session, authority="assist")
     run_campaign(session, pilot, now=NOW)
@@ -729,8 +739,47 @@ def test_approving_after_the_slot_passed_clamps_to_now(
 
     approve_execution(session, pilot, execution, now=much_later)
 
+    # The campaign posts daily at 12:00, and it is 09:00 on the third day.
+    expected = much_later.replace(hour=12, minute=0)
+    assert engine_stub[0]["at"] == expected
+    assert execution.scheduled_at == expected
+    assert execution.state == "queued"
+    assert engine_stub[0]["delivery_override"] is None, "on the schedule, not fired now"
+
+
+def test_approving_late_refuses_rather_than_inventing_a_posting_time(
+    session, tmp_path, engine_stub
+) -> None:
+    """A campaign's schedule is the operator's. With nothing free to move the
+    post to, this says so and leaves it held - where it can be approved again,
+    or posted now, which is the decision it will not make for them."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    session.delete(session.get(PublishingSlot, "slot-12"))
+    session.commit()
+
+    with pytest.raises(ValueError, match="no free posting time"):
+        approve_execution(session, pilot, execution, now=NOW.replace(day=NOW.day + 3))
+
+    assert execution.state == "proposed", "left held"
+
+
+def test_publish_now_on_a_late_post_still_goes_out_immediately(
+    session, tmp_path, engine_stub
+) -> None:
+    """The other answer to an overdue post, and the one that does mean now."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    much_later = NOW.replace(day=NOW.day + 3)
+
+    approve_execution(session, pilot, execution, now=much_later, publish_now=True)
+
     assert engine_stub[0]["at"] == much_later
-    assert execution.scheduled_at == much_later
+    assert engine_stub[0]["delivery_override"] == "now"
 
 
 def test_only_a_held_execution_can_be_approved(session, tmp_path, engine_stub) -> None:
