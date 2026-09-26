@@ -5,7 +5,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from trendrelay_api.models import Base, new_id, utc_now
@@ -23,6 +32,15 @@ class MediaAsset(Base):
             "media_kind IN ('video','audio','image')",
             name="valid_media_kind",
         ),
+        # The Library's own listing, in the order it lists in.
+        #
+        # `workspace_id` and `collected_at` were indexed one at a time, which
+        # lets SQLite find the workspace's rows and then leaves it to sort all
+        # of them - "USE TEMP B-TREE FOR ORDER BY" over six and a half thousand
+        # assets to return a page of forty, on every page of every listing and
+        # every picker. Together they are the order itself, so the page is read
+        # off the index and stops at forty.
+        Index("ix_media_assets_workspace_collected", "workspace_id", "collected_at"),
     )
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("asset"))
     workspace_id: Mapped[str] = mapped_column(
