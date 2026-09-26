@@ -265,19 +265,69 @@ def _notes_for(session: Session, held: list[dict[str, Any]]) -> None:
         item.setdefault("notes", notes.get(str(item.get("queue_item_id") or "")) or "")
 
 
-def _pairing(item: dict[str, Any]) -> tuple[str, str] | None:
-    """The clip-and-account a card is about, or None when it cannot be keyed.
+#: Telegram errors that prove the card never left this machine.
+#:
+#: The distinction is the whole of whether a post may be announced twice, and
+#: it is the one `campaign_runner.UNREACHED_MARKERS` draws before sending a
+#: post again: a refused connection spoke to nobody, so no card exists and the
+#: next pass may send it. Anything that got as far as a conversation is the
+#: other case - `send_card` posts the message and then reads the answer, and
+#: Telegram only answers once it has the message, so a read that timed out or
+#: a connection reset mid-answer is very likely a card sitting in the chat.
+#: Those keep their claim and are never sent again.
+#:
+#: When in doubt a card is not sent twice. Silence is visible in the inbox and
+#: in the run note; a chat that asks the same question every minute taught the
+#: approver to ignore it, which is the more expensive mistake.
+NEVER_LEFT_MARKERS = (
+    "could not be reached",
+    "could not reach",
+    "connection refused",
+    "failed to establish",
+    "name or service not known",
+    "nodename nor servname",
+    "temporary failure in name resolution",
+    "getaddrinfo failed",
+    "no route to host",
+    "network is unreachable",
+    "is not set up",
+    "no chat is saved",
+)
+
+
+def never_delivered(error: str) -> bool:
+    """Whether this failure proves no card was created. See `NEVER_LEFT_MARKERS`."""
+    text = (error or "").casefold()
+    return any(marker in text for marker in NEVER_LEFT_MARKERS)
+
+
+def pairing_of(
+    execution_id: str, queue_item_id: str | None, destination_id: str | None,
+) -> tuple[str, str]:
+    """The key a card is remembered by: this clip, to this account.
 
     An execution's queue item and destination are both nullable - a one-off
-    Publish post has neither - and a held post missing either is one this
-    cannot remember. Those fall through to being announced, which is the
-    behaviour there has always been for a case a campaign does not produce.
+    Publish post has neither - and a post missing either used to be announced
+    with nothing recorded at all, which is not "the old behaviour" but the
+    original bug with a narrower door: nothing claimed it, so every pass sent
+    it again, for as long as it stayed held.
+
+    So a post that cannot be keyed by its pairing is keyed by itself. That is
+    a weaker promise - a new execution for the same post is a new key, where a
+    real pairing would have recognised it - but it is bounded, and the thing
+    being prevented is a card a minute.
     """
-    queue_item_id = str(item.get("queue_item_id") or "")
-    destination_id = str(item.get("destination_id") or "")
-    if not queue_item_id or not destination_id:
-        return None
-    return queue_item_id, destination_id
+    fallback = f"execution:{execution_id}"
+    return (queue_item_id or fallback, destination_id or fallback)
+
+
+def _pairing(item: dict[str, Any]) -> tuple[str, str]:
+    """`pairing_of` for one entry of the list a planning pass hands over."""
+    return pairing_of(
+        str(item.get("execution_id") or ""),
+        str(item.get("queue_item_id") or "") or None,
+        str(item.get("destination_id") or "") or None,
+    )
 
 
 def notice_for(
@@ -301,11 +351,11 @@ def settle_notice(session: Session, execution: PublicationExecution) -> None:
     the next pass; both would otherwise be announced as though nobody had
     ever been asked. The notice stays behind to say somebody was.
     """
-    if not (execution.campaign_id and execution.queue_item_id and execution.destination_id):
+    if not execution.campaign_id:
         return
     notice = notice_for(
         session, execution.campaign_id,
-        (execution.queue_item_id, execution.destination_id),
+        pairing_of(execution.id, execution.queue_item_id, execution.destination_id),
     )
     if notice is not None and notice.settled_at is None:
         notice.settled_at = datetime.now(UTC)
@@ -320,11 +370,11 @@ def clear_notice(session: Session, execution: PublicationExecution) -> None:
     and the memory that would have suppressed it is spent here. The only
     place a notice is ever removed.
     """
-    if not (execution.campaign_id and execution.queue_item_id and execution.destination_id):
+    if not execution.campaign_id:
         return
     notice = notice_for(
         session, execution.campaign_id,
-        (execution.queue_item_id, execution.destination_id),
+        pairing_of(execution.id, execution.queue_item_id, execution.destination_id),
     )
     if notice is not None:
         session.delete(notice)
@@ -397,7 +447,7 @@ def announce_held(
     known = 0
     for item in held:
         pairing = _pairing(item)
-        notice = notice_for(session, autopilot.campaign_id, pairing) if pairing else None
+        notice = notice_for(session, autopilot.campaign_id, pairing)
         if notice is None:
             fresh.append(item)
             continue
@@ -410,51 +460,92 @@ def announce_held(
             if known else ""
         )
     _notes_for(session, fresh[:CARDS_PER_PASS])
+
+    # The claim, taken and committed before a single card exists.
+    #
+    # This used to be written after the send returned, which is the wrong way
+    # round by exactly the failure the chat actually has. `send_card` posts
+    # the message and then reads the answer, and the read is what times out
+    # when the connection drops - so Telegram had the card, the send raised,
+    # nothing was recorded, and the next pass a minute later sent it again.
+    # A flaky link turned one held post into a card per tick, which is the
+    # duplicate that survived remembering the announcement at all.
+    #
+    # Committed rather than flushed for the same reason: a notice that is
+    # still inside the tick's transaction is a notice a crash, a rollback or
+    # a failed later step can take away while the card stays in the chat.
+    # After this line the claim outlives anything that happens next, and the
+    # worst case is a post that was never announced and never will be - which
+    # is in the inbox, visible, and is the side of the trade the operator
+    # asked for.
     sent = 0
+    attempted = 0
     left_out: list[str] = []
     try:
         for item in fresh[:CARDS_PER_PASS]:
-            images, video = _media_of(item)
-            execution_id = str(item["execution_id"])
-            outcome = telegram.send_card(
-                card_text(name, item, zone=zone, language=language),
-                buttons=card_buttons(
-                    execution_id, autopilot.campaign_id, language=language,
-                ),
-                images=images, video=video,
-            )
-            left_out.extend(outcome.get("skipped") or [])
-            # Written the moment the card exists, and flushed, so a failure on
-            # the next one cannot leave a card in the chat that nothing
-            # remembers - which is exactly how a post gets asked about twice.
-            #
-            # In a savepoint because the worker's tick and a request that
-            # announces - the campaign's Telegram switch - can be in this loop
-            # at the same time, and the unique index is what decides which of
-            # them owns the pairing. Losing that race means the other one has
-            # the notice, so this one has nothing left to record; it must not
-            # take the rest of the plan down for it.
             pairing = _pairing(item)
-            if pairing:
-                try:
-                    with session.begin_nested():
-                        session.add(CampaignApprovalNotice(
-                            workspace_id=autopilot.workspace_id,
-                            campaign_id=autopilot.campaign_id,
-                            queue_item_id=pairing[0],
-                            destination_id=pairing[1],
-                            execution_id=execution_id,
-                            chat_id=str(outcome.get("chat_id") or "") or None,
-                            message_id=outcome.get("message_id"),
-                        ))
-                except IntegrityError:
-                    print(
-                        "Telegram card recorded by another pass: "
-                        f"{pairing[0]} to {pairing[1]}",
-                        flush=True,
-                    )
+            execution_id = str(item["execution_id"])
+            notice = CampaignApprovalNotice(
+                workspace_id=autopilot.workspace_id,
+                campaign_id=autopilot.campaign_id,
+                queue_item_id=pairing[0],
+                destination_id=pairing[1],
+                execution_id=execution_id,
+            )
+            try:
+                # In a savepoint because the worker's tick and a request that
+                # announces - the campaign's Telegram switch - can be here at
+                # the same time, and the unique index is what decides which of
+                # them owns the pairing. Losing that race means the other one
+                # is sending the card, so this one must not send a second.
+                with session.begin_nested():
+                    session.add(notice)
+            except IntegrityError:
+                known += 1
+                print(
+                    f"Telegram card already claimed by another pass:"
+                    f" {pairing[0]} to {pairing[1]}",
+                    flush=True,
+                )
+                continue
+            session.commit()
+            attempted += 1
+            images, video = _media_of(item)
+            try:
+                outcome = telegram.send_card(
+                    card_text(name, item, zone=zone, language=language),
+                    buttons=card_buttons(
+                        execution_id, autopilot.campaign_id, language=language,
+                    ),
+                    images=images, video=video,
+                )
+            except telegram.TelegramUnavailable as error:
+                # Whether the claim is given back turns on one question, and
+                # it is the same question publishing asks before sending a
+                # post twice: did this reach Telegram at all? A refused
+                # connection reached nothing, so the card does not exist and
+                # the next pass may send it. A read that timed out is the
+                # other case entirely - Telegram answers only once it has the
+                # message, so the answer is what a dropped link loses, and
+                # sending again is how one held post became a card a minute.
+                if never_delivered(str(error)):
+                    session.delete(notice)
+                    session.commit()
+                raise
+            left_out.extend(outcome.get("skipped") or [])
+            # Which message the card is, so it can be re-pointed, marked
+            # overdue and settled. Committed per card: the claim already stops
+            # a second send, and this is what makes the first one editable.
+            notice.chat_id = str(outcome.get("chat_id") or "") or None
+            notice.message_id = outcome.get("message_id")
+            notice.updated_at = datetime.now(UTC)
+            session.commit()
             sent += 1
-        rest = len(fresh) - sent
+        # What this pass had no room for, which is not the same as what it
+        # did not send: a pairing another pass claimed while this one was
+        # working is a post already being announced, and counting it here
+        # sent "1 more waiting in the inbox" about a card that was on its way.
+        rest = max(0, len(fresh) - CARDS_PER_PASS)
         if rest > 0:
             link = app_link(autopilot.campaign_id)
             telegram.send_message(
@@ -466,9 +557,24 @@ def announce_held(
                 ),
             )
     except telegram.TelegramUnavailable as error:
+        # The ones that did not go out are not tried again, and the note says
+        # so rather than leaving it to be discovered. Their claim is already
+        # committed, because a send that raises may still have delivered the
+        # card - Telegram answers after it has the message, and the answer is
+        # what a dropped connection loses. Sending again to be sure is how one
+        # post became a card a minute, so the post waits in the inbox instead.
+        held_back = attempted - sent if not never_delivered(str(error)) else 0
+        tail = (
+            f" {held_back} post(s) may already have reached the chat and are"
+            " not sent again; they wait in the inbox."
+            if held_back else ""
+        )
         if sent:
-            return f"Announced {sent} of {len(fresh)} on Telegram; then: {error}"
-        return f"Not announced on Telegram: {error}"
+            return f"Announced {sent} of {len(fresh)} on Telegram; then: {error}{tail}"
+        return f"Not announced on Telegram: {error}{tail}"
+    if not sent and known:
+        # Everything this pass had turned out to belong to another one.
+        return f"Already announced on Telegram: {known} post(s) were asked about before."
     note = f"Announced {sent} post{'' if sent == 1 else 's'} on Telegram."
     if known:
         note = f"{note} {known} was already asked about."

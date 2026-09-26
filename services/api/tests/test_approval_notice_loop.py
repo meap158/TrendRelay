@@ -209,21 +209,27 @@ def test_the_autopilot_row_is_the_one_the_campaign_set_up(session) -> None:
     assert session.scalar(select(CampaignAutopilot)).approvals_telegram is True
 
 
-def test_a_card_that_could_not_be_sent_goes_out_on_the_next_pass(
+def test_a_card_that_never_left_the_machine_goes_out_on_the_next_pass(
     session, tmp_path, engine_stub, chat, monkeypatch,
 ) -> None:
     """The send is the only way the approver learns a post is waiting, so a
     send that fails has to be a delay rather than a silence. Three posts were
     frozen on the evening of 22 September while Telegram could not be
     reached; the run note said so once, the campaign's own breaker overwrote
-    it seven minutes later, and nobody was ever told about them."""
+    it seven minutes later, and nobody was ever told about them.
+
+    A refused connection is the case this is safe for: nothing was spoken to,
+    so no card exists to duplicate. The ambiguous failures are the test below.
+    """
     campaign_setup(session, tmp_path)
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     down = {"now": True}
 
     def flaky(text, **kwargs):
         if down["now"]:
-            raise telegram.TelegramUnavailable("Telegram refused the card: timed out")
+            raise telegram.TelegramUnavailable(
+                "Telegram could not be reached: connection refused"
+            )
         chat["sent"].append({"text": text, **kwargs})
         return {"message_id": len(chat["sent"]), "chat_id": "-100200300", "media": 0, "skipped": []}
 
@@ -254,3 +260,92 @@ def test_a_card_that_could_not_be_sent_goes_out_on_the_next_pass(
     run_campaign(session, pilot, now=NOW + timedelta(minutes=3))
     session.commit()
     assert len(chat["sent"]) == 1, "and never again"
+
+
+def test_a_send_that_may_have_arrived_is_never_sent_again(
+    session, tmp_path, engine_stub, chat, monkeypatch,
+) -> None:
+    """The duplicate that survived remembering the announcement.
+
+    `send_card` posts the message and then reads the answer, and Telegram
+    answers only once it has the message - so a read that times out is a card
+    very likely sitting in the chat. Treating that as "not sent" and trying
+    again is what turned one held post into a card per tick on a flaky link,
+    which is exactly when the operator saw it.
+    """
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    attempts: list[str] = []
+
+    def timing_out(text, **kwargs):
+        attempts.append(text)
+        raise telegram.TelegramUnavailable(
+            "Telegram refused the card: The read operation timed out"
+        )
+
+    monkeypatch.setattr(telegram, "send_card", timing_out)
+
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+
+    held = _held_now(session)
+    assert held is not None, "held in the app regardless"
+    assert len(attempts) == 1
+    # The claim stands, because the card may be in the chat.
+    [notice] = session.scalars(select(CampaignApprovalNotice)).all()
+    assert notice.message_id is None, "no card this pass could confirm"
+    assert "may already have reached the chat" in pilot.last_note
+
+    # Telegram is fine now, and the post is still held - and still not sent,
+    # because the question was never whether Telegram is up.
+    monkeypatch.setattr(
+        telegram, "send_card",
+        lambda text, **kwargs: chat["sent"].append({"text": text, **kwargs})
+        or {"message_id": 9, "chat_id": "-100200300", "media": 0, "skipped": []},
+    )
+    for minutes in (1, 2, 3):
+        run_campaign(session, pilot, now=NOW + timedelta(minutes=minutes))
+        session.commit()
+
+    assert chat["sent"] == [], "asked once, whatever happened to the answer"
+    assert len(attempts) == 1
+
+
+def test_the_claim_survives_the_pass_that_made_it_falling_over(
+    session, tmp_path, engine_stub, chat, monkeypatch,
+) -> None:
+    """The other half of sending once: the claim is committed before the card
+    exists, so nothing that happens afterwards can take it back.
+
+    It used to be written after the send returned and left inside the tick's
+    own transaction, which meant a crash, a rollback or a failing later step
+    dropped the record of a card that was already in somebody's chat.
+    """
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+
+    def send_then_die(text, **kwargs):
+        chat["sent"].append({"text": text, **kwargs})
+        raise RuntimeError("the worker fell over after the card went out")
+
+    monkeypatch.setattr(telegram, "send_card", send_then_die)
+
+    with pytest.raises(RuntimeError):
+        run_campaign(session, pilot, now=NOW)
+    session.rollback()
+
+    assert len(chat["sent"]) == 1
+    [notice] = session.scalars(select(CampaignApprovalNotice)).all()
+    assert notice.settled_at is None, "still waiting for somebody"
+
+    # Whatever the plan did next, the card is remembered - so the post is not
+    # announced a second time when the campaign runs again.
+    monkeypatch.setattr(
+        telegram, "send_card",
+        lambda text, **kwargs: chat["sent"].append({"text": text, **kwargs})
+        or {"message_id": 2, "chat_id": "-100200300", "media": 0, "skipped": []},
+    )
+    run_campaign(session, pilot, now=NOW + timedelta(minutes=1))
+    session.commit()
+
+    assert len(chat["sent"]) == 1, "one post, one card, across a crash"

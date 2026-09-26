@@ -459,21 +459,23 @@ def test_a_pairing_another_pass_recorded_first_does_not_fail_the_plan(
 ) -> None:
     """The worker's tick and the campaign's Telegram switch can both be in
     the announcer at once, and the unique index decides which of them owns
-    the pairing. Losing that race leaves this one nothing to record - not a
-    reason to take the rest of the plan down."""
+    the pairing. Losing that race means the other one is sending the card, so
+    this one sends nothing - and does not take the rest of the plan down for
+    it either."""
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
     session.add(CampaignApprovalNotice(
         id="notice-theirs", workspace_id="ws", campaign_id="camp",
         queue_item_id="queued-1", destination_id="dest-1", execution_id="exec-theirs",
     ))
     session.commit()
-    # Their row lands between this pass reading and this pass writing.
+    # Their row lands between this pass reading and this pass claiming.
     monkeypatch.setattr(approval_notices, "notice_for", lambda *a, **k: None)
 
     note = approval_notices.announce_held(session, pilot, [_held("exec-ours")])
 
-    assert note == "Announced 1 post on Telegram."
-    assert "recorded by another pass" in capsys.readouterr().out
+    assert chat["sent"] == [], "the pass that lost the race sends no second card"
+    assert "Already announced" in note
+    assert "already claimed by another pass" in capsys.readouterr().out
     assert session.get(CampaignApprovalNotice, "notice-theirs") is not None
 
 
@@ -525,18 +527,33 @@ def test_a_press_that_never_lands_still_says_so_in_the_chat(
     assert answered["message_id"] is None
 
 
-def test_a_post_with_no_pairing_to_key_on_is_announced_as_it_always_was(
+def test_a_post_with_no_pairing_to_key_on_is_remembered_by_itself(
     session, chat,
 ) -> None:
-    """A queue item and a destination are both nullable, and a held post
-    missing either is one this cannot remember. It is announced rather than
-    swallowed - the old behaviour, for a case a campaign does not produce."""
+    """A queue item and a destination are both nullable, and a post missing
+    either used to be announced with nothing recorded at all - which is not
+    the old behaviour but the original bug with a narrower door: nothing
+    claimed it, so every pass sent it again for as long as it stayed held.
+
+    Keyed by its own execution instead. A weaker promise than a real pairing,
+    which would recognise the same post frozen again - but bounded, and what
+    it bounds is a card a minute.
+    """
     pilot = autopilot(session, authority="assist", approvals_telegram=True)
 
-    approval_notices.announce_held(session, pilot, [_held("exec-1", queue_item_id=None)])
-    approval_notices.announce_held(session, pilot, [_held("exec-2", queue_item_id=None)])
+    first = approval_notices.announce_held(
+        session, pilot, [_held("exec-1", queue_item_id=None)],
+    )
+    session.commit()
+    again = approval_notices.announce_held(
+        session, pilot, [_held("exec-1", queue_item_id=None)],
+    )
 
-    assert len(chat["sent"]) == 2
+    assert first == "Announced 1 post on Telegram."
+    assert "Already announced" in again
+    assert len(chat["sent"]) == 1, "the same held post is asked about once"
+    [notice] = session.scalars(select(CampaignApprovalNotice)).all()
+    assert notice.queue_item_id == "execution:exec-1"
 
 
 def test_the_switch_does_not_re_announce_what_the_chat_has_already_seen(
