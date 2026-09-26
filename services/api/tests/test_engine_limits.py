@@ -360,3 +360,22 @@ def test_a_feature_nobody_charges_for_is_always_available() -> None:
 
     assert feature_available("buffer", "threads", free) is True
     assert feature_available("zernio", "first_comment", free) is True
+
+
+def test_woopsocial_names_the_storage_it_fills_and_never_empties() -> None:
+    """The cap that bit a live campaign, and the one this table did not have.
+
+    Media is uploaded into the engine's library and referenced by the post;
+    nothing deletes it afterwards. So the gigabytes count every clip and every
+    carousel frame ever delivered and only ever go up - and the campaign that
+    reached the free tier's one had no way to see it coming, because the only
+    published limits here were accounts, posts and AI credits.
+    """
+    found = allowances("woopsocial", account_count=1)
+    storage = next(item for item in found if item.id == "storage_bytes")
+
+    assert storage.label == "Media storage"
+    assert storage.limit == 1024 ** 3
+    assert storage.used is None, "the engine reports no usage to read"
+    assert "never empties on its own" in storage.note
+    assert "deleted in the engine's own dashboard" in storage.note

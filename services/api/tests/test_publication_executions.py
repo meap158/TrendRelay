@@ -708,3 +708,67 @@ def test_reconciliation_survives_a_worker_restart(
         execution = fresh_session.get(PublicationExecution, execution_id)
         assert execution.state == "published"
         assert fresh_session.get(CampaignQueueItem, item.id).times_posted == 1
+
+
+@pytest.mark.parametrize("answer", ["HTTP 524", "HTTP 504 Gateway Time-out"])
+def test_a_gateway_that_gave_up_waiting_is_uncertain_not_failed(
+    session, tmp_path, engine_stub, answer
+) -> None:
+    """The duplicate risk hiding in the `provider` grab-bag.
+
+    A 524 means a gateway stopped waiting for the engine behind it - so the
+    request reached that engine and the post may well exist. Filed as an
+    ordinary failure it freed the slot and the queue item, and the next pass
+    planned the same post into the same place: the shape that turns one slow
+    post into two real ones. The campaign that tripped its own breaker over
+    "2 recent deliveries ended uncertain" had been logging 524s for days.
+    """
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    item = queue_item(session, "q1", str(clip(tmp_path)))
+    pilot = autopilot(session)
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    settle_job(
+        session, execution.job_id, "failed",
+        error=f"woopsocial: api.woopsocial.com: {answer}",
+    )
+
+    reconcile_executions(session, now=NOW)
+    session.commit()
+
+    execution = executions(session)[0]
+    assert execution.state == "uncertain"
+    assert execution.failure_class == "uncertain"
+    assert session.get(CampaignQueueItem, item.id).times_posted == 0
+    # The slot and the queue item stay occupied, which is what stops the next
+    # pass re-planning a post that may already exist.
+    assert run_campaign(session, pilot, now=NOW)["posts"] == []
+
+
+def test_an_engine_with_no_storage_left_is_not_delivered_again(
+    session, tmp_path, engine_stub
+) -> None:
+    """"Not now" and "not until you do something" arrive as the same class.
+
+    Both say a limit was exceeded, and the difference is the whole of whether
+    sending again is worth anything. A rate limit clears on its own; a storage
+    quota does not clear at all. The live campaign that found this spent three
+    redeliveries per approval on the same refusal, and then handed the post
+    back to the person who had already approved it.
+    """
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "woopsocial: api.woopsocial.com: storage limit exceeded: current usage 1073283895",
+    )
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    execution = executions(session)[0]
+    assert outcome["redelivered"] == []
+    assert execution.state == "failed"
+    assert execution.delivery_attempts == 0, "not one wasted attempt"
+    assert len(engine_stub.calls) == 1
+
+

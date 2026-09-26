@@ -46,6 +46,18 @@ UNCERTAIN_MARKERS = (
     "connection reset",
     "remote end closed",
     "incomplete read",
+    # A gateway that gave up waiting for the engine behind it. The request
+    # reached that engine - something answered, and what it answered is that
+    # it is still working - so the post may well exist. This read as an
+    # ordinary `provider` failure, which frees the slot and the queue item and
+    # lets the next pass plan the same post into the same place: the exact
+    # shape that turns one slow post into two real ones. The campaign that
+    # tripped its own breaker over "2 recent deliveries ended uncertain" had
+    # been logging `HTTP 524` against this class for days.
+    "524",
+    "504",
+    "gateway time-out",
+    "gateway timeout",
 )
 
 #: Error text that means the engine no longer accepts who we are. Actionable as
@@ -96,6 +108,26 @@ UNREACHED_MARKERS = (
     "getaddrinfo failed",
     "no route to host",
     "network is unreachable",
+)
+
+#: An engine that is full in a way waiting does not empty.
+#:
+#: "Not now" and "not until you do something" arrive as the same class - both
+#: say a limit was exceeded - and the difference is the whole of whether
+#: sending again is worth anything. A rate limit clears on its own within
+#: minutes. A storage quota does not clear at all: the engine is holding as
+#: much media as the plan allows and will refuse every post until somebody
+#: frees space or buys more.
+#:
+#: The live campaign that found this spent three redeliveries per approval on
+#: "storage limit exceeded: current usage 1073283895" - and then, having burnt
+#: the approval, put the post back in the inbox to be approved again.
+EXHAUSTED_MARKERS = (
+    "storage limit",
+    "storage quota",
+    "out of storage",
+    "storage is full",
+    "disk quota",
 )
 
 #: How many times one approved post may be delivered again before the failure
@@ -154,9 +186,14 @@ def redelivery_reason(
     """
     if execution.delivery_attempts >= MAX_DELIVERY_ATTEMPTS:
         return None
+    text = (error or "").casefold()
+    if any(marker in text for marker in EXHAUSTED_MARKERS):
+        # Full in a way waiting does not empty - see `EXHAUSTED_MARKERS`.
+        # Sending again buys the same refusal, three times, and then hands the
+        # post back to the person who already approved it.
+        return None
     if failure_class == "rate_limited":
         return "the engine was full"
-    text = (error or "").casefold()
     if failure_class == "provider" and any(
         marker in text for marker in UNREACHED_MARKERS
     ):

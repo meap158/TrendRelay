@@ -92,6 +92,17 @@ FREE_PLAN: dict[str, dict[str, Any]] = {
         "posts_per_month": None,
         "comments_per_month": None,
         "ai_credits_per_month": 30,
+        # The cap that actually bites, and the one this table did not have.
+        #
+        # Media is uploaded into WoopSocial's own library and referenced by the
+        # post; nothing deletes it afterwards, so every clip and every carousel
+        # frame ever delivered is still counted. It is not a queue depth and it
+        # does not fall when a post publishes - it only ever goes up. The free
+        # gigabyte was reached after eleven days of posting, and from then on
+        # every delivery was refused with "storage limit exceeded", which the
+        # campaign had no way to see coming because nothing here recorded that
+        # a storage limit existed.
+        "storage_bytes": 1024 ** 3,
         "source": "https://woopsocial.com/pricing",
     },
     "buffer": {
@@ -253,9 +264,13 @@ PLAN_CAVEATS: dict[str, str] = {
         "accounts are eight at $6 and two at $3 rather than twelve at $3."
     ),
     "woopsocial": (
-        "Credits meter AI content generation, not publishing. TrendRelay writes "
-        "its own captions, so the free tier's thirty are never spent and the "
-        "account limit is the only one that applies."
+        "Storage is the cap that bites. Media is uploaded into the engine's own "
+        "library and kept there, so the plan's gigabytes count every clip and "
+        "every carousel frame ever delivered and never fall when a post goes "
+        "out; a full library refuses new posts until files are deleted in the "
+        "engine's dashboard. Credits meter AI content generation, not "
+        "publishing - TrendRelay writes its own captions, so the free tier's "
+        "thirty are never spent."
     ),
     "buffer": (
         "Ten is a queue depth, not a monthly allowance: publishing a post frees "
@@ -477,6 +492,26 @@ def allowances(
             note="Spent on this engine's own content generation, not on "
                  "publishing. TrendRelay writes its own captions, so posting "
                  f"never uses one. From {plan['source']}, checked {PUBLISHED_ON}.",
+        ))
+    if plan.get("storage_bytes"):
+        # Named as what it is: a total that only grows. Every other allowance
+        # here refills - a month turns over, a queue slot frees when its post
+        # goes out - and reading this one as though it did is what let a
+        # campaign post into it until it stopped.
+        gigabytes = int(plan["storage_bytes"]) / (1024 ** 3)
+        found.append(Allowance(
+            id="storage_bytes",
+            label="Media storage",
+            confidence="published",
+            limit=int(plan["storage_bytes"]),
+            used=None,
+            note=(
+                f"{gigabytes:.0f} GB for every file this engine has ever been "
+                "given. Media is uploaded to the engine and kept there, so this "
+                "fills as you post and never empties on its own - a full library "
+                "refuses new posts until files are deleted in the engine's own "
+                f"dashboard. From {plan['source']}, checked {PUBLISHED_ON}."
+            ),
         ))
     if plan.get("queued_per_channel"):
         found.append(Allowance(
