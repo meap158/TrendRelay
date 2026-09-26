@@ -13,6 +13,7 @@ import math
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from sqlalchemy import func, select
@@ -71,19 +72,37 @@ STOP = frozenset(
 )
 
 
-def tokens(value: object) -> set[str]:
-    text = str(value or "").casefold()
+@lru_cache(maxsize=4096)
+def _token_set(text: str) -> frozenset[str]:
+    """The words in one piece of already-folded text, computed once.
+
+    Tokenising is pure - the same string always gives the same words - and the
+    same strings come back constantly: every post a plan composes is matched
+    against the same catalogue, so a product's title and description are torn
+    apart again for each one. Planning a week for one campaign called this
+    nearly fifty-five thousand times and ran a hundred and ten thousand regex
+    passes, which was the single most expensive thing a planning pass did.
+
+    Bounded, because the keys are arbitrary text - a caption is a key too, and
+    those do not repeat the way a catalogue does.
+    """
     found = {item for item in WORD.findall(text) if item not in STOP}
     # A Chinese phrase is otherwise one enormous token. Characters and bigrams
     # let a product category match a caption without requiring segmentation.
     for run in HAN.findall(text):
         found.update(run)
         found.update(run[index : index + 2] for index in range(len(run) - 1))
-    return {
+    return frozenset(
         item
         for item in found
         if (len(item) > 1 or HAN.fullmatch(item)) and not item.isdecimal()
-    }
+    )
+
+
+def tokens(value: object) -> set[str]:
+    # A fresh set per call, because callers own what they are given and some
+    # of them do subtract from it - the cache holds the frozen original.
+    return set(_token_set(str(value or "").casefold()))
 
 
 @dataclass(frozen=True)

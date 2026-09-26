@@ -1894,3 +1894,36 @@ def test_a_video_that_owes_no_credit_adds_none(session) -> None:
     posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
 
     assert "Music:" not in posts[0].caption
+
+
+def test_a_plan_asked_for_shape_alone_keeps_every_slot(session) -> None:
+    """`match_products=False` is a promise about cost, not about schedule.
+
+    The control room plans every campaign to count outings and name the next
+    one, and matching each post against the catalogue was most of the
+    seventeen seconds that page took to draw. Leaving it out has to move
+    nothing: the same posts, to the same accounts, at the same times - only
+    without the products they would have carried.
+    """
+    destination(session, "d1", "youtube")
+    destination(session, "d2", "tiktok")
+    slot(session, 10)
+    slot(session, 16)
+    for index in range(4):
+        queue_item(session, f"q{index}")
+    pilot = autopilot(session)
+
+    matched, _ = plan_campaign(
+        session, pilot, now=NOW, link_for=None, horizon=timedelta(days=3),
+    )
+    shape, _ = plan_campaign(
+        session, pilot, now=NOW, link_for=None, horizon=timedelta(days=3),
+        match_products=False,
+    )
+
+    assert matched, "the fixture has to plan something for this to mean anything"
+    assert [(post.at, post.destination_id, post.queue_item_id) for post in shape] == [
+        (post.at, post.destination_id, post.queue_item_id) for post in matched
+    ]
+    # And it really did skip the work rather than quietly doing it anyway.
+    assert all(not post.offer_ids for post in shape)

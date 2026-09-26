@@ -276,15 +276,26 @@ def _destination_link_ids(
         )
     ).all():
         found[row.destination_id].add(row.tracking_link_id)
-    for execution in session.scalars(
-        select(PublicationExecution).where(
-            PublicationExecution.destination_id.in_(ids)
-        )
-    ).all():
-        for entry in execution.tracking_links or []:
+    # Two columns, not the whole row.
+    #
+    # This selected `PublicationExecution` itself, so every execution these
+    # destinations have ever had came back as a fully built ORM object -
+    # caption, frozen media paths, link records, performance snapshots, the
+    # lot - to read one field off each. Thirty-seven thousand of them, on a
+    # page that calls this once per campaign: four of the seventeen seconds
+    # the control room took were spent hydrating rows to throw them away.
+    for destination_id, links in session.execute(
+        select(
+            PublicationExecution.destination_id,
+            PublicationExecution.tracking_links,
+        ).where(PublicationExecution.destination_id.in_(ids))
+    ):
+        if not destination_id:
+            continue
+        for entry in links or []:
             link_id = entry.get("tracking_link_id")
-            if link_id and execution.destination_id:
-                found[execution.destination_id].add(link_id)
+            if link_id:
+                found[destination_id].add(link_id)
     return found
 
 
@@ -518,9 +529,20 @@ def plan_campaign(
     now: datetime,
     link_for: Callable[..., str | None] | None = None,
     allow_inactive: bool = False,
-    horizon: timedelta = HORIZON,
+    horizon: timedelta | None = None,
+    match_products: bool = True,
 ) -> tuple[list[ScheduledPost], str]:
     """Work out what one campaign should post next, and why.
+
+    `horizon` is how far ahead this fills. None means the campaign's own
+    answer - `plan_horizon_hours`, 24 by default, which is what the shared
+    constant used to be for everybody. Passed explicitly only by callers that
+    are asking a different question, such as the outlook preview.
+
+    `match_products` off gives the schedule's shape without its contents: the
+    same posts at the same times, carrying no products. For a caller counting
+    outings rather than reading them - matching is what a plan spends most of
+    its time on, and it changes nothing about when a post goes out.
 
     Returns the posts and a note. The note is the whole point when the list is
     empty: "nothing scheduled" is not an explanation, and an operator staring at
@@ -1086,10 +1108,20 @@ def plan_campaign(
             frozen = frozen_cache[item.id]
             # Chosen per post rather than per item: the ranking is the same
             # every time, and which of it goes out is not.
-            cached_matches, ranked, match_strategy = resolve_matches(
-                session, campaign, autopilot, item, destinations,
-                used_in_run=used_in_run,
-                last_used=promoted_before,
+            #
+            # Skipped entirely for a caller that only wants the shape of the
+            # schedule. Matching is the most expensive thing a plan does - it
+            # scores the whole catalogue against every post - and a dashboard
+            # counting outings and naming the next one never looks at a
+            # product. It does not decide *whether* or *when* a post is
+            # planned, only what it carries, so leaving it out moves no slot.
+            cached_matches, ranked, match_strategy = (
+                resolve_matches(
+                    session, campaign, autopilot, item, destinations,
+                    used_in_run=used_in_run,
+                    last_used=promoted_before,
+                )
+                if match_products else ([], [], {"selection": "not asked"})
             )
             matched = list(cached_matches)
             # The product this post was queued with, where it still stands.

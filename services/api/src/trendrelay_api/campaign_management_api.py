@@ -328,6 +328,11 @@ def campaign_management(
                 ),
                 allow_inactive=True,
                 horizon=OUTLOOK_HORIZON,
+                # Counts and a next time, which is all this reads off the
+                # forecast. Matching every post against the catalogue to
+                # display a number was most of the seventeen seconds this
+                # page took to draw.
+                match_products=False,
             )
         scheduled = attention.get("committed", 0) + len(forecast)
         for post in forecast:
