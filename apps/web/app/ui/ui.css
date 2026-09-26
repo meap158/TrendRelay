@@ -453,7 +453,7 @@ a.ui-button { text-decoration: none; }
 /* Fitted, never enlarged. A picture smaller than the window is shown at the
    size it is - blowing a 200px thumbnail up to fill a screen would be showing
    detail that is not in the file. */
-.ui-lightbox img { max-inline-size: 100%; max-block-size: 100%; object-fit: contain; cursor: default; }
+.ui-lightbox img, .ui-lightbox-video { max-inline-size: 100%; max-block-size: 100%; object-fit: contain; cursor: default; }
 .ui-lightbox-close { position: absolute; z-index: 1; inset-block-start: 12px; inset-inline-end: 12px; display: grid; place-items: center; inline-size: 34px; block-size: 34px; border: 0; border-radius: 999px; padding: 0; color: var(--on-media); background: color-mix(in srgb, var(--on-media) 12%, transparent); cursor: pointer; }
 .ui-lightbox-close:hover { background: color-mix(in srgb, var(--on-media) 22%, transparent); }
 .ui-lightbox-close:focus-visible { outline: 2px solid var(--on-media); outline-offset: 2px; }

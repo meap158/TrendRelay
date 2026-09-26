@@ -717,30 +717,43 @@ function CarouselStrip({ sources }: { sources: string[] }) {
  * page shows for this post. Its shape is read from its own load, captured on
  * the wrapper because a load event does not bubble.
  */
-function QueuePictureThumb({ asset, sources, workspaceId, apiFetch }: {
+function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
   asset: ThumbnailAsset | null;
   sources: string[];
+  /** The clip this post posts, when it posts one. Pictures and a video are
+      the two shapes a post has, and only one of them is ever set. */
+  video?: string;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
   const [ratio, setRatio] = useState(3 / 4);
   const { openAt, open, close, previous, next } = useLightboxSet(sources.length);
+  // A clip has no preview URL of its own to enlarge, so the hover card shows
+  // the poster the row is already drawing - which is also what says the clip
+  // is worth opening.
+  const poster = useAssetPoster(video ? asset?.id : null, workspaceId, apiFetch);
   const count = sources.length;
   const position = (index: number) => (
     count > 1 ? `Picture ${index + 1} of ${count}` : "Picture"
   );
+  const label = video
+    ? "Video - play full size"
+    : `${count > 1 ? `Carousel of ${count} pictures` : "Picture"} - view full size`;
+  const enlarged = video ? poster : sources[0];
   return (
     <>
       <HoverPreview
-        label={`${count > 1 ? `Carousel of ${count} pictures` : "Picture"} - view full size`}
+        label={label}
         ratio={ratio}
         className="autopilot-queue-zoom"
         onActivate={() => open(0)}
-        media={(
+        media={enlarged ? (
           // eslint-disable-next-line @next/next/no-img-element -- preview URL
-          <img src={sources[0]} alt={`Larger view of ${position(0).toLowerCase()}`} />
-        )}
-        caption={count > 1 ? <strong>{position(0)}</strong> : undefined}
+          <img src={enlarged} alt={`Larger view of ${video ? "this video" : position(0).toLowerCase()}`} />
+        ) : null}
+        caption={video
+          ? <strong>Video</strong>
+          : count > 1 ? <strong>{position(0)}</strong> : undefined}
       >
         <span
           className="autopilot-queue-zoom-frame"
@@ -771,11 +784,13 @@ function QueuePictureThumb({ asset, sources, workspaceId, apiFetch }: {
       {openAt !== null && (
         <Lightbox
           open
-          src={sources[openAt] ?? ""}
-          alt={position(openAt)}
+          kind={video ? "video" : "image"}
+          src={video ?? sources[openAt] ?? ""}
+          alt={video ? "This post's video" : position(openAt)}
           onClose={close}
-          onPrevious={previous}
-          onNext={next}
+          // One clip is not a set, so it offers no way to step through one.
+          onPrevious={video ? undefined : previous}
+          onNext={video ? undefined : next}
         />
       )}
     </>
@@ -5995,13 +6010,18 @@ export function AutopilotPanel({
                     an empty play frame would imply a missing attachment. */}
                 {!item.text_only && (
                   <div className="autopilot-queue-thumb">
-                    {!item.video_path && item.image_paths.length > 0 ? (
+                    {item.video_path || item.image_paths.length > 0 ? (
                       <QueuePictureThumb
+                        video={item.video_path
+                          ? `${apiBaseUrl()}/api/workspaces/${workspaceId}`
+                            + "/publishing/media/preview"
+                            + `?path=${encodeURIComponent(item.video_path)}`
+                          : undefined}
                         asset={item.asset_id ? {
                           id: item.asset_id,
                           title: item.title ?? "Queued media",
                           original_path: "",
-                          media_kind: "image",
+                          media_kind: item.video_path ? "video" : "image",
                           duration_ms: null,
                           platform: null,
                           creator: null,

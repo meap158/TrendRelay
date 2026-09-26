@@ -68,6 +68,7 @@ export function Lightbox({
   onClose,
   onPrevious,
   onNext,
+  kind = "image",
 }: {
   open: boolean;
   /** The image itself. An object URL, the same bytes the preview is showing. */
@@ -91,6 +92,16 @@ export function Lightbox({
    */
   onPrevious?: () => void;
   onNext?: () => void;
+  /**
+   * What `src` is. Pictures by default, because that is all this held for a
+   * long time and every caller that does not say otherwise means one.
+   *
+   * A clip gets the same view rather than a second one: the reason to open
+   * something full size - the thumbnail is too small to decide on - is the
+   * same reason whichever kind it is, and a queue row showing a video had no
+   * way to be opened at all while this only knew about pictures.
+   */
+  kind?: "image" | "video";
 }) {
   const t = useT();
 
@@ -122,10 +133,23 @@ export function Lightbox({
           {/* No src while the next picture's bytes are still arriving - the
               dark stage holds steady and the image joins it, rather than a
               broken-image glyph or the dialog flashing out and in. */}
-          {src && (
+          {src && (kind === "video" ? (
+            /* Controls, because a clip nobody can pause is not being looked
+               at. The click that dismisses the view stops here for the same
+               reason it stops on a picture: reaching for the scrubber is not
+               reaching for the way out. */
+            <video
+              className="ui-lightbox-video"
+              src={src}
+              controls
+              autoPlay
+              playsInline
+              onClick={(event) => event.stopPropagation()}
+            />
+          ) : (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={src} alt={alt} onClick={(event) => event.stopPropagation()} />
-          )}
+          ))}
           {onPrevious && (
             <button
               type="button"
