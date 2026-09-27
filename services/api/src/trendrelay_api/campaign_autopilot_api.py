@@ -3266,7 +3266,9 @@ def run_autopilot_now(
     return result
 
 
-def _overdue_first(rows: list[PublicationExecution], *, now: datetime | None = None) -> list[PublicationExecution]:
+def _overdue_first(
+    rows: list[PublicationExecution], *, now: datetime | None = None
+) -> list[PublicationExecution]:
     """The inbox in the order an approver should work it.
 
     What has already missed its own due time comes first, longest overdue
