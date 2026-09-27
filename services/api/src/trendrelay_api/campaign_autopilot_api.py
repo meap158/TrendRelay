@@ -51,6 +51,7 @@ from trendrelay_api.integrations.publishing import (
     PROVIDERS,
     cached_identity,
     carousel_fits_destination,
+    engine_off_note,
     post_types_for,
     resolve_post_type,
     resolve_provider,
@@ -510,6 +511,11 @@ def _destination_view(
         # Carousel support is narrow: only Zernio and WoopSocial post one, and
         # only to TikTok.
         "accepts_carousel": carousel_fits_destination(item.provider, item.platform, 1)[0],
+        # Whether the engine behind this account is switched on in Publish. The
+        # campaign is where somebody looks when posts stop arriving, and the
+        # only sign of a switched-off engine was their absence - the switch is
+        # two tabs away and says nothing about which campaigns it stopped.
+        "engine_enabled": engine_off_note(item.provider) is None,
         # Whether a follow-up (first comment or thread reply) can be delivered
         # here, so the package editor can show at a glance which destinations
         # a written comment will actually reach. When link_placement is 'none',

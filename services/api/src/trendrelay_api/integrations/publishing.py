@@ -3733,6 +3733,13 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "configured": configured,
         "authenticated": authenticated,
         "authorization_error": authorization_error,
+        # Whether the operator wants to publish through this login at all,
+        # which is a different question from whether it can - see
+        # `ENGINES_OFF_KEY`. Switched off is allowed on an engine that is
+        # broken, and on the default one: it says "I am not using this", and a
+        # switch that could not be thrown while something else was wrong was
+        # how an engine nobody wanted stayed in every picker.
+        "enabled": connection.id not in engines_off(),
         "thread_platforms": sorted(
             platform for platform in provider.platforms
             if platform in THREAD_PLATFORMS
@@ -3985,6 +3992,86 @@ def set_active_provider(provider_id: str) -> dict[str, Any]:
     provider = resolve_provider(provider_id)
     write_env_values({"PUBLISHING_PROVIDER": provider.id})
     return {"active_provider": provider.id}
+
+
+#: The logins the operator has switched off, as a JSON list of connection ids.
+#:
+#: Intent, not capability - `provider_status` already answers whether an engine
+#: can deliver, and this answers whether it should. That is a decision about
+#: posting, so it has to reach the planner and the worker and not only the
+#: browser that made it: the switch lived in one browser's local storage, so a
+#: campaign went on posting through an engine the operator had switched off,
+#: and every screen agreed it was off while the posts kept arriving.
+ENGINES_OFF_KEY = "PUBLISHING_ENGINES_OFF"
+
+
+def engines_off() -> set[str]:
+    """Which logins are switched off right now.
+
+    Malformed contents are read as "none off", the way the connection registry
+    reads a bad hand-edit: the failure mode of guessing wrong here is refusing
+    to post, and a campaign that stops posting because of a stray character in
+    `.env` is worse than one that keeps going.
+    """
+    raw = effective_value(ENGINES_OFF_KEY).strip()
+    if not raw:
+        return set()
+    try:
+        found = json.loads(raw)
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(found, list):
+        return set()
+    return {item for item in found if isinstance(item, str) and item}
+
+
+def engine_off_note(provider_id: str | None) -> str | None:
+    """Why nothing should go out through this login, or None if it may.
+
+    Separate from `delivery_block`, which is about what an engine has left:
+    "waiting for engine capacity" is a pause that ends by itself, and this
+    ends when somebody switches the engine back on. Saying the second in the
+    words of the first sent the operator to wait for a quota that was never
+    the problem.
+
+    An unknown id is not switched off. A destination can name a login that has
+    since been removed, and that is a broken destination rather than a quiet
+    decision to stop posting - it has its own error, further down.
+    """
+    try:
+        connection = resolve_connection(provider_id)
+    except ValueError:
+        return None
+    if connection.id not in engines_off():
+        return None
+    provider = PROVIDERS[connection.provider]
+    label = (
+        provider.label if connection.is_default
+        else f"{provider.label} · {connection.label}"
+    )
+    return (
+        f"{label} is switched off in Publish, so nothing is delivered through "
+        "it. Switch it on there to post through it again."
+    )
+
+
+def set_engine_enabled(provider_id: str, enabled: bool) -> dict[str, Any]:
+    """Switch one login on or off for everything that posts.
+
+    The key is removed rather than written empty when the last engine is
+    switched back on, for the reason `clear_provider_credentials` gives:
+    absent is a state every reader already handles, and a blank value is one
+    more shape to get right.
+    """
+    connection = resolve_connection(provider_id)
+    current = engines_off()
+    updated = current - {connection.id} if enabled else current | {connection.id}
+    if updated != current:
+        if updated:
+            write_env_values({ENGINES_OFF_KEY: json.dumps(sorted(updated))})
+        else:
+            remove_env_values((ENGINES_OFF_KEY,))
+    return {"provider": connection.id, "enabled": enabled, "engines_off": sorted(updated)}
 
 
 # --------------------------------------------------------------------------- #

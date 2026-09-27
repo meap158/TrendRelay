@@ -59,7 +59,7 @@ def api(tmp_path, monkeypatch):
     # these tests create would survive teardown and be read by the next test as
     # a login somebody had configured.
     prefixes = ("BUFFER_", "ZERNIO_", "BUNDLE_SOCIAL_", "WOOPSOCIAL_",
-                connections.REGISTRY_KEY)
+                connections.REGISTRY_KEY, "PUBLISHING_ENGINES_OFF")
     before = {key: value for key, value in os.environ.items() if key.startswith(prefixes)}
     for key in before:
         del os.environ[key]
@@ -213,6 +213,44 @@ def test_removing_something_that_never_existed_says_so(workspace) -> None:
                     json={"confirm_external_action": True})
 
     assert response.status_code == 404
+
+
+# --- switching one off --------------------------------------------------------
+#
+# Per login, same file, same guards - so it is proved here rather than beside a
+# second HTTP harness. What the switch then stops is tested with the planner.
+
+
+def test_an_engine_can_be_switched_off_and_the_cards_say_so(workspace) -> None:
+    body = call("POST", f"/api/workspaces/{workspace}/publishing/providers/enabled",
+                json={"provider": "buffer", "enabled": False}).json()
+
+    cards = {row["id"]: row for row in body["connection"]["providers"]}
+    assert not cards["buffer"]["enabled"]
+    assert cards["zernio"]["enabled"]
+
+
+def test_switching_it_back_on_is_the_same_call(workspace) -> None:
+    switch = f"/api/workspaces/{workspace}/publishing/providers/enabled"
+    call("POST", switch, json={"provider": "buffer", "enabled": False})
+    body = call("POST", switch, json={"provider": "buffer", "enabled": True}).json()
+
+    cards = {row["id"]: row for row in body["connection"]["providers"]}
+    assert cards["buffer"]["enabled"]
+
+
+def test_switching_an_engine_nobody_has_is_refused(workspace) -> None:
+    response = call("POST", f"/api/workspaces/{workspace}/publishing/providers/enabled",
+                    json={"provider": "not-an-engine", "enabled": False})
+
+    assert response.status_code == 422
+
+
+def test_switching_an_engine_is_local_machine_only(workspace) -> None:
+    response = call("POST", f"/api/workspaces/{workspace}/publishing/providers/enabled",
+                    host="10.1.2.3", json={"provider": "buffer", "enabled": False})
+
+    assert response.status_code == 403
 
 
 # --- the guards ---------------------------------------------------------------

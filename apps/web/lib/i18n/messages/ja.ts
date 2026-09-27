@@ -588,7 +588,7 @@ export const ja: Messages = {
     nowDefault: "{label} を既定のエンジンにしました。",
     engineSetup: "エンジン設定",
     notOffering: "配信先を提供していません: {engines}。",
-    enginesOff: "ここでオフにしています: {engines}。",
+    enginesOff: "オフになっています: {engines}。ここからもキャンペーンからも、これらを通じて何も投稿されません。",
     blockedEngine: "現在 {engines} では投稿できません",
     noEngineOn: "オンのエンジンなし",
     noEngineOnHelp: "エンジン設定でいずれかをオンにすると配信先が表示されます。",

@@ -36,6 +36,7 @@ from trendrelay_api.integrations.publishing import (
     run_publish_job,
     save_provider_credentials,
     set_active_provider,
+    set_engine_enabled,
     test_provider,
 )
 from trendrelay_api.integrations.publishing_matrix import capability_matrix
@@ -61,6 +62,12 @@ class ExternalConfirmation(BaseModel):
 
 class ProviderSelection(BaseModel):
     provider: str = Field(min_length=1, max_length=40)
+
+
+class ProviderSwitch(ProviderSelection):
+    """Whether the operator wants to publish through one login at all."""
+
+    enabled: bool
 
 
 class ProviderCredentials(ProviderSelection):
@@ -662,6 +669,32 @@ def activate_provider(
     except EnvWriteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {"result": result, "connection": connection_status()}
+
+
+@router.post("/providers/enabled")
+def switch_provider(
+    workspace_id: str,
+    body: ProviderSwitch,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Switch one login on or off for everything that posts.
+
+    Written to `.env` rather than kept in the browser, which is where it used
+    to live: a campaign's planner and the worker both have to honour it, and
+    neither of them has a local storage. Same guards as activating an engine,
+    because it is the same file and the same kind of decision.
+    """
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        result = set_engine_enabled(body.provider, body.enabled)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result, "connection": connection_status(probe=False)}
 
 
 @router.post("/integrations")

@@ -598,7 +598,7 @@ export const fr: Messages = {
     nowDefault: "{label} est désormais le moteur par défaut.",
     engineSetup: "Configuration des moteurs",
     notOffering: "Ne propose aucune destination : {engines}.",
-    enginesOff: "Désactivés ici : {engines}.",
+    enginesOff: "Désactivés : {engines}. Rien n'est publié via eux, ni ici ni depuis une campagne.",
     blockedEngine: "{engines} ne peut pas publier pour le moment",
     noEngineOn: "Aucun moteur activé",
     noEngineOnHelp: "Activez-en un dans la configuration des moteurs pour voir ses destinations.",

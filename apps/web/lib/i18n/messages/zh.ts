@@ -578,7 +578,7 @@ export const zh: Messages = {
     nowDefault: "{label} 已设为默认引擎。",
     engineSetup: "引擎设置",
     notOffering: "未提供目标：{engines}。",
-    enginesOff: "已在此关闭：{engines}。",
+    enginesOff: "已关闭：{engines}。无论从这里还是从广告系列，都不会通过它们发布。",
     blockedEngine: "{engines} 目前无法发布",
     noEngineOn: "未启用任何引擎",
     noEngineOnHelp: "在引擎设置中启用一个，即可看到其目标。",

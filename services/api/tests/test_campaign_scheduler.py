@@ -201,6 +201,46 @@ def test_an_inactive_campaign_can_be_previewed_without_becoming_active(session) 
     assert campaign.status == "draft"
 
 
+def test_an_engine_switched_off_in_publish_is_not_planned_for(
+    session, monkeypatch
+) -> None:
+    """The switch used to live in a browser, so the planner never heard it.
+
+    Dropped before a slot is considered rather than refused at handover: a post
+    frozen for an engine nobody wants spends a slot and settles as a failure
+    that reads like something broke.
+    """
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(publishing, "engines_off", lambda: {"buffer"})
+    destination(session, "d-off", "youtube", provider="buffer")
+    destination(session, "d-on", "tiktok", provider="zernio")
+    slot(session, 12)
+    queue_item(session, "q1")
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.destination_id for post in posts] == ["d-on"]
+    assert "switched off in Publish" in note
+
+
+def test_a_campaign_whose_every_engine_is_off_says_so_rather_than_nothing(
+    session, monkeypatch
+) -> None:
+    """Otherwise the campaign reads as having no posting times at all."""
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(publishing, "engines_off", lambda: {"buffer"})
+    destination(session, "d-off", "youtube", provider="buffer")
+    slot(session, 12)
+    queue_item(session, "q1")
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert posts == []
+    assert "switched off in Publish" in note
+
+
 def test_an_outlook_can_look_beyond_the_workers_safe_window(session) -> None:
     """The UI can explain the week without making the worker schedule a week ahead."""
     destination(session, "d1", "youtube")

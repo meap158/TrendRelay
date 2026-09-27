@@ -214,6 +214,14 @@ type Provider = {
   configured: boolean;
   authenticated: boolean;
   authorization_error: string | null;
+  /**
+   * Whether the operator wants to publish through this login at all.
+   *
+   * Intent, beside the capability the three fields above describe. Optional
+   * because a response from before the setting existed carries no answer, and
+   * an engine nobody has switched off is on.
+   */
+  enabled?: boolean;
   credential_fields: CredentialField[];
   account_count?: number;
   /**
@@ -384,22 +392,25 @@ export default function PublishPage() {
   /** Threads' one topic tag, when a destination can carry it. */
   const [topic, setTopic] = useState("");
   /**
-   * Engines switched off for publishing, by id.
+   * Engines switched off for publishing, by id, as the server has them.
    *
-   * A key that works is not the same as an engine you want this post to use. A
-   * workspace can hold a client's engine alongside its own, and without a
-   * switch the only way to keep a post off one was to remember not to pick its
-   * accounts - which is a rule you break once and discover afterwards.
+   * A key that works is not the same as an engine you want to use. A workspace
+   * can hold a client's engine alongside its own, and without a switch the only
+   * way to keep a post off one was to remember not to pick its accounts - which
+   * is a rule you break once and discover afterwards.
    *
-   * Stored here rather than on the server: it is a preference about composing,
-   * not a policy about the workspace, and every destination still names the
-   * engine that will deliver it.
+   * This was a preference in this browser's local storage, on the grounds that
+   * it was about composing. It was not: a campaign plans and delivers without
+   * anybody at a keyboard, so the planner and the worker have to be able to
+   * read it, and while they could not, a campaign went on posting through an
+   * engine every screen here showed as off. It is a setting now, beside the
+   * engine's keys, and this reads it back off the connection.
    */
-  const [disabledEngines, setDisabledEngines] = usePersistedState<string[]>(
-    "trendrelay.publish.disabledEngines",
-    [],
-    (value): value is string[] =>
-      Array.isArray(value) && value.every((item) => typeof item === "string"),
+  const disabledEngines = useMemo(
+    () => (connection?.providers ?? [])
+      .filter((item) => item.enabled === false)
+      .map((item) => item.id),
+    [connection],
   );
   /**
    * Engine notes somebody has read and put away.
@@ -2170,6 +2181,89 @@ export default function PublishPage() {
     }
   }
 
+  /**
+   * Switch one engine on or off for everything that posts.
+   *
+   * Said plainly in the notice, because the switch now reaches further than the
+   * picker in front of it: a campaign's planner reads the same setting, so
+   * switching an engine off stops its scheduled posts as well as hiding its
+   * accounts here.
+   */
+  async function switchProvider(provider: Provider, enabled: boolean) {
+    setBusy(`${provider.id}-switch`);
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await json<{ connection: Connection }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/providers/enabled`, {
+          method: "POST",
+          body: JSON.stringify({ provider: provider.id, enabled }),
+        }),
+      );
+      setConnection(body.connection);
+      setNotice(enabled
+        ? `${provider.label} can publish again, here and for every campaign that names it.`
+        : `${provider.label} is switched off. Nothing publishes through it - not from here, and not from a campaign's schedule - until it is switched on again.`);
+    } catch (reason) {
+      setError(reason instanceof Error
+        ? reason.message : `${provider.label} could not be switched.`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Engines this browser switched off before the setting existed.
+   *
+   * The switch used to be local storage, so an operator who had switched an
+   * engine off would have found it on again after this shipped - and, worse,
+   * posting. What that browser still remembers is sent up once and then
+   * forgotten, so the choice survives the move and this never runs twice.
+   */
+  const adoptedSwitches = useRef(false);
+
+  useEffect(() => {
+    if (!workspaceId || !connection || !canExecute || adoptedSwitches.current) return;
+    adoptedSwitches.current = true;
+    let remembered: string[] = [];
+    try {
+      const raw = window.localStorage.getItem("trendrelay.publish.disabledEngines");
+      const parsed: unknown = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed)) {
+        remembered = parsed.filter((item): item is string => typeof item === "string");
+      }
+      window.localStorage.removeItem("trendrelay.publish.disabledEngines");
+    } catch {
+      // A preference that cannot be read is not worth reporting, and the
+      // engines are on - which is what the cards already show.
+      return;
+    }
+    const known = new Set((connection.providers ?? []).map((item) => item.id));
+    const pending = remembered.filter(
+      (id) => known.has(id) && !disabledEngines.includes(id),
+    );
+    if (!pending.length) return;
+    void (async () => {
+      for (const id of pending) {
+        try {
+          const body = await json<{ connection: Connection }>(
+            await apiFetch(`/api/workspaces/${workspaceId}/publishing/providers/enabled`, {
+              method: "POST",
+              body: JSON.stringify({ provider: id, enabled: false }),
+            }),
+          );
+          setConnection(body.connection);
+        } catch {
+          // Left on rather than reported: the card says it is on, which is the
+          // truth, and the switch beside it is one click away.
+        }
+      }
+    })();
+    // Runs on the first loaded connection and never again, which is what the
+    // ref enforces; the rest are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, connection, canExecute]);
+
   const autoLoaded = useRef(false);
 
   useEffect(() => {
@@ -2700,13 +2794,9 @@ export default function PublishPage() {
                    * is fixed, and the line under it says why. */}
                   <Switch
                     checked={!engineOff(provider.id)}
-                    disabled={!canExecute}
+                    disabled={!canExecute || busy === `${provider.id}-switch`}
                     label={t("publish.useForPublishing")}
-                    onChange={(next) => setDisabledEngines(
-                      next
-                        ? disabledEngines.filter((id) => id !== provider.id)
-                        : [...disabledEngines, provider.id],
-                    )}
+                    onChange={(next) => void switchProvider(provider, next)}
                   />
                   {isDefault
                     ? <Badge tone="accent">{t("publish.defaultEngine")}</Badge>

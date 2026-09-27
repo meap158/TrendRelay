@@ -2797,5 +2797,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* An account this campaign's own posts cannot reach. Quieter than a warning -
    nothing is broken, the pairing simply cannot carry what this queue holds -
    but said on the account rather than in a run note that scrolls away. */
-.autopilot-destination-blocked { display: flex; gap: 6px; align-items: start; margin: 6px 0 0; padding: 7px 9px; border-radius: var(--radius-sm); background: var(--bad-bg); color: var(--bad); font-size: 10px; line-height: 1.45; }
+/* Spans the row it is about: the account line is a four-column grid, so a
+   fifth child lands under the first column alone and a sentence arrives one
+   word wide. */
+.autopilot-destination-blocked { grid-column: 1 / -1; display: flex; gap: 6px; align-items: start; margin: 6px 0 0; padding: 7px 9px; border-radius: var(--radius-sm); background: var(--bad-bg); color: var(--bad); font-size: 10px; line-height: 1.45; }
 .autopilot-destination-blocked svg { flex: none; margin-block-start: 1px; }
+/* A switched-off engine is somebody's decision, not a fault, and reads in the
+   colour the rest of the app gives a pause rather than the one it gives a
+   failure. */
+.autopilot-destination-blocked[data-tone="warn"] { background: var(--warn-bg); color: var(--warn); }

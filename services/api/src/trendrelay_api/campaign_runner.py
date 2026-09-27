@@ -819,7 +819,7 @@ def _release_autonomous_holds(
         return {"posts": [], "failures": [], "deferred": [], "released": 0}
 
     from trendrelay_api.autopilot_models import CampaignQueueItem
-    from trendrelay_api.integrations.publishing import delivery_block
+    from trendrelay_api.integrations.publishing import delivery_block, engine_off_note
 
     rows = session.scalars(
         select(PublicationExecution).where(
@@ -853,6 +853,20 @@ def _release_autonomous_holds(
             reason = "The campaign destination no longer exists."
             fail_execution(execution, reason, "validation")
             failures.append(f"{label}: {reason}")
+            continue
+
+        # Switched off since this row was frozen. A decision rather than a
+        # fault, and the same disposal as a quota: the attempt is cancelled and
+        # the post stays approved, so it goes out at a slot after the engine is
+        # switched back on rather than needing to be found and re-made.
+        switched_off = engine_off_note(destination.provider)
+        if switched_off:
+            execution.state = "cancelled"
+            execution.error = switched_off[:1000]
+            execution.held_reason = None
+            execution.reconciled_at = now
+            execution.updated_at = now
+            deferred.append(f"{label}: {switched_off}")
             continue
 
         blocked = delivery_block(destination.provider, destination.integration_id)
@@ -1197,8 +1211,19 @@ def approve_execution(
     if unfinished:
         raise ValueError("This post is not finished. " + " ".join(unfinished))
     moment = now or datetime.now(UTC)
-    from trendrelay_api.integrations.publishing import delivery_block
+    from trendrelay_api.integrations.publishing import delivery_block, engine_off_note
 
+    # Refused for the same reason the planner would not have proposed it, and
+    # said in the engine's own terms: approving a post into an engine that is
+    # switched off is a mistake to catch here rather than a delivery to watch
+    # fail, and "there is no room" would have sent somebody to wait for a
+    # quota that was never the problem.
+    switched_off = engine_off_note(execution.provider)
+    if switched_off:
+        raise ValueError(
+            f"{execution.destination_label or execution.platform} cannot take a "
+            f"post right now. {switched_off} The post stays held."
+        )
     blocked = delivery_block(execution.provider, execution.integration_id)
     if blocked:
         # Refused before the job exists. Approving into a full quota produced a
@@ -1639,6 +1664,7 @@ def publish_queue_item_now(
     from trendrelay_api.integrations.publishing import (
         carousel_fits_destination,
         delivery_block,
+        engine_off_note,
         first_comment_deliverable,
         post_type_for_media,
         thread_deliverable,
@@ -1756,6 +1782,18 @@ def publish_queue_item_now(
                     "reason": why,
                 })
                 continue
+
+        # Switched off in Publish: the operator's own decision about this
+        # engine, reported as itself rather than as the account being
+        # unavailable - the account is fine, nobody wants to post through it.
+        switched_off = engine_off_note(destination.provider)
+        if switched_off:
+            skipped.append({
+                "destination_id": destination.id,
+                "label": dest_label,
+                "reason": switched_off,
+            })
+            continue
 
         # Check delivery block / quota
         blocked = delivery_block(destination.provider, destination.integration_id)

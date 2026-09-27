@@ -320,6 +320,63 @@ def test_approving_into_a_full_engine_is_refused_before_the_job(
     assert engine_stub == []
 
 
+def switched_off_engine(monkeypatch) -> None:
+    """An engine the operator has switched off in Publish."""
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(publishing, "engines_off", lambda: {"buffer"})
+
+
+def test_approving_through_an_engine_that_is_switched_off_is_refused(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """A decision, told in its own words rather than as a quota.
+
+    The post keeps its hold: switching the engine back on is the whole fix, and
+    a failed execution would leave a post to be found and re-made instead.
+    """
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    switched_off_engine(monkeypatch)
+
+    with pytest.raises(ValueError) as refused:
+        approve_execution(session, pilot, execution, now=NOW)
+
+    assert "switched off in Publish" in str(refused.value)
+    assert execution.state == "proposed", "still held, not failed"
+    assert engine_stub == []
+
+
+def test_a_post_frozen_before_the_engine_was_switched_off_does_not_go_out(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """The switch has to reach what was already planned, or it changes nothing.
+
+    Cancelled rather than failed, and the queue item is left approved: this is
+    the same disposal a quota gets, because both end with the post going out at
+    a later slot.
+    """
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    held = executions(session)[0]
+    assert held.state == "proposed"
+
+    # Granted autonomy, which is what makes the run look at a hold it left
+    # behind - and by then the engine is off.
+    pilot.authority = "autonomous"
+    session.commit()
+    switched_off_engine(monkeypatch)
+    result = run_campaign(session, pilot, now=NOW)
+
+    assert engine_stub == []
+    assert held.state == "cancelled"
+    assert "switched off in Publish" in (held.error or "")
+    assert any("switched off in Publish" in item for item in result["deferred"]), result
+
+
 def test_a_quota_refusal_is_not_read_as_a_broken_account() -> None:
     """Two of the four engines report no usage, so this is the only warning.
 

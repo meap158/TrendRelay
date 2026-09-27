@@ -589,7 +589,7 @@ export const vi: Messages = {
     nowDefault: "{label} giờ là công cụ mặc định.",
     engineSetup: "Thiết lập công cụ",
     notOffering: "Không cung cấp đích đến: {engines}.",
-    enginesOff: "Đã tắt tại đây: {engines}.",
+    enginesOff: "Đã tắt: {engines}. Không đăng gì qua chúng, từ đây hay từ một chiến dịch.",
     blockedEngine: "{engines} hiện không đăng được",
     noEngineOn: "Chưa bật công cụ nào",
     noEngineOnHelp: "Hãy bật một công cụ trong Thiết lập công cụ để thấy các đích đến.",

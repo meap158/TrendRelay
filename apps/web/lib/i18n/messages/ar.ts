@@ -585,7 +585,7 @@ export const ar: Messages = {
     nowDefault: "أصبح {label} المحرّك الافتراضي.",
     engineSetup: "إعداد المحرّكات",
     notOffering: "لا توفّر وجهات: {engines}.",
-    enginesOff: "موقوفة هنا: {engines}.",
+    enginesOff: "موقوفة: {engines}. لا يُنشر أي شيء من خلالها، لا من هنا ولا من حملة.",
     blockedEngine: "لا يمكن لـ {engines} النشر الآن",
     noEngineOn: "لا محرّك مُشغّل",
     noEngineOnHelp: "شغّل أحدها من إعداد المحرّكات لتظهر وجهاته.",

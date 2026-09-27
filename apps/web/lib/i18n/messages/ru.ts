@@ -595,7 +595,7 @@ export const ru: Messages = {
     nowDefault: "Теперь {label} — движок по умолчанию.",
     engineSetup: "Настройка движков",
     notOffering: "Не дают направлений: {engines}.",
-    enginesOff: "Выключены здесь: {engines}.",
+    enginesOff: "Выключены: {engines}. Через них ничего не публикуется — ни отсюда, ни из кампании.",
     blockedEngine: "{engines} сейчас не может публиковать",
     noEngineOn: "Ни один движок не включён",
     noEngineOnHelp: "Включите один в настройках движков, чтобы увидеть его направления.",

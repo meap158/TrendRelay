@@ -655,6 +655,28 @@ def plan_campaign(
     if not destinations:
         return [], "No destinations chosen. Add the accounts this campaign should feed."
 
+    # An engine switched off in Publish is a decision about posting, so it is
+    # honoured here rather than at delivery. The switch used to live in the
+    # browser that threw it, so the planner never heard about it and the
+    # campaign went on posting through an engine every screen showed as off.
+    # Dropped before a slot is considered, not refused at handover: a post
+    # frozen for an engine that is off spends a slot on a delivery nobody wants,
+    # and the refusal settles as a failure that reads like something broke.
+    from trendrelay_api.integrations.publishing import engine_off_note
+
+    switched_off = {
+        destination.id: note
+        for destination in destinations
+        if (note := engine_off_note(destination.provider))
+    }
+    if switched_off:
+        destinations = [
+            destination for destination in destinations
+            if destination.id not in switched_off
+        ]
+    if not destinations:
+        return [], " ".join(dict.fromkeys(switched_off.values()))
+
     workspace = session.get(Workspace, autopilot.workspace_id)
     timezone = workspace.timezone if workspace else "UTC"
     from trendrelay_api.integrations import posting_slots
@@ -908,7 +930,10 @@ def plan_campaign(
     by_id = {item.id: item for item in destinations}
 
     scheduled: list[ScheduledPost] = []
-    notes: list[str] = []
+    # The accounts this run will not even consider lead the notes: they explain
+    # a campaign that is planning fewer posts than its slots, and a note about
+    # which post filled which slot cannot.
+    notes: list[str] = list(dict.fromkeys(switched_off.values()))
     #: Unwritten posts met during the run, by id, so each is counted once
     #: however many slots considered it. Summarised into a single note below.
     unwritten: dict[str, str] = {}

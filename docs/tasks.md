@@ -3,13 +3,6 @@
 Operator-requested work that is noted but not yet built. One bullet per task;
 remove it when the work lands, and name the commit that did.
 
-- A campaign kept posting to an engine that was switched off in Publish.
-  Whether an engine is on is asked for delivery, but the planner freezes and
-  schedules posts for its destinations regardless, so a switched-off engine
-  produces scheduled posts that either fail at delivery or go out anyway.
-  With it, the campaign's "Where it posts" pane should mark a destination
-  whose engine is off, the way the sidebar now marks a stopped campaign -
-  otherwise the only sign is posts not appearing. Asked on 2026-09-27.
 - One campaign is creating publish jobs to Buffer far faster than it can have
   posts to make, and every one is refused. 56,176 of the 57,152 failed jobs in
   the database are `Too many requests` or `HTTP 429` from api.buffer.com, each

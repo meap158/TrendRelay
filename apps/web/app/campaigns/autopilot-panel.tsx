@@ -467,6 +467,15 @@ type Destination = {
   connection_account?: EngineAccount;
   /** Whether this login can post a gallery of pictures to this network. */
   accepts_carousel?: boolean;
+  /**
+   * Whether the engine behind this account is switched on in Publish.
+   *
+   * A campaign is where somebody looks when posts stop arriving, and a
+   * switched-off engine showed itself only by their absence: the switch is two
+   * tabs away and says nothing about which campaigns it stopped. Optional for
+   * a payload from before the setting existed, where nothing was ever off.
+   */
+  engine_enabled?: boolean;
   /** Whether a first comment or thread reply can be delivered here. */
   follow_up_deliverable?: boolean;
   /** Whether this exact connection can publish additional reply posts. */
@@ -7305,6 +7314,20 @@ export function AutopilotPanel({
                       {item.accepts_carousel ? " · video and carousels" : ""}</small>
                   </span>
                 </div>
+                {/* The engine behind this account is switched off, which the
+                    campaign could not say before: the switch is two tabs away
+                    and the only sign here was posts not arriving. Wearing the
+                    sidebar's stopped glyph, for the same reason it wears it -
+                    the row is scanned before it is read. */}
+                {item.enabled && item.engine_enabled === false && (
+                  <p className="autopilot-destination-blocked" data-tone="warn">
+                    <ActionIcon name="pause" size={12} />
+                    <span>{item.provider_label ?? item.provider} is switched off in
+                      Publish, so nothing goes out through this account - not from
+                      here and not from a schedule. Switch it on in Publish to
+                      start posting again.</span>
+                  </p>
+                )}
                 {/* An account this campaign's own posts cannot reach.
                     Storytelling has had Instagram and Threads attached since
                     it was made and has never sent either of them a single

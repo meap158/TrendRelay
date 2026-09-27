@@ -592,7 +592,7 @@ export const en = {
     nowDefault: "{label} is now the default engine.",
     engineSetup: "Engine setup",
     notOffering: "Not offering destinations: {engines}.",
-    enginesOff: "Switched off here: {engines}.",
+    enginesOff: "Switched off: {engines}. Nothing publishes through them, here or from a campaign.",
     blockedEngine: "{engines} cannot publish right now",
     noEngineOn: "No engine switched on",
     noEngineOnHelp: "Turn one on in Engine setup to see its destinations.",
