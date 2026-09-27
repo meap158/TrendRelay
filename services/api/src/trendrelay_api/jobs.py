@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from trendrelay_api.database import SessionFactory
@@ -598,6 +598,63 @@ def settle_expired_cancellations(
             item.updated_at = timestamp
             settled.append(item.id)
     return settled
+
+
+#: How long a finished job is kept before it is forgotten.
+#:
+#: The record is worth having while somebody might still ask what happened -
+#: a timeline reads it, a failure is investigated - and worth nothing a month
+#: later. Nothing removed them at all until now: 72,359 settled jobs had
+#: accumulated, carrying 317 MB of request and result JSON, about half of a
+#: 645 MB database. 56,176 of those were one campaign's posts being refused by
+#: Buffer for rate limits, each refusal keeping its own copy of the request.
+JOB_RETENTION = timedelta(days=30)
+
+
+def prune_settled_jobs(
+    older_than: timedelta = JOB_RETENTION,
+    limit: int = 2_000,
+    *,
+    now: datetime | None = None,
+    factory: SessionMaker = SessionFactory,
+) -> int:
+    """Forget finished jobs nothing reads any more. Returns how many went.
+
+    Only settled ones, and only those old enough that no execution is still
+    waiting on them. An execution outlives its job - that is why `job_id` is a
+    string rather than a foreign key - but reconciliation reads the job back
+    to learn the outcome, and a job deleted while its execution is still
+    `queued` turns that execution `uncertain`, which holds its slot and its
+    queue item for a post that in fact went out. So a job any unsettled
+    execution still points at is kept however old it is.
+
+    Bounded per pass, because the first one has tens of thousands to do and a
+    single enormous delete would hold a write lock across the whole worker.
+    """
+    from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
+
+    moment = now or datetime.now(UTC)
+    cutoff = moment - older_than
+    with factory() as session:
+        waiting = select(PublicationExecution.job_id).where(
+            PublicationExecution.job_id.is_not(None),
+            PublicationExecution.state.in_(sorted(HOLDING_STATES)),
+        )
+        doomed = session.scalars(
+            select(DurableJob.id)
+            .where(
+                DurableJob.status.in_(("succeeded", "failed", "cancelled")),
+                DurableJob.completed_at.is_not(None),
+                DurableJob.completed_at < cutoff,
+                DurableJob.id.not_in(waiting),
+            )
+            .limit(limit)
+        ).all()
+        if not doomed:
+            return 0
+        session.execute(delete(DurableJob).where(DurableJob.id.in_(doomed)))
+        session.commit()
+    return len(doomed)
 
 
 def abandon_expired_jobs(

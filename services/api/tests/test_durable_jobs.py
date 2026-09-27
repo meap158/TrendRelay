@@ -21,6 +21,7 @@ from trendrelay_api.jobs import (
     list_job_records_for_kinds,
     list_job_records_including_active,
     now_utc,
+    prune_settled_jobs,
     recoverable_job_ids,
     request_job_cancellation,
     requeue_terminal_job,
@@ -722,3 +723,62 @@ def test_a_caller_that_names_a_delay_still_gets_it() -> None:
 
     waited = failed["available_at"] - now_utc()
     assert waited.total_seconds() <= 6
+
+
+def test_a_finished_job_is_forgotten_once_nobody_reads_it_any_more() -> None:
+    """Nothing removed settled jobs at all: 72,359 of them had accumulated
+    with 317 MB of request and result JSON, about half the database. 56,176
+    were one campaign's posts being refused by Buffer for rate limits, each
+    refusal keeping its own copy of the request."""
+    sessions = factory()
+    moment = now_utc()
+    with sessions.begin() as session:
+        for name, status, age in (
+            ("old-failure", "failed", timedelta(days=40)),
+            ("old-success", "succeeded", timedelta(days=31)),
+            ("recent-failure", "failed", timedelta(days=3)),
+        ):
+            session.add(DurableJob(
+                id=name, workspace_key="ws", kind="social_publish", status=status,
+                payload={"request": "x" * 200}, max_attempts=1,
+                completed_at=moment - age,
+            ))
+        # Still working, however old it looks.
+        session.add(DurableJob(
+            id="still-running", workspace_key="ws", kind="social_publish",
+            status="running", payload={}, max_attempts=1,
+            completed_at=moment - timedelta(days=90),
+        ))
+
+    assert prune_settled_jobs(factory=sessions) == 2
+
+    with sessions() as session:
+        left = {job.id for job in session.query(DurableJob).all()}
+    assert left == {"recent-failure", "still-running"}
+
+
+def test_a_job_an_execution_is_still_waiting_on_is_kept_however_old() -> None:
+    """An execution outlives its job - that is why `job_id` is a string rather
+    than a foreign key - but reconciliation reads the job back to learn the
+    outcome. Delete it while the execution is still `queued` and that
+    execution turns `uncertain`, which holds its slot and its queue item for a
+    post that in fact went out."""
+    from trendrelay_api.publication_models import PublicationExecution
+
+    sessions = factory()
+    moment = now_utc()
+    with sessions.begin() as session:
+        session.add(DurableJob(
+            id="publish-1", workspace_key="ws", kind="social_publish",
+            status="succeeded", payload={}, max_attempts=1,
+            completed_at=moment - timedelta(days=90),
+        ))
+        session.add(PublicationExecution(
+            id="pubexec-1", workspace_id="ws", state="queued", job_id="publish-1",
+            media_path="clip.mp4",
+        ))
+
+    assert prune_settled_jobs(factory=sessions) == 0
+
+    with sessions() as session:
+        assert session.get(DurableJob, "publish-1") is not None

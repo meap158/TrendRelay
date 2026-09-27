@@ -53,6 +53,7 @@ from trendrelay_api.database import SessionFactory  # noqa: E402
 from trendrelay_api.jobs import (  # noqa: E402
     abandon_expired_jobs,
     recoverable_job_ids,
+    prune_settled_jobs,
     settle_expired_cancellations,
     upgrade_active_job_recovery,
 )
@@ -154,6 +155,15 @@ def process_available() -> int:
             print(f"Finished cancellation for orphaned {kind} job {job_id}.", flush=True)
         for job_id in abandon_expired_jobs(kind):
             print(f"Abandoned {kind} job {job_id}: its worker never came back.", flush=True)
+
+    # Finished jobs nobody reads any more. Nothing removed them until now, so
+    # 72,359 of them had accumulated with 317 MB of request and result JSON -
+    # about half the database. Bounded per pass, because the first few have
+    # tens of thousands to get through and one enormous delete would hold the
+    # write lock across everything else the worker is doing.
+    forgotten = prune_settled_jobs()
+    if forgotten:
+        print(f"Forgot {forgotten} settled job(s) past their retention.", flush=True)
 
     # Listing reads run beside the pass, not at their turn in it. Each is a
     # couple of seconds of polite HTTP - yet in a serial pass a hundred media
