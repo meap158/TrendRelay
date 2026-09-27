@@ -798,6 +798,38 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
 }
 
 /**
+ * The frame a post stands in while it waits for its media.
+ *
+ * Every waiting post drew a play triangle in a landscape box, including the
+ * eight-picture carousels a shopping campaign is mostly made of - so a row
+ * waiting for pictures advertised a clip, at a shape none of those pictures
+ * will take. The queue already knows the difference: `media_target` counts
+ * files, and a post waiting for more than one of them cannot be a video,
+ * because no post carries two clips.
+ *
+ * So a carousel's frame takes the shape a picture frame starts at and the
+ * mark a loaded carousel wears, and the row does not change width when the
+ * cards arrive. A post waiting for one file, or naming no number at all,
+ * keeps the triangle - one file is as likely a clip as a picture, and
+ * guessing there would just move the wrong icon somewhere else.
+ */
+function WaitingThumb({ count, target }: { count: number; target: number | null }) {
+  const files = Math.max(count, target ?? 0);
+  if (files > 1) {
+    return (
+      <span
+        className="campaign-pipeline-thumb-empty"
+        data-waiting="pictures"
+        title={`Waiting for ${files} pictures - ${count} attached so far`}
+      >
+        <CarouselMark size={14} />
+      </span>
+    );
+  }
+  return <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>;
+}
+
+/**
  * A timeline row's thumbnail: hovered to glance, pressed to look properly.
  *
  * The row's still could be hovered and nothing else, while the same picture
@@ -6055,7 +6087,10 @@ export function AutopilotPanel({
                         hoverPreview
                       />
                     ) : (
-                      <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>
+                      <WaitingThumb
+                        count={item.media_count}
+                        target={item.media_target}
+                      />
                     )}
                   </div>
                 )}

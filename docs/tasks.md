@@ -16,11 +16,6 @@ remove it when the work lands, and name the commit that did.
   With it, the campaign's "Where it posts" pane should mark a destination
   whose engine is off, the way the sidebar now marks a stopped campaign -
   otherwise the only sign is posts not appearing. Asked on 2026-09-27.
-- A post waiting for media draws a video placeholder whatever it is waiting
-  for. The queue already knows the shape - "0 of 8" is a carousel, and a post
-  whose media count is more than one cannot be a video - so the placeholder
-  should take the pictures' own aspect and icon rather than a play triangle
-  in a landscape box. Asked on 2026-09-27 from the Storytelling queue.
 - One campaign is creating publish jobs to Buffer far faster than it can have
   posts to make, and every one is refused. 56,176 of the 57,152 failed jobs in
   the database are `Too many requests` or `HTTP 429` from api.buffer.com, each

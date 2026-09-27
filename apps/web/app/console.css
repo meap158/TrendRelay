@@ -1540,6 +1540,10 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-queue-thumb { display: grid; place-items: center; inline-size: 84px; }
 .autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; block-size: 64px; inline-size: 84px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
 .autopilot-queue-thumb .picker-thumb { inline-size: auto; max-inline-size: 84px; aspect-ratio: var(--thumb-ratio, 84 / 64); }
+/* A post waiting for a carousel waits in a picture's frame, not a clip's: the
+   same 3/4 the loaded thumbnail starts at, so the row keeps its width when the
+   cards arrive. */
+.autopilot-queue-thumb .campaign-pipeline-thumb-empty[data-waiting="pictures"] { inline-size: 48px; }
 /* `cover` on a box that is already the media's own shape crops nothing, and it
    avoids the half-pixel letterbox `contain` leaves on a rounded corner. */
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
