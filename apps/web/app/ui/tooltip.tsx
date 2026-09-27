@@ -5,12 +5,11 @@ import {
   isValidElement,
   useId,
   useRef,
-  useState,
   type ReactElement,
   type ReactNode,
 } from "react";
 
-import { type Alignment, tooltipAlignment } from "../../lib/tooltip-align";
+import { tooltipAlignment } from "../../lib/tooltip-align";
 
 type TooltipTriggerProps = {
   "aria-describedby"?: string;
@@ -35,7 +34,6 @@ export function Tooltip({
 }) {
   const id = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
-  const [alignment, setAlignment] = useState<Alignment>("center");
 
   /**
    * What the tooltip actually has to fit inside, which is not always the window.
@@ -70,13 +68,28 @@ export function Tooltip({
     return { left: 0, right: window.innerWidth };
   };
 
+  /**
+   * Placed on the node itself, not through state, so it is in effect for the
+   * very frame the surface appears in.
+   *
+   * CSS reveals the surface on `:hover`, which is the same moment this
+   * handler runs - but a state update does not reach the DOM until React has
+   * rendered again, a frame later. So the first painted frame had the surface
+   * revealed and still centred: it hung out over the edge, the dialog's
+   * scrollable width grew, and a horizontal scrollbar appeared and then
+   * vanished as the alignment landed. Writing the attribute here happens
+   * inside the event, before the browser lays out and paints, so there is no
+   * frame in which the surface is both visible and misplaced.
+   *
+   * React does not render this attribute, so it will not overwrite what is
+   * set here. Recomputed on every open, which is what follows responsive
+   * reflow, scrolling and keyboard focus.
+   */
   const placeInsideViewport = () => {
     const node = wrapperRef.current;
     const rect = node?.getBoundingClientRect();
     if (!node || !rect) return;
-    // Recomputed when it is opened so it follows responsive reflow, scrolling
-    // and keyboard focus rather than whatever was true at first render.
-    setAlignment(tooltipAlignment(rect, clippingBounds(node)));
+    node.dataset.align = tooltipAlignment(rect, clippingBounds(node));
   };
 
   if (!isValidElement(children)) return children as ReactNode;
@@ -88,7 +101,6 @@ export function Tooltip({
   return (
     <span
       className={className ? `ui-tooltip ${className}` : "ui-tooltip"}
-      data-align={alignment}
       data-side={side}
       ref={wrapperRef}
       onFocusCapture={placeInsideViewport}
