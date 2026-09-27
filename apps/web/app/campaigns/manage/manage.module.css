@@ -145,8 +145,14 @@
 .approvalList { max-block-size: min(68vh, 680px); overflow-y: auto; overscroll-behavior: contain; }
 .approvalList li { border-block-end: 1px solid var(--line); }
 .approvalList li:last-child { border-block-end: 0; }
-.approvalList a { display: grid; gap: 5px; padding: 11px 13px; color: var(--text); text-decoration: none; }
+.approvalList a { display: grid; gap: 5px; padding: 11px 13px 4px; color: var(--text); text-decoration: none; }
 .approvalList a:hover { background: var(--panel-raised); }
+/* The decisions share the line the time already owns. A row of its own per
+   post would have cost six of them the height of the panel, on a rail whose
+   whole job is to show what is waiting. */
+.approvalActions { display: flex; align-items: center; gap: 6px; padding: 0 13px 10px; }
+.approvalActions small { flex: 1; min-inline-size: 0; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.approvalActions .ui-button { flex: none; }
 .approvalTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .approvalTop strong { overflow: hidden; color: var(--link); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .approvalList b { display: -webkit-box; overflow: hidden; font-size: 12px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }

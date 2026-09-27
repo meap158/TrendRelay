@@ -14,6 +14,7 @@ import { CampaignViewNav } from "../campaign-view-nav";
 import { useWorkspace } from "../../workspace-provider";
 import { ActionIcon } from "../../ui/action-icons";
 import { Badge } from "../../ui/primitives";
+import { ActionMenu } from "../../ui/action-menu";
 import { Button, buttonClass } from "../../ui/button";
 import { Select } from "../../ui/select";
 import { Tooltip } from "../../ui/tooltip";
@@ -402,6 +403,60 @@ export default function CampaignManagementPage() {
     }
   }, [apiFetch, fail, range, snapshotKey, timezone, workspaceId]);
 
+  /** The post a decision is in flight for, so the row can say so and the rest
+      hold still rather than letting a second press race the first. */
+  const [deciding, setDeciding] = useState<string>("");
+
+  /**
+   * Decide one held post without leaving the control room.
+   *
+   * The panel listed what needed a person and then sent them somewhere else
+   * to do it - six posts meant six trips into a campaign and back. These are
+   * the same four endpoints the campaign's own inbox calls, so a decision
+   * made here is the decision made there: the same finalisation checks, the
+   * same delivery block, the same audit trail.
+   *
+   * The row goes when the snapshot comes back rather than the moment it is
+   * pressed. Approval can be refused - a post that is not finished says what
+   * to fix - and a row that vanished optimistically would take the reason
+   * with it.
+   */
+  const decide = useCallback(async (
+    item: ManagementSnapshot["approvals"]["items"][number],
+    action: "approve" | "publish-now" | "skip" | "decline",
+  ) => {
+    if (!workspaceId || deciding) return;
+    const base = `/api/workspaces/${workspaceId}/campaigns/`
+      + `${encodeURIComponent(item.campaign_id)}/autopilot/executions/`
+      + `${encodeURIComponent(item.id)}`;
+    const approving = action === "approve" || action === "publish-now";
+    setDeciding(item.id);
+    try {
+      const response = await apiFetch(approving ? `${base}/approve` : `${base}/dismiss`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(approving
+          ? { confirm_external_action: true, publish_now: action === "publish-now" }
+          : { stop_proposing: action === "decline" }),
+      });
+      if (!response.ok) {
+        // The reason a post was refused is the useful part - "this post is
+        // not finished" names what to fix - so it is shown rather than a
+        // generic failure.
+        const detail = await response.json().catch(() => null);
+        throw new Error(
+          (detail && typeof detail.detail === "string" && detail.detail)
+          || "That decision could not be made.",
+        );
+      }
+      await load();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "That decision could not be made.");
+    } finally {
+      setDeciding("");
+    }
+  }, [apiFetch, deciding, fail, load, workspaceId]);
+
   useEffect(() => {
     if (!workspaceId) return;
     const cached = readTabSnapshot<ManagementSnapshot>(snapshotKey);
@@ -553,12 +608,53 @@ export default function CampaignManagementPage() {
                   <ol className={styles.approvalList}>
                     {snapshot.approvals.items.map((item) => (
                       <li key={item.id}>
+                        {/* The row reads as one thing and acts as another: the
+                            post opens where it can be read in full, and the
+                            decisions sit on the line the time already owns.
+                            A second row of controls per post would have cost
+                            six of them the height of the panel. */}
                         <Link href={`/campaigns?campaign=${encodeURIComponent(item.campaign_id)}#campaign-approvals`}>
                           <span className={styles.approvalTop}><strong>{item.campaign_name}</strong><Badge tone="warn">Waiting</Badge></span>
                           <b>{labelForApproval(item)}</b>
                           <span>{[item.platform, item.destination_label].filter(Boolean).join(" · ") || "Destination pending"}</span>
-                          <small>{timeLabel(item.scheduled_at ?? item.created_at)}</small>
                         </Link>
+                        <div className={styles.approvalActions}>
+                          <small>{timeLabel(item.scheduled_at ?? item.created_at)}</small>
+                          <Tooltip content={`Approve this post. It goes out on ${item.campaign_name}'s schedule; one past its own time takes the next free slot.`}>
+                            <Button variant="primary" size="sm" iconOnly
+                              busy={deciding === item.id}
+                              disabled={Boolean(deciding) && deciding !== item.id}
+                              aria-label={`Approve ${labelForApproval(item)}`}
+                              onClick={() => void decide(item, "approve")}>
+                              <ActionIcon name="confirm" />
+                            </Button>
+                          </Tooltip>
+                          {/* Publishing now and refusing a post are both
+                              things somebody should mean, so they are one
+                              press further away than approving. */}
+                          <ActionMenu
+                            label="More"
+                            ariaLabel={`More for ${labelForApproval(item)}`}
+                            disabled={Boolean(deciding)}
+                            items={[
+                              { id: "now", label: "Publish now",
+                                description: "Send it immediately instead of waiting for its slot." },
+                              { id: "skip", label: "Skip this time",
+                                description: "Frees the slot and the clip; the post returns next cycle." },
+                              { id: "decline", label: "Decline",
+                                description: "Also pauses the post, so it stops being proposed." },
+                            ]}
+                            onSelect={(id) => {
+                              if (id === "now") {
+                                if (!window.confirm(
+                                  `Publishes to ${item.destination_label ?? item.platform ?? "its account"} immediately instead of waiting for its slot. Continue?`,
+                                )) return;
+                                void decide(item, "publish-now");
+                              } else {
+                                void decide(item, id === "skip" ? "skip" : "decline");
+                              }
+                            }} />
+                        </div>
                       </li>
                     ))}
                   </ol>
