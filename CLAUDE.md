@@ -44,6 +44,13 @@ delete, restore it and say so - do not commit over it.
   stale snapshots.
 - No bash heredocs for code or CJK text - backslashes and multibyte content
   get corrupted. Use the Write/Edit tools.
+- Everything this install writes stays on the project drive. `C:` is the
+  system drive here and it has reached zero bytes free; the project drive has
+  room. Scratch and the model caches are pointed at `.data` by
+  `project_storage`, which the package's `__init__` calls, so ordinary
+  `tempfile` use is already correct - do not reach for `%TEMP%`, a home
+  directory or an absolute `C:` path, and when a new library caches weights,
+  add it there rather than letting it default under the home directory.
 
 ## Commits and conduct
 

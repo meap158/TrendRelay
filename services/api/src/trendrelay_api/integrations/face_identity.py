@@ -38,6 +38,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from trendrelay_api.project_storage import INSIGHTFACE_ROOT
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 Box = tuple[int, int, int, int]
@@ -229,8 +230,15 @@ def analyser(confidence: float = 0.5, force_cpu: bool = False) -> tuple[Any, str
         # The CPU provider is always appended: a GPU provider that cannot place
         # an operator falls back per-node instead of failing to build at all.
         providers = [provider] if provider == CPU_PROVIDER else [provider, CPU_PROVIDER]
+        # Kept on the project drive, beside the licence acknowledgement that
+        # already lives there. Left to itself insightface downloads its pack
+        # under the home directory - six hundred megabytes onto the system
+        # drive, which on this machine had none to spare. It takes the root as
+        # an argument rather than reading the environment, so it is passed.
+        INSIGHTFACE_ROOT.mkdir(parents=True, exist_ok=True)
         app = FaceAnalysis(
-            name=MODEL_PACK, providers=providers, allowed_modules=MODULES
+            name=MODEL_PACK, providers=providers, allowed_modules=MODULES,
+            root=str(INSIGHTFACE_ROOT),
         )
         app.prepare(
             ctx_id=-1 if provider == CPU_PROVIDER else 0,
