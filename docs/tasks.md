@@ -21,11 +21,6 @@ remove it when the work lands, and name the commit that did.
   whose media count is more than one cannot be a video - so the placeholder
   should take the pictures' own aspect and icon rather than a play triangle
   in a landscape box. Asked on 2026-09-27 from the Storytelling queue.
-- The Storytelling campaign has Instagram and Threads accounts attached and
-  posts to neither. Its run notes mention WoopSocial refusing photo carousels
-  to Threads and to Instagram, so the destinations may be being skipped for
-  the format rather than never considered - but the campaign reads as though
-  those accounts are simply idle. Asked on 2026-09-27.
 - One campaign is creating publish jobs to Buffer far faster than it can have
   posts to make, and every one is refused. 56,176 of the 57,152 failed jobs in
   the database are `Too many requests` or `HTTP 429` from api.buffer.com, each

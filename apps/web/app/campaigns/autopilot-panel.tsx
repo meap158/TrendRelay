@@ -7270,6 +7270,23 @@ export function AutopilotPanel({
                       {item.accepts_carousel ? " · video and carousels" : ""}</small>
                   </span>
                 </div>
+                {/* An account this campaign's own posts cannot reach.
+                    Storytelling has had Instagram and Threads attached since
+                    it was made and has never sent either of them a single
+                    post: its queue is carousels, and its engine posts those
+                    to TikTok only. The planner says so once per run in a note
+                    that scrolls away, so the account simply read as idle -
+                    whereas the reason is a fixed fact about the pairing and
+                    belongs on the account it is about. */}
+                {item.enabled && item.accepts_carousel === false
+                  && queue.some((post) => post.image_paths.length > 1) && (
+                  <p className="autopilot-destination-blocked">
+                    <ActionIcon name="dismiss" size={12} />
+                    <span>Carousels cannot go here. {item.provider_label ?? item.provider}
+                      {" "}posts them to TikTok only, so this campaign&apos;s picture posts
+                      skip this account - send it video, or deliver it through another engine.</span>
+                  </p>
+                )}
                 {/* The decision, next to the account it applies to. Someone who
                     expects a tappable link on TikTok needs to find out here,
                     not from a post that already went out. */}
