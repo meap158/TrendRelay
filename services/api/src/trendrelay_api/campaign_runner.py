@@ -1475,6 +1475,20 @@ def _redeliver(
     )
     if autopilot is None:
         return False
+    # Asked again only if the engine is not still saying no. "The engine was
+    # full" is a reason to try again later and was being read as a reason to try
+    # again immediately: three deliveries went out within seconds of the
+    # refusal, each one another request against a client the engine had just
+    # told to slow down.
+    from trendrelay_api.integrations.publishing import delivery_block, engine_off_note
+
+    blocked = (
+        engine_off_note(execution.provider)
+        or delivery_block(execution.provider, execution.integration_id)
+    )
+    if blocked:
+        print(f"Redelivery of {execution.id} held off: {blocked}", flush=True)
+        return False
     scheduled = _as_utc(execution.scheduled_at)
     ahead = scheduled is not None and scheduled > now
     at = scheduled if ahead else now
@@ -1539,6 +1553,12 @@ def reconcile_executions(
             execution.permalinks = permalinks
             execution.published_at = moment
             record_published(session, execution, now=moment)
+            # A post went through, so whatever the engine was refusing before
+            # it is over: the next one does not have to sit out the rest of a
+            # wait that has already been answered.
+            from trendrelay_api.integrations.publishing import clear_rate_limit
+
+            clear_rate_limit(execution.provider)
             # The post went out, so the approval it needed is spent. The clip
             # goes to the back of the rotation and its next outing is a new
             # decision rather than the same one re-asked, so that one is
@@ -1549,6 +1569,23 @@ def reconcile_executions(
             published.append(execution.id)
         elif job.status == "failed":
             failure_class = _classify_failure(job.last_error or "")
+            text = (job.last_error or "").casefold()
+            if failure_class == "rate_limited" and not any(
+                marker in text for marker in EXHAUSTED_MARKERS
+            ):
+                # The one thing a rate limit asks for is time. Remembered
+                # against the login here, which is the only place it is ever
+                # said, so the next slot waits instead of asking again - see
+                # `RATE_LIMIT_BACKOFF` for what this campaign cost before.
+                #
+                # Not for a full drive. "Limit exceeded" covers both, and
+                # waiting five minutes for storage to appear would only delay
+                # the breaker that is meant to switch the campaign off over it.
+                from trendrelay_api.integrations.publishing import (
+                    note_rate_limit_refusal,
+                )
+
+                note_rate_limit_refusal(execution.provider)
             again = redelivery_reason(execution, failure_class, job.last_error or "")
             if failure_class == "uncertain":
                 execution.state = "uncertain"

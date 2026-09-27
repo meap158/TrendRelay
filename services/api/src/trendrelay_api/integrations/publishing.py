@@ -3307,6 +3307,95 @@ def _measured_daily(provider_id: str, integration_id: str | None) -> Any:
     return figures
 
 
+#: How long an engine that answered "too many requests" is left alone, growing
+#: while it keeps saying it.
+#:
+#: The one thing a rate limit asks for is time, and nothing here was giving it
+#: any. A refusal was charged to the post instead: the delivery was retried
+#: three times within seconds, the execution settled as failed, its slot came
+#: free, and the next tick froze the *next* approved post into the same slot -
+#: sixty-five of them per slot, each with its three retries. One campaign put
+#: 56,176 refused jobs in the database that way, and the refusals were its own
+#: doing: Buffer was answering "too many requests from this client" to a client
+#: that was asking two hundred times a slot.
+#:
+#: Five minutes is long enough for a per-minute throttle to clear and short
+#: enough that a slot is not missed over one unlucky burst. It doubles while
+#: the engine goes on refusing, because the second refusal says the first wait
+#: was not enough, and stops at an hour: past that the engine is out of quota
+#: for the day rather than busy, and an hourly knock is enough to notice it
+#: coming back.
+RATE_LIMIT_BACKOFF = (300, 600, 1200, 2400, 3600)
+
+#: How long after the last refusal the count starts again. An isolated 429 next
+#: week is not the fifth strike of this afternoon.
+RATE_LIMIT_MEMORY = 3600.0
+
+#: Per login: when it may be asked again, how many times running it has
+#: refused, and when the last refusal was. Process-local on purpose, like the
+#: usage cache below it - the worker is what plans and delivers, so the memory
+#: only has to outlive a tick, and a shared table for it would be a migration
+#: to hold something that is stale in five minutes.
+_RATE_LIMITED: dict[str, tuple[float, int, float]] = {}
+
+
+def _rate_limit_key(provider_id: str | None) -> str:
+    """The login a throttle belongs to.
+
+    Per connection rather than per engine: the limit is counted against the API
+    key, so a second Buffer login has its own budget and must not be silenced
+    by the first one's.
+    """
+    try:
+        return resolve_connection(provider_id).id
+    except ValueError:
+        return provider_id or ""
+
+
+def note_rate_limit_refusal(provider_id: str | None) -> float:
+    """Remember that this login has just refused for want of room.
+
+    Returns how long it is being left alone, in seconds.
+    """
+    key = _rate_limit_key(provider_id)
+    now = time.monotonic()
+    _until, strikes, last = _RATE_LIMITED.get(key, (0.0, 0, 0.0))
+    if now - last > RATE_LIMIT_MEMORY:
+        strikes = 0
+    wait = RATE_LIMIT_BACKOFF[min(strikes, len(RATE_LIMIT_BACKOFF) - 1)]
+    _RATE_LIMITED[key] = (now + wait, strikes + 1, now)
+    return float(wait)
+
+
+def clear_rate_limit(provider_id: str | None) -> None:
+    """Forget the refusals, because a post has just gone through."""
+    _RATE_LIMITED.pop(_rate_limit_key(provider_id), None)
+
+
+def rate_limit_pause(provider_id: str | None) -> str | None:
+    """Why this login is being left alone for a moment, or None.
+
+    Said in minutes, because that is the decision it explains: nothing is
+    wrong with the post or the account, and the wait is shorter than the gap to
+    the next posting slot.
+    """
+    key = _rate_limit_key(provider_id)
+    entry = _RATE_LIMITED.get(key)
+    if not entry:
+        return None
+    until, _strikes, _last = entry
+    left = until - time.monotonic()
+    if left <= 0:
+        del _RATE_LIMITED[key]
+        return None
+    minutes = max(1, round(left / 60))
+    return (
+        f"{connection_label(provider_id)} answered \"too many requests\", so it is "
+        f"being left alone for another {minutes} "
+        f"{'minute' if minutes == 1 else 'minutes'} rather than asked again."
+    )
+
+
 def delivery_block(provider_id: str, integration_id: str | None = None) -> str | None:
     """Why this engine cannot take a post right now, or None if it can.
 
@@ -3320,8 +3409,16 @@ def delivery_block(provider_id: str, integration_id: str | None = None) -> str |
     pricing page and may be a year stale; blocking on one would stop posts
     that the engine would have accepted. Engines that report nothing are
     therefore never blocked here, and are protected instead by recognising a
-    quota refusal when it arrives.
+    quota refusal when it arrives - which is the first thing asked below, and
+    was for a long time the part that never happened.
     """
+    # What the engine said last time, before what it publishes about itself: a
+    # throttle refuses a client, not a plan, so no header or usage figure
+    # reports it and the only evidence is the refusal - see `RATE_LIMIT_BACKOFF`.
+    paused = rate_limit_pause(provider_id)
+    if paused:
+        return paused
+
     from trendrelay_api.integrations import engine_limits
 
     items = engine_limits.allowances(
@@ -4005,6 +4102,24 @@ def set_active_provider(provider_id: str) -> dict[str, Any]:
 ENGINES_OFF_KEY = "PUBLISHING_ENGINES_OFF"
 
 
+def connection_label(provider_id: str | None) -> str:
+    """The login a stored `provider` value names, in words rather than as an id.
+
+    "Buffer" for an engine's first connection, "Buffer · Client B" for one
+    somebody added and named. Three payloads and two sentences answer this same
+    question, and each one that answered it inline got a slightly different
+    answer. An unknown id is returned as itself: it is what a destination
+    stores, so it is the only name there is for it.
+    """
+    if not provider_id:
+        return ""
+    connection = publishing_connections.find(PROVIDERS, provider_id)
+    engine = PROVIDERS.get(connection.provider) if connection else None
+    if not engine:
+        return provider_id
+    return engine.label if connection.is_default else f"{engine.label} · {connection.label}"
+
+
 def engines_off() -> set[str]:
     """Which logins are switched off right now.
 
@@ -4044,14 +4159,10 @@ def engine_off_note(provider_id: str | None) -> str | None:
         return None
     if connection.id not in engines_off():
         return None
-    provider = PROVIDERS[connection.provider]
-    label = (
-        provider.label if connection.is_default
-        else f"{provider.label} · {connection.label}"
-    )
     return (
-        f"{label} is switched off in Publish, so nothing is delivered through "
-        "it. Switch it on there to post through it again."
+        f"{connection_label(connection.id)} is switched off in Publish, so "
+        "nothing is delivered through it. Switch it on there to post through "
+        "it again."
     )
 
 

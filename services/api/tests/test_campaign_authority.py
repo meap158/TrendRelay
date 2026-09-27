@@ -377,6 +377,31 @@ def test_a_post_frozen_before_the_engine_was_switched_off_does_not_go_out(
     assert any("switched off in Publish" in item for item in result["deferred"]), result
 
 
+def test_a_throttled_engine_is_not_offered_the_rest_of_the_queue(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """The failure this whole cool-down exists for.
+
+    A refusal used to be charged to the post: it failed, its slot came free,
+    and the next tick froze the next approved post into the same slot. With
+    sixty-five approved posts that is sixty-five deliveries for one slot, each
+    one another request against a client the engine had just asked to slow down.
+    Now the slot simply goes unfilled until the engine is worth asking again.
+    """
+    from trendrelay_api.integrations import publishing
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="autonomous")
+    publishing.note_rate_limit_refusal("buffer")
+
+    result = run_campaign(session, pilot, now=NOW)
+
+    assert executions(session) == [], "nothing was frozen for it"
+    assert engine_stub == []
+    assert any("too many requests" in item for item in result["deferred"]), result
+    assert session.get(CampaignQueueItem, "q1").state == "approved", "still to post"
+
+
 def test_a_quota_refusal_is_not_read_as_a_broken_account() -> None:
     """Two of the four engines report no usage, so this is the only warning.
 

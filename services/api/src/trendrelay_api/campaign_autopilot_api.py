@@ -51,6 +51,7 @@ from trendrelay_api.integrations.publishing import (
     PROVIDERS,
     cached_identity,
     carousel_fits_destination,
+    connection_label,
     engine_off_note,
     post_types_for,
     resolve_post_type,
@@ -449,16 +450,12 @@ def provider_label(provider: str | None) -> str:
     is, and renaming the connection in Publish does not change it, because it
     never was the name.
 
-    Written here rather than inline because three payloads answer this same
-    question and two of them were not answering it at all.
+    Written once rather than inline because three payloads answer this same
+    question and two of them were not answering it at all. It has since moved
+    down to the engine module, where the sentences that also name a login can
+    reach it; this name is kept because the payloads are built through it.
     """
-    if not provider:
-        return ""
-    connection = publishing_connections.find(PROVIDERS, provider)
-    engine = PROVIDERS.get(connection.provider) if connection else None
-    if not engine:
-        return provider
-    return engine.label if connection.is_default else f"{engine.label} · {connection.label}"
+    return connection_label(provider)
 
 
 def _destination_view(

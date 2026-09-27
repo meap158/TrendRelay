@@ -369,11 +369,45 @@ def test_a_redelivery_after_the_slot_has_passed_posts_now(
     assert execution.scheduled_at.replace(tzinfo=UTC) == late
 
 
-def test_an_engine_that_was_full_is_delivered_again(
+def test_an_engine_that_was_full_is_left_alone_before_being_asked_again(
     session, tmp_path, engine_stub
 ) -> None:
-    """A refusal on the spot creates nothing, so the next attempt is the first
-    real one."""
+    """The one thing a rate limit asks for is time.
+
+    A refusal on the spot creates nothing, so the post may certainly be sent
+    again - but not in the same second, which is what "the next attempt is the
+    first real one" had it doing: three deliveries within seconds of being told
+    to slow down, and then the slot handed to the next post in the queue for
+    another three. See `RATE_LIMIT_BACKOFF` for what one campaign spent on that.
+    """
+    from trendrelay_api.integrations import publishing
+
+    _failed_once(
+        session, tmp_path, engine_stub,
+        "buffer: api.buffer.com: HTTP 429 Rate limited by the engine.",
+    )
+
+    outcome = reconcile_executions(session, now=NOW)
+    session.commit()
+
+    assert outcome["redelivered"] == []
+    assert executions(session)[0].state == "failed"
+    assert len(engine_stub.calls) == 1, "nothing was sent while it was refusing"
+    assert "too many requests" in (publishing.rate_limit_pause("buffer") or "")
+
+
+def test_once_the_wait_is_over_the_post_is_delivered_again(
+    session, tmp_path, engine_stub, monkeypatch
+) -> None:
+    """The refusal is a delay, not a verdict on the post.
+
+    A wait of nothing is this test's way of standing at the end of one: what
+    decides whether the post goes again is the engine's own quiet period, and
+    nothing else about the row has changed.
+    """
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(publishing, "RATE_LIMIT_BACKOFF", (0,))
     _failed_once(
         session, tmp_path, engine_stub,
         "buffer: api.buffer.com: HTTP 429 Rate limited by the engine.",

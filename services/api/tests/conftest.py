@@ -91,3 +91,21 @@ def _restore_gpu_availability():
     yield
     face_detect_onnx._GPU_DISABLED = disabled
     face_detect_onnx._GPU_DISABLED_AT = disabled_at
+
+
+@pytest.fixture(autouse=True)
+def _forget_engine_throttles():
+    """No test inherits an engine another one left waiting.
+
+    A rate-limit refusal is remembered against the login for minutes, on
+    purpose, and it is remembered at module scope because the worker is meant to
+    keep it across ticks. A test that provokes one would otherwise leave every
+    delivery afterwards blocked, and the failure would land on whichever test
+    happened to publish next.
+    """
+    from trendrelay_api.integrations import publishing
+
+    before = dict(publishing._RATE_LIMITED)
+    yield
+    publishing._RATE_LIMITED.clear()
+    publishing._RATE_LIMITED.update(before)
