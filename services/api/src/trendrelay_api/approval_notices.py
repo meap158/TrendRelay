@@ -25,6 +25,7 @@ import html
 import threading
 import time
 from datetime import UTC, datetime
+from secrets import token_hex
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -53,11 +54,26 @@ CAPTION_CHARS = 400
 #: a phone screen is one nobody reads to the end of.
 NOTES_CHARS = 300
 
+#: How many posts one grouped card carries, and how much of each one's caption
+#: it quotes.
+#:
+#: Six, because the card is read on a phone and the buttons are underneath it:
+#: past six the decision is below the fold, which is the problem grouping is
+#: here to solve rather than a smaller version of it. A moment holding more
+#: than six is split into cards of six.
+GROUP_LIMIT = 6
+#: Shorter than a single card's excerpt, and for the same reason: six of these
+#: are one message, and the card has to stay one screen.
+GROUP_CAPTION_CHARS = 180
+
 #: What a press means. Short, because Telegram allows 64 bytes of data and
 #: the execution id takes forty of them.
 APPROVE = "apr"
 APPROVE_NOW = "now"
 DISMISS = "dis"
+#: Approve every post still waiting on one grouped card. Carries the card's
+#: group id rather than a list of executions, which would not fit.
+APPROVE_ALL = "all"
 #: The test card's buttons. They answer, and decide nothing.
 TEST = "tst"
 
@@ -235,6 +251,119 @@ def card_buttons(
     ]
 
 
+def group_card_text(
+    campaign_name: str, items: list[dict[str, Any]], *, zone: str | None = None,
+    language: str = "en", pictures: int = 0,
+) -> str:
+    """The posts one pass is holding, as one message.
+
+    Numbered, because the buttons under it are numbered: the pairs of buttons
+    Telegram can show carry no room for an account's name, so the number is
+    what ties a press to a post and it has to be in front of the reader.
+
+    Each post keeps what a single card gives it - when it goes out, which
+    network, which account, its own words - and loses the room for its working
+    notes: six sets of notes is a message nobody reaches the end of, and the
+    app is one press away for the post that needs them.
+
+    A post already decided says so on its own line, in place of nothing, so a
+    card that has been half answered reads as half answered rather than as a
+    card with fewer buttons than lines. A post whose own time has passed wears
+    the clock on its line, for the same reason and in the same place.
+    """
+    times = {_when(item.get("at"), zone, language) for item in items} - {""}
+    # One time for all of them belongs in the heading; several belong on the
+    # lines they are about, which is the ordinary case - the planner spreads a
+    # campaign's accounts across its posting times rather than posting them all
+    # at once.
+    shared = times.pop() if len(times) == 1 else ""
+    waiting = [item for item in items if not item.get("decided")]
+    heading = words.say(
+        language, "group_waiting", count=len(waiting) or len(items),
+    )
+    lines: list[str] = [
+        f"<b>{html.escape(campaign_name)}</b> · {html.escape(heading)}"
+        + (f" · {html.escape(shared)}" if shared else ""),
+        "",
+    ]
+    for index, item in enumerate(items, start=1):
+        network = words.platform_name(str(item.get("platform") or ""))
+        where = str(item.get("destination") or "an account")
+        if network and network.casefold() in where.casefold():
+            network = ""
+        when = "" if shared else _when(item.get("at"), zone, language)
+        head = f"<b>{index}.</b> " + " · ".join(
+            html.escape(part) for part in (when, network, where) if part
+        )
+        if item.get("overdue") and not item.get("decided"):
+            head = f"{head} ⏰"
+        decided = item.get("decided")
+        lines.append(f"{head} — <i>{decided}</i>" if decided else head)
+        caption = _shorten(str(item.get("caption") or ""), GROUP_CAPTION_CHARS)
+        if caption:
+            lines.append(html.escape(caption))
+        lines.append("")
+    # One reason, when the posts share it, which they nearly always do: they
+    # were frozen by the same pass under the same authority. Said once at the
+    # bottom rather than six times in the middle.
+    reasons = {
+        words.say(language, str(item.get("reason_code") or ""))
+        if str(item.get("reason_code") or "") in words.WORDS["en"]
+        else str(item.get("reason") or "").strip()
+        for item in items
+    } - {""}
+    if len(reasons) == 1:
+        lines.append(f"<i>{html.escape(reasons.pop())}</i>")
+    if pictures:
+        lines.append(html.escape(words.say(language, "group_pictures")))
+    return "\n".join(lines).rstrip()
+
+
+def group_buttons(
+    items: list[dict[str, Any]], campaign_id: str, group_id: str, *,
+    language: str = "en",
+) -> list[list[dict[str, str]]]:
+    """A pair of buttons per post still waiting, and one for all of them.
+
+    Numbered to match the message's own list. "Approve and post now" is not
+    here: three buttons a post would be eighteen on a card, and the choice it
+    offers - change this post's own timing - is a per-post decision that
+    belongs on the post's own card or in the app.
+
+    "Approve all" only appears while more than one is waiting, because with one
+    left it is the button above it under a second name.
+    """
+    rows: list[list[dict[str, str]]] = []
+    waiting = 0
+    for index, item in enumerate(items, start=1):
+        if item.get("decided"):
+            continue
+        waiting += 1
+        execution_id = str(item.get("execution_id") or "")
+        rows.append([
+            {
+                "label": f"{words.say(language, 'approve')} {index}",
+                "callback": f"{APPROVE}:{execution_id}",
+            },
+            {
+                "label": f"{words.say(language, 'dismiss')} {index}",
+                "callback": f"{DISMISS}:{execution_id}",
+            },
+        ])
+    last: list[dict[str, str]] = []
+    if waiting > 1:
+        last.append({
+            "label": words.say(language, "approve_all"),
+            "callback": f"{APPROVE_ALL}:{group_id}",
+        })
+    link = app_link(campaign_id)
+    if link:
+        last.append({"label": words.say(language, "open_app"), "url": link})
+    if last:
+        rows.append(last)
+    return rows
+
+
 def _media_of(item: dict[str, Any]) -> tuple[list[str], str | None]:
     """The post's pictures, or its video, as the card will show them."""
     images = [str(path) for path in (item.get("image_paths") or []) if path]
@@ -330,6 +459,35 @@ def _pairing(item: dict[str, Any]) -> tuple[str, str]:
     )
 
 
+def _cards_of(
+    held: list[dict[str, Any]], *, grouped: bool,
+) -> list[list[dict[str, Any]]]:
+    """Which posts share a card, in the order they will be sent.
+
+    One pass, one card. What fills a chat is not a single moment - the planner
+    takes one post per posting time across the whole campaign, so two accounts
+    never wait for the same minute - it is the pass: a run freezes its whole
+    horizon at once, so a campaign with eight slots in the next day and a half
+    puts eight cards in the chat inside a second, one for each of them.
+
+    Those eight are the approval queue as it stands, which is the thing the
+    approver is actually looking at, so they arrive as one card that lists them
+    - with each post's own time on its own line, because the times differ and
+    the time is half of what is being agreed to.
+
+    Order is kept: the posts arrive in the order the pass held them, which is
+    by posting time, which is the order the timeline shows.
+    """
+    if not grouped:
+        return [[item] for item in held]
+    # Past the limit the buttons are below the fold, which is the problem this
+    # exists to solve rather than a smaller version of it.
+    return [
+        held[start:start + GROUP_LIMIT]
+        for start in range(0, len(held), GROUP_LIMIT)
+    ]
+
+
 def notice_for(
     session: Session, campaign_id: str, pairing: tuple[str, str],
 ) -> CampaignApprovalNotice | None:
@@ -383,6 +541,7 @@ def clear_notice(session: Session, execution: PublicationExecution) -> None:
 def _repoint(
     session: Session, notice: CampaignApprovalNotice, item: dict[str, Any],
     autopilot: CampaignAutopilot, *, language: str,
+    regroup: set[str] | None = None,
 ) -> None:
     """Aim the card already in the chat at the post's newest execution.
 
@@ -401,13 +560,22 @@ def _repoint(
     execution_id = str(item.get("execution_id") or "")
     if not execution_id or execution_id == notice.execution_id:
         return
-    if notice.chat_id and notice.message_id is not None and notice.settled_at is None:
-        telegram.edit_card(
-            chat_id=notice.chat_id, message_id=notice.message_id,
-            buttons=card_buttons(execution_id, autopilot.campaign_id, language=language),
-        )
     notice.execution_id = execution_id
     notice.updated_at = datetime.now(UTC)
+    if not (notice.chat_id and notice.message_id is not None and notice.settled_at is None):
+        return
+    if notice.group_id:
+        # A grouped card is rewritten whole, once, after every row on it has
+        # been aimed: the row that moved is one line of it, the numbers have to
+        # keep meaning what they meant, and a card rendered halfway through the
+        # loop would carry the executions the rest of the loop is replacing.
+        if regroup is not None:
+            regroup.add(notice.group_id)
+        return
+    telegram.edit_card(
+        chat_id=notice.chat_id, message_id=notice.message_id,
+        buttons=card_buttons(execution_id, autopilot.campaign_id, language=language),
+    )
 
 
 def announce_held(
@@ -445,6 +613,7 @@ def announce_held(
     # the ones it did reach.
     fresh: list[dict[str, Any]] = []
     known = 0
+    regroup: set[str] = set()
     for item in held:
         pairing = _pairing(item)
         notice = notice_for(session, autopilot.campaign_id, pairing)
@@ -452,14 +621,39 @@ def announce_held(
             fresh.append(item)
             continue
         known += 1
-        _repoint(session, notice, item, autopilot, language=language)
+        _repoint(session, notice, item, autopilot, language=language, regroup=regroup)
+    # The grouped cards whose rows moved, rewritten once each now that every
+    # row on them has been aimed at the post that is actually held.
+    for group_id in sorted(regroup):
+        session.flush()
+        notices = group_of(session, group_id)
+        lead = next(
+            (
+                notice for notice in notices
+                if notice.chat_id and notice.message_id is not None
+                and notice.settled_at is None
+            ),
+            None,
+        )
+        if lead is None or lead.chat_id is None or lead.message_id is None:
+            continue
+        text, buttons = group_card(session, group_id, language)
+        telegram.edit_card(
+            chat_id=lead.chat_id, message_id=lead.message_id,
+            text=text, buttons=buttons,
+        )
 
     if not fresh:
         return (
             f"Already announced on Telegram: {known} post(s) were asked about before."
             if known else ""
         )
-    _notes_for(session, fresh[:CARDS_PER_PASS])
+    # One card per posting time where the campaign asked for that, one card
+    # per post where it did not.
+    cards = _cards_of(fresh, grouped=autopilot.approvals_grouped)[:CARDS_PER_PASS]
+    # Working notes go on a card that has room for them, which a grouped one
+    # has not - see `group_card_text`.
+    _notes_for(session, [card[0] for card in cards if len(card) == 1])
 
     # The claim, taken and committed before a single card exists.
     #
@@ -479,45 +673,78 @@ def announce_held(
     # is in the inbox, visible, and is the side of the trade the operator
     # asked for.
     sent = 0
+    announced = 0
     attempted = 0
     left_out: list[str] = []
     try:
-        for item in fresh[:CARDS_PER_PASS]:
-            pairing = _pairing(item)
-            execution_id = str(item["execution_id"])
-            notice = CampaignApprovalNotice(
-                workspace_id=autopilot.workspace_id,
-                campaign_id=autopilot.campaign_id,
-                queue_item_id=pairing[0],
-                destination_id=pairing[1],
-                execution_id=execution_id,
-            )
-            try:
-                # In a savepoint because the worker's tick and a request that
-                # announces - the campaign's Telegram switch - can be here at
-                # the same time, and the unique index is what decides which of
-                # them owns the pairing. Losing that race means the other one
-                # is sending the card, so this one must not send a second.
-                with session.begin_nested():
-                    session.add(notice)
-            except IntegrityError:
-                known += 1
-                print(
-                    f"Telegram card already claimed by another pass:"
-                    f" {pairing[0]} to {pairing[1]}",
-                    flush=True,
+        for card in cards:
+            claimed: list[tuple[dict[str, Any], CampaignApprovalNotice]] = []
+            for item in card:
+                pairing = _pairing(item)
+                notice = CampaignApprovalNotice(
+                    workspace_id=autopilot.workspace_id,
+                    campaign_id=autopilot.campaign_id,
+                    queue_item_id=pairing[0],
+                    destination_id=pairing[1],
+                    execution_id=str(item["execution_id"]),
                 )
+                try:
+                    # In a savepoint because the worker's tick and a request
+                    # that announces - the campaign's Telegram switch - can be
+                    # here at the same time, and the unique index is what
+                    # decides which of them owns the pairing. Losing that race
+                    # means the other one is sending the card, so this one must
+                    # not send a second.
+                    with session.begin_nested():
+                        session.add(notice)
+                except IntegrityError:
+                    known += 1
+                    print(
+                        f"Telegram card already claimed by another pass:"
+                        f" {pairing[0]} to {pairing[1]}",
+                        flush=True,
+                    )
+                    continue
+                claimed.append((item, notice))
+            # Every post on this card belonged to another pass. There is
+            # nothing left to ask about, so there is no card.
+            if not claimed:
                 continue
             session.commit()
-            attempted += 1
-            images, video = _media_of(item)
+            attempted += len(claimed)
+            items = [item for item, _notice in claimed]
+            # A grouped card is one message about several posts, so the group
+            # is what a press on "approve all" has to find and what a decision
+            # on one post has to rewrite. Only for a card that carries more
+            # than one: a single post's card is exactly what it was.
+            group_id = token_hex(8) if len(claimed) > 1 else None
+            if group_id:
+                for _item, notice in claimed:
+                    notice.group_id = group_id
+                # One picture per post, in the card's own order, so the album
+                # above the message can be read against its list. A carousel's
+                # remaining cards and a clip are what the app is for.
+                images = [
+                    str(item["image_paths"][0]) for item in items
+                    if item.get("image_paths")
+                ]
+                video = None
+                text = group_card_text(
+                    name, items, zone=zone, language=language, pictures=len(images),
+                )
+                buttons = group_buttons(
+                    items, autopilot.campaign_id, group_id, language=language,
+                )
+            else:
+                images, video = _media_of(items[0])
+                text = card_text(name, items[0], zone=zone, language=language)
+                buttons = card_buttons(
+                    str(items[0]["execution_id"]), autopilot.campaign_id,
+                    language=language,
+                )
             try:
                 outcome = telegram.send_card(
-                    card_text(name, item, zone=zone, language=language),
-                    buttons=card_buttons(
-                        execution_id, autopilot.campaign_id, language=language,
-                    ),
-                    images=images, video=video,
+                    text, buttons=buttons, images=images, video=video,
                 )
             except telegram.TelegramUnavailable as error:
                 # Whether the claim is given back turns on one question, and
@@ -529,23 +756,26 @@ def announce_held(
                 # message, so the answer is what a dropped link loses, and
                 # sending again is how one held post became a card a minute.
                 if never_delivered(str(error)):
-                    session.delete(notice)
+                    for _item, notice in claimed:
+                        session.delete(notice)
                     session.commit()
                 raise
             left_out.extend(outcome.get("skipped") or [])
             # Which message the card is, so it can be re-pointed, marked
             # overdue and settled. Committed per card: the claim already stops
             # a second send, and this is what makes the first one editable.
-            notice.chat_id = str(outcome.get("chat_id") or "") or None
-            notice.message_id = outcome.get("message_id")
-            notice.updated_at = datetime.now(UTC)
+            for _item, notice in claimed:
+                notice.chat_id = str(outcome.get("chat_id") or "") or None
+                notice.message_id = outcome.get("message_id")
+                notice.updated_at = datetime.now(UTC)
             session.commit()
             sent += 1
+            announced += len(claimed)
         # What this pass had no room for, which is not the same as what it
         # did not send: a pairing another pass claimed while this one was
         # working is a post already being announced, and counting it here
         # sent "1 more waiting in the inbox" about a card that was on its way.
-        rest = max(0, len(fresh) - CARDS_PER_PASS)
+        rest = max(0, len(fresh) - sum(len(card) for card in cards))
         if rest > 0:
             link = app_link(autopilot.campaign_id)
             telegram.send_message(
@@ -563,19 +793,26 @@ def announce_held(
         # card - Telegram answers after it has the message, and the answer is
         # what a dropped connection loses. Sending again to be sure is how one
         # post became a card a minute, so the post waits in the inbox instead.
-        held_back = attempted - sent if not never_delivered(str(error)) else 0
+        held_back = attempted - announced if not never_delivered(str(error)) else 0
         tail = (
             f" {held_back} post(s) may already have reached the chat and are"
             " not sent again; they wait in the inbox."
             if held_back else ""
         )
-        if sent:
-            return f"Announced {sent} of {len(fresh)} on Telegram; then: {error}{tail}"
+        if announced:
+            return f"Announced {announced} of {len(fresh)} on Telegram; then: {error}{tail}"
         return f"Not announced on Telegram: {error}{tail}"
     if not sent and known:
         # Everything this pass had turned out to belong to another one.
         return f"Already announced on Telegram: {known} post(s) were asked about before."
-    note = f"Announced {sent} post{'' if sent == 1 else 's'} on Telegram."
+    note = f"Announced {announced} post{'' if announced == 1 else 's'} on Telegram."
+    if sent != announced:
+        # Grouped, so the count of cards is not the count of posts and the note
+        # would otherwise read as though five posts had gone out five times.
+        note = (
+            f"Announced {announced} posts on Telegram, "
+            f"on {sent} card{'' if sent == 1 else 's'}."
+        )
     if known:
         note = f"{note} {known} was already asked about."
     if left_out:
@@ -728,6 +965,26 @@ def announce_overdue(
             or notice.message_id is None
         ):
             continue
+        if notice.group_id:
+            # Every post on a grouped card shares the moment that has passed,
+            # A grouped card holds several moments, so the clock goes on the
+            # line whose time has passed rather than over the whole card - and
+            # the card is rewritten whole, once, with every row on it
+            # remembering that it was said. Without that the next tick would say
+            # it again for the row it happened to read first.
+            notice.execution_id = execution.id
+            text, buttons = group_card(session, notice.group_id, language, now=moment)
+            if not telegram.edit_card(
+                chat_id=notice.chat_id, message_id=notice.message_id,
+                text=text, buttons=buttons,
+            ):
+                continue
+            for row in group_of(session, notice.group_id):
+                if row.overdue_notified_at is None:
+                    row.overdue_notified_at = moment
+                    row.updated_at = moment
+            marked += 1
+            continue
         item = {
             "destination": execution.destination_label,
             "caption": execution.caption,
@@ -765,10 +1022,11 @@ class PressRefused(ValueError):
 
 
 def _decision(data: str) -> tuple[str, str]:
-    verb, _, execution_id = (data or "").partition(":")
-    if verb not in (APPROVE, APPROVE_NOW, DISMISS, TEST) or not execution_id:
+    """The verb pressed and what it is about - an execution, or a whole card."""
+    verb, _, target = (data or "").partition(":")
+    if verb not in (APPROVE, APPROVE_NOW, DISMISS, TEST, APPROVE_ALL) or not target:
         raise PressRefused(words.say("en", "not_ours"))
-    return verb, execution_id
+    return verb, target
 
 
 def _what_became_of(
@@ -833,6 +1091,111 @@ def _what_became_of(
     return f"{action} {where}"
 
 
+def group_of(session: Session, group_id: str) -> list[CampaignApprovalNotice]:
+    """The posts that share one card, in the order the card lists them.
+
+    By when each row was claimed, which is the order the card was built in -
+    the numbers beside the buttons are what tie a press to a post, so they have
+    to mean the same thing on every later edit as they did when it was sent.
+    """
+    return list(session.scalars(
+        select(CampaignApprovalNotice)
+        .where(CampaignApprovalNotice.group_id == group_id)
+        .order_by(
+            CampaignApprovalNotice.created_at.asc(),
+            CampaignApprovalNotice.id.asc(),
+        )
+    ).all())
+
+
+def _group_view(
+    session: Session, notices: list[CampaignApprovalNotice], language: str,
+    *, now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """What each post on a grouped card is, and what has become of it.
+
+    Read from the executions the rows point at rather than from anything kept
+    on the card, for the reason the notice exists at all: a held post is frozen
+    again whenever a delivery fails or somebody skips it, and the card is
+    re-pointed at the row that is actually held. So the card is rendered from
+    what is held now, every time, and a post decided since the last render says
+    so instead of showing buttons that would answer for it.
+    """
+    moment = now or datetime.now(UTC)
+    items: list[dict[str, Any]] = []
+    for notice in notices:
+        execution = session.get(PublicationExecution, notice.execution_id)
+        if execution is None:
+            continue
+        # Read back from SQLite a due time has lost its zone, and a naive one
+        # compares as though it were local - which is the same trap `_when`
+        # documents. Everything stored is UTC; say so before comparing.
+        due = execution.scheduled_at
+        if due is not None and due.tzinfo is None:
+            due = due.replace(tzinfo=UTC)
+        items.append({
+            # Its own time having passed is a fact about the post rather than
+            # about the card, and a card holding six moments has six answers to
+            # it - so the clock goes on the line it belongs to.
+            "overdue": due is not None and due < moment,
+            "execution_id": execution.id,
+            "destination_id": execution.destination_id,
+            "destination": execution.destination_label,
+            "platform": execution.platform,
+            "caption": execution.caption,
+            "at": execution.scheduled_at,
+            "reason": execution.held_reason,
+            "reason_code": execution.held_reason_code,
+            "image_paths": list(execution.image_paths or []),
+            "queue_item_id": execution.queue_item_id,
+            "decided": (
+                None if execution.state == "proposed"
+                else _what_became_of(session, execution, language)
+            ),
+        })
+    return items
+
+
+def group_card(
+    session: Session, group_id: str, language: str, *, now: datetime | None = None,
+) -> tuple[str, list[list[dict[str, str]]] | None]:
+    """A grouped card as it reads now: its words, and the buttons still live.
+
+    None for the buttons when nothing on it is waiting any more, which is what
+    strips them: a card whose every post has been decided is a record, and a
+    record with buttons invites a press that can only be refused.
+    """
+    notices = group_of(session, group_id)
+    if not notices:
+        return "", None
+    items = _group_view(session, notices, language, now=now)
+    campaign = session.get(Campaign, notices[0].campaign_id)
+    workspace = session.get(Workspace, notices[0].workspace_id)
+    text = group_card_text(
+        campaign.name if campaign else "Campaign", items,
+        zone=workspace.timezone if workspace else None,
+        language=language,
+        pictures=len([item for item in items if item.get("image_paths")]),
+    )
+    waiting = [item for item in items if not item.get("decided")]
+    if not waiting:
+        return text, None
+    return text, group_buttons(
+        items, notices[0].campaign_id, group_id, language=language,
+    )
+
+
+def _group_for(session: Session, execution: PublicationExecution) -> str | None:
+    """Which grouped card this post is on, if it is on one."""
+    if not execution.campaign_id:
+        return None
+    notice = notice_for(
+        session, execution.campaign_id,
+        pairing_of(execution.id, execution.queue_item_id, execution.destination_id),
+    )
+    return notice.group_id if notice else None
+
+
 def _shape_of(state: str) -> str:
     """The three ends a post can come to, for a reader who is not a database."""
     if state in ("published", "measured"):
@@ -846,6 +1209,80 @@ def _who(callback: dict[str, Any]) -> str:
     person = callback.get("from") or {}
     handle = person.get("username")
     return f"@{handle}" if handle else (person.get("name") or f"user {person.get('id')}")
+
+
+def _approve_group(
+    session: Session, group_id: str, callback: dict[str, Any],
+) -> tuple[str, str]:
+    """Approve every post still waiting on one grouped card.
+
+    The button exists because the common answer to a card holding four posts is
+    the same answer four times, and pressing four pairs on a phone is how an
+    approver ends up not pressing any. It is deliberately not the only way to
+    answer: each post keeps its own pair beside it, because the posts are
+    different posts.
+
+    One post refusing does not stop the others. A post that cannot be approved
+    - its engine switched off, its media gone - keeps its buttons and its line
+    on the card, and the toast counts what actually went.
+    """
+    from trendrelay_api.campaign_autopilot_api import _omit_unsupported_thread
+    from trendrelay_api.campaign_runner import approve_execution
+
+    notices = group_of(session, group_id)
+    if not notices:
+        raise PressRefused(words.say("en", "gone"))
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == notices[0].campaign_id,
+            CampaignAutopilot.workspace_id == notices[0].workspace_id,
+        )
+    )
+    if autopilot is None:
+        raise PressRefused(words.say("en", "no_autopilot"))
+    language = card_language(autopilot)
+    who = _who(callback)
+    identity = {
+        "via": "telegram",
+        "telegram_user_id": str((callback.get("from") or {}).get("id") or ""),
+        "telegram_user": who,
+    }
+    approved = 0
+    refusals: list[str] = []
+    for notice in notices:
+        execution = session.get(PublicationExecution, notice.execution_id)
+        if execution is None or execution.state != "proposed":
+            continue
+        omitted = _omit_unsupported_thread(execution)
+        try:
+            approve_execution(session, autopilot, execution)
+        except ValueError as error:
+            # Left as it was, buttons and all: this one still needs a decision,
+            # and the reason is about this post rather than about the press.
+            session.rollback()
+            refusals.append(str(error))
+            continue
+        audit(
+            session, None, execution.workspace_id, autopilot.created_by,
+            "campaign.exception_approved", "campaign", execution.campaign_id or "",
+            {"execution_id": execution.id, "state": execution.state,
+             "publish_now": False, "omitted_unsupported_replies": omitted,
+             "approved_with_the_card": True, **identity},
+        )
+        approved += 1
+        session.commit()
+    if not approved:
+        # Nothing was waiting, or nothing could go. The card is left exactly as
+        # it is, because nothing about it has changed, and the presser hears the
+        # reason.
+        raise PressRefused(
+            refusals[0] if refusals else words.say(language, "became_settled")
+        )
+    toast = words.say(
+        language, "approved_all_by", count=approved, who=html.escape(who),
+    )
+    text, _buttons = group_card(session, group_id, language)
+    return toast, text
 
 
 def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
@@ -887,6 +1324,8 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
         # message becomes, same as it always was.
         line = words.say("en", "test_answer", who=html.escape(_who(callback)))
         return line, line
+    if verb == APPROVE_ALL:
+        return _approve_group(session, execution_id, callback)
 
     execution = session.get(PublicationExecution, execution_id)
     if execution is None:
@@ -906,7 +1345,17 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
     }
 
     def settled(toast: str) -> tuple[str, str]:
-        """The card as it reads once this decision has landed."""
+        """The card as it reads once this decision has landed.
+
+        A grouped card is rewritten as the whole card: this post's line says
+        what became of it and the posts beside it go on waiting, with their
+        buttons. Only a card about one post is replaced by that post's own
+        decided version.
+        """
+        group_id = _group_for(session, execution)
+        if group_id:
+            text, _buttons = group_card(session, group_id, language)
+            return toast, text
         campaign = session.get(Campaign, execution.campaign_id)
         workspace = session.get(Workspace, execution.workspace_id)
         notes = ""
@@ -987,6 +1436,46 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
     ))
 
 
+def surviving_buttons(
+    session: Session, callback: dict[str, Any],
+) -> list[list[dict[str, str]]] | None:
+    """The buttons a card still needs after this press, or None to take them off.
+
+    A card about one post has none: it has been decided, and buttons over a
+    decided post invite a press that can only be refused. A grouped card has
+    the pairs belonging to the posts nobody has answered yet - asked of the
+    group as it stands now, so it is right whether the press decided one post
+    or all of them.
+    """
+    try:
+        verb, target = _decision(callback.get("data", ""))
+    except PressRefused:
+        return None
+    if verb == TEST:
+        return None
+    group_id = target if verb == APPROVE_ALL else None
+    if group_id is None:
+        execution = session.get(PublicationExecution, target)
+        if execution is None:
+            return None
+        group_id = _group_for(session, execution)
+    if not group_id:
+        return None
+    notices = group_of(session, group_id)
+    if not notices:
+        return None
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == notices[0].campaign_id,
+            CampaignAutopilot.workspace_id == notices[0].workspace_id,
+        )
+    )
+    _text, buttons = group_card(
+        session, group_id, card_language(autopilot) if autopilot else "en",
+    )
+    return buttons
+
+
 #: How many times a press is carried out again before it is given up on.
 #: The database is SQLite and the worker writes to it from the job loop at the
 #: same time, so "database is locked" is the ordinary reason a decision does
@@ -1020,10 +1509,15 @@ def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
     if not callback:
         return None
     toast, text = "", ""
+    # What the card keeps after the press. Only a grouped card has anything
+    # left: deciding one of its posts leaves the others waiting, and the
+    # keyboard they are waiting with has to survive the edit.
+    keep: list[list[dict[str, str]]] | None = None
     for attempt in range(PRESS_ATTEMPTS):
         try:
             with session_factory() as session:
                 toast, text = decide(session, callback)
+                keep = surviving_buttons(session, callback)
             break
         except PressRefused as refusal:
             # Understood and declined: the post is gone, already decided, or
@@ -1044,7 +1538,7 @@ def handle_update(session_factory: Any, update: dict[str, Any]) -> str | None:
             # Refused or failed: the card stays as it is, buttons and all, so
             # the decision can still be made. Only a settled press rewrites it.
             message_id=callback.get("message_id") if text else None,
-            text=text, toast=toast,
+            text=text, toast=toast, buttons=keep,
         )
     except telegram.TelegramUnavailable as error:
         # The decision landed; only the chat did not hear it. Said here

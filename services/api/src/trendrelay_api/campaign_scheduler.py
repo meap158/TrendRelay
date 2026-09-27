@@ -1762,6 +1762,8 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "delivery": autopilot.delivery,
         "authority": autopilot.authority,
         "approvals_telegram": autopilot.approvals_telegram,
+        # Whether the posts of one posting time arrive as one card.
+        "approvals_grouped": autopilot.approvals_grouped,
         # Null is the campaign's own post language; a code is a choice.
         "approvals_telegram_language": autopilot.approvals_telegram_language,
         # Whether the choice is even on offer: the Telegram tool installed and

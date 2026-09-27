@@ -179,6 +179,9 @@ class AutopilotSettings(BaseModel):
     #: Whether a held post is also announced on Telegram, through the tool
     #: set up in Tools. A message only; approving stays in the app.
     approvals_telegram: bool = False
+    #: Whether the posts of one posting time arrive as one card rather than as
+    #: one card each. On by default; it only shapes what the chat is sent.
+    approvals_grouped: bool = True
     #: The language of those cards. None is the campaign's own post language.
     approvals_telegram_language: str | None = Field(default=None, pattern=r"^[a-z]{2}$")
     #: What ranking optimises for. Balanced blends whichever axes have
@@ -1020,6 +1023,7 @@ def save_autopilot(
     autopilot.authority = body.authority
     telegram_switched_on = body.approvals_telegram and not autopilot.approvals_telegram
     autopilot.approvals_telegram = body.approvals_telegram
+    autopilot.approvals_grouped = body.approvals_grouped
     autopilot.approvals_telegram_language = _card_language(body.approvals_telegram_language)
     autopilot.priority = body.priority
     autopilot.weekly_post_cap = body.weekly_post_cap
@@ -1077,6 +1081,7 @@ def save_autopilot(
             "delivery": body.delivery,
             "authority": body.authority,
             "approvals_telegram": body.approvals_telegram,
+            "approvals_grouped": body.approvals_grouped,
             "recomposed_held": reached["recomposed"],
             "offer_id": body.offer_id,
             "offer_mode": body.offer_mode,

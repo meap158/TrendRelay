@@ -285,6 +285,16 @@ class CampaignApprovalNotice(Base):
     #: re-sent, when the post is frozen again: a press has to reach a row that
     #: is still there, and the row it was sent for may be long settled.
     execution_id: Mapped[str] = mapped_column(String(64), index=True)
+    #: Which card this post is on, when the card carries several.
+    #:
+    #: A campaign that groups its approvals announces the posts of one posting
+    #: time together - see `CampaignAutopilot.approvals_grouped` - and every
+    #: one of them still gets its own row here, because this row is the claim
+    #: that stops a second card existing. What the grouping needs on top of
+    #: that is this: "approve all" has to find the posts that share the card,
+    #: and a decision on one has to rewrite the card the others still wait on.
+    #: Null for a card about a single post, which is most of them.
+    group_id: Mapped[str | None] = mapped_column(String(32), index=True)
     #: Where the card is, so it can be edited - re-pointed, marked overdue, or
     #: settled. Empty when the send never got far enough to have one.
     chat_id: Mapped[str | None] = mapped_column(String(64))

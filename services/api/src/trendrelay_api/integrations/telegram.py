@@ -465,15 +465,22 @@ def fetch_updates(offset: int | None, *, timeout: int = 0) -> list[dict[str, Any
 
 def settle_button(
     callback_id: str, *, chat_id: str, message_id: int | None, text: str, toast: str,
+    buttons: list[list[Button]] | None = None,
 ) -> None:
-    """Answer a press and rewrite its message without the buttons.
+    """Answer a press and rewrite its message with whatever buttons are left.
 
     The toast is the short line Telegram shows over the chat; the text is
     what the message says from now on - the decision and who made it - so a
     decided post cannot be pressed twice and reads as decided.
+
+    `buttons` is for a card that carries several posts: deciding one of them
+    leaves the others waiting, and stripping the keyboard would take their
+    buttons away with it. None removes the keyboard, which is what a card about
+    a single post wants.
     """
     telegram = _telegram_module()
     token, _chat = _settings()
+    markup = _markup(telegram, buttons)
 
     async def go() -> None:
         async with telegram.Bot(token) as bot:
@@ -484,7 +491,7 @@ def settle_button(
             if message_id is not None:
                 await bot.edit_message_text(
                     chat_id=chat_id, message_id=message_id, text=text[:MESSAGE_LIMIT],
-                    parse_mode=telegram.constants.ParseMode.HTML, reply_markup=None,
+                    parse_mode=telegram.constants.ParseMode.HTML, reply_markup=markup,
                     disable_web_page_preview=True,
                 )
 

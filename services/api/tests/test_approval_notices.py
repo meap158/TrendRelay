@@ -317,7 +317,12 @@ def test_a_card_reads_in_the_workspace_s_own_time_and_is_escaped() -> None:
 
 
 def test_past_the_card_limit_the_rest_are_one_line_with_a_count(session, chat, monkeypatch) -> None:
-    pilot = autopilot(session, authority="assist", approvals_telegram=True)
+    # One card per post, which is what the limit is a limit on. The campaign
+    # that groups them fits six posts on a card and so reaches this much later;
+    # that it still reaches it is pinned beside the grouping itself.
+    pilot = autopilot(
+        session, authority="assist", approvals_telegram=True, approvals_grouped=False,
+    )
     held = [
         {"execution_id": f"pubexec_{index}", "destination": "acct", "caption": "x",
          "at": None, "reason": ""}

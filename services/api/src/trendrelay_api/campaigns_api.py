@@ -166,6 +166,9 @@ class CampaignCreate(BaseModel):
     #: cards to decide from. Off unless asked; the form offers it only when
     #: Telegram is connected.
     approvals_telegram: bool | None = None
+    #: Whether the posts of one posting time arrive as one card. None leaves the
+    #: column's own default, which is on.
+    approvals_grouped: bool | None = None
     #: The language of those cards. Empty means the campaign's own post
     #: language; None means not sent.
     approvals_telegram_language: str | None = Field(default=None, pattern=r"^([a-z]{2})?$")
@@ -246,6 +249,9 @@ class CampaignUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
     #: Whether held posts also go to Telegram as cards. None leaves it alone.
     approvals_telegram: bool | None = None
+    #: Whether the posts of one posting time arrive as one card. None leaves it
+    #: alone.
+    approvals_grouped: bool | None = None
     #: The language of those cards: a code, empty for the campaign's own
     #: post language, None to leave it alone.
     approvals_telegram_language: str | None = Field(default=None, pattern=r"^([a-z]{2})?$")
@@ -573,6 +579,7 @@ def create_campaign(
         "authority",
         "priority",
         "approvals_telegram",
+        "approvals_grouped",
     ):
         value = getattr(body, field)
         if value is not None:
@@ -795,6 +802,7 @@ def update_campaign(
             "authority": body.authority,
             "priority": body.priority,
             "approvals_telegram": body.approvals_telegram,
+            "approvals_grouped": body.approvals_grouped,
         }
         for field, value in policy.items():
             if value is None:

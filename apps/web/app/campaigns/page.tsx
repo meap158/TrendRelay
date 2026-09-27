@@ -95,6 +95,10 @@ type CampaignPolicy = {
   priority: string;
   /** Whether held posts also go to Telegram as cards to decide from. */
   approvals_telegram: boolean;
+  /** Whether the posts of one posting time arrive as one card. Absent from a
+      payload made before the setting existed, where one card each was all
+      there was. */
+  approvals_grouped?: boolean;
   /** The language of those cards; null is the campaign's own post language. */
   approvals_telegram_language?: string | null;
   offer_mode: "smart" | "manual" | "none";
@@ -231,11 +235,14 @@ type CampaignsSnapshot = {
 function TelegramApprovalsField({
   link,
   defaultChecked,
+  defaultGrouped,
   defaultLanguage,
   campaignLanguage,
 }: {
   link: TelegramLink | null;
   defaultChecked: boolean;
+  /** Whether the posts of one posting time arrive as one card. */
+  defaultGrouped: boolean;
   /** The card language chosen for this campaign; empty is the campaign's own. */
   defaultLanguage: string;
   /** The campaign's post language, named in the default option so the
@@ -267,6 +274,22 @@ function TelegramApprovalsField({
               {" "}Nothing is sent until it is set up again in Tools.
             </span>
           )}
+        </span>
+      </label>
+      {/* Beside the switch rather than under a heading of its own: it is not
+          another thing to set up, it is the shape of what the switch sends.
+          Every account on its own posting times means a post per account at
+          11:00, and four cards asking about the same minute is a chat that
+          stops being read. */}
+      <label className="campaign-dialog-check">
+        <input type="checkbox" name="approvals_grouped" defaultChecked={defaultGrouped} />
+        <span>
+          One card per posting time
+          <span className="campaign-dialog-hint">
+            Posts waiting for the same time arrive together, each with its own
+            Approve and Dismiss, and an Approve all for when the answer is the
+            same. Off sends a card per post, with its own pictures and notes.
+          </span>
         </span>
       </label>
       {/* The cards' language. The campaign's own is right nearly always -
@@ -705,6 +728,7 @@ export default function CampaignsPage() {
             ...(telegramLink?.connected
               ? {
                 approvals_telegram: form.get("approvals_telegram") === "on",
+                approvals_grouped: form.get("approvals_grouped") === "on",
                 approvals_telegram_language: String(form.get("approvals_telegram_language") ?? ""),
               }
               : {}),
@@ -802,6 +826,7 @@ export default function CampaignsPage() {
               ...(telegramLink?.connected || policy.approvals_telegram
                 ? {
                   approvals_telegram: form.get("approvals_telegram") === "on",
+                  approvals_grouped: form.get("approvals_grouped") === "on",
                   approvals_telegram_language: String(form.get("approvals_telegram_language") ?? ""),
                 }
                 : {}),
@@ -1372,6 +1397,7 @@ export default function CampaignsPage() {
             <TelegramApprovalsField
               link={telegramLink}
               defaultChecked={false}
+              defaultGrouped
               defaultLanguage=""
               campaignLanguage={newLanguage}
             />
@@ -1610,6 +1636,7 @@ export default function CampaignsPage() {
               <TelegramApprovalsField
                 link={telegramLink}
                 defaultChecked={policy.approvals_telegram}
+                defaultGrouped={policy.approvals_grouped ?? true}
                 defaultLanguage={policy.approvals_telegram_language ?? ""}
                 campaignLanguage={settingsFor.languages[0] ?? "en"}
               />

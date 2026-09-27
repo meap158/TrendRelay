@@ -957,6 +957,8 @@ type Autopilot = {
   authority: "assist" | "auto_draft" | "run_by_exception" | "autonomous";
   /** Whether held posts also go to Telegram as cards to decide from, via the tool in Tools. */
   approvals_telegram: boolean;
+  /** Whether the posts of one posting time arrive as one card. */
+  approvals_grouped: boolean;
   /** The language of those cards; null is the campaign's own post language. */
   approvals_telegram_language: string | null;
   /** Whether that is on offer at all: the Telegram tool installed and set up. */
@@ -3208,6 +3210,7 @@ export function AutopilotPanel({
           delivery: next.delivery,
           authority: next.authority,
           approvals_telegram: next.approvals_telegram,
+          approvals_grouped: next.approvals_grouped,
           // Sent, because this PUT replaces the settings whole: left out, the
           // card language would fall back to the campaign's on every save.
           approvals_telegram_language: next.approvals_telegram_language,

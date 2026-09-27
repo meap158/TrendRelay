@@ -107,6 +107,20 @@ class CampaignAutopilot(Base):
     #: the approving still happens in the app. Needs the Telegram tool set up
     #: in Tools; without it the flag is kept and nothing is sent.
     approvals_telegram: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Whether the posts of one posting time arrive as one card rather than
+    #: as one card each.
+    #:
+    #: A campaign whose accounts share its posting times holds a post per
+    #: account at 11:00, and four cards asking four questions about the same
+    #: minute is a chat that stops being read. Grouped, they are one card
+    #: that lists them, each with its own pair of buttons - the decisions stay
+    #: per post, because the posts are different posts - and an "approve all"
+    #: for the common case where the answer is the same.
+    #:
+    #: On by default, unlike `approvals_telegram`: that switch decides whether
+    #: the chat hears anything at all, and this only decides the shape of what
+    #: it hears.
+    approvals_grouped: Mapped[bool] = mapped_column(Boolean, default=True)
     #: The language those cards are written in. Null is the campaign's own
     #: post language - the approver's language far more often than the
     #: server's - and a code here is for the campaign whose approver reads a
