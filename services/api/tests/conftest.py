@@ -14,6 +14,8 @@ database, and from there onto the internet. See below.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
@@ -91,6 +93,33 @@ def _restore_gpu_availability():
     yield
     face_detect_onnx._GPU_DISABLED = disabled
     face_detect_onnx._GPU_DISABLED_AT = disabled_at
+
+
+@pytest.fixture(autouse=True)
+def _no_engine_is_switched_off_by_this_machine():
+    """The operator's own `.env` is not an input to this suite.
+
+    Which engines are switched off is a setting in the `.env` beside the
+    engine keys, and `effective_value` falls back to that file for any test
+    that has not pointed it somewhere else - so the developer switching Buffer
+    off in Publish made thirty-five campaign tests fail, on their machine only,
+    with the planner refusing to plan for an engine the test never mentioned.
+
+    An empty list in the environment rather than a patched function: the
+    process environment is what `effective_value` reads first, so this
+    neutralises the machine's configuration while leaving the reading of it
+    exactly as it ships - which is what the tests about the switch itself are
+    testing.
+    """
+    from trendrelay_api.integrations.publishing import ENGINES_OFF_KEY
+
+    before = os.environ.get(ENGINES_OFF_KEY)
+    os.environ[ENGINES_OFF_KEY] = "[]"
+    yield
+    if before is None:
+        os.environ.pop(ENGINES_OFF_KEY, None)
+    else:
+        os.environ[ENGINES_OFF_KEY] = before
 
 
 @pytest.fixture(autouse=True)
