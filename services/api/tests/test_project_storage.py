@@ -69,3 +69,47 @@ def test_a_deliberate_cache_of_the_operator_s_own_is_left_alone(monkeypatch) -> 
 
     assert os.environ["HF_HOME"] == "D:/somewhere/else"
     assert Path(tempfile.gettempdir()).resolve() == SCRATCH.resolve()
+
+
+def test_the_sweep_takes_only_what_nothing_can_still_be_using(tmp_path, monkeypatch) -> None:
+    """A render that crashes leaves its directory behind, and nothing removes
+    it: `TemporaryDirectory` only cleans up what it made if the process lives
+    long enough to unwind. Two months of that came to 8.6 GB here."""
+    from datetime import UTC, datetime, timedelta
+
+    from trendrelay_api import project_storage
+
+    scratch = tmp_path / "tmp"
+    scratch.mkdir()
+    monkeypatch.setattr(project_storage, "SCRATCH", scratch)
+
+    old_dir = scratch / "render-abandoned"
+    old_dir.mkdir()
+    (old_dir / "frames.raw").write_bytes(b"x" * 2048)
+    old_file = scratch / "half-a-cut.mp4"
+    old_file.write_bytes(b"y" * 1024)
+    fresh = scratch / "render-in-flight"
+    fresh.mkdir()
+    (fresh / "frames.raw").write_bytes(b"z" * 4096)
+
+    stale = (datetime.now(UTC) - timedelta(days=9)).timestamp()
+    for path in (old_dir, old_file):
+        os.utime(path, (stale, stale))
+
+    swept, freed = project_storage.sweep_abandoned_scratch()
+
+    assert not old_dir.exists() and not old_file.exists()
+    assert fresh.exists(), "a render happening right now keeps its scratch"
+    assert (fresh / "frames.raw").read_bytes() == b"z" * 4096
+    assert swept == 2
+    assert freed == 2048 + 1024
+
+
+def test_the_sweep_never_fails_the_worker_over_a_leftover(tmp_path, monkeypatch) -> None:
+    """A file another process still holds open is skipped and taken on the
+    next pass. Refusing to start over a leftover is the worse outcome."""
+    from trendrelay_api import project_storage
+
+    monkeypatch.setattr(project_storage, "SCRATCH", tmp_path / "not-created-yet")
+
+    assert project_storage.sweep_abandoned_scratch() == (0, 0)

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 API_SOURCE = ROOT / "services" / "api" / "src"
 sys.path.insert(0, str(API_SOURCE))
 
+from trendrelay_api.project_storage import sweep_abandoned_scratch  # noqa: E402
 from trendrelay_api.integrations.douyin import run_download_job  # noqa: E402
 from trendrelay_api.integrations.face_blur import run_blur_job  # noqa: E402
 from trendrelay_api.integrations.effect_render import (  # noqa: E402
@@ -295,6 +296,16 @@ def worker_main() -> None:
         "campaign_autopilot, telegram_approvals",
         flush=True,
     )
+    # Whatever a crashed render or a killed worker left behind last time.
+    # Nothing else removes these: `TemporaryDirectory` only cleans up what it
+    # made if the process lives long enough to unwind, so two months of them
+    # had accumulated to 8.6 GB.
+    swept, freed = sweep_abandoned_scratch()
+    if swept:
+        print(
+            f"Swept {swept} abandoned scratch file(s), {freed / 1024 / 1024:.0f} MB.",
+            flush=True,
+        )
     start_telegram_approvals()
     try:
         while True:

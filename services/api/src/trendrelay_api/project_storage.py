@@ -31,7 +31,9 @@ inherits the project's scratch rather than falling back to the system's.
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -73,3 +75,52 @@ def keep_work_on_the_project_drive() -> Path:
     for name, path in MODEL_CACHES.items():
         os.environ.setdefault(name, str(path))
     return SCRATCH
+
+
+#: How long an abandoned scratch entry is left alone before it is swept.
+#:
+#: Two days, which is far longer than any render takes and far shorter than
+#: the two months of leftovers found here: 3,056 files and 8.6 GB, the oldest
+#: from July, of pip build directories, node compile caches, dev-server logs
+#: and half-finished cuts. Nothing cleans these up on its own - a render that
+#: crashes, or a worker killed mid-job, leaves its directory behind, and
+#: `TemporaryDirectory` only removes what it made if the process lives long
+#: enough to unwind.
+SCRATCH_GRACE = timedelta(days=2)
+
+
+def sweep_abandoned_scratch(
+    older_than: timedelta = SCRATCH_GRACE, *, now: datetime | None = None
+) -> tuple[int, int]:
+    """Delete scratch entries nothing can still be using. Returns (files, bytes).
+
+    Only by age, and only inside the project's own scratch: an entry younger
+    than the grace period might belong to a render happening right now, and an
+    entry outside this directory is not ours to touch.
+
+    Never raises. A file held open by another process is skipped and swept on
+    the next pass; failing the worker's startup over a leftover would be a
+    worse outcome than leaving it on disk.
+    """
+    moment = now or datetime.now(UTC)
+    cutoff = moment - older_than
+    removed = freed = 0
+    if not SCRATCH.is_dir():
+        return (0, 0)
+    for entry in SCRATCH.iterdir():
+        try:
+            if datetime.fromtimestamp(entry.stat().st_mtime, UTC) >= cutoff:
+                continue
+            if entry.is_dir():
+                for child in entry.rglob("*"):
+                    if child.is_file():
+                        freed += child.stat().st_size
+                        removed += 1
+                shutil.rmtree(entry, ignore_errors=True)
+            else:
+                freed += entry.stat().st_size
+                removed += 1
+                entry.unlink(missing_ok=True)
+        except OSError:
+            continue
+    return (removed, freed)
