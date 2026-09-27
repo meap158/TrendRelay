@@ -2607,6 +2607,16 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    stay in one stable grid, the time series carries the visual weight, and top
    posts remain a compact ranked list even on a phone. */
 .campaign-analytics { gap: 14px; }
+/* Roughly what this card becomes once its numbers arrive - the period line,
+   four scorecards, the chart and the two lists below it. Held from the moment
+   it mounts so the page does not collapse and rebound around it; see the
+   comment where the class is set. A screenful at most, so a short window is
+   not a page of empty panel.
+
+   Given to the waiting block rather than to the card, because the block
+   centres what it says: the reserved space then reads as a panel being filled
+   rather than as a card with a hole under it. */
+.campaign-analytics-waiting .waiting-block { min-block-size: min(660px, 74vh); }
 .campaign-analytics-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .campaign-analytics-body { display: grid; gap: 14px; min-width: 0; }
 .campaign-analytics-body[aria-busy="true"] { opacity: .72; transition: opacity 120ms ease; }

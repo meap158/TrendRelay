@@ -613,7 +613,16 @@ export function CampaignAnalytics({
   ] : [], [data]);
 
   return (
-    <Card className="campaign-analytics" eyebrow="Overview" title="Performance"
+    <Card
+      // Standing at the height it is about to be, while it has nothing to
+      // show. The work area is a tab strip over one pane, and this pane is the
+      // only one that arrives empty: switching to it from the queue took the
+      // document from nine thousand pixels to two thousand, the browser
+      // clamped the scroll to the new bottom, and everything on the page -
+      // the sticky campaign list most visibly - jumped up and snapped back
+      // when the numbers landed a tenth of a second later.
+      className={`campaign-analytics${data || failure ? "" : " campaign-analytics-waiting"}`}
+      eyebrow="Overview" title="Performance"
       aside={
         <div className="campaign-analytics-controls">
           <SegmentedControl label="Analytics date range" value={range}
@@ -625,7 +634,13 @@ export function CampaignAnalytics({
           </Button>
         </div>
       }>
-      {!data && busy ? <WaitingBlock message="Loading campaign performance…" /> : null}
+      {/* Waiting from the first frame, not from the moment the request is in
+          flight: `busy` is set by the effect that runs after this render, so
+          asking for it here drew one frame of an empty card - and one frame of
+          an empty card is a document that collapses and springs back, which is
+          what the reserved height above exists to prevent. Having nothing yet
+          and no reason not to expect something is what waiting means. */}
+      {!data && !failure ? <WaitingBlock message="Loading campaign performance…" /> : null}
       {failure && !data ? <p className="autopilot-refusal" role="alert">{failure}</p> : null}
       {data ? (
         <div className="campaign-analytics-body" aria-busy={busy || undefined}>
