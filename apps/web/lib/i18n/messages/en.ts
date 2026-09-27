@@ -814,6 +814,13 @@ export const en = {
     listHeading: "CAMPAIGNS",
     empty: "No campaigns yet.",
     activeCount: "{count} active",
+    state: {
+      active: "Active",
+      inactive: "Inactive",
+      draft: "Draft",
+      archived: "Archived",
+    },
+    stateInactiveHelp: "Autopilot is switched off, so this campaign is not posting.",
     visibility: "Campaign visibility",
     scopeActive: "Active ({count})",
     scopeArchived: "Archived ({count})",

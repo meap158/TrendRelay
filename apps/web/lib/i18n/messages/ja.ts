@@ -809,6 +809,13 @@ export const ja: Messages = {
     listHeading: "キャンペーン",
     empty: "キャンペーンはまだありません。",
     activeCount: "{count} 件が進行中",
+    state: {
+      active: "進行中",
+      inactive: "停止中",
+      draft: "下書き",
+      archived: "アーカイブ済み",
+    },
+    stateInactiveHelp: "オートパイロットがオフのため、このキャンペーンは投稿していません。",
     visibility: "キャンペーンの表示",
     scopeActive: "進行中 ({count})",
     scopeArchived: "アーカイブ済み ({count})",

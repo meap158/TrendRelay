@@ -807,6 +807,13 @@ export const ar: Messages = {
     listHeading: "الحملات",
     empty: "لا توجد حملات بعد.",
     activeCount: "{count} نشطة",
+    state: {
+      active: "نشطة",
+      inactive: "متوقفة",
+      draft: "مسودة",
+      archived: "مؤرشفة",
+    },
+    stateInactiveHelp: "النشر التلقائي مُوقَف، لذا لا تنشر هذه الحملة أي شيء.",
     visibility: "عرض الحملات",
     scopeActive: "نشطة ({count})",
     scopeArchived: "المؤرشفة ({count})",

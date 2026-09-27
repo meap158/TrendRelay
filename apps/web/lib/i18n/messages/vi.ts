@@ -810,6 +810,13 @@ export const vi: Messages = {
     listHeading: "CHIẾN DỊCH",
     empty: "Chưa có chiến dịch nào.",
     activeCount: "{count} đang chạy",
+    state: {
+      active: "Đang chạy",
+      inactive: "Đã dừng",
+      draft: "Bản nháp",
+      archived: "Đã lưu trữ",
+    },
+    stateInactiveHelp: "Tự động đăng đang tắt, nên chiến dịch này không đăng gì.",
     visibility: "Hiển thị chiến dịch",
     scopeActive: "Đang chạy ({count})",
     scopeArchived: "Đã lưu trữ ({count})",

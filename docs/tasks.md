@@ -3,12 +3,6 @@
 Operator-requested work that is noted but not yet built. One bullet per task;
 remove it when the work lands, and name the commit that did.
 
-- The sidebar's status word should not read "active" for a campaign whose
-  autopilot is off: something like "Inactive". The campaign's own status
-  (active, draft, archived) and the autopilot's switch are two things today,
-  and the row only says the first. Asked on 2026-09-23. Part of this landed
-  in fb8b8c4, which marks a stopped campaign with its own glyph rather than
-  changing the word - the word is still "active", so the ask stands.
 - A campaign kept posting to an engine that was switched off in Publish.
   Whether an engine is on is asked for delivery, but the planner freezes and
   schedules posts for its destinations regardless, so a switched-off engine

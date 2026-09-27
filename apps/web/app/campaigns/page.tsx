@@ -21,6 +21,7 @@ import { ActionIcon, type ActionName } from "../ui/action-icons";
 import { WaitingBlock } from "../ui/waiting-block";
 import { handoffPath } from "../../lib/media-rules";
 import { isDefaultScaffolding, scaffoldingFor } from "../../lib/campaign-scaffolding";
+import { campaignStateKey } from "../../lib/campaign-state-word";
 import {
   upcomingSlots,
   type Slot,
@@ -1066,7 +1067,14 @@ export default function CampaignsPage() {
                 {/* The language it posts in, not the market it was never asked
                     for. Every campaign reported "global" once markets stopped
                     being collected, which is a word that told you nothing. */}
-                <span>{campaign.status} · {
+                {/* The word says whether anything is happening, not only where
+                    the campaign sits in its life - see `campaignStateKey`. The
+                    tooltip is on the word rather than on the row: it explains
+                    the one word that is not a status. */}
+                <span
+                  title={campaignStateKey(campaign.status, campaign.autopilot_running) === "inactive"
+                    ? t("campaigns.stateInactiveHelp") : undefined}
+                >{t(`campaigns.state.${campaignStateKey(campaign.status, campaign.autopilot_running)}`)} · {
                   POST_LANGUAGES.find((item) => item.value === campaign.languages[0])?.label
                   ?? campaign.languages[0]
                   ?? "English"
@@ -1102,7 +1110,9 @@ export default function CampaignsPage() {
             <>
               <section className="campaign-summary">
                 <div>
-                  <p className="section-kicker">{selectedCampaign.status}</p>
+                  <p className="section-kicker">{t(
+                    `campaigns.state.${campaignStateKey(selectedCampaign.status, selectedCampaign.autopilot_running)}`,
+                  )}</p>
                   <h2>{selectedCampaign.name}</h2>
                   <p>{selectedCampaign.objective}</p>
                   <small>Audience: {selectedCampaign.audience} · {t("attribution.productCount", { count: selectedCampaign.tagged_products ?? 0 })}</small>

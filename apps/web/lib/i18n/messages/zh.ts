@@ -798,6 +798,13 @@ export const zh: Messages = {
     listHeading: "广告系列",
     empty: "暂无广告系列。",
     activeCount: "{count} 个进行中",
+    state: {
+      active: "进行中",
+      inactive: "已停止",
+      draft: "草稿",
+      archived: "已归档",
+    },
+    stateInactiveHelp: "自动发布已关闭，因此该广告系列不会发帖。",
     visibility: "广告系列显示范围",
     scopeActive: "进行中 ({count})",
     scopeArchived: "已归档 ({count})",

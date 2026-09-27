@@ -820,6 +820,13 @@ export const fr: Messages = {
     listHeading: "CAMPAGNES",
     empty: "Aucune campagne pour le moment.",
     activeCount: "{count} actives",
+    state: {
+      active: "Active",
+      inactive: "Inactive",
+      draft: "Brouillon",
+      archived: "Archivée",
+    },
+    stateInactiveHelp: "Le pilote automatique est désactivé : cette campagne ne publie rien.",
     visibility: "Visibilité des campagnes",
     scopeActive: "Actives ({count})",
     scopeArchived: "Archivées ({count})",

@@ -817,6 +817,13 @@ export const ru: Messages = {
     listHeading: "КАМПАНИИ",
     empty: "Кампаний пока нет.",
     activeCount: "{count} активных",
+    state: {
+      active: "Активна",
+      inactive: "Остановлена",
+      draft: "Черновик",
+      archived: "В архиве",
+    },
+    stateInactiveHelp: "Автопилот выключен, поэтому кампания ничего не публикует.",
     visibility: "Отображение кампаний",
     scopeActive: "Активные ({count})",
     scopeArchived: "Архивные ({count})",
