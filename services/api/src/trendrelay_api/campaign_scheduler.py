@@ -568,13 +568,20 @@ def next_open_slot(
     )
     # Everything this account already owns, so the approved post lands beside
     # the plan rather than on top of a post already frozen for that minute.
+    # Including the ones already handed to the engine. A scheduled post is
+    # confirmed the moment it is accepted, hours before it appears, so asking
+    # only for unsettled executions offers a slot that is already spoken for -
+    # see `plan_campaign`'s own note on this.
     taken = {
         _as_utc(execution.scheduled_at)
         for execution in session.scalars(
             select(PublicationExecution).where(
                 PublicationExecution.destination_id == destination.id,
-                PublicationExecution.state.in_(sorted(HOLDING_STATES)),
+                PublicationExecution.state.in_(
+                    sorted(HOLDING_STATES | {"published", "measured"})
+                ),
                 PublicationExecution.scheduled_at.is_not(None),
+                PublicationExecution.scheduled_at >= now - GRACE,
             )
         ).all()
         if execution.id != ignore
@@ -719,9 +726,34 @@ def plan_campaign(
             PublicationExecution.state.in_(sorted(HOLDING_STATES)),
         )
     ).all()
+    # A slot is taken by anything that still intends to post at it, which is
+    # not the same as anything unsettled.
+    #
+    # Under scheduled delivery the engine accepts a post and confirms it at
+    # once, so the execution is marked `published` the moment it is handed
+    # over - hours before the post actually appears. It leaves the holding
+    # states there and then, and every check that asked "is this slot taken?"
+    # read it as free. On 27 September one account was given the 11:00 slot
+    # three times in thirteen minutes that way: each post was confirmed within
+    # two minutes of being approved, and the next pass planned another into
+    # the same minute. Three posts went out at once to the same page.
+    #
+    # Bounded to slots that could still be offered - anything older than the
+    # grace window is past and will not be planned again - so this reads a
+    # handful of rows rather than the campaign's whole history.
+    committed = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state.in_(
+                sorted(HOLDING_STATES | {"published", "measured"})
+            ),
+            PublicationExecution.scheduled_at.is_not(None),
+            PublicationExecution.scheduled_at >= now - GRACE,
+        )
+    ).all()
     held_slots = {
         (execution.destination_id, _as_utc(execution.scheduled_at))
-        for execution in pending
+        for execution in (*pending, *committed)
     }
     held_items = {
         (execution.queue_item_id, execution.destination_id) for execution in pending

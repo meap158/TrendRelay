@@ -1115,3 +1115,51 @@ def test_a_campaign_that_never_set_a_horizon_plans_a_day_ahead(
     pilot = autopilot(session, authority="assist")
 
     assert pilot.plan_horizon_hours == 24
+
+
+def test_a_post_already_handed_to_the_engine_still_owns_its_slot(
+    session, tmp_path, engine_stub
+) -> None:
+    """Under scheduled delivery the engine confirms a post the moment it takes
+    it, hours before it appears. The execution left the holding states there
+    and then, so every check that asked whether the slot was taken read it as
+    free - and on 27 September one account was given its 11:00 slot three
+    times in thirteen minutes. Each post was confirmed within two minutes of
+    being approved, and the next pass planned another into the same minute.
+    Three went out at once, to the same page.
+    """
+    campaign_setup(session, tmp_path)
+    for index in range(1, 3):
+        clip = tmp_path / f"extra-{index}.mp4"
+        clip.write_bytes(b"another clip entirely")
+        session.add(CampaignQueueItem(
+            id=f"q-extra-{index}", workspace_id="ws", campaign_id="camp",
+            state="approved", video_path=str(clip), body=f"Another {index}.",
+            hashtags=["coffee"], position=index, last_posted_by_destination={},
+            created_by="user-1",
+        ))
+    pilot = autopilot(session, authority="assist", daily_cap_per_account=24)
+
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+    first = executions(session)[0]
+
+    def utc(value):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+    slot = utc(first.scheduled_at)
+    approve_execution(session, pilot, first, now=NOW)
+    # The engine takes it and says yes immediately; the post itself is still
+    # hours away.
+    first.state = "published"
+    first.published_at = NOW
+    session.commit()
+
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+
+    same_slot = [row for row in executions(session) if utc(row.scheduled_at) == slot]
+    assert len(same_slot) == 1, (
+        "a slot handed to the engine is not free: "
+        f"{[(row.id[:12], row.state) for row in same_slot]}"
+    )

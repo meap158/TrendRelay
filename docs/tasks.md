@@ -9,12 +9,6 @@ remove it when the work lands, and name the commit that did.
   and the row only says the first. Asked on 2026-09-23. Part of this landed
   in fb8b8c4, which marks a stopped campaign with its own glyph rather than
   changing the word - the word is still "active", so the ask stands.
-- A post went to the same Facebook page twice at the same minute: "Bát cháo
-  trước cửa" and "Người giữ công trường", both 6:00 PM on 27 September, both
-  to Mẫu Chuyện Cuộc Sống, both scheduled. The planner's double-booking guard
-  reads its own campaign's pending executions and the queue's per-destination
-  stamps, so two posts landing on one destination at one moment means one of
-  those did not see the other. Asked on 2026-09-27 from the day dialog.
 - A campaign kept posting to an engine that was switched off in Publish.
   Whether an engine is on is asked for delivery, but the planner freezes and
   schedules posts for its destinations regardless, so a switched-off engine
