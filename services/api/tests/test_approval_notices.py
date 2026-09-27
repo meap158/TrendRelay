@@ -196,7 +196,7 @@ def test_a_campaign_s_cards_speak_its_language_and_a_chosen_one_wins(
     outcome = approval_notices.handle_update(same(session), press(execution.id, "apr"))
     assert outcome == "✅ @ana đã duyệt"
     again = approval_notices.handle_update(same(session), press(execution.id, "apr"))
-    assert again == "Đã được quyết định trong ứng dụng: trạng thái queued."
+    assert again.startswith("✅ Đã duyệt từ thẻ Telegram")
 
     # The choice overrides the campaign's language.
     from trendrelay_api.autopilot_models import CampaignAutopilot
@@ -971,13 +971,61 @@ def test_a_press_from_another_chat_or_an_unlisted_person_is_refused(
     ))
 
 
-def test_a_second_press_reads_as_a_fact_not_a_failure(session, tmp_path, engine_stub, chat) -> None:
+def test_a_second_press_says_what_happened_and_where(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """A card outlives the question it asks, and pressing a stale one is a
+    fair thing to do. It used to answer "Already decided in the app" - vague,
+    and untrue for every decision actually made from a card."""
     execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
     approval_notices.handle_update(same(session), press(execution.id, "dis"))
+
     again = approval_notices.handle_update(same(session), press(execution.id, "apr"))
-    assert again == "Already decided in the app: it is cancelled."
+
+    assert again == "🚫 Dismissed from a Telegram card, by @ana."
     session.refresh(execution)
-    assert execution.state == "cancelled"
+    assert execution.state == "cancelled", "the second press changed nothing"
+    # And the stale card settles rather than keeping its buttons, so it cannot
+    # be pressed a third time and answered the same way again.
+    assert chat["settled"][-1]["message_id"] == 5
+    assert "Dismissed from a Telegram card" in chat["settled"][-1]["text"]
+
+
+def test_a_press_on_a_post_decided_in_the_app_names_the_app_and_the_person(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """The other half of the same question. The decision records how it
+    arrived, so a card can say so rather than guessing."""
+    from trendrelay_api.campaign_runner import approve_execution
+    from trendrelay_api.foundation import audit
+
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
+    pilot = session.scalar(select(CampaignAutopilot))
+    approve_execution(session, pilot, execution)
+    audit(
+        session, None, "ws", "user-1", "campaign.exception_approved",
+        "campaign", "camp", {"execution_id": execution.id, "publish_now": False},
+    )
+    session.commit()
+
+    outcome = approval_notices.handle_update(same(session), press(execution.id, "apr"))
+
+    assert outcome.startswith("✅ Approved in the app")
+    assert "a@example.test" in outcome, "and by whom"
+
+
+def test_a_post_nobody_decided_is_described_by_what_became_of_it(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """An autonomous campaign posts without anybody deciding, so there is no
+    decision to report - the post's own state is the answer."""
+    execution = held_one(session, tmp_path, engine_stub, approvals_telegram=True)
+    execution.state = "published"
+    session.commit()
+
+    outcome = approval_notices.handle_update(same(session), press(execution.id, "apr"))
+
+    assert outcome == "✅ This post has already gone out."
 
 
 def test_a_button_that_is_not_ours_is_refused_and_nothing_changes(session, tmp_path, engine_stub, chat) -> None:

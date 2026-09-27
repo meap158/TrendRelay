@@ -771,6 +771,77 @@ def _decision(data: str) -> tuple[str, str]:
     return verb, execution_id
 
 
+def _what_became_of(
+    session: Session, execution: PublicationExecution, language: str,
+) -> str:
+    """What happened to this post, where it was decided, and by whom.
+
+    A card outlives the question it asks. The same post can be approved in the
+    app a minute after the card went out, or approved from another card, or
+    published by the campaign itself - and the card in the chat still shows
+    two live buttons either way. Somebody presses one and deserves a better
+    answer than "already decided", which was both vague and, for every
+    decision actually made on Telegram, untrue.
+
+    Read from the audit log, because that is where a decision records who made
+    it and how it arrived - the Telegram path writes `via: telegram` and the
+    presser's handle for exactly this reason. A post that reached its engine
+    without anybody deciding it - an autonomous campaign, or one whose
+    delivery has already failed - has no such event, and is described by its
+    own state instead.
+    """
+    from sqlalchemy import String, cast
+
+    from trendrelay_api.models import AuditEvent, UserProfile
+
+    event = session.scalar(
+        select(AuditEvent)
+        .where(
+            AuditEvent.action.in_((
+                "campaign.exception_approved", "campaign.exception_dismissed",
+            )),
+            # The execution is inside the JSON detail rather than in a column
+            # of its own. Compared as text because the column is portable JSON
+            # and an execution id cannot contain the quotes this looks for.
+            cast(AuditEvent.detail, String).like(f'%"{execution.id}"%'),
+        )
+        .order_by(AuditEvent.created_at.desc())
+    )
+    if event is None:
+        # Nobody decided it; it simply got on with itself.
+        return words.say(language, f"became_{_shape_of(execution.state)}")
+    detail = event.detail or {}
+    approved = event.action.endswith("approved")
+    if approved and detail.get("publish_now"):
+        action = words.say(language, "was_approved_now")
+    elif approved:
+        action = words.say(language, "was_approved")
+    else:
+        action = words.say(language, "was_dismissed")
+    if detail.get("via") == "telegram":
+        where = words.say(
+            language, "from_a_card", who=str(detail.get("telegram_user") or "?"),
+        )
+    else:
+        # Punctuation rather than a word, so the name reads the same in every
+        # language the card speaks and the sentence needs no grammar for it.
+        person = session.get(UserProfile, event.actor_user_id or "")
+        named = (person.email if person else "") or ""
+        where = words.say(
+            language, "in_the_app", who=f" · {named}" if named else "",
+        )
+    return f"{action} {where}"
+
+
+def _shape_of(state: str) -> str:
+    """The three ends a post can come to, for a reader who is not a database."""
+    if state in ("published", "measured"):
+        return "posted"
+    if state in ("failed", "uncertain"):
+        return "not_posted"
+    return "settled"
+
+
 def _who(callback: dict[str, Any]) -> str:
     person = callback.get("from") or {}
     handle = person.get("username")
@@ -827,10 +898,6 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
         )
     )
     language = card_language(autopilot) if autopilot else "en"
-    if execution.state != "proposed":
-        raise PressRefused(words.say(language, "already_decided", state=execution.state))
-    if autopilot is None:
-        raise PressRefused(words.say("en", "no_autopilot"))
     who = _who(callback)
     identity = {
         "via": "telegram",
@@ -861,6 +928,24 @@ def decide(session: Session, callback: dict[str, Any]) -> tuple[str, str]:
             language=language, decided=toast,
         )
         return toast, message
+
+    if execution.state != "proposed":
+        # Answered already - here, or in the app, or by the campaign itself.
+        #
+        # This used to refuse the press with "Already decided in the app",
+        # which is a guess and was wrong every time the decision had been made
+        # from a card. It said nothing about what the decision was, and it
+        # left the card standing with live buttons, so the same stale card
+        # could be pressed again and answered the same unhelpful way.
+        #
+        # Now the press settles the card it was made on: what happened to the
+        # post, where that was decided and by whom, in place of the line that
+        # said it was waiting. Not a refusal - the presser asked a fair
+        # question of a card that was out of date, and this is the answer.
+        outcome = _what_became_of(session, execution, language)
+        return settled(outcome)
+    if autopilot is None:
+        raise PressRefused(words.say("en", "no_autopilot"))
 
     if verb == DISMISS:
         execution.state = "cancelled"
