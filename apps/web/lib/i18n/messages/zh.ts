@@ -1106,6 +1106,8 @@ export const zh: Messages = {
       subjectShared: "每个选中的商品都用同一组图片作为主体。",
       subjectCount: "{count} / {limit}",
       chooseLibrary: "从资料库选择",
+      pickerTitle: "选择主体图片",
+      pickerHelp: "本工作区资料库中的图片。按生成时应看到的顺序选择。再次点击已选图片即可移除。",
       removeSubject: "移除",
       backgroundHeading: "背景图",
       backgroundNone: "无。使用方案自带的场景。",

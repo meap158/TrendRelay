@@ -468,6 +468,8 @@ export function GenerateDialog({
         capacity={SUBJECT_LIMIT}
         chosen={subjects.map((asset) => asset.id)}
         pathOf={(asset) => asset.id}
+        title={t("attribution.generate.pickerTitle")}
+        description={t("attribution.generate.pickerHelp")}
         onPick={toggleSubject}
         onClose={() => setPickerOpen(false)}
       />

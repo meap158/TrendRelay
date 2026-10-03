@@ -1119,6 +1119,8 @@ export const vi: Messages = {
       subjectShared: "Cùng những ảnh này là chủ thể cho mọi sản phẩm đã chọn.",
       subjectCount: "{count} / {limit}",
       chooseLibrary: "Chọn từ Thư viện",
+      pickerTitle: "Chọn ảnh chủ thể",
+      pickerHelp: "Ảnh trong Thư viện của workspace này. Chọn theo thứ tự bước tạo sẽ thấy. Bấm ảnh đã chọn để bỏ.",
       removeSubject: "Bỏ",
       backgroundHeading: "Ảnh nền",
       backgroundNone: "Không có. Mẫu dùng bối cảnh của chính nó.",

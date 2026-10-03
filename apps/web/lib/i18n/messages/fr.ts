@@ -1131,6 +1131,8 @@ export const fr: Messages = {
       subjectShared: "Les mêmes photos sont le sujet de chaque produit sélectionné.",
       subjectCount: "{count} sur {limit}",
       chooseLibrary: "Choisir dans la Bibliothèque",
+      pickerTitle: "Choisir les images du sujet",
+      pickerHelp: "Photos de la Bibliothèque de cet espace. Choisissez-les dans l'ordre où la génération doit les voir. Cliquez une photo choisie pour la retirer.",
       removeSubject: "Retirer",
       backgroundHeading: "Image de fond",
       backgroundNone: "Aucune. Le décor de la recette est utilisé.",

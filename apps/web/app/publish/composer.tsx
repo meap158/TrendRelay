@@ -289,6 +289,8 @@ export function MediaPicker({
   chosen = [],
   pathOf,
   capacity = 0,
+  title,
+  description,
 }: {
   open: boolean;
   workspaceId: string;
@@ -297,6 +299,9 @@ export function MediaPicker({
   onClose: () => void;
   /** What this dialog is being opened to find. */
   mediaKind?: "video" | "image";
+  /** Replaces the Publish wording when another screen opens this same picker. */
+  title?: string;
+  description?: string;
   /**
    * What is already in the carousel, in the order it will be swiped.
    *
@@ -351,15 +356,15 @@ export function MediaPicker({
     <Dialog
       open={open}
       size="wide"
-      title={singleImage
+      title={title ?? (singleImage
         ? "Choose an image"
-        : images ? t("composer.chooseImages") : t("composer.chooseMedia")}
-      description={singleImage
+        : images ? t("composer.chooseImages") : t("composer.chooseMedia"))}
+      description={description ?? (singleImage
         ? "Images in this workspace's library. Choose the one this post will use."
         : images
           ? "Images in this workspace's library. Pick them in display order, and click "
             + "a picked one to take it out again."
-          : "Videos in this workspace's library. The chosen clip fills the video slot."}
+          : "Videos in this workspace's library. The chosen clip fills the video slot.")}
       onClose={onClose}
     >
       {/* The same control the Library uses, media kind included. It used to be

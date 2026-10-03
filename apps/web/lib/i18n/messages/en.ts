@@ -1123,6 +1123,8 @@ export const en = {
       subjectShared: "The same pictures are the subject for every selected product.",
       subjectCount: "{count} of {limit}",
       chooseLibrary: "Choose from Library",
+      pickerTitle: "Choose subject images",
+      pickerHelp: "Images in this workspace's Library. Pick them in the order generation should see them. Click a picked one to take it out.",
       removeSubject: "Remove",
       backgroundHeading: "Background image",
       backgroundNone: "None. The recipe's own setting is used.",

@@ -1119,6 +1119,8 @@ export const ja: Messages = {
       subjectShared: "選んだすべての商品で、同じ画像が被写体になります。",
       subjectCount: "{count} / {limit}",
       chooseLibrary: "ライブラリから選ぶ",
+      pickerTitle: "被写体の画像を選ぶ",
+      pickerHelp: "このワークスペースのライブラリの画像です。生成に見せる順に選んでください。選んだ画像をもう一度押すと外れます。",
       removeSubject: "外す",
       backgroundHeading: "背景画像",
       backgroundNone: "なし。レシピ自身の設定が使われます。",

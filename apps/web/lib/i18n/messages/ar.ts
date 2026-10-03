@@ -1121,6 +1121,8 @@ export const ar: Messages = {
       subjectShared: "الصور نفسها هي الموضوع لكل منتج محدد.",
       subjectCount: "{count} من {limit}",
       chooseLibrary: "اختيار من المكتبة",
+      pickerTitle: "اختيار صور الموضوع",
+      pickerHelp: "صور من مكتبة مساحة العمل هذه. اخترها بالترتيب الذي يجب أن يراها الإنشاء. انقر صورة مختارة مرة أخرى لإزالتها.",
       removeSubject: "إزالة",
       backgroundHeading: "صورة الخلفية",
       backgroundNone: "لا شيء. يُستخدم إعداد القالب نفسه.",
