@@ -1071,7 +1071,7 @@ export const ja: Messages = {
     matchedClick: "クリックと一致",
     noEligibleClick: "該当するクリックなし",
     generate: {
-      open: "生成",
+      open: "メディアを生成",
       title: "クリエイティブを生成",
       description: "{name} のプロンプトを確認してから待ち行列に入れます。ファイルは送信されてからライブラリに入り、この商品と結び付きます。",
       descriptionMany: "このプロンプトを確認してから、{count} 件の商品を待ち行列に入れます。文言はどの商品も同じです。商品ごとに下書きは別です。",

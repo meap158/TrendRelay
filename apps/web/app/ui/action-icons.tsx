@@ -28,6 +28,7 @@ import {
   Send,
   Settings2,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Upload,
   Wand2,
@@ -64,6 +65,9 @@ export const ACTION_ICONS = {
   // to the asset rather than speaking a new track over it. Four editing
   // actions in one row, two of them identical and one of them wrong.
   effects: Wand2,
+  // Starts an image or a video for a product. The wand above edits an asset
+  // that is already in the Library, so this action keeps its own mark.
+  generate: Sparkles,
   captions: Captions,
   voiceover: MicVocal,
   clip: Scissors,

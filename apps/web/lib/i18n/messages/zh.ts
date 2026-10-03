@@ -1058,7 +1058,7 @@ export const zh: Messages = {
     matchedClick: "已匹配点击",
     noEligibleClick: "无符合条件的点击",
     generate: {
-      open: "生成",
+      open: "生成素材",
       title: "生成创意",
       description: "先查看 {name} 的提示词，再排队。文件在提交之后才会进入资料库并关联到这个商品。",
       descriptionMany: "先查看这条提示词，再为 {count} 个商品排队。每个商品的措辞相同，但各自保留自己的草稿。",

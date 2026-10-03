@@ -1075,7 +1075,7 @@ export const en = {
     matchedClick: "Matched click",
     noEligibleClick: "No eligible click",
     generate: {
-      open: "Generate",
+      open: "Generate media",
       title: "Generate a creative",
       description: "Review the prompt for {name}, then queue it. The file joins the Library and links to this product only after it is submitted.",
       descriptionMany: "Review this prompt, then queue it for {count} products. The wording is the same for each. Every product keeps its own draft.",

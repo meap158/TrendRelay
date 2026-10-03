@@ -1071,7 +1071,7 @@ export const vi: Messages = {
     matchedClick: "Đã khớp lượt nhấp",
     noEligibleClick: "Không có lượt nhấp hợp lệ",
     generate: {
-      open: "Tạo",
+      open: "Tạo media",
       title: "Tạo creative",
       description: "Xem lại câu lệnh cho {name}, rồi xếp hàng. Tệp vào Thư viện và gắn với sản phẩm này chỉ sau khi được nộp.",
       descriptionMany: "Xem lại câu lệnh này, rồi xếp hàng cho {count} sản phẩm. Lời văn giống nhau cho từng sản phẩm. Mỗi sản phẩm giữ bản nháp riêng.",

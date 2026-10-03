@@ -594,7 +594,7 @@ export function ProductTable({
             )}
             {canQueue && (
               <Button
-                variant="secondary"
+                variant="primary"
                 size="sm"
                 disabled={picked.size === 0}
                 onClick={() => {
@@ -603,7 +603,7 @@ export function ProductTable({
                     .filter((item): item is ProductRow => item !== undefined);
                   if (chosen.length > 0) setGenerateFor(chosen);
                 }}
-              >{t("attribution.generate.open")}</Button>
+              ><ActionIcon name="generate" /> {t("attribution.generate.open")}</Button>
             )}
           </div>
           {/* Tagging a selection to a campaign, where the selection already
@@ -878,10 +878,10 @@ export function ProductTable({
                           <h4>{t("attribution.generate.creatives")}</h4>
                           {canQueue && (
                             <Button
-                              variant="secondary"
+                              variant="primary"
                               size="sm"
                               onClick={() => setGenerateFor([product])}
-                            >{t("attribution.generate.open")}</Button>
+                            ><ActionIcon name="generate" /> {t("attribution.generate.open")}</Button>
                           )}
                         </div>
                         {(product.creative_assets?.length || product.creative_drafts?.length) ? (

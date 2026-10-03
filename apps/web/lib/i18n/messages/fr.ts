@@ -1083,7 +1083,7 @@ export const fr: Messages = {
     matchedClick: "Clic associé",
     noEligibleClick: "Aucun clic éligible",
     generate: {
-      open: "Générer",
+      open: "Générer le média",
       title: "Générer un visuel",
       description: "Relisez l'invite pour {name}, puis mettez-la en file. Le fichier rejoint la Bibliothèque et se lie à ce produit seulement une fois envoyé.",
       descriptionMany: "Relisez cette invite, puis mettez-la en file pour {count} produits. Le texte est le même pour chacun. Chaque produit garde son propre brouillon.",
