@@ -5,9 +5,13 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { useWorkspace } from "../workspace-provider";
+import { AssetThumbnail, type LibraryAsset, MediaPicker } from "../publish/composer";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
+
+/** The same ceiling the API stores and a thumbnail read can fetch at once. */
+const SUBJECT_LIMIT = 8;
 
 type Kind = "image" | "carousel" | "video";
 type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
@@ -57,6 +61,9 @@ export function GenerateDialog({
   const [busy, setBusy] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileEpoch, setFileEpoch] = useState(0);
+  /** Library images the operator picked, in the order generation will see them. */
+  const [subjects, setSubjects] = useState<LibraryAsset[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const mirror = recipe === "mirror_selfie";
   const backgroundOn = mirror || backgroundEnabled;
@@ -80,7 +87,21 @@ export function GenerateDialog({
       background_enabled: backgroundOn,
       background_reference: backgroundOn ? backgroundReference.trim() : null,
       card_count: kind === "carousel" ? cardCount : null,
+      ...(subjects.length > 0
+        ? { subject_asset_ids: subjects.map((asset) => asset.id) }
+        : {}),
     };
+  }
+
+  function toggleSubject(asset: LibraryAsset) {
+    setSubjects((current) => (
+      current.some((item) => item.id === asset.id)
+        ? current.filter((item) => item.id !== asset.id)
+        : current.length >= SUBJECT_LIMIT
+          ? current
+          : [...current, asset]
+    ));
+    setError("");
   }
 
   useEffect(() => {
@@ -92,38 +113,26 @@ export function GenerateDialog({
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
-        // The wording does not name the product. A row with no image refuses
-        // the preview, so walk until one row can show the shared prompt.
-        let lastError = "";
-        for (const item of products) {
+        // The wording does not name the product, so the first selected row
+        // is enough to show the shared prompt.
+        try {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
+            { method: "POST", body: JSON.stringify(requestBody(leadId)) },
+          );
           if (cancelled) return;
-          try {
-            const response = await apiFetch(
-              `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
-              { method: "POST", body: JSON.stringify(requestBody(item.id)) },
-            );
-            if (cancelled) return;
-            if (!response.ok) {
-              lastError = await errorDetail(response, t("attribution.generate.requestFailed"));
-              if (lastError.toLowerCase().includes("no image")) continue;
-              setPrompt("");
-              setError(lastError);
-              return;
-            }
-            const payload = await response.json() as { draft?: { prompt?: string } };
-            setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
-            setError("");
-            return;
-          } catch (caught) {
-            if (cancelled) return;
+          if (!response.ok) {
             setPrompt("");
-            setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+            setError(await errorDetail(response, t("attribution.generate.requestFailed")));
             return;
           }
-        }
-        if (!cancelled) {
+          const payload = await response.json() as { draft?: { prompt?: string } };
+          setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
+          setError("");
+        } catch (caught) {
+          if (cancelled) return;
           setPrompt("");
-          setError(lastError || t("attribution.generate.requestFailed"));
+          setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
         }
       })();
     }, 200);
@@ -148,7 +157,7 @@ export function GenerateDialog({
   }
 
   async function queue() {
-    if (products.length === 0 || !workspaceId || !prompt) return;
+    if (products.length === 0 || !workspaceId || !prompt || subjects.length === 0) return;
     setBusy("queue");
     setError("");
     const failures: string[] = [];
@@ -220,7 +229,16 @@ export function GenerateDialog({
     }
   }
 
+  const omitted = [
+    "omitTitle",
+    "omitPrice",
+    "omitDescription",
+    "omitGallery",
+    "omitVariations",
+  ] as const;
+
   return (
+    <>
     <Dialog
       open={open && products.length > 0}
       title={t("attribution.generate.title")}
@@ -229,7 +247,11 @@ export function GenerateDialog({
         : products[0]
           ? t("attribution.generate.description", { name: products[0].name })
           : undefined}
-      onClose={onClose}
+      onClose={() => {
+        if (pickerOpen) return;
+        onClose();
+      }}
+      suspendDismiss={pickerOpen}
       footer={(
         <>
           <Button variant="quiet" onClick={onClose}>{t("attribution.generate.close")}</Button>
@@ -237,7 +259,7 @@ export function GenerateDialog({
             <Button
               variant="primary"
               busy={busy === "queue"}
-              disabled={!prompt || busy !== ""}
+              disabled={!prompt || subjects.length === 0 || busy !== ""}
               onClick={() => void queue()}
             >{busy === "queue"
               ? t("attribution.generate.queuing")
@@ -305,37 +327,99 @@ export function GenerateDialog({
             </Select>
           </label>
         )}
-        {!mirror && (
-          <label className="campaign-dialog-check">
-            <input
-              type="checkbox"
-              checked={backgroundEnabled}
-              disabled={locked}
-              onChange={(event) => {
-                setBackgroundEnabled(event.target.checked);
-                if (!event.target.checked) setBackgroundReference("");
-                setError("");
-              }}
-            />
-            <span>
-              {t("attribution.generate.background")}
-              <small>{t("attribution.generate.backgroundHint")}</small>
-            </span>
-          </label>
-        )}
-        {backgroundOn && (
-          <label>
-            {t("attribution.generate.backgroundUrl")}
-            <input
-              type="url"
-              value={backgroundReference}
-              disabled={locked}
-              placeholder={t("attribution.generate.backgroundPlaceholder")}
-              onChange={(event) => setBackgroundReference(event.target.value)}
-            />
-            {!backgroundReady && <small>{t("attribution.generate.backgroundNeeded")}</small>}
-          </label>
-        )}
+        <section className="generate-uses">
+          <h3>{t("attribution.generate.uses")}</h3>
+          <p>{t("attribution.generate.usesHelp")}</p>
+          <div className="generate-use">
+            <strong>{t("attribution.generate.subject")}</strong>
+            <p>{t("attribution.generate.subjectHelp")}</p>
+            {many && <p>{t("attribution.generate.subjectShared")}</p>}
+            {subjects.length === 0 ? (
+              <p>{t("attribution.generate.subjectEmpty")}</p>
+            ) : (
+              <ol className="generate-subject-list">
+                {subjects.map((asset, index) => (
+                  <li key={asset.id}>
+                    {workspaceId && (
+                      <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                    )}
+                    <span>{index + 1}. {asset.title}</span>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      disabled={locked}
+                      onClick={() => setSubjects((current) => current.filter((item) => item.id !== asset.id))}
+                    >{t("attribution.generate.removeSubject")}</Button>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <div className="generate-subject-actions">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={locked || !workspaceId}
+                onClick={() => setPickerOpen(true)}
+              >{t("attribution.generate.chooseLibrary")}</Button>
+              <small>
+                {t("attribution.generate.subjectCount", {
+                  count: subjects.length,
+                  limit: SUBJECT_LIMIT,
+                })}
+              </small>
+            </div>
+          </div>
+          <div className="generate-use">
+            <strong>{t("attribution.generate.backgroundHeading")}</strong>
+            {!mirror && (
+              <label className="campaign-dialog-check">
+                <input
+                  type="checkbox"
+                  checked={backgroundEnabled}
+                  disabled={locked}
+                  onChange={(event) => {
+                    setBackgroundEnabled(event.target.checked);
+                    if (!event.target.checked) setBackgroundReference("");
+                    setError("");
+                  }}
+                />
+                <span>
+                  {t("attribution.generate.background")}
+                  <small>{t("attribution.generate.backgroundHint")}</small>
+                </span>
+              </label>
+            )}
+            {mirror && <p>{t("attribution.generate.backgroundHint")}</p>}
+            {backgroundOn && (
+              <label>
+                {t("attribution.generate.backgroundUrl")}
+                <input
+                  type="url"
+                  value={backgroundReference}
+                  disabled={locked}
+                  placeholder={t("attribution.generate.backgroundPlaceholder")}
+                  onChange={(event) => setBackgroundReference(event.target.value)}
+                />
+                {!backgroundReady && <small>{t("attribution.generate.backgroundNeeded")}</small>}
+                {backgroundReady && backgroundReference.trim().startsWith("https://") && (
+                  <small>{t("attribution.generate.backgroundSent")}</small>
+                )}
+              </label>
+            )}
+            {!backgroundOn && (
+              <p className="generate-background-none">{t("attribution.generate.backgroundNone")}</p>
+            )}
+          </div>
+        </section>
+        <div className="generate-omitted">
+          <strong>{t("attribution.generate.notUsed")}</strong>
+          <p>{t("attribution.generate.notUsedHelp")}</p>
+          <ul>
+            {omitted.map((key) => (
+              <li key={key}>{t(`attribution.generate.${key}`)}</li>
+            ))}
+          </ul>
+        </div>
         {kind === "carousel" && (
           <label>
             {t("attribution.generate.cards")}
@@ -375,6 +459,20 @@ export function GenerateDialog({
         {error && <p role="alert">{error}</p>}
       </div>
     </Dialog>
+    {workspaceId && (
+      <MediaPicker
+        open={pickerOpen}
+        workspaceId={workspaceId}
+        apiFetch={apiFetch}
+        mediaKind="image"
+        capacity={SUBJECT_LIMIT}
+        chosen={subjects.map((asset) => asset.id)}
+        pathOf={(asset) => asset.id}
+        onPick={toggleSubject}
+        onClose={() => setPickerOpen(false)}
+      />
+    )}
+    </>
   );
 }
 

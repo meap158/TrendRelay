@@ -22,6 +22,7 @@ from trendrelay_api import media_library
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
+from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product
 from trendrelay_api.product_creative_recipes import (
@@ -411,3 +412,73 @@ def test_another_workspace_cannot_read_or_fill_the_draft() -> None:
         json={"media_base64": png(2)},
     )
     assert foreign_fill.status_code == 404
+
+
+def add_library_image(
+    workspace_id: str, asset_id: str, *, kind: str = "image", title: str = "Flat lay",
+) -> str:
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id=asset_id,
+            workspace_id=workspace_id,
+            title=title,
+            media_kind=kind,
+            source_type="upload",
+            original_path=f"C:/media/{asset_id}.png",
+            original_sha256=(asset_id + ("0" * 64))[:64],
+            mime_type="image/png" if kind == "image" else "video/mp4",
+            size_bytes=10,
+            created_by="owner-user",
+        ))
+    return asset_id
+
+
+def test_library_images_are_the_subject_and_stay_the_subject() -> None:
+    workspace_id = make_workspace()
+    other = make_workspace()
+    product_id = add_product(workspace_id, image=False, name="Bare row")
+    own = add_library_image(workspace_id, "asset-own", title="Gloves on white")
+    second = add_library_image(workspace_id, "asset-second", title="Gloves detail")
+    clip = add_library_image(workspace_id, "asset-clip", kind="video", title="A clip")
+    foreign = add_library_image(other, "asset-foreign", title="Someone else")
+
+    preview = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(product_id),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["draft"]["prompt"] == BED_FLAT_LAY_OFF
+    assert preview.json()["draft"]["subject_assets"] == []
+
+    bare = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id),
+    )
+    assert bare.status_code == 422
+
+    assert request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id, subject_asset_ids=[foreign]),
+    ).status_code == 422
+    assert request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id, subject_asset_ids=[clip]),
+    ).status_code == 422
+
+    created = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id, subject_asset_ids=[own, second, own]),
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()["draft"]
+    assert draft["product_images"] == []
+    assert draft["subject_assets"] == [
+        {"asset_id": own, "title": "Gloves on white", "missing": False},
+        {"asset_id": second, "title": "Gloves detail", "missing": False},
+    ]
+    again = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts/{draft['id']}",
+    )
+    assert again.json()["draft"]["subject_assets"] == draft["subject_assets"]
+    assert again.json()["draft"]["prompt"] == draft["prompt"]

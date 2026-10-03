@@ -31,6 +31,10 @@ from trendrelay_api.tool_registry import PROJECT_ROOT
 
 DEFAULT_PAGE = 50
 MAX_PAGE = 100
+#: How many Library pictures one draft may attach. The same ceiling as a
+#: thumbnail read, so the assistant that fills the draft can fetch them in
+#: one call.
+MAX_SUBJECT_IMAGES = 8
 _KINDS = frozenset({"image", "carousel", "video"})
 _UPLOAD_DIRNAME = "product-creatives"
 
@@ -68,6 +72,78 @@ def _product_images(product: Product) -> list[str]:
     from trendrelay_api.integrations.mcp.products import product_images
 
     return product_images(product)
+
+
+def _subject_ids(raw: list[str] | None) -> list[str]:
+    """The pick, in order, without blanks or repeats."""
+    found: list[str] = []
+    for item in raw or []:
+        text = str(item).strip()
+        if text and text not in found:
+            found.append(text)
+    if len(found) > MAX_SUBJECT_IMAGES:
+        raise ValueError(
+            f"Choose at most {MAX_SUBJECT_IMAGES} images from the Library."
+        )
+    return found
+
+
+def _subject_assets(
+    session: Session, workspace_id: str, raw: list[str] | None,
+) -> list[dict[str, Any]]:
+    """The Library images this ask attaches, or a refusal.
+
+    An id from another workspace, a missing id, or a video is not a subject.
+    """
+    from trendrelay_api.media_models import MediaAsset
+
+    ids = _subject_ids(raw)
+    if not ids:
+        return []
+    rows = {
+        asset.id: asset
+        for asset in session.scalars(
+            select(MediaAsset).where(
+                MediaAsset.id.in_(ids),
+                MediaAsset.workspace_id == workspace_id,
+            )
+        ).all()
+    }
+    resolved: list[dict[str, Any]] = []
+    for asset_id in ids:
+        asset = rows.get(asset_id)
+        if asset is None:
+            raise ValueError("That Library image is not in this workspace.")
+        if asset.media_kind != "image":
+            raise ValueError("Choose images from the Library. Video and audio are not a subject.")
+        resolved.append({"asset_id": asset.id, "title": asset.title})
+    return resolved
+
+
+def _stored_subjects(session: Session, draft: ProductCreativeDraft) -> list[dict[str, Any]]:
+    """What was stored, including an asset that has since gone."""
+    from trendrelay_api.media_models import MediaAsset
+
+    ids = [str(item) for item in (draft.subject_asset_ids or []) if str(item).strip()]
+    if not ids:
+        return []
+    rows = {
+        asset.id: asset
+        for asset in session.scalars(
+            select(MediaAsset).where(
+                MediaAsset.id.in_(ids),
+                MediaAsset.workspace_id == draft.workspace_id,
+            )
+        ).all()
+    }
+    stored: list[dict[str, Any]] = []
+    for asset_id in ids:
+        asset = rows.get(asset_id)
+        if asset is None or asset.media_kind != "image":
+            stored.append({"asset_id": asset_id, "title": "", "missing": True})
+        else:
+            stored.append({"asset_id": asset.id, "title": asset.title, "missing": False})
+    return stored
 
 
 def _background(recipe: str, enabled: bool, reference: str | None) -> tuple[bool, str | None]:
@@ -111,6 +187,8 @@ def _prepare(
     background_enabled: bool,
     background_reference: str | None,
     card_count: int | None,
+    subject_asset_ids: list[str] | None = None,
+    require_subject: bool = True,
 ) -> dict[str, Any]:
     """Validate an ask and resolve the prompt. Does not write."""
     if kind not in _KINDS:
@@ -128,7 +206,11 @@ def _prepare(
         raise ValueError("This recipe has no subject variant.")
     product = _product(session, workspace_id, product_id)
     images = _product_images(product)
-    if not images:
+    subjects = _subject_assets(session, workspace_id, subject_asset_ids)
+    # A Library pick is the subject. Without one, the listing pictures are,
+    # and a product that has neither cannot be queued. Preview skips that
+    # gate so the prompt can be read before a picture is chosen.
+    if require_subject and not subjects and not images:
         raise ValueError("This product has no image to generate from.")
     enabled, reference = _background(recipe, background_enabled, background_reference)
     prompt = resolve_prompt(
@@ -146,6 +228,7 @@ def _prepare(
         "prompt": prompt,
         "card_count": _card_count(kind, card_count),
         "product_images": images,
+        "subject_assets": subjects,
     }
 
 
@@ -173,6 +256,7 @@ def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
         "card_count": draft.card_count,
         "status": draft.status,
         "product_images": images,
+        "subject_assets": _stored_subjects(session, draft),
         "ingested_asset_ids": staged,
         "owed": _owed(draft),
         "linked": draft.status == "succeeded",
@@ -190,6 +274,7 @@ def preview(
     background_enabled: bool = False,
     background_reference: str | None = None,
     card_count: int | None = None,
+    subject_asset_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """The prompt that would be stored, without storing it."""
     prepared = _prepare(
@@ -197,6 +282,7 @@ def preview(
         product_id=product_id, kind=kind, recipe=recipe, variant=variant,
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
+        subject_asset_ids=subject_asset_ids, require_subject=False,
     )
     prepared["status"] = "preview"
     prepared["owed"] = prepared["card_count"]
@@ -217,6 +303,7 @@ def create_draft(
     background_enabled: bool = False,
     background_reference: str | None = None,
     card_count: int | None = None,
+    subject_asset_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Store a pending draft. Does not ingest media and does not link anything."""
     prepared = _prepare(
@@ -224,6 +311,7 @@ def create_draft(
         product_id=product_id, kind=kind, recipe=recipe, variant=variant,
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
+        subject_asset_ids=subject_asset_ids,
     )
     draft = ProductCreativeDraft(
         id=new_id("pcreative"),
@@ -236,6 +324,7 @@ def create_draft(
         background_reference=prepared["background_reference"],
         prompt=prepared["prompt"],
         card_count=prepared["card_count"],
+        subject_asset_ids=[item["asset_id"] for item in prepared["subject_assets"]],
         status="pending",
         staged_asset_ids=[],
         created_by=actor_user_id,

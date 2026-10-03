@@ -1317,11 +1317,14 @@ def build_server(workspace_id: str) -> FastMCP:
     @server.tool(
         name="get_product_creative_draft",
         description=(
-            "One Attribution creative draft: the stored reviewed prompt, the "
-            "product image references, the background reference when one was "
-            "attached, the kind, the card count, and how many files are still "
-            "owed. The prompt is the text stored at confirm, not a fresh "
-            "resolution. Use an id from list_product_creative_drafts."
+            "One Attribution creative draft: the stored reviewed prompt, "
+            "subject_assets when Library images were picked (otherwise the "
+            "listing pictures as product_images), the background reference "
+            "when one was attached, the kind, the card count, and how many "
+            "files are still owed. Title, price, description, variations, "
+            "and stock are not part of the ask. The prompt is the text "
+            "stored at confirm, not a fresh resolution. Use an id from "
+            "list_product_creative_drafts."
         ),
     )
     def get_product_creative_draft(draft_id: str) -> dict[str, Any]:
@@ -1341,9 +1344,13 @@ def build_server(workspace_id: str) -> FastMCP:
             "background. bed_flat_lay and mannequin_transition take an "
             "optional https background, and the stored prompt changes when "
             "it is on. A carousel needs card_count from 2 to 10; that count "
-            "cannot be lowered later. Confirm stores the prompt and does not "
-            "ingest media. The product must already have an image. Do not "
-            "publish, and do not mark the draft complete from here."
+            "cannot be lowered later. Optional subject_asset_ids are Library "
+            "image ids, in order, at most 8. When they are set, those images "
+            "are the subject and the listing title, price, description, and "
+            "pictures are not. When they are omitted, the product's own "
+            "pictures are the subject, and the product must already have "
+            "one. Confirm stores the prompt and does not ingest media. Do "
+            "not publish, and do not mark the draft complete from here."
         ),
     )
     def create_product_creative_draft(
@@ -1354,6 +1361,7 @@ def build_server(workspace_id: str) -> FastMCP:
         variant: str | None = None,
         background_enabled: bool = False,
         background_reference: str | None = None,
+        subject_asset_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_product_creative_draft",
@@ -1363,6 +1371,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 card_count=card_count, variant=variant,
                 background_enabled=background_enabled,
                 background_reference=background_reference,
+                subject_asset_ids=subject_asset_ids,
             ),
         )
 

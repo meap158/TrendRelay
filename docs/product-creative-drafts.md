@@ -24,9 +24,11 @@ and submitted, the same way a campaign post waits for media.
   prompt names a bed only when background is off. The mannequin prompt includes
   the narrow beige hallway only when background is off.
 - **`product_creative_models.py`** — `ProductCreativeDraft` (the stored prompt,
-  kind, card count, staged asset ids, status `pending` or `succeeded`) and
-  `ProductCreativeLink` (one row per product and Library asset). Migration
-  `20261003_0084`.
+  kind, card count, staged asset ids, `subject_asset_ids`, status `pending` or
+  `succeeded`) and `ProductCreativeLink` (one row per product and Library
+  asset). Migrations `20261003_0084` and `20261004_0085`. An empty
+  `subject_asset_ids` means the listing gallery is the subject, which is what
+  an older draft and an MCP create without a pick still do.
 - **`product_creative_drafts.py`** — preview does not save. Create stores the
   resolved prompt and commits, because MCP's `_call` closes its session and
   rolls back a flush. Submit ingests through `create_ingest_job` and
@@ -58,6 +60,14 @@ its own file. Optional background is a checkbox only for the bed and mannequin
 recipes. Mirror shows a required background URL and a woman/man choice, and no
 off switch. Success means the asset is in the Library and both sides of the
 link show it.
+
+The modal names what the ask attaches. Subject images are chosen from this
+workspace's Library with the shared Library picker (`MediaPicker`), up to 8,
+in pick order, and the same pick is stored on every selected product's own
+draft as `subject_asset_ids`. The background, when one is used, stays an https
+URL. Title, price, description, listing pictures, variations, and stock are
+listed as not sent. Queue stays disabled until at least one Library image is
+picked. The prompt text does not depend on those images.
 
 ## Tests
 

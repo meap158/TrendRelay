@@ -12,8 +12,12 @@ Read the "Live system" section first. Some of it is posting to real accounts.
 Generate on Attribution queues one reviewed prompt per selected product, for a
 single row or for many, with the same recipe. The prompt is
 resolved only in `product_creative_recipes.py` and stored on the draft. The
-modal and MCP both display that stored text. TrendRelay does not generate the
-pixels. Submitting a file ingests it into the Library and writes
+modal and MCP both display that stored text. The modal's subject is Library
+images picked with the shared Library picker and stored as
+`subject_asset_ids`; an empty list still means the listing gallery. Title,
+price, description, listing pictures, variations, and stock are not sent.
+TrendRelay does not generate the pixels. Submitting a file ingests it into
+the Library and writes
 `ProductCreativeLink` only when the draft holds its card count. Both the
 product read (`creative_assets`) and the Library asset read
 (`attribution_products`) show the link. Nothing is published.

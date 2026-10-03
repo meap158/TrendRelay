@@ -42,6 +42,7 @@ export function Dialog({
   footer,
   headerAction,
   size = "default",
+  suspendDismiss = false,
 }: {
   open: boolean;
   title: string;
@@ -51,6 +52,13 @@ export function Dialog({
   footer?: ReactNode;
   /** The affirmative action, beside the ×. A settings panel's Save. */
   headerAction?: ReactNode;
+  /**
+   * Keep this panel up while another dialog is open on top of it.
+   *
+   * A second portaled dialog is outside this one, so Radix would otherwise
+   * treat opening it, or dismissing it, as leaving this panel.
+   */
+  suspendDismiss?: boolean;
   /**
    * `wide` for a panel whose content is the point rather than a form — a
    * gallery of objects, a stack of effects with their own controls. At the
@@ -67,6 +75,18 @@ export function Dialog({
         <RadixDialog.Overlay className="ui-dialog-overlay" />
         <RadixDialog.Content
           className={size === "wide" ? "ui-dialog ui-dialog-wide" : "ui-dialog"}
+          onPointerDownOutside={
+            suspendDismiss ? (event) => event.preventDefault() : undefined
+          }
+          onInteractOutside={
+            suspendDismiss ? (event) => event.preventDefault() : undefined
+          }
+          onFocusOutside={
+            suspendDismiss ? (event) => event.preventDefault() : undefined
+          }
+          onEscapeKeyDown={
+            suspendDismiss ? (event) => event.preventDefault() : undefined
+          }
         >
           <header className="ui-dialog-head">
             <div>

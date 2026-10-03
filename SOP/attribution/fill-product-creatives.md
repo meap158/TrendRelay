@@ -76,9 +76,13 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `mannequin_transition` | video | Optional. Off is the narrow beige hallway. On opens on the attached background and drops the hallway. |
 | `mirror_selfie` | video | Required, with `variant` `female` or `male`. A mirror draft cannot be queued without a background image. |
 
-Subject references are the product's own listing images, returned as
-`product_images`. A product with no image cannot be queued. One draft is one
-garment: the product's own piece, not a collage of unrelated tops.
+When `subject_assets` is non-empty, those Library image ids are the subject,
+in that order, at most 8. Read them with `get_asset_thumbnails`. Do not use
+`product_images`, the title, the price, the description, the variations, or
+the stock. When `subject_assets` is empty, `product_images` (the listing
+gallery) is the subject, and a product with no image cannot be queued. One
+draft is one garment: the product's own piece, not a collage of unrelated
+tops.
 
 A carousel's `card_count` is fixed at confirm, from 2 to 10. It cannot be
 lowered. Generate that many separate images and submit them one at a time,
@@ -86,8 +90,11 @@ in order. Do not submit one picture that contains every card as panels.
 
 ## 4. One draft, then the next
 
-1. Read the draft and generate the file the stored prompt describes, using
-   `product_images` as the subject and `background_reference` when it is set.
+1. Read the draft and generate the file the stored prompt describes. If
+   `subject_assets` is non-empty, those Library images are the subject
+   (`get_asset_thumbnails`). If it is empty, use `product_images`. Use
+   `background_reference` when it is set. Do not send the title, the price,
+   the description, the variations, or the stock.
 2. `submit_product_creative_media` once for that file. Video ingest finishes
    in the same call; do not poll `get_import_status` for it.
 3. Read the draft again. `owed` is what is left. `linked` is true only when

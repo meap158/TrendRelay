@@ -68,6 +68,10 @@ class ProductCreativeDraft(Base):
     #: The prompt the operator reviewed. Stored as resolved, so a later read
     #: returns this text rather than whatever the resolver would say now.
     prompt: Mapped[str] = mapped_column(String(4000))
+    #: Library image ids the operator picked as the subject, in pick order.
+    #: Empty means the product's own listing pictures are the subject, which
+    #: is the path an older draft and an MCP call without a pick still take.
+    subject_asset_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
     card_count: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     #: Library asset ids already ingested for this draft, in order. They are

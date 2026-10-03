@@ -41,6 +41,7 @@ class DraftBody(BaseModel):
     background_enabled: bool = False
     background_reference: str | None = Field(default=None, max_length=2000)
     card_count: int | None = Field(default=None, ge=1, le=10)
+    subject_asset_ids: list[str] | None = Field(default=None, max_length=8)
 
 
 class MediaBody(BaseModel):
@@ -72,6 +73,7 @@ def preview_creative_draft(
         product_id=body.product_id, kind=body.kind, recipe=body.recipe,
         variant=body.variant, background_enabled=body.background_enabled,
         background_reference=body.background_reference, card_count=body.card_count,
+        subject_asset_ids=body.subject_asset_ids,
     ))}
 
 
@@ -91,6 +93,7 @@ def create_creative_draft(
         product_id=body.product_id, kind=body.kind, recipe=body.recipe,
         variant=body.variant, background_enabled=body.background_enabled,
         background_reference=body.background_reference, card_count=body.card_count,
+        subject_asset_ids=body.subject_asset_ids,
     ))
     audit(
         session, request, workspace_id, user.id,

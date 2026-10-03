@@ -503,5 +503,60 @@
   line-height: 1.45;
   white-space: pre-wrap;
 }
+/* What this ask attaches, named, so a long listing is not mistaken for the
+   subject. The chips underneath are the listing fields that stay behind. */
+.campaign-dialog-form .generate-uses {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.campaign-dialog-form .generate-uses h3,
+.campaign-dialog-form .generate-omitted > strong {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.campaign-dialog-form .generate-uses > p,
+.campaign-dialog-form .generate-use p,
+.campaign-dialog-form .generate-omitted > p,
+.campaign-dialog-form .generate-background-none {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+.campaign-dialog-form .generate-use { display: grid; gap: 6px; }
+.campaign-dialog-form .generate-use > strong { color: var(--text); font-size: 12px; }
+.generate-subject-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.generate-subject-list li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.generate-subject-list li > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.generate-subject-list .picker-thumb { flex: 0 0 auto; width: 76px; height: 44px; }
+.generate-subject-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.generate-subject-actions small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.campaign-dialog-form .generate-omitted { display: grid; gap: 6px; }
+.generate-omitted ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.generate-omitted li {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--muted);
+  background: var(--panel-raised);
+  font-size: 11px;
+}
 .product-creatives { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
 .product-creatives a { color: var(--link); }
