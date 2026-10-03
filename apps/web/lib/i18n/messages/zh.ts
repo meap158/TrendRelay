@@ -1149,6 +1149,7 @@ export const zh: Messages = {
       linkedAll: "已在资料库中，并关联到这份草稿里的每个商品。",
       subjectTogether: "每个商品自己的商品图仍留在画面里。这里的资料库图片是额外的，不会替换它们。",
       members: "画面中的商品",
+      noListingPicture: "没有商品页图片",
       close: "关闭",
     },
   },

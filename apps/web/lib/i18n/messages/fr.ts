@@ -1174,6 +1174,7 @@ export const fr: Messages = {
       linkedAll: "Dans la Bibliothèque et lié à chaque produit de ce brouillon.",
       subjectTogether: "Les photos de fiche de chaque produit restent dans le plan. Une image de la Bibliothèque ici s'ajoute et ne les remplace pas.",
       members: "Produits dans ce plan",
+      noListingPicture: "Pas de photo de fiche",
       close: "Fermer",
     },
   },

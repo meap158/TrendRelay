@@ -1184,14 +1184,20 @@ function CreativeDraftSummary({
     : t("attribution.generate.backgroundNone");
   const cardCount = config.card_count ?? 1;
 
-  const memberNames = (config.products ?? []).map((item) => item.name).filter(Boolean);
+  const memberRows = (config.products ?? []).filter((item) => item.name);
 
   return (
     <dl className="product-creative-config">
-      {memberNames.length > 1 && (
+      {memberRows.length > 1 && (
         <div>
           <dt>{t("attribution.generate.members")}</dt>
-          <dd>{memberNames.join(", ")}</dd>
+          <dd>
+            <ul className="product-creative-members">
+              {memberRows.map((item) => (
+                <li key={item.product_id}>{item.name}</li>
+              ))}
+            </ul>
+          </dd>
         </div>
       )}
       <div>

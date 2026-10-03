@@ -288,9 +288,17 @@ export function GenerateDialog({
     setNotice("");
   }
 
+  const chosenFields = LISTING_KEYS.filter((key) => selectedFields.has(key));
+  const oneCreative = !many || (draft?.product_count ?? 0) > 1;
+  const queueNeedsLibrary = !together;
+  const attachedLibrary = reviewing ? storedSubjects.length : subjects.length;
+  const togetherUncovered = together
+    && attachedLibrary === 0
+    && members.some((member) => !(member.product_images ?? []).some((url) => Boolean(url)));
+
   async function queue() {
     if (products.length === 0 || !workspaceId || !prompt) return;
-    if (together ? products.length > SUBJECT_LIMIT : subjects.length === 0) return;
+    if (together ? products.length > SUBJECT_LIMIT || togetherUncovered : subjects.length === 0) return;
     setBusy("queue");
     setError("");
     if (together) {
@@ -389,10 +397,6 @@ export function GenerateDialog({
     }
   }
 
-  const chosenFields = LISTING_KEYS.filter((key) => selectedFields.has(key));
-  const oneCreative = !many || (draft?.product_count ?? 0) > 1;
-  const queueNeedsLibrary = !together;
-
   return (
     <>
     <Dialog
@@ -421,7 +425,7 @@ export function GenerateDialog({
             <Button
               variant="primary"
               busy={busy === "queue"}
-              disabled={!prompt || busy !== "" || (queueNeedsLibrary && subjects.length === 0)}
+              disabled={!prompt || busy !== "" || togetherUncovered || (queueNeedsLibrary && subjects.length === 0)}
               onClick={() => void queue()}
             >{busy === "queue"
               ? t("attribution.generate.queuing")
@@ -481,7 +485,21 @@ export function GenerateDialog({
         {groupShot && members.length > 1 && (
           <div className="generate-scope">
             <strong>{t("attribution.generate.members")}</strong>
-            <p>{members.map((member) => member.name).filter(Boolean).join(", ")}</p>
+            <ul className="generate-member-list">
+              {members.map((member) => {
+                const picture = (member.product_images ?? []).find((url) => Boolean(url)) ?? "";
+                const uncovered = attachedLibrary === 0 && !picture;
+                return (
+                  <li key={member.product_id}>
+                    {picture
+                      ? <img src={picture} alt="" />
+                      : <span className="generate-member-missing" aria-hidden="true" />}
+                    <span className="generate-member-name" title={member.name}>{member.name}</span>
+                    {uncovered && <small>{t("attribution.generate.noListingPicture")}</small>}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
         <label>
@@ -559,7 +577,7 @@ export function GenerateDialog({
                 </ol>
               )
             ) : subjects.length === 0 ? (
-              <p>{t("attribution.generate.subjectEmpty")}</p>
+              together ? null : <p>{t("attribution.generate.subjectEmpty")}</p>
             ) : (
               <ol className="generate-subject-list">
                 {subjects.map((asset, index) => (

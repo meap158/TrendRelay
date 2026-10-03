@@ -1162,6 +1162,7 @@ export const ja: Messages = {
       linkedAll: "ライブラリにあり、この下書きのすべての商品に紐づいています。",
       subjectTogether: "各商品の掲載画像はそのまま被写体です。ここでのライブラリ画像は追加であり、それらを置き換えません。",
       members: "このカットの商品",
+      noListingPicture: "掲載画像がありません",
       close: "閉じる",
     },
   },

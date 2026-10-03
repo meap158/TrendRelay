@@ -1162,6 +1162,7 @@ export const vi: Messages = {
       linkedAll: "Đã ở Thư viện và gắn với mọi sản phẩm trong bản nháp này.",
       subjectTogether: "Ảnh trang sản phẩm của từng sản phẩm vẫn ở trong khung hình. Ảnh Thư viện ở đây là thêm và không thay thế chúng.",
       members: "Sản phẩm trong khung hình",
+      noListingPicture: "Không có ảnh trang sản phẩm",
       close: "Đóng",
     },
   },

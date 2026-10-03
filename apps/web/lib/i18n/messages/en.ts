@@ -1166,6 +1166,7 @@ export const en = {
       linkedAll: "In the Library and linked to every product in this draft.",
       subjectTogether: "Each product's listing pictures stay in the shot. A Library image here is extra and does not replace them.",
       members: "Products in this shot",
+      noListingPicture: "No listing picture",
       close: "Close",
     },
   },
