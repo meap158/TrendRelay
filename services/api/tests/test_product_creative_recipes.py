@@ -52,3 +52,32 @@ def test_mirror_selfie_keeps_both_genders_and_has_no_wording_without_a_backgroun
 def test_a_variant_on_the_bed_recipe_is_refused() -> None:
     with pytest.raises(ValueError, match="variant"):
         resolve_prompt("bed_flat_lay", background=False, variant="female")
+
+
+def test_together_is_a_sibling_and_leaves_the_single_product_scripts_alone() -> None:
+    assert resolve_prompt("bed_flat_lay", background=False, together=False) == BED_FLAT_LAY_OFF
+    assert resolve_prompt("bed_flat_lay", background=True, together=False) == BED_FLAT_LAY_ON
+    assert resolve_prompt("mannequin_transition", background=False, together=False) == MANNEQUIN_OFF
+    assert resolve_prompt("mannequin_transition", background=True, together=False) == MANNEQUIN_ON
+
+    bed_off = resolve_prompt("bed_flat_lay", background=False, together=True)
+    bed_on = resolve_prompt("bed_flat_lay", background=True, together=True)
+    hallway = resolve_prompt("mannequin_transition", background=False, together=True)
+    room = resolve_prompt("mannequin_transition", background=True, together=True)
+    female = resolve_prompt("mirror_selfie", background=True, variant="female", together=True)
+    male = resolve_prompt("mirror_selfie", background=True, variant="male", together=True)
+    for prompt in (bed_off, bed_on, hallway, room, female, male):
+        assert len(prompt) <= 4000
+        assert "every attached product" in prompt
+        assert "only this one garment" not in prompt
+        assert prompt not in {
+            BED_FLAT_LAY_OFF, BED_FLAT_LAY_ON, MANNEQUIN_OFF, MANNEQUIN_ON,
+            MIRROR_FEMALE, MIRROR_MALE,
+        }
+    assert _BED.search(bed_off)
+    assert not _BED.search(bed_on)
+    assert "narrow beige hallway" in hallway
+    assert "hallway" not in room
+    assert "instantly changes" not in hallway and "instantly changes" not in room
+    assert "completely obscure" in female and "completely obscure" in male
+    assert female != male

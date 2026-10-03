@@ -84,7 +84,10 @@ snapshot from confirm. Use a key only when it is present: `title`, `price`,
 `description`, `gallery`, `variations`. An empty object means none of those
 were attached. Do not read the live listing to fill in a missing key. One
 draft is one garment: the product's own piece, not a collage of unrelated
-tops.
+tops. A draft can instead feature up to eight products in one shot. Read
+`products`. Each product's `product_images` stay the subject, and
+`subject_assets` are extra when present. Submit the one file once; it links
+to every product in `products`.
 
 A carousel's `card_count` is fixed at confirm, from 2 to 10. It cannot be
 lowered. Generate that many separate images and submit them one at a time,

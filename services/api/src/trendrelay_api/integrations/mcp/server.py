@@ -101,13 +101,17 @@ INSTRUCTIONS = (
     "loading every full listing at once, and make only claims supported by the "
     "live record.\n\n"
     "Pending product creatives — an image, a carousel, or a video still owed "
-    "for one Attribution product — are `list_product_creative_drafts`. "
+    "for an Attribution product — are `list_product_creative_drafts`. "
     "`get_product_creative_draft` returns the reviewed prompt, the subject "
-    "images, the background reference when one was attached, and "
-    "`listing_fields` for any listing values chosen at confirm. "
+    "images, the background reference when one was attached, "
+    "`listing_fields` for any listing values chosen at confirm, and "
+    "`products` when the draft features more than one product. "
     "`create_product_creative_draft` queues that prompt; it does not generate "
-    "pixels. `submit_product_creative_media` files the finished media in the "
-    "Library and links it to the product once the draft's card count is met. "
+    "pixels. Pass `together` with `product_ids` for one shot of several "
+    "products. The finished file then links to each of them. "
+    "`submit_product_creative_media` files the finished media in the "
+    "Library and links it to every product on the draft once the card count "
+    "is met. "
     "A carousel stays pending, with no new link, until every card has landed. "
     "Nothing here publishes or attaches the asset to a campaign.\n\n"
     "To add a new post: `list_library_assets` finds media the workspace already "
@@ -1324,9 +1328,12 @@ def build_server(workspace_id: str) -> FastMCP:
             "when one was attached, listing_fields as snapshotted at confirm "
             "(an empty object means title, price, description, gallery, and "
             "variations were not attached), the kind, the card count, and "
-            "how many files are still owed. The prompt is the text stored at "
+            "how many files are still owed, and `products` when the draft "
+            "features more than one. The prompt is the text stored at "
             "confirm, not a fresh resolution. A field that is present was "
-            "sent; do not invent the ones that are absent. Use an id from "
+            "sent; do not invent the ones that are absent. On a group draft, "
+            "each product's listing pictures stay the subject, and "
+            "subject_assets are extra. Use an id from "
             "list_product_creative_drafts."
         ),
     )
@@ -1355,9 +1362,16 @@ def build_server(workspace_id: str) -> FastMCP:
             "attach beside the prompt: title, price, description, gallery, "
             "variations. Omit it, or send an empty list, and none of those "
             "fields are sent. The stored prompt does not change because a "
-            "field was selected. Confirm stores the prompt and a snapshot of "
-            "the selected values, and does not ingest media. Do not publish, "
-            "and do not mark the draft complete from here."
+            "field was selected. Optional together with product_ids queues "
+            "one draft that features every listed product, from 2 to 8, with "
+            "product_id kept as the first. Each product's listing pictures "
+            "stay the subject. subject_asset_ids, when also sent, are extra "
+            "and do not replace those pictures. Omit together, or leave it "
+            "false, and product_ids is ignored: the draft is the one product. "
+            "Confirm stores the prompt and a snapshot of the selected values "
+            "for each product, and does not ingest media. The finished file "
+            "links to every product on the draft. Do not publish, and do not "
+            "mark the draft complete from here."
         ),
     )
     def create_product_creative_draft(
@@ -1370,6 +1384,8 @@ def build_server(workspace_id: str) -> FastMCP:
         background_reference: str | None = None,
         subject_asset_ids: list[str] | None = None,
         listing_fields: list[str] | None = None,
+        together: bool = False,
+        product_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_product_creative_draft",
@@ -1381,6 +1397,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 background_reference=background_reference,
                 subject_asset_ids=subject_asset_ids,
                 listing_fields=listing_fields,
+                together=together, product_ids=product_ids,
             ),
         )
 
@@ -1392,8 +1409,10 @@ def build_server(workspace_id: str) -> FastMCP:
             "media_base64. Image and carousel drafts accept an image; a video "
             "draft accepts a video. The file is ingested into the Library in "
             "this call. A carousel stays pending, and writes no new product "
-            "link, until every card has landed. A failed or refused file "
-            "writes no link and leaves the draft pending. There is no way to "
+            "link, until every card has landed. When the draft features "
+            "several products, the completed file is linked to each of them. "
+            "A failed or refused file writes no link and leaves the draft "
+            "pending. There is no way to "
             "mark the draft complete without a real ingested Library asset. "
             "Do not publish, and do not attach the asset to a campaign."
         ),

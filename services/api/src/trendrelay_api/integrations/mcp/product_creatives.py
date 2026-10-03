@@ -52,6 +52,8 @@ def create_draft(
     card_count: int | None = None,
     subject_asset_ids: list[str] | None = None,
     listing_fields: list[str] | None = None,
+    together: bool = False,
+    product_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     return store.create_draft(
         session, workspace_id, LOCAL_ADMIN_ID,
@@ -60,6 +62,7 @@ def create_draft(
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids,
         listing_fields=listing_fields,
+        together=together, product_ids=product_ids,
     )
 
 

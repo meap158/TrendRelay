@@ -88,6 +88,7 @@ export type ProductRow = {
     status: string;
     card_count: number;
     owed: number;
+    product_count?: number;
   }[];
 };
 

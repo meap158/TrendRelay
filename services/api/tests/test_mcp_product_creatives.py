@@ -112,6 +112,47 @@ def test_the_four_tools_are_reads_or_workspace_writes() -> None:
     assert not policy.is_allowed("approve_post")
 
 
+def test_together_shows_on_every_product_and_ignores_extra_ids_otherwise(session) -> None:
+    session.add(Product(
+        id="product-2", workspace_id="ws-1", catalog_key="bambi",
+        name="Bambi set", marketplace="shopee",
+        image_url="https://shop.example/bambi.jpg",
+        listing={"title": "Bambi set", "images": ["https://shop.example/bambi.jpg"]},
+        created_by=LOCAL_ADMIN_ID,
+    ))
+    session.commit()
+    alone = product_creatives.create_draft(
+        session, "ws-1",
+        product_id="product-1", product_ids=["product-1", "product-2"],
+        kind="image", recipe="bed_flat_lay",
+    )
+    assert alone["product_count"] == 1
+    assert alone["prompt"] == BED_FLAT_LAY_OFF
+
+    made = product_creatives.create_draft(
+        session, "ws-1",
+        product_id="product-1", product_ids=["product-2", "product-1"],
+        together=True, kind="image", recipe="bed_flat_lay",
+    )
+    assert made["product_count"] == 2
+    assert made["prompt"] != BED_FLAT_LAY_OFF
+    assert [item["product_id"] for item in made["products"]] == ["product-1", "product-2"]
+    rows = {
+        row["id"]: row
+        for row in products_payload(session, "ws-1")["products"]
+    }
+    for product_id in ("product-1", "product-2"):
+        assert any(
+            item["id"] == made["id"] and item["product_count"] == 2
+            for item in rows[product_id]["creative_drafts"]
+        )
+    assert all(
+        item["id"] != made["id"]
+        for item in rows["product-1"]["creative_drafts"]
+        if item["product_count"] == 1
+    )
+
+
 def test_list_and_get_return_the_stored_prompt_and_image_references(session) -> None:
     made = product_creatives.create_draft(
         session, "ws-1",

@@ -192,7 +192,9 @@ When a product is waiting on an image, a carousel, or a video, load
 `attribution.fill-product-creatives` and work one draft at a time:
 
 1. `list_product_creative_drafts` for the pending queue. Open one with
-   `get_product_creative_draft`. Use the stored `prompt`. If `subject_assets`
+   `get_product_creative_draft`. Use the stored `prompt`. If `products` lists
+   more than one product, use each product's `product_images`, and treat
+   `subject_assets` as extra. Otherwise, if `subject_assets`
    is non-empty, those images are the subject; otherwise use `product_images`.
    Use `background_reference` when one is attached, and `listing_fields` only
    for keys that are present. Do not rewrite the prompt.
@@ -205,8 +207,8 @@ When a product is waiting on an image, a carousel, or a video, load
 4. A carousel stays pending, with no new product link, until every card has
    been submitted. Read `owed`. `linked` is true only when the set is complete.
    A failed file writes no link.
-5. On success the Library asset is linked to the product and the product is
-   linked back on the asset. Do not publish, and do not attach it to a campaign
+5. On success the Library asset is linked to every product on the draft, and
+   each product is linked back on the asset. Do not publish, and do not attach it to a campaign
    unless that was asked as its own action.
 
 `create_product_creative_draft` queues a new one for a product that already

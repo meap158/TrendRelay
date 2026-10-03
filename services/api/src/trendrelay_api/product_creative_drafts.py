@@ -1,11 +1,13 @@
-"""Pending creatives for one Attribution product, filled through the Library.
+"""Pending creatives for Attribution products, filled through the Library.
 
-Queueing stores the prompt the resolver just produced and nothing else. A
-file, a public https URL, or base64 — one of them — is ingested by the same
-job the Library uses for any other upload. The product↔asset link is written
-only when the draft holds as many assets as it asked for. A refused file, a
-failed ingest, or a carousel still short of its count leaves that link unwritten
-and the draft pending.
+Queueing stores the prompt the resolver just produced and nothing else. One
+product is one draft. Together, when asked, is one draft for every selected
+product, and the finished file is linked to each of them. A file, a public
+https URL, or base64 — one of them — is ingested by the same job the Library
+uses for any other upload. The product↔asset link is written only when the
+draft holds as many assets as it asked for. A refused file, a failed ingest,
+or a carousel still short of its count leaves that link unwritten and the
+draft pending.
 
 Nothing here publishes, approves, or attaches the creative to a campaign.
 """
@@ -16,7 +18,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.config import get_settings
@@ -24,6 +26,7 @@ from trendrelay_api.models import new_id, utc_now
 from trendrelay_api.opportunity_models import Product, ProductOffer
 from trendrelay_api.product_creative_models import (
     ProductCreativeDraft,
+    ProductCreativeDraftProduct,
     ProductCreativeLink,
 )
 from trendrelay_api.product_creative_recipes import RECIPES, resolve_prompt
@@ -64,6 +67,39 @@ def _product(session: Session, workspace_id: str, product_id: str) -> Product:
     if product is None or product.workspace_id != workspace_id:
         raise LookupError("Product not found.")
     return product
+
+
+def _products_for_ask(
+    session: Session,
+    workspace_id: str,
+    *,
+    product_id: str,
+    together: bool,
+    product_ids: list[str] | None,
+) -> list[Product]:
+    """The products this ask features. Together keeps the lead first.
+
+    Without together, extra ids are ignored. An older create that names one
+    product stays one product even if a list is also sent.
+    """
+    lead = _product(session, workspace_id, product_id)
+    if not together:
+        return [lead]
+    ordered: list[str] = []
+    for item in product_ids or []:
+        text = str(item).strip()
+        if text and text not in ordered:
+            ordered.append(text)
+    if not ordered:
+        ordered = [lead.id]
+    if lead.id not in ordered:
+        raise ValueError("The lead product has to be one of the products in the shot.")
+    ordered = [lead.id, *[item for item in ordered if item != lead.id]]
+    if len(ordered) < 2:
+        raise ValueError("Together needs at least two products.")
+    if len(ordered) > MAX_SUBJECT_IMAGES:
+        raise ValueError(f"Together holds at most {MAX_SUBJECT_IMAGES} products.")
+    return [_product(session, workspace_id, item) for item in ordered]
 
 
 def _draft(session: Session, workspace_id: str, draft_id: str) -> ProductCreativeDraft:
@@ -294,6 +330,8 @@ def _prepare(
     subject_asset_ids: list[str] | None = None,
     listing_fields: list[str] | None = None,
     require_subject: bool = True,
+    together: bool = False,
+    product_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Validate an ask and resolve the prompt. Does not write."""
     if kind not in _KINDS:
@@ -309,22 +347,42 @@ def _prepare(
             raise ValueError("Choose female or male for the mirror selfie.")
     elif variant:
         raise ValueError("This recipe has no subject variant.")
-    product = _product(session, workspace_id, product_id)
-    images = _product_images(product)
+    products = _products_for_ask(
+        session, workspace_id,
+        product_id=product_id, together=together, product_ids=product_ids,
+    )
     subjects = _subject_assets(session, workspace_id, subject_asset_ids)
-    # A Library pick is the subject. Without one, the listing pictures are,
-    # and a product that has neither cannot be queued. Preview skips that
-    # gate so the prompt can be read before a picture is chosen.
-    if require_subject and not subjects and not images:
-        raise ValueError("This product has no image to generate from.")
+    # A Library pick replaces the listing for one product. Together keeps
+    # every product's own listing pictures, and a shared pick is extra: it
+    # does not stand in for the whole group. A member with neither cannot
+    # be queued. Preview skips that gate so the prompt can be read first.
+    if require_subject:
+        if len(products) > 1:
+            missing = [
+                product.name or product.id
+                for product in products
+                if not _product_images(product) and not subjects
+            ]
+            if missing:
+                raise ValueError(
+                    "These products have no image to generate from: "
+                    + ", ".join(missing)
+                    + "."
+                )
+        elif not subjects and not _product_images(products[0]):
+            raise ValueError("This product has no image to generate from.")
     enabled, reference = _background(recipe, background_enabled, background_reference)
+    group = len(products) > 1
     prompt = resolve_prompt(
         recipe,
         background=enabled,
         variant=variant if spec["variants"] else None,
+        together=group,
     )
+    keys = _listing_keys(listing_fields)
+    snapshots = [_listing_snapshot(session, product, keys) for product in products]
     return {
-        "product_id": product.id,
+        "product_id": products[0].id,
         "kind": kind,
         "recipe": recipe,
         "variant": variant if spec["variants"] else None,
@@ -332,9 +390,21 @@ def _prepare(
         "background_reference": reference,
         "prompt": prompt,
         "card_count": _card_count(kind, card_count),
-        "product_images": images,
+        "product_images": _product_images(products[0]),
         "subject_assets": subjects,
-        "listing_fields": _listing_snapshot(session, product, _listing_keys(listing_fields)),
+        "listing_fields": snapshots[0],
+        "together": group,
+        "product_count": len(products),
+        "products": [
+            {
+                "product_id": product.id,
+                "name": product.name,
+                "position": index,
+                "product_images": _product_images(product),
+                "listing_fields": snapshots[index],
+            }
+            for index, product in enumerate(products)
+        ],
     }
 
 
@@ -345,10 +415,56 @@ def _owed(draft: ProductCreativeDraft) -> int:
     return max(int(draft.card_count) - len(staged), 0)
 
 
+def _known_listing(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    return {key: raw[key] for key in _LISTING_KEYS if key in raw}
+
+
+def _member_views(session: Session, draft: ProductCreativeDraft) -> list[dict[str, Any]]:
+    """Each product on this draft, lead first. A draft with no member rows
+    still reads as its lead, which is an insert that predates membership.
+    """
+    rows = session.scalars(
+        select(ProductCreativeDraftProduct)
+        .where(ProductCreativeDraftProduct.draft_id == draft.id)
+        .order_by(
+            ProductCreativeDraftProduct.position,
+            ProductCreativeDraftProduct.id,
+        )
+    ).all()
+    if not rows:
+        product = session.get(Product, draft.product_id)
+        return [{
+            "product_id": draft.product_id,
+            "name": product.name if product is not None else "",
+            "position": 0,
+            "product_images": _product_images(product) if product is not None else [],
+            "listing_fields": _stored_listing(draft),
+        }]
+    views: list[dict[str, Any]] = []
+    for row in rows:
+        product = session.get(Product, row.product_id)
+        views.append({
+            "product_id": row.product_id,
+            "name": product.name if product is not None else "",
+            "position": int(row.position),
+            "product_images": _product_images(product) if product is not None else [],
+            "listing_fields": _known_listing(row.listing_fields),
+        })
+    return views
+
+
+def _member_product_ids(session: Session, draft: ProductCreativeDraft) -> list[str]:
+    ids = [item["product_id"] for item in _member_views(session, draft)]
+    return ids or [draft.product_id]
+
+
 def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
     product = session.get(Product, draft.product_id)
     images = _product_images(product) if product is not None else []
     staged = [str(item) for item in (draft.staged_asset_ids or [])]
+    members = _member_views(session, draft)
     return {
         "id": draft.id,
         "workspace_id": draft.workspace_id,
@@ -364,6 +480,9 @@ def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
         "product_images": images,
         "subject_assets": _stored_subjects(session, draft),
         "listing_fields": _stored_listing(draft),
+        "together": len(members) > 1,
+        "product_count": len(members),
+        "products": members,
         "ingested_asset_ids": staged,
         "owed": _owed(draft),
         "linked": draft.status == "succeeded",
@@ -383,6 +502,8 @@ def preview(
     card_count: int | None = None,
     subject_asset_ids: list[str] | None = None,
     listing_fields: list[str] | None = None,
+    together: bool = False,
+    product_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """The prompt that would be stored, without storing it."""
     prepared = _prepare(
@@ -391,7 +512,7 @@ def preview(
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
-        require_subject=False,
+        require_subject=False, together=together, product_ids=product_ids,
     )
     prepared["status"] = "preview"
     prepared["owed"] = prepared["card_count"]
@@ -414,6 +535,8 @@ def create_draft(
     card_count: int | None = None,
     subject_asset_ids: list[str] | None = None,
     listing_fields: list[str] | None = None,
+    together: bool = False,
+    product_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Store a pending draft. Does not ingest media and does not link anything."""
     prepared = _prepare(
@@ -422,7 +545,9 @@ def create_draft(
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
+        together=together, product_ids=product_ids,
     )
+    now = utc_now()
     draft = ProductCreativeDraft(
         id=new_id("pcreative"),
         workspace_id=workspace_id,
@@ -439,12 +564,23 @@ def create_draft(
         status="pending",
         staged_asset_ids=[],
         created_by=actor_user_id,
-        created_at=utc_now(),
-        updated_at=utc_now(),
+        created_at=now,
+        updated_at=now,
     )
     session.add(draft)
+    for member in prepared["products"]:
+        session.add(ProductCreativeDraftProduct(
+            id=new_id("pcmember"),
+            workspace_id=workspace_id,
+            draft_id=draft.id,
+            product_id=member["product_id"],
+            position=member["position"],
+            listing_fields=member["listing_fields"],
+            created_at=now,
+        ))
     # MCP closes the session on the way out and rolls back whatever was only
-    # flushed. The id this returns has to still be a row.
+    # flushed. The id this returns has to still be a row, and so do the
+    # products it features.
     session.commit()
     return _view(session, draft)
 
@@ -476,7 +612,14 @@ def list_drafts(
     if kind:
         conditions.append(ProductCreativeDraft.kind == kind)
     if product_id:
-        conditions.append(ProductCreativeDraft.product_id == product_id)
+        member_of = select(ProductCreativeDraftProduct.draft_id).where(
+            ProductCreativeDraftProduct.workspace_id == workspace_id,
+            ProductCreativeDraftProduct.product_id == product_id,
+        )
+        conditions.append(or_(
+            ProductCreativeDraft.product_id == product_id,
+            ProductCreativeDraft.id.in_(member_of),
+        ))
     total = session.scalar(
         select(func.count()).select_from(ProductCreativeDraft).where(*conditions)
     ) or 0
@@ -587,26 +730,28 @@ def _ingest(
 
 
 def _write_links(session: Session, draft: ProductCreativeDraft, asset_ids: list[str]) -> None:
-    """Tie every ingested asset to the product. One association each."""
-    for position, asset_id in enumerate(asset_ids):
-        existing = session.scalar(
-            select(ProductCreativeLink).where(
-                ProductCreativeLink.workspace_id == draft.workspace_id,
-                ProductCreativeLink.product_id == draft.product_id,
-                ProductCreativeLink.asset_id == asset_id,
+    """Tie every ingested asset to every product in the shot. One association each."""
+    now = utc_now()
+    for product_id in _member_product_ids(session, draft):
+        for position, asset_id in enumerate(asset_ids):
+            existing = session.scalar(
+                select(ProductCreativeLink).where(
+                    ProductCreativeLink.workspace_id == draft.workspace_id,
+                    ProductCreativeLink.product_id == product_id,
+                    ProductCreativeLink.asset_id == asset_id,
+                )
             )
-        )
-        if existing is not None:
-            continue
-        session.add(ProductCreativeLink(
-            id=new_id("pclink"),
-            workspace_id=draft.workspace_id,
-            product_id=draft.product_id,
-            asset_id=asset_id,
-            draft_id=draft.id,
-            position=position,
-            created_at=utc_now(),
-        ))
+            if existing is not None:
+                continue
+            session.add(ProductCreativeLink(
+                id=new_id("pclink"),
+                workspace_id=draft.workspace_id,
+                product_id=product_id,
+                asset_id=asset_id,
+                draft_id=draft.id,
+                position=position,
+                created_at=now,
+            ))
 
 
 def submit_media(
@@ -695,22 +840,40 @@ def creative_assets_by_product(
 def creative_drafts_by_product(
     session: Session, workspace_id: str
 ) -> dict[str, list[dict[str, Any]]]:
-    """A short reading of each product's drafts, pending ones included."""
+    """A short reading of each product's drafts, pending ones included.
+
+    A draft that features several products is attached to every member, so
+    each row can show it. `product_count` is the size of that group. Names
+    and listing snapshots stay on the single-draft read.
+    """
     rows = session.scalars(
         select(ProductCreativeDraft)
         .where(ProductCreativeDraft.workspace_id == workspace_id)
         .order_by(ProductCreativeDraft.updated_at.desc())
     ).all()
+    membership: dict[str, list[str]] = {}
+    for member in session.scalars(
+        select(ProductCreativeDraftProduct)
+        .where(ProductCreativeDraftProduct.workspace_id == workspace_id)
+        .order_by(ProductCreativeDraftProduct.position, ProductCreativeDraftProduct.id)
+    ).all():
+        bucket = membership.setdefault(member.draft_id, [])
+        if member.product_id not in bucket:
+            bucket.append(member.product_id)
     found: dict[str, list[dict[str, Any]]] = {}
     for draft in rows:
-        found.setdefault(draft.product_id, []).append({
+        product_ids = membership.get(draft.id) or [draft.product_id]
+        summary = {
             "id": draft.id,
             "kind": draft.kind,
             "recipe": draft.recipe,
             "status": draft.status,
             "card_count": draft.card_count,
             "owed": _owed(draft),
-        })
+            "product_count": len(product_ids),
+        }
+        for product_id in product_ids:
+            found.setdefault(product_id, []).append(summary)
     return found
 
 

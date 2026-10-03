@@ -25,9 +25,12 @@ and submitted, the same way a campaign post waits for media.
   the narrow beige hallway only when background is off.
 - **`product_creative_models.py`** — `ProductCreativeDraft` (the stored prompt,
   kind, card count, staged asset ids, `subject_asset_ids`, `listing_fields`,
-  status `pending` or `succeeded`) and `ProductCreativeLink` (one row per
-  product and Library asset). Migrations `20261003_0084`, `20261004_0085`, and
-  `20261004_0086`. An empty `subject_asset_ids` means the listing gallery is
+  status `pending` or `succeeded`), `ProductCreativeDraftProduct` (one row per
+  product in the shot, including a single-product draft), and
+  `ProductCreativeLink` (one row per product and Library asset). Migrations
+  `20261003_0084`, `20261004_0085`, `20261004_0086`, and `20261004_0087`.
+  `0087` backfills one member row per existing draft and lets one card be
+  linked to every product in the shot. An empty `subject_asset_ids` means the listing gallery is
   the subject, which is what an older draft and an MCP create without a pick
   still do. `listing_fields` is the snapshot of the listing values chosen at
   confirm (`title`, `price`, `description`, `gallery`, `variations`). An empty
@@ -57,26 +60,34 @@ and submitted, the same way a campaign post waits for media.
 Attribution → Generate sits in the bulk bar with the other selection actions.
 It is enabled for one checked row and for many, and the product detail opens
 the same dialog for that one product. One confirmation queues the same recipe
-for every selected product; each product keeps its own draft. A finished file
-is submitted only while a single product is open, because each product needs
-its own file. Optional background is a checkbox only for the bed and mannequin
+for every selected product; each product keeps its own draft. When two to
+eight products are selected, Together is optional: one draft features all of
+them, each product's listing pictures stay in the shot, a Library pick is
+extra and does not replace those pictures, and the finished file links to
+every product. That one draft can take its file in the dialog. Each-product
+bulk still needs a separate file per product, so that dialog does not take a
+file. Optional background is a checkbox only for the bed and mannequin
 recipes. Mirror shows a required background URL and a woman/man choice, and no
 off switch. Success means the asset is in the Library and both sides of the
 link show it.
 
 The modal names what the ask attaches. Subject images are chosen from this
 workspace's Library with the shared Library picker (`MediaPicker`), up to 8,
-in pick order, and the same pick is stored on every selected product's own
-draft as `subject_asset_ids`. The background, when one is used, stays an https
+in pick order. An each-product queue stores that pick on every draft as
+`subject_asset_ids`. Together stores it once, as extra, and does not replace
+each product's listing pictures. The background, when one is used, stays an https
 URL. Title, price, description, listing pictures, and variations and stock
-are toggles, off until selected. A selected field is snapshotted onto that
-product's draft at confirm, and its value is shown under the prompt. Queue stays
-disabled until at least one Library image is picked. The prompt text does not
+are toggles, off until selected. A selected field is snapshotted per product
+at confirm, and its value is shown under the prompt. Each product stays
+disabled until at least one Library image is picked. Together can be queued
+from the listing pictures. The prompt text does not
 depend on those images or on which listing fields are selected.
 
 Each draft line in an expanded product row shows that draft's stored
 configuration (background, subject, listing fields, and prompt), loaded by
-its id when the row is open. The product list itself stays a short summary.
+its id when the row is open. The product list itself stays a short summary,
+plus a product count when one draft features several. The expanded row names
+those products.
 View opens the same dialog, read only. Generate media still starts a new
 draft. A single draft that still owes a file can take that file from the
 review.

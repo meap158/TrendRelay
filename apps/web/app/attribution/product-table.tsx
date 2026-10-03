@@ -969,6 +969,12 @@ export function ProductTable({
                                       : t("attribution.generate.statusPending")}
                                     {" · "}
                                     {t("attribution.generate.owed", { count: item.owed })}
+                                    {(item.product_count ?? 0) > 1 && (
+                                      <>
+                                        {" · "}
+                                        {t("attribution.generate.featuresProducts", { count: item.product_count ?? 0 })}
+                                      </>
+                                    )}
                                   </span>
                                   <span className="product-creative-view">{t("attribution.generate.viewDraft")}</span>
                                 </button>
@@ -1081,6 +1087,7 @@ type DraftConfig = {
   background_reference?: string | null;
   subject_assets?: StoredSubject[];
   listing_fields?: Record<string, unknown>;
+  products?: { product_id: string; name: string }[];
 };
 
 const draftConfigCache = new Map<string, DraftConfig>();
@@ -1177,8 +1184,16 @@ function CreativeDraftSummary({
     : t("attribution.generate.backgroundNone");
   const cardCount = config.card_count ?? 1;
 
+  const memberNames = (config.products ?? []).map((item) => item.name).filter(Boolean);
+
   return (
     <dl className="product-creative-config">
+      {memberNames.length > 1 && (
+        <div>
+          <dt>{t("attribution.generate.members")}</dt>
+          <dd>{memberNames.join(", ")}</dd>
+        </div>
+      )}
       <div>
         <dt>{t("attribution.generate.backgroundHeading")}</dt>
         <dd>{backgroundText}</dd>

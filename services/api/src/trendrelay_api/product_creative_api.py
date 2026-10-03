@@ -45,6 +45,10 @@ class DraftBody(BaseModel):
     listing_fields: list[
         Literal["title", "price", "description", "gallery", "variations"]
     ] | None = Field(default=None, max_length=5)
+    #: One shot of every id. False ignores product_ids, so an older create
+    #: that names one product stays one product.
+    together: bool = False
+    product_ids: list[str] | None = Field(default=None, max_length=100)
 
 
 class MediaBody(BaseModel):
@@ -78,6 +82,7 @@ def preview_creative_draft(
         background_reference=body.background_reference, card_count=body.card_count,
         subject_asset_ids=body.subject_asset_ids,
         listing_fields=body.listing_fields,
+        together=body.together, product_ids=body.product_ids,
     ))}
 
 
@@ -99,11 +104,16 @@ def create_creative_draft(
         background_reference=body.background_reference, card_count=body.card_count,
         subject_asset_ids=body.subject_asset_ids,
         listing_fields=body.listing_fields,
+        together=body.together, product_ids=body.product_ids,
     ))
     audit(
         session, request, workspace_id, user.id,
         "attribution.creative_draft_queued", "product_creative_draft", view["id"],
-        {"product_id": view["product_id"], "kind": view["kind"]},
+        {
+            "product_id": view["product_id"],
+            "kind": view["kind"],
+            "product_count": view.get("product_count", 1),
+        },
     )
     return {"draft": view}
 

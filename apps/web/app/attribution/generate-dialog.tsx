@@ -40,6 +40,13 @@ type ListingSnapshot = Partial<{
 
 type StoredSubject = { asset_id: string; title: string; missing?: boolean };
 
+type DraftMember = {
+  product_id: string;
+  name: string;
+  listing_fields?: ListingSnapshot;
+  product_images?: string[];
+};
+
 type Kind = "image" | "carousel" | "video";
 type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
 
@@ -57,16 +64,19 @@ type DraftView = {
   background_reference?: string | null;
   subject_assets?: StoredSubject[];
   listing_fields?: ListingSnapshot;
+  together?: boolean;
+  product_count?: number;
+  products?: DraftMember[];
 };
 
 /**
- * Queue one reviewed prompt for every product the operator already selected.
+ * Queue a reviewed prompt for the products the operator already selected.
  *
- * The wording is the recipe, so one dialog covers a single row or many. Each
- * product still gets its own draft. The textarea shows only the prompt the
- * API returns. TrendRelay does not generate the pixels: a finished file can
- * be submitted into the Library only while one product is open, because each
- * product needs its own file.
+ * Each product is its own draft. Together, when two or more are selected, is
+ * one draft of all of them, and the finished file links to every product.
+ * The textarea shows only the prompt the API returns. TrendRelay does not
+ * generate the pixels. A file is submitted for that one draft, or while a
+ * single product is open.
  */
 export function GenerateDialog({
   open,
@@ -104,6 +114,8 @@ export function GenerateDialog({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<ListingKey>>(() => new Set());
   const [listingSnapshot, setListingSnapshot] = useState<ListingSnapshot>({});
+  const [scope, setScope] = useState<"each" | "together">("each");
+  const [members, setMembers] = useState<DraftMember[]>([]);
 
   const reviewing = Boolean(draftId);
   const mirror = recipe === "mirror_selfie";
@@ -111,13 +123,16 @@ export function GenerateDialog({
   const backgroundReady = !backgroundOn || backgroundReference.trim().startsWith("https://");
   const locked = draft !== null || reviewing;
   const many = products.length > 1;
+  const together = !locked && many && scope === "together" && products.length <= SUBJECT_LIMIT;
+  const groupShot = together || (draft?.product_count ?? 0) > 1;
   const leadId = products[0]?.id ?? "";
   const fieldsKey = LISTING_KEYS.filter((key) => selectedFields.has(key)).join(",");
-  const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}`;
+  const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}|${together ? "together" : "each"}`;
 
   useEffect(() => {
     if (draft) return;
     setPrompt("");
+    setMembers([]);
   }, [shape, draft]);
 
   function requestBody(productId: string) {
@@ -133,6 +148,9 @@ export function GenerateDialog({
         ? { subject_asset_ids: subjects.map((asset) => asset.id) }
         : {}),
       listing_fields: LISTING_KEYS.filter((key) => selectedFields.has(key)),
+      ...(together
+        ? { together: true, product_ids: products.map((item) => item.id) }
+        : {}),
     };
   }
 
@@ -159,6 +177,7 @@ export function GenerateDialog({
     const fields = stored.listing_fields ?? {};
     setSelectedFields(new Set(LISTING_KEYS.filter((key) => key in fields)));
     setListingSnapshot(fields);
+    setMembers(stored.products ?? []);
     setDraft(stored);
   }
 
@@ -228,17 +247,22 @@ export function GenerateDialog({
           if (!response.ok) {
             setPrompt("");
             setListingSnapshot({});
+            setMembers([]);
             setError(await errorDetail(response, t("attribution.generate.requestFailed")));
             return;
           }
-          const payload = await response.json() as { draft?: { prompt?: string; listing_fields?: ListingSnapshot } };
+          const payload = await response.json() as {
+            draft?: { prompt?: string; listing_fields?: ListingSnapshot; products?: DraftMember[] };
+          };
           setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
           setListingSnapshot(payload.draft?.listing_fields ?? {});
+          setMembers(together && Array.isArray(payload.draft?.products) ? payload.draft.products : []);
           setError("");
         } catch (caught) {
           if (cancelled) return;
           setPrompt("");
           setListingSnapshot({});
+          setMembers([]);
           setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
         }
       })();
@@ -251,7 +275,8 @@ export function GenerateDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     open, reviewing, leadId, products, workspaceId, draft, kind, recipe, variant,
-    backgroundEnabled, backgroundReference, cardCount, backgroundReady, fieldsKey, apiFetch, t,
+    backgroundEnabled, backgroundReference, cardCount, backgroundReady, fieldsKey,
+    together, apiFetch, t,
   ]);
 
   function chooseKind(next: Kind) {
@@ -264,9 +289,34 @@ export function GenerateDialog({
   }
 
   async function queue() {
-    if (products.length === 0 || !workspaceId || !prompt || subjects.length === 0) return;
+    if (products.length === 0 || !workspaceId || !prompt) return;
+    if (together ? products.length > SUBJECT_LIMIT : subjects.length === 0) return;
     setBusy("queue");
     setError("");
+    if (together) {
+      try {
+        const response = await apiFetch(
+          `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
+          { method: "POST", body: JSON.stringify(requestBody(leadId)) },
+        );
+        if (!response.ok) {
+          setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+          return;
+        }
+        const payload = await response.json() as { draft: DraftView };
+        setDraft(payload.draft);
+        setPrompt(payload.draft.prompt);
+        setMembers(payload.draft.products ?? []);
+        if (payload.draft.listing_fields) setListingSnapshot(payload.draft.listing_fields);
+        setNotice(t("attribution.generate.queuedTogether"));
+        onChanged?.();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+      } finally {
+        setBusy("");
+      }
+      return;
+    }
     const failures: string[] = [];
     let first: DraftView | null = null;
     let queued = 0;
@@ -325,7 +375,9 @@ export function GenerateDialog({
       setDraft(payload.draft);
       setPrompt(payload.draft.prompt);
       setNotice(payload.linked
-        ? t("attribution.generate.linked")
+        ? (payload.draft.product_count ?? 1) > 1
+          ? t("attribution.generate.linkedAll")
+          : t("attribution.generate.linked")
         : t("attribution.generate.partial"));
       setFile(null);
       setFileEpoch((current) => current + 1);
@@ -338,6 +390,8 @@ export function GenerateDialog({
   }
 
   const chosenFields = LISTING_KEYS.filter((key) => selectedFields.has(key));
+  const oneCreative = !many || (draft?.product_count ?? 0) > 1;
+  const queueNeedsLibrary = !together;
 
   return (
     <>
@@ -348,11 +402,13 @@ export function GenerateDialog({
         ? products[0]
           ? t("attribution.generate.reviewDescription", { name: products[0].name })
           : undefined
-        : many
-          ? t("attribution.generate.descriptionMany", { count: products.length })
-          : products[0]
-            ? t("attribution.generate.description", { name: products[0].name })
-            : undefined}
+        : together
+          ? t("attribution.generate.descriptionTogether", { count: products.length })
+          : many
+            ? t("attribution.generate.descriptionMany", { count: products.length })
+            : products[0]
+              ? t("attribution.generate.description", { name: products[0].name })
+              : undefined}
       onClose={() => {
         if (pickerOpen) return;
         onClose();
@@ -365,15 +421,15 @@ export function GenerateDialog({
             <Button
               variant="primary"
               busy={busy === "queue"}
-              disabled={!prompt || subjects.length === 0 || busy !== ""}
+              disabled={!prompt || busy !== "" || (queueNeedsLibrary && subjects.length === 0)}
               onClick={() => void queue()}
             >{busy === "queue"
               ? t("attribution.generate.queuing")
-              : many
+              : many && !together
                 ? t("attribution.generate.queueMany")
                 : t("attribution.generate.queue")}</Button>
           )}
-          {draft && !many && draft.owed > 0 && (
+          {draft && oneCreative && draft.owed > 0 && (
             <Button
               variant="primary"
               busy={busy === "file"}
@@ -389,6 +445,45 @@ export function GenerateDialog({
           <p role="status">{error || t("attribution.generate.loadingDraft")}</p>
         ) : (
         <>
+        {many && !locked && (
+          <div className="generate-scope">
+            <strong>{t("attribution.generate.scope")}</strong>
+            <div
+              className="product-listing-filter"
+              role="group"
+              aria-label={t("attribution.generate.scope")}
+            >
+              <button
+                type="button"
+                aria-pressed={scope === "each"}
+                className={scope === "each" ? "selected" : undefined}
+                onClick={() => {
+                  setScope("each");
+                  setError("");
+                }}
+              >{t("attribution.generate.scopeEach")}</button>
+              <button
+                type="button"
+                aria-pressed={scope === "together"}
+                className={scope === "together" ? "selected" : undefined}
+                disabled={products.length > SUBJECT_LIMIT}
+                onClick={() => {
+                  setScope("together");
+                  setError("");
+                }}
+              >{t("attribution.generate.scopeTogether")}</button>
+            </div>
+            <p>{products.length > SUBJECT_LIMIT
+              ? t("attribution.generate.scopeLimit")
+              : t("attribution.generate.scopeHelp")}</p>
+          </div>
+        )}
+        {groupShot && members.length > 1 && (
+          <div className="generate-scope">
+            <strong>{t("attribution.generate.members")}</strong>
+            <p>{members.map((member) => member.name).filter(Boolean).join(", ")}</p>
+          </div>
+        )}
         <label>
           {t("attribution.generate.kind")}
           <Select
@@ -443,7 +538,11 @@ export function GenerateDialog({
           <div className="generate-use">
             <strong>{t("attribution.generate.subject")}</strong>
             <p>{t("attribution.generate.subjectHelp")}</p>
-            {many && <p>{t("attribution.generate.subjectShared")}</p>}
+            {together && <p>{t("attribution.generate.subjectTogether")}</p>}
+            {many && !together && <p>{t("attribution.generate.subjectShared")}</p>}
+            {!together && (draft?.product_count ?? 0) > 1 && (
+              <p>{t("attribution.generate.subjectTogether")}</p>
+            )}
             {reviewing ? (
               storedSubjects.length === 0 ? (
                 <p>{t("attribution.generate.subjectReviewEmpty")}</p>
@@ -590,26 +689,50 @@ export function GenerateDialog({
         </label>
         {chosenFields.length > 0 && (
           <section className="generate-attached" aria-label={t("attribution.generate.listingFields")}>
-            {many && !reviewing && products[0] && (
-              <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
+            {groupShot && members.length > 1 ? (
+              members.map((member) => (
+                <div className="generate-member" key={member.product_id}>
+                  <strong>{member.name}</strong>
+                  {chosenFields.map((key) => (
+                    <div className="generate-use" key={key}>
+                      <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
+                      <ListingFieldValue
+                        field={key}
+                        value={member.listing_fields?.[key]}
+                        empty={t("attribution.generate.fieldEmpty")}
+                        truncated={t("attribution.generate.descriptionTruncated")}
+                        galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
+                        stockLine={(count) => t("attribution.generate.stockLine", { count })}
+                        stockUnknown={t("attribution.generate.stockUnknown")}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))
+            ) : (
+              <>
+                {many && !reviewing && products[0] && (
+                  <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
+                )}
+                {chosenFields.map((key) => (
+                  <div className="generate-use" key={key}>
+                    <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
+                    <ListingFieldValue
+                      field={key}
+                      value={listingSnapshot[key]}
+                      empty={t("attribution.generate.fieldEmpty")}
+                      truncated={t("attribution.generate.descriptionTruncated")}
+                      galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
+                      stockLine={(count) => t("attribution.generate.stockLine", { count })}
+                      stockUnknown={t("attribution.generate.stockUnknown")}
+                    />
+                  </div>
+                ))}
+              </>
             )}
-            {chosenFields.map((key) => (
-              <div className="generate-use" key={key}>
-                <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
-                <ListingFieldValue
-                  field={key}
-                  value={listingSnapshot[key]}
-                  empty={t("attribution.generate.fieldEmpty")}
-                  truncated={t("attribution.generate.descriptionTruncated")}
-                  galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
-                  stockLine={(count) => t("attribution.generate.stockLine", { count })}
-                  stockUnknown={t("attribution.generate.stockUnknown")}
-                />
-              </div>
-            ))}
           </section>
         )}
-        {draft && !many && (
+        {draft && oneCreative && (
           <p role="status">
             {draft.linked
               ? t("attribution.generate.statusSucceeded")
@@ -618,7 +741,7 @@ export function GenerateDialog({
             {t("attribution.generate.owed", { count: draft.owed })}
           </p>
         )}
-        {draft && !many && draft.owed > 0 && (
+        {draft && oneCreative && draft.owed > 0 && (
           <label>
             {t("attribution.generate.file")}
             <input

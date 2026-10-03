@@ -19,7 +19,9 @@ fields (title, price, description, gallery, variations) are sent only when
 selected, and the draft stores the snapshot from confirm in `listing_fields`.
 An empty object means none were sent. The expanded product row shows that
 stored configuration, and View opens the same draft read only. Generate media
-starts a new draft.
+starts a new draft. Together, when several products are selected, queues
+one draft for all of them and links the finished Library file to every
+product. Each product stays the default.
 TrendRelay does not generate the pixels. Submitting a file ingests it into
 the Library and writes
 `ProductCreativeLink` only when the draft holds its card count. Both the

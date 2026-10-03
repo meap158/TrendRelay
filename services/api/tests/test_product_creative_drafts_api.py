@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -25,6 +25,8 @@ from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product, ProductOffer
+from trendrelay_api.product_creative_drafts import creative_drafts_by_product
+from trendrelay_api.product_creative_models import ProductCreativeLink
 from trendrelay_api.product_creative_recipes import (
     BED_FLAT_LAY_OFF,
     BED_FLAT_LAY_ON,
@@ -176,6 +178,8 @@ def test_queueing_stores_the_reviewed_prompt_and_flips_it_with_the_background() 
     draft = created.json()["draft"]
     assert draft["status"] == "pending"
     assert draft["prompt"] == BED_FLAT_LAY_OFF
+    assert draft["together"] is False
+    assert draft["product_count"] == 1
     assert _BED.search(draft["prompt"])
     assert draft["product_images"] == ["https://shop.example/angel.jpg"]
     assert draft["linked"] is False
@@ -579,3 +583,148 @@ def test_selected_listing_fields_are_snapshotted_and_leave_the_prompt_alone() ->
     )
     assert bare.json()["draft"]["listing_fields"] == {}
     assert bare.json()["draft"]["prompt"] == BED_FLAT_LAY_OFF
+
+
+def test_together_is_one_draft_linked_to_every_product(monkeypatch, tmp_path) -> None:
+    allow_roots(monkeypatch, tmp_path)
+    fake_process(monkeypatch)
+    workspace_id = make_workspace()
+    first = add_product(workspace_id, image=True, name="Angel set")
+    second = add_product(workspace_id, image=True, name="Bambi set")
+    with TestingSession.begin() as session:
+        product = session.get(Product, second)
+        assert product is not None
+        product.image_url = "https://shop.example/bambi.jpg"
+        product.listing = {"title": "Bambi set", "images": ["https://shop.example/bambi.jpg"]}
+
+    alone = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(first, product_ids=[first, second]),
+    )
+    assert alone.status_code == 201, alone.text
+    assert alone.json()["draft"]["product_count"] == 1
+    assert alone.json()["draft"]["prompt"] == BED_FLAT_LAY_OFF
+
+    preview = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(
+            first, together=True, product_ids=[second, first], listing_fields=["title"],
+        ),
+    )
+    assert preview.status_code == 200, preview.text
+    shown = preview.json()["draft"]
+    assert shown["together"] is True
+    assert shown["prompt"] != BED_FLAT_LAY_OFF
+    assert "every attached product" in shown["prompt"]
+    assert "only this one garment" not in shown["prompt"]
+    assert _BED.search(shown["prompt"])
+    assert [item["product_id"] for item in shown["products"]] == [first, second]
+    assert shown["products"][0]["product_images"] == ["https://shop.example/angel.jpg"]
+    assert shown["products"][1]["product_images"] == ["https://shop.example/bambi.jpg"]
+    assert shown["products"][0]["listing_fields"]["title"] == "Angel set"
+    assert shown["products"][1]["listing_fields"]["title"] == "Bambi set"
+    assert shown["listing_fields"]["title"] == "Angel set"
+    assert "Angel set" not in shown["prompt"]
+
+    room = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            background_enabled=True, background_reference="https://cdn.example/room.jpg",
+        ),
+    )
+    assert room.status_code == 200, room.text
+    assert not _BED.search(room.json()["draft"]["prompt"])
+
+    own = add_library_image(workspace_id, "asset-shared", title="Shared cloth")
+    picked = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            subject_asset_ids=[own],
+        ),
+    )
+    assert picked.status_code == 200, picked.text
+    kept = picked.json()["draft"]
+    assert kept["products"][0]["product_images"] == ["https://shop.example/angel.jpg"]
+    assert kept["products"][1]["product_images"] == ["https://shop.example/bambi.jpg"]
+    assert kept["subject_assets"] == [{"asset_id": own, "title": "Shared cloth"}]
+
+    created = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second], listing_fields=["title"],
+        ),
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()["draft"]
+    assert draft["product_count"] == 2
+    assert draft["products"][1]["listing_fields"]["title"] == "Bambi set"
+
+    listed = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        params={"product_id": second, "status": "pending"},
+    )
+    assert listed.status_code == 200, listed.text
+    assert draft["id"] in {row["id"] for row in listed.json()["drafts"]}
+
+    with TestingSession() as session:
+        grouped = creative_drafts_by_product(session, workspace_id)
+    assert any(
+        item["id"] == draft["id"] and item["product_count"] == 2
+        for item in grouped[first]
+    )
+    assert any(
+        item["id"] == draft["id"] and item["product_count"] == 2
+        for item in grouped[second]
+    )
+
+    filled = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts/{draft['id']}/media",
+        json={"media_base64": png(11), "filename": "together.png"},
+    )
+    assert filled.status_code == 200, filled.text
+    body = filled.json()
+    assert body["linked"] is True
+    assert body["draft"]["status"] == "succeeded"
+    with TestingSession() as session:
+        links = session.scalars(
+            select(ProductCreativeLink).where(ProductCreativeLink.draft_id == draft["id"])
+        ).all()
+    assert {link.product_id for link in links} == {first, second}
+    assert {link.asset_id for link in links} == {body["asset_id"]}
+    assert {link.position for link in links} == {0}
+
+
+def test_together_refuses_a_product_with_no_picture_and_a_group_past_eight() -> None:
+    workspace_id = make_workspace()
+    first = add_product(workspace_id, image=True, name="Angel set")
+    bare = add_product(workspace_id, image=False, name="Bare row")
+    missing = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(first, together=True, product_ids=[first, bare]),
+    )
+    assert missing.status_code == 422
+    assert "Bare row" in missing.json()["detail"]
+
+    own = add_library_image(workspace_id, "asset-cover", title="Cover")
+    covered = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, bare], subject_asset_ids=[own],
+        ),
+    )
+    assert covered.status_code == 201, covered.text
+    assert covered.json()["draft"]["products"][0]["product_images"] == [
+        "https://shop.example/angel.jpg",
+    ]
+
+    crowd = [add_product(workspace_id, image=True, name=f"Set {index}") for index in range(9)]
+    too_many = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(crowd[0], together=True, product_ids=crowd),
+    )
+    assert too_many.status_code == 422
+    assert "8" in too_many.json()["detail"]

@@ -1,10 +1,13 @@
-"""Pending creatives for an Attribution product, and the link once they land.
+"""Pending creatives for Attribution products, and the link once they land.
 
-A draft is the prompt and the ask — image, carousel, or video — bound to one
-product. It holds no pixels. Bytes arrive later, through the Library's own
-ingest, and only then does `ProductCreativeLink` tie the asset to the product
-from both sides. A carousel remembers files it has already ingested and stays
-pending, with no link, until it holds its card count.
+A draft is the prompt and the ask — image, carousel, or video. It is bound to
+one product, or, when the operator asked for one shot of several, to each
+product in that shot. `product_id` stays the lead. The other rows live in
+`product_creative_draft_products`, including the lead, so a later read does
+not have to guess. The draft holds no pixels. Bytes arrive later, through the
+Library's own ingest, and only then does `ProductCreativeLink` tie each asset
+to every product in the shot. A carousel remembers files it has already
+ingested and stays pending, with no link, until it holds its card count.
 """
 
 from __future__ import annotations
@@ -88,8 +91,47 @@ class ProductCreativeDraft(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
 
 
+class ProductCreativeDraftProduct(Base):
+    """One product featured in a draft, in the order the operator selected.
+
+    A draft for one product has one row. A draft that features several has
+    one row each, and the finished file is linked to all of them. The listing
+    snapshot on the row is that product's own values at confirm.
+    """
+
+    __tablename__ = "product_creative_draft_products"
+    __table_args__ = (
+        UniqueConstraint(
+            "draft_id",
+            "product_id",
+            name="unique_product_creative_member",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("pcmember")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    draft_id: Mapped[str] = mapped_column(
+        ForeignKey("product_creative_drafts.id", ondelete="CASCADE"), index=True
+    )
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    listing_fields: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
 class ProductCreativeLink(Base):
-    """One asset tied to one product. Visible from either side."""
+    """One asset tied to one product. Visible from either side.
+
+    The same asset may be tied to every product in one draft. Position is the
+    card inside that draft, so the unique key includes the product: two
+    products can both hold card 0.
+    """
 
     __tablename__ = "product_creative_links"
     __table_args__ = (
@@ -100,6 +142,7 @@ class ProductCreativeLink(Base):
         ),
         UniqueConstraint(
             "draft_id",
+            "product_id",
             "position",
             name="unique_product_creative_position",
         ),
