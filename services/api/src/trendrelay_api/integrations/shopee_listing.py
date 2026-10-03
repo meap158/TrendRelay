@@ -34,10 +34,10 @@ IMAGE_HOST = "https://down-vn.img.susercontent.com/file/"
 #: urllib agent is the kind of caller its edge is quickest to challenge.
 REQUEST_HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
 }
 
@@ -46,10 +46,11 @@ FETCH_TIMEOUT_SECONDS = 30
 #: not the page this is looking for.
 MAX_PAGE_BYTES = 8 * 1024 * 1024
 
-#: The module whose initial state is the product: base64 of
-#: "pcmall-productdetailspage", matched decoded so an encoding change in the
-#: attribute cannot silently select the wrong module.
-PRODUCT_MODULE = "pcmall-productdetailspage"
+#: The modules whose initial state is the product: base64 of
+#: "mobilemall-productdetailspage" (used on mobile web SSR) or
+#: "pcmall-productdetailspage" (legacy desktop SSR).
+PRODUCT_MODULES = ("mobilemall-productdetailspage", "pcmall-productdetailspage")
+PRODUCT_MODULE = PRODUCT_MODULES[0]
 
 _STATE_SCRIPT = re.compile(
     r"<script type=\"text/mfe-initial-data\" data-module=\"([^\"]+)\"[^>]*>(\{.*?)</script>",
@@ -61,6 +62,10 @@ _ITEM_SLUG = re.compile(r"-i\.(\d+)\.(\d+)(?:[?#]|$)")
 
 class ListingUnavailable(RuntimeError):
     """The page answered, but not with a product's initial state."""
+
+
+class ListingNotFound(ListingUnavailable):
+    """The product page loaded, but the item no longer exists on Shopee."""
 
 
 def is_fetched_listing(value: Any) -> bool:
@@ -105,7 +110,7 @@ def _product_state(html: str) -> dict[str, Any] | None:
             module = base64.b64decode(module_b64).decode("utf-8", errors="replace")
         except (ValueError, TypeError):
             continue
-        if module != PRODUCT_MODULE:
+        if module not in PRODUCT_MODULES:
             continue
         try:
             return json.loads(body).get("initialState")
@@ -132,7 +137,9 @@ def distill(
     items = ((state.get("item") or {}).get("items")) or {}
     item = items.get(str(item_id)) or {}
     if not isinstance(item, dict) or not str(item.get("title") or "").strip():
-        raise ListingUnavailable("Shopee did not return data for the requested product. Try again later.")
+        raise ListingNotFound(
+            "Shopee did not return data for this product. It may be unlisted or removed."
+        )
     rating = item.get("item_rating") or {}
     price = {
         "min": item.get("price_min"),

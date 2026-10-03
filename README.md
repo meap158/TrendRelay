@@ -23,7 +23,7 @@ TrendRelay is a local-first Windows workspace. Discover consolidates topics, pos
 - **Manage every campaign together** from Campaigns → Campaign overview: compare provider-backed output, views, engagement, queue health, warnings, and pending approvals, with compact metric charts, without opening each campaign.
 - **Place each affiliate URL where it can be clicked** — in the caption on networks that support it, and as a profile/bio pointer on Instagram and TikTok. Disclosure always leads the caption.
 - **Publish a one-off** from Publish with media, copy, disclosure, affiliate placement, and schedule restored together when the post came from a campaign.
-- **Manage products in Attribution** as one table of offers, handmade tracking links, imported conversions, and commission context.
+- **Manage products in Attribution** as one table of offers, handmade tracking links, imported conversions, commission context, and background-fetched Shopee listing details (descriptions, images, variations, and vouchers).
 - **Let an assistant draft, not send** over MCP: fill missing captions, bring an image into the Library, and propose a campaign post that stays a draft until a person promotes it in the app.
 - **Set providers up on Tools** — Douyin session, media-AI runtimes, ElevenLabs, research sources, and Assistant Access — without leaving the workspace.
 - **Keep downloads private** in the local `.data/` directory, which is excluded from Git.

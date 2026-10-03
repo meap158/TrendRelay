@@ -1,6 +1,35 @@
 # Agent Handover
 
-Last updated: 2026-09-14
+Last updated: 2026-10-03
+
+## Fix: Attribution Shopee product listings fetch failed with verification challenge, 2026-10-03
+
+- **Context & Request**:
+  - In Attribution (`/attribution`), clicking "Fetch listings" for products resulted in all jobs failing with:
+    `Shopee blocked the silent product check with verification. Use the Product Offer Excel export instead.` (e.g. 0 of 15 listings fetched · 15 failed).
+- **Root Cause**:
+  1. **Shopee Desktop SSR Deprecation**: Shopee updated its desktop web frontend (`sw-WEBFE-MKP-2026.09.v3-1`) to pure client-side rendering (SPA). It stopped embedding the SSR `<script type="text/mfe-initial-data" ...>` containing module `pcmall-productdetailspage`.
+  2. `shopee_listing.fetch_listing` used a desktop Chrome user agent and expected `pcmall-productdetailspage`. As a result, `_product_state` returned `None` and raised `ListingUnavailable` on every single product.
+  3. `_read_product_page` caught `ListingUnavailable` and fell back to `shopee_session.fetch_product(url)`. This launches headless Playwright Chromium with operator cookies, which Shopee immediately detected and redirected to `/verify/`, raising `"Shopee blocked the silent product check with verification. Use the Product Offer Excel export instead."`
+  4. Live probing showed Shopee mobile web (`Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 ... Mobile Safari/537.36`) continues to server-render full product details under module `mobilemall-productdetailspage` with an identical schema (`item.items[item_id]`).
+  5. Additionally, 3 of 15 products in the batch were removed/unlisted on Shopee, returning `{}` in `items[item_id]`. Previously, an empty item raised `ListingUnavailable`, triggering the futile browser bridge.
+- **Changes**:
+  - `services/api/src/trendrelay_api/integrations/shopee_listing.py`:
+    - Updated `REQUEST_HEADERS` to use Mobile Chrome User-Agent.
+    - Updated `PRODUCT_MODULES` to accept both `mobilemall-productdetailspage` (current mobile SSR) and `pcmall-productdetailspage` (legacy desktop SSR).
+    - Introduced `ListingNotFound(ListingUnavailable)` exception when page state is present but product item is empty or missing title.
+  - `services/api/src/trendrelay_api/shopee_enrichment.py`:
+    - In `_read_product_page`: caught `ListingNotFound` and re-raised directly, preventing futile fallback to headless browser for deleted/unlisted items.
+    - In `_read_product_page`: wrapped successful browser bridge results with a fallback listing dictionary so `is_fetched_listing` passes.
+    - In `run_enrich_job`: caught `ListingNotFound` and called `fail_job(job_id, worker_id, str(not_found), retry_allowed=False)` to record the clear status and avoid useless retries.
+  - `services/api/tests/test_shopee_listing.py` & `services/api/tests/test_shopee_enrichment.py`:
+    - Added unit test coverage for `mobilemall-productdetailspage` module extraction, `ListingNotFound` fail without retry, and bridge fallback listing formatting.
+  - `docs/third-party/shopee-listing.md`:
+    - Documented mobile web SSR findings and `ListingNotFound` semantics.
+- **Verification**:
+  - Unit tests: 39/39 Shopee tests passed (`pytest test_shopee_listing.py test_shopee_enrichment.py`).
+  - Full API test suite: 3,576/3,576 tests passed.
+  - Live execution: verified extraction and database persistence on live Shopee products.
 
 ## Fix: Microsoft TTS vs ElevenLabs Voice ID Mismatch (`microsoft:...`), 2026-09-14
 

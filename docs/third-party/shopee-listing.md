@@ -12,10 +12,11 @@ driven by the `shopee_enrich` worker jobs
   anonymous caller outright: HTTP 403, `error: 90309999`,
   `redirect_to_error_page: true` - Shopee's bot check, on every product tried.
 - The product page itself (`https://shopee.vn/product/{shop_id}/{item_id}`)
-  answers a plain GET with browser-like headers: HTTP 200, ~900KB, and embeds
+  answers a plain GET with mobile browser headers: HTTP 200, ~600KB, and embeds
   the product-details module's entire initial state in a
   `<script type="text/mfe-initial-data" data-module="<base64>">` tag whose
-  decoded module id is `pcmall-productdetailspage`.
+  decoded module id is `mobilemall-productdetailspage` (or legacy desktop
+  `pcmall-productdetailspage` when SSR was enabled on desktop).
 - Both public URL forms carry the ids: `/product/{shop}/{item}` and the SEO
   slug `...-i.{shop}.{item}`.
 
@@ -38,6 +39,9 @@ posture as the Douyin wall.
 - One polite request per product, 2.5 seconds apart
   (`LISTING_DELAY_SECONDS`), drained by the worker's own listing lane beside
   the rest of the pass.
+- A product that has been unlisted or removed on Shopee returns an empty item
+  dictionary in the parsed state; this raises `ListingNotFound`, which fails the
+  job honestly without retrying or invoking the browser bridge.
 - A page that comes back without the product state (the challenged shell)
   raises `ListingUnavailable`; the enrichment job then falls back to the
   signed-in browser bridge (`integrations/shopee_session.fetch_product`),

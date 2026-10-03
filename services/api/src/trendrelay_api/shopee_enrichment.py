@@ -242,8 +242,20 @@ def _read_product_page(url: str) -> dict[str, Any]:
     """
     try:
         listing = shopee_listing.fetch_listing(url)
+    except shopee_listing.ListingNotFound:
+        # The page loaded without bot challenge, but the product is deleted or unlisted.
+        # Calling the browser bridge would be futile and risk verification triggers.
+        raise
     except shopee_listing.ListingUnavailable:
-        return shopee_session.fetch_product(url)
+        bridge_res = shopee_session.fetch_product(url)
+        if isinstance(bridge_res, dict) and (bridge_res.get("name") or bridge_res.get("title")):
+            bridge_res.setdefault("listing", {
+                "source": "shopee-session",
+                "title": bridge_res.get("name") or bridge_res.get("title"),
+                "images": bridge_res.get("images") or ([bridge_res["image_url"]] if bridge_res.get("image_url") else []),
+                "description": bridge_res.get("description"),
+            })
+        return bridge_res
     time.sleep(LISTING_DELAY_SECONDS)
     return {
         "listing": listing,
@@ -274,6 +286,8 @@ def run_enrich_job(
             )
         applied = apply_details(payload["workspace_id"], payload["product_id"], found, factory)
         complete_job(job_id, worker_id, applied, factory=factory)
+    except shopee_listing.ListingNotFound as not_found:
+        fail_job(job_id, worker_id, str(not_found), retry_allowed=False, factory=factory)
     except Exception as error:
         # Redacted: this message is stored on the job and read back on a screen,
         # and the failure came from a process holding a live session.

@@ -7,6 +7,20 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Attribution Shopee product listings fetch fix (2026-10-03)
+
+- **Context & Problem**: In Attribution (`/attribution`), clicking "Fetch listings" for products resulted in all jobs failing with `Shopee blocked the silent product check with verification. Use the Product Offer Excel export instead.` (e.g. 0 of 15 listings fetched · 15 failed).
+- **Root Cause**:
+  1. Shopee deprecated desktop server-side rendering (`pcmall-productdetailspage`), converting desktop pages to client-side rendered shells with no initial item data.
+  2. `shopee_listing.py` failed with `ListingUnavailable` on all desktop requests and fell back to `shopee_session.fetch_product`, which invoked headless Playwright Chromium. Shopee challenged the headless browser session with `/verify/`.
+  3. Shopee's mobile web frontend still renders full initial state under module `mobilemall-productdetailspage` with an identical schema (`item.items[item_id]`).
+  4. 3 of 15 products in the user's batch were deleted/unlisted on Shopee (`item == {}`), which previously also triggered the headless browser fallback.
+- **Fix**:
+  - `shopee_listing.py`: updated `REQUEST_HEADERS` to Mobile Chrome User-Agent, added `mobilemall-productdetailspage` to `PRODUCT_MODULES`, and introduced `ListingNotFound(ListingUnavailable)` for unlisted/removed items.
+  - `shopee_enrichment.py`: in `_read_product_page`, caught `ListingNotFound` to prevent browser fallback for deleted products; synthesized fallback listing for successful bridge responses; in `run_enrich_job`, handled `ListingNotFound` with `fail_job(..., retry_allowed=False)`.
+  - Added unit test coverage in `test_shopee_listing.py` and `test_shopee_enrichment.py`.
+- **Verification**: 39/39 Shopee unit tests passed, all 3,576 API tests passed. Live Shopee product enrichment verified against SQLite database.
+
 ## Media Tag Category Coloring by Class (2026-09-14)
 
 Tags on media cards and the detail pane in the Media Library previously shared a single

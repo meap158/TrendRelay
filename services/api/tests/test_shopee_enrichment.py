@@ -474,3 +474,52 @@ def test_enqueue_failure_rolls_back_the_whole_batch(factory, monkeypatch) -> Non
     with pytest.raises(RuntimeError, match="insertion failed"):
         queue_two(factory)
     assert enrichment.recent_jobs("workspace-1", factory=factory) == []
+
+
+def test_listing_not_found_fails_job_without_retrying_and_skips_bridge(factory, monkeypatch) -> None:
+    bridge_called = False
+
+    def fake_bridge(_url):
+        nonlocal bridge_called
+        bridge_called = True
+        return {"name": "Should not be called"}
+
+    monkeypatch.setattr(enrichment.shopee_session, "fetch_product", fake_bridge)
+
+    def fake_fetch_listing(_url):
+        raise enrichment.shopee_listing.ListingNotFound("Product removed from Shopee")
+
+    monkeypatch.setattr(enrichment.shopee_listing, "fetch_listing", fake_fetch_listing)
+
+    product = read(factory, add_product(factory))
+    job_id = enrichment.enqueue("workspace-1", [product], force=True, factory=factory)[0]
+    enrichment.run_enrich_job(job_id, factory=factory)
+
+    record = get_job_record(job_id, factory=factory)
+    assert record["status"] == "failed"
+    assert "Product removed from Shopee" in record["error"]
+    assert bridge_called is False
+
+
+def test_browser_bridge_fallback_constructs_usable_listing(factory, monkeypatch) -> None:
+    monkeypatch.setattr(
+        enrichment.shopee_listing, "fetch_listing",
+        lambda _url: (_ for _ in ()).throw(enrichment.shopee_listing.ListingUnavailable("challenge")),
+    )
+    monkeypatch.setattr(
+        enrichment.shopee_session, "fetch_product",
+        lambda _url: {
+            "name": "Fallback Name",
+            "image_url": "https://down-vn.img.susercontent.com/file/abc",
+        },
+    )
+    product = read(factory, add_product(factory))
+    job_id = enrichment.enqueue("workspace-1", [product], force=True, factory=factory)[0]
+    enrichment.run_enrich_job(job_id, factory=factory)
+
+    record = get_job_record(job_id, factory=factory)
+    assert record["status"] == "succeeded"
+    assert "listing" in record["result"]["filled"]
+    saved = read(factory, product.id)
+    assert saved.listing["title"] == "Fallback Name"
+

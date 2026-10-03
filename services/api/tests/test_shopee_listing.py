@@ -174,7 +174,17 @@ def test_a_link_that_is_not_a_product_is_refused_before_any_request() -> None:
     {"item": {"items": {"999": {"title": "Another product"}}}},
 ])
 def test_empty_or_unrelated_product_state_is_not_a_listing(state) -> None:
-    with pytest.raises(shopee_listing.ListingUnavailable):
+    with pytest.raises(shopee_listing.ListingNotFound):
         shopee_listing.fetch_listing(
             "https://shopee.vn/product/1/2", opener=opener_for(page_for(state)),
         )
+
+
+def test_mobilemall_module_is_recognized_and_extracted() -> None:
+    listing = shopee_listing.fetch_listing(
+        "https://shopee.vn/product/1834061111/51760891537",
+        opener=opener_for(page_for(STATE, module="mobilemall-productdetailspage")),
+    )
+    assert listing["title"] == "Khăn giấy TopGia"
+    assert listing["brand"] == "Top Gia"
+
