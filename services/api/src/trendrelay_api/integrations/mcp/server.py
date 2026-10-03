@@ -102,8 +102,9 @@ INSTRUCTIONS = (
     "live record.\n\n"
     "Pending product creatives — an image, a carousel, or a video still owed "
     "for one Attribution product — are `list_product_creative_drafts`. "
-    "`get_product_creative_draft` returns the reviewed prompt and the product "
-    "image references, plus the background reference when one was attached. "
+    "`get_product_creative_draft` returns the reviewed prompt, the subject "
+    "images, the background reference when one was attached, and "
+    "`listing_fields` for any listing values chosen at confirm. "
     "`create_product_creative_draft` queues that prompt; it does not generate "
     "pixels. `submit_product_creative_media` files the finished media in the "
     "Library and links it to the product once the draft's card count is met. "
@@ -1320,10 +1321,12 @@ def build_server(workspace_id: str) -> FastMCP:
             "One Attribution creative draft: the stored reviewed prompt, "
             "subject_assets when Library images were picked (otherwise the "
             "listing pictures as product_images), the background reference "
-            "when one was attached, the kind, the card count, and how many "
-            "files are still owed. Title, price, description, variations, "
-            "and stock are not part of the ask. The prompt is the text "
-            "stored at confirm, not a fresh resolution. Use an id from "
+            "when one was attached, listing_fields as snapshotted at confirm "
+            "(an empty object means title, price, description, gallery, and "
+            "variations were not attached), the kind, the card count, and "
+            "how many files are still owed. The prompt is the text stored at "
+            "confirm, not a fresh resolution. A field that is present was "
+            "sent; do not invent the ones that are absent. Use an id from "
             "list_product_creative_drafts."
         ),
     )
@@ -1346,11 +1349,15 @@ def build_server(workspace_id: str) -> FastMCP:
             "it is on. A carousel needs card_count from 2 to 10; that count "
             "cannot be lowered later. Optional subject_asset_ids are Library "
             "image ids, in order, at most 8. When they are set, those images "
-            "are the subject and the listing title, price, description, and "
-            "pictures are not. When they are omitted, the product's own "
+            "are the subject. When they are omitted, the product's own "
             "pictures are the subject, and the product must already have "
-            "one. Confirm stores the prompt and does not ingest media. Do "
-            "not publish, and do not mark the draft complete from here."
+            "one. Optional listing_fields names which listing values to "
+            "attach beside the prompt: title, price, description, gallery, "
+            "variations. Omit it, or send an empty list, and none of those "
+            "fields are sent. The stored prompt does not change because a "
+            "field was selected. Confirm stores the prompt and a snapshot of "
+            "the selected values, and does not ingest media. Do not publish, "
+            "and do not mark the draft complete from here."
         ),
     )
     def create_product_creative_draft(
@@ -1362,6 +1369,7 @@ def build_server(workspace_id: str) -> FastMCP:
         background_enabled: bool = False,
         background_reference: str | None = None,
         subject_asset_ids: list[str] | None = None,
+        listing_fields: list[str] | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_product_creative_draft",
@@ -1372,6 +1380,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 background_enabled=background_enabled,
                 background_reference=background_reference,
                 subject_asset_ids=subject_asset_ids,
+                listing_fields=listing_fields,
             ),
         )
 

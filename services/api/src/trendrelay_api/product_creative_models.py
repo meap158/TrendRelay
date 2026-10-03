@@ -72,6 +72,12 @@ class ProductCreativeDraft(Base):
     #: Empty means the product's own listing pictures are the subject, which
     #: is the path an older draft and an MCP call without a pick still take.
     subject_asset_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    #: Listing fields the operator chose to attach, snapshotted at confirm.
+    #: Keys are title, price, description, gallery, and variations. An empty
+    #: object means none of them were sent, which is what an older draft and
+    #: a create that omits the field still do. The values are the product's
+    #: at that moment, so a later listing refresh does not rewrite the ask.
+    listing_fields: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     card_count: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     #: Library asset ids already ingested for this draft, in order. They are

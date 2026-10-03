@@ -9,9 +9,36 @@ import { AssetThumbnail, type LibraryAsset, MediaPicker } from "../publish/compo
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
+import { money } from "./format";
 
 /** The same ceiling the API stores and a thumbnail read can fetch at once. */
 const SUBJECT_LIMIT = 8;
+
+/** Listing values an operator can attach. Off until selected. The order matches the API. */
+const LISTING_KEYS = ["title", "price", "description", "gallery", "variations"] as const;
+type ListingKey = (typeof LISTING_KEYS)[number];
+
+const FIELD_LABEL: Record<ListingKey, string> = {
+  title: "omitTitle",
+  price: "omitPrice",
+  description: "omitDescription",
+  gallery: "omitGallery",
+  variations: "omitVariations",
+};
+
+type ListingSnapshot = Partial<{
+  title: string;
+  price: { offers?: { price_cents: number; currency: string; merchant?: string | null }[] };
+  description: { text?: string; truncated?: boolean };
+  gallery: string[];
+  variations: {
+    tiers?: { name?: string; options?: string[] }[];
+    models?: string[];
+    stock?: number | null;
+  };
+}>;
+
+type StoredSubject = { asset_id: string; title: string; missing?: boolean };
 
 type Kind = "image" | "carousel" | "video";
 type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
@@ -23,6 +50,13 @@ type DraftView = {
   owed: number;
   linked: boolean;
   card_count: number;
+  kind?: Kind;
+  recipe?: Recipe;
+  variant?: "female" | "male" | null;
+  background_enabled?: boolean;
+  background_reference?: string | null;
+  subject_assets?: StoredSubject[];
+  listing_fields?: ListingSnapshot;
 };
 
 /**
@@ -37,11 +71,14 @@ type DraftView = {
 export function GenerateDialog({
   open,
   products,
+  draftId = null,
   onClose,
   onChanged,
 }: {
   open: boolean;
   products: { id: string; name: string }[];
+  /** An existing draft. The dialog then shows that draft's stored configuration. */
+  draftId?: string | null;
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -63,14 +100,19 @@ export function GenerateDialog({
   const [fileEpoch, setFileEpoch] = useState(0);
   /** Library images the operator picked, in the order generation will see them. */
   const [subjects, setSubjects] = useState<LibraryAsset[]>([]);
+  const [storedSubjects, setStoredSubjects] = useState<StoredSubject[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedFields, setSelectedFields] = useState<Set<ListingKey>>(() => new Set());
+  const [listingSnapshot, setListingSnapshot] = useState<ListingSnapshot>({});
 
+  const reviewing = Boolean(draftId);
   const mirror = recipe === "mirror_selfie";
   const backgroundOn = mirror || backgroundEnabled;
   const backgroundReady = !backgroundOn || backgroundReference.trim().startsWith("https://");
-  const locked = draft !== null;
+  const locked = draft !== null || reviewing;
   const many = products.length > 1;
   const leadId = products[0]?.id ?? "";
+  const fieldsKey = LISTING_KEYS.filter((key) => selectedFields.has(key)).join(",");
   const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}`;
 
   useEffect(() => {
@@ -90,7 +132,34 @@ export function GenerateDialog({
       ...(subjects.length > 0
         ? { subject_asset_ids: subjects.map((asset) => asset.id) }
         : {}),
+      listing_fields: LISTING_KEYS.filter((key) => selectedFields.has(key)),
     };
+  }
+
+  function toggleField(key: ListingKey) {
+    setSelectedFields((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setError("");
+  }
+
+  function applyStored(stored: DraftView) {
+    const nextKind = stored.kind ?? "image";
+    setKind(nextKind);
+    setRecipe(stored.recipe ?? (nextKind === "video" ? "mannequin_transition" : "bed_flat_lay"));
+    setVariant(stored.variant === "male" ? "male" : "female");
+    setBackgroundEnabled(Boolean(stored.background_enabled));
+    setBackgroundReference(stored.background_reference ?? "");
+    setCardCount(stored.card_count > 1 ? stored.card_count : 2);
+    setPrompt(stored.prompt);
+    setStoredSubjects(stored.subject_assets ?? []);
+    const fields = stored.listing_fields ?? {};
+    setSelectedFields(new Set(LISTING_KEYS.filter((key) => key in fields)));
+    setListingSnapshot(fields);
+    setDraft(stored);
   }
 
   function toggleSubject(asset: LibraryAsset) {
@@ -105,7 +174,42 @@ export function GenerateDialog({
   }
 
   useEffect(() => {
-    if (!open || products.length === 0 || !workspaceId || draft) return;
+    if (!open || !reviewing || !draftId || !workspaceId) return;
+    let cancelled = false;
+    setBusy("load");
+    setError("");
+    void (async () => {
+      try {
+        const response = await apiFetch(
+          `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draftId}`,
+        );
+        if (cancelled) return;
+        if (!response.ok) {
+          setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+          return;
+        }
+        const payload = await response.json() as { draft?: DraftView };
+        if (!payload.draft?.prompt) {
+          setError(t("attribution.generate.requestFailed"));
+          return;
+        }
+        applyStored(payload.draft);
+      } catch (caught) {
+        if (cancelled) return;
+        setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+      } finally {
+        if (!cancelled) setBusy("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // applyStored reads the setters from this render. The draft id is the load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, reviewing, draftId, workspaceId, apiFetch, t]);
+
+  useEffect(() => {
+    if (!open || reviewing || products.length === 0 || !workspaceId || draft) return;
     if (!backgroundReady) {
       setPrompt("");
       return;
@@ -123,15 +227,18 @@ export function GenerateDialog({
           if (cancelled) return;
           if (!response.ok) {
             setPrompt("");
+            setListingSnapshot({});
             setError(await errorDetail(response, t("attribution.generate.requestFailed")));
             return;
           }
-          const payload = await response.json() as { draft?: { prompt?: string } };
+          const payload = await response.json() as { draft?: { prompt?: string; listing_fields?: ListingSnapshot } };
           setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
+          setListingSnapshot(payload.draft?.listing_fields ?? {});
           setError("");
         } catch (caught) {
           if (cancelled) return;
           setPrompt("");
+          setListingSnapshot({});
           setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
         }
       })();
@@ -143,8 +250,8 @@ export function GenerateDialog({
     // requestBody is derived from the same state listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    open, leadId, products, workspaceId, draft, kind, recipe, variant,
-    backgroundEnabled, backgroundReference, cardCount, backgroundReady, apiFetch, t,
+    open, reviewing, leadId, products, workspaceId, draft, kind, recipe, variant,
+    backgroundEnabled, backgroundReference, cardCount, backgroundReady, fieldsKey, apiFetch, t,
   ]);
 
   function chooseKind(next: Kind) {
@@ -185,6 +292,7 @@ export function GenerateDialog({
       if (first) {
         setDraft(first);
         setPrompt(first.prompt);
+        if (first.listing_fields) setListingSnapshot(first.listing_fields);
         setNotice(many
           ? t("attribution.generate.queuedMany", { count: queued })
           : t("attribution.generate.queued"));
@@ -229,24 +337,22 @@ export function GenerateDialog({
     }
   }
 
-  const omitted = [
-    "omitTitle",
-    "omitPrice",
-    "omitDescription",
-    "omitGallery",
-    "omitVariations",
-  ] as const;
+  const chosenFields = LISTING_KEYS.filter((key) => selectedFields.has(key));
 
   return (
     <>
     <Dialog
       open={open && products.length > 0}
-      title={t("attribution.generate.title")}
-      description={many
-        ? t("attribution.generate.descriptionMany", { count: products.length })
-        : products[0]
-          ? t("attribution.generate.description", { name: products[0].name })
-          : undefined}
+      title={reviewing ? t("attribution.generate.reviewTitle") : t("attribution.generate.title")}
+      description={reviewing
+        ? products[0]
+          ? t("attribution.generate.reviewDescription", { name: products[0].name })
+          : undefined
+        : many
+          ? t("attribution.generate.descriptionMany", { count: products.length })
+          : products[0]
+            ? t("attribution.generate.description", { name: products[0].name })
+            : undefined}
       onClose={() => {
         if (pickerOpen) return;
         onClose();
@@ -255,7 +361,7 @@ export function GenerateDialog({
       footer={(
         <>
           <Button variant="quiet" onClick={onClose}>{t("attribution.generate.close")}</Button>
-          {!draft && (
+          {!draft && !reviewing && (
             <Button
               variant="primary"
               busy={busy === "queue"}
@@ -279,6 +385,10 @@ export function GenerateDialog({
       )}
     >
       <div className="campaign-dialog-form">
+        {reviewing && !draft ? (
+          <p role="status">{error || t("attribution.generate.loadingDraft")}</p>
+        ) : (
+        <>
         <label>
           {t("attribution.generate.kind")}
           <Select
@@ -334,7 +444,22 @@ export function GenerateDialog({
             <strong>{t("attribution.generate.subject")}</strong>
             <p>{t("attribution.generate.subjectHelp")}</p>
             {many && <p>{t("attribution.generate.subjectShared")}</p>}
-            {subjects.length === 0 ? (
+            {reviewing ? (
+              storedSubjects.length === 0 ? (
+                <p>{t("attribution.generate.subjectReviewEmpty")}</p>
+              ) : (
+                <ol className="generate-subject-list">
+                  {storedSubjects.map((asset, index) => (
+                    <li key={asset.asset_id}>
+                      <span>
+                        {index + 1}. {asset.title || asset.asset_id}
+                        {asset.missing ? ` — ${t("attribution.generate.subjectMissing")}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )
+            ) : subjects.length === 0 ? (
               <p>{t("attribution.generate.subjectEmpty")}</p>
             ) : (
               <ol className="generate-subject-list">
@@ -344,30 +469,41 @@ export function GenerateDialog({
                       <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
                     )}
                     <span>{index + 1}. {asset.title}</span>
-                    <Button
-                      variant="quiet"
-                      size="sm"
-                      disabled={locked}
-                      onClick={() => setSubjects((current) => current.filter((item) => item.id !== asset.id))}
-                    >{t("attribution.generate.removeSubject")}</Button>
+                    {!locked && (
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        onClick={() => setSubjects((current) => current.filter((item) => item.id !== asset.id))}
+                      >{t("attribution.generate.removeSubject")}</Button>
+                    )}
                   </li>
                 ))}
               </ol>
             )}
-            <div className="generate-subject-actions">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={locked || !workspaceId}
-                onClick={() => setPickerOpen(true)}
-              >{t("attribution.generate.chooseLibrary")}</Button>
+            {!locked && (
+              <div className="generate-subject-actions">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!workspaceId}
+                  onClick={() => setPickerOpen(true)}
+                >{t("attribution.generate.chooseLibrary")}</Button>
+                <small>
+                  {t("attribution.generate.subjectCount", {
+                    count: subjects.length,
+                    limit: SUBJECT_LIMIT,
+                  })}
+                </small>
+              </div>
+            )}
+            {reviewing && (
               <small>
                 {t("attribution.generate.subjectCount", {
-                  count: subjects.length,
+                  count: storedSubjects.length,
                   limit: SUBJECT_LIMIT,
                 })}
               </small>
-            </div>
+            )}
           </div>
           <div className="generate-use">
             <strong>{t("attribution.generate.backgroundHeading")}</strong>
@@ -410,13 +546,39 @@ export function GenerateDialog({
               <p className="generate-background-none">{t("attribution.generate.backgroundNone")}</p>
             )}
           </div>
+          {many && !reviewing && chosenFields.length > 0 && products[0] && (
+            <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
+          )}
+          {chosenFields.map((key) => (
+            <div className="generate-use" key={key}>
+              <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
+              <ListingFieldValue
+                field={key}
+                value={listingSnapshot[key]}
+                empty={t("attribution.generate.fieldEmpty")}
+                truncated={t("attribution.generate.descriptionTruncated")}
+                galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
+                stockLine={(count) => t("attribution.generate.stockLine", { count })}
+                stockUnknown={t("attribution.generate.stockUnknown")}
+              />
+            </div>
+          ))}
         </section>
-        <div className="generate-omitted">
-          <strong>{t("attribution.generate.notUsed")}</strong>
-          <p>{t("attribution.generate.notUsedHelp")}</p>
+        <div className="generate-omitted" role="group" aria-label={t("attribution.generate.listingFields")}>
+          <strong>{t("attribution.generate.listingFields")}</strong>
+          <p>{reviewing
+            ? t("attribution.generate.listingFieldsReview")
+            : t("attribution.generate.listingFieldsHelp")}</p>
           <ul>
-            {omitted.map((key) => (
-              <li key={key}>{t(`attribution.generate.${key}`)}</li>
+            {LISTING_KEYS.map((key) => (
+              <li key={key}>
+                <button
+                  type="button"
+                  aria-pressed={selectedFields.has(key)}
+                  disabled={locked}
+                  onClick={() => toggleField(key)}
+                >{t(`attribution.generate.${FIELD_LABEL[key]}`)}</button>
+              </li>
             ))}
           </ul>
         </div>
@@ -439,10 +601,18 @@ export function GenerateDialog({
         <label className="generate-prompt">
           {t("attribution.generate.prompt")}
           <textarea readOnly rows={12} value={prompt} />
-          <small>{t("attribution.generate.promptHelp")}</small>
+          <small>{reviewing || draft
+            ? t("attribution.generate.promptStored")
+            : t("attribution.generate.promptHelp")}</small>
         </label>
         {draft && !many && (
-          <p role="status">{t("attribution.generate.owed", { count: draft.owed })}</p>
+          <p role="status">
+            {draft.linked
+              ? t("attribution.generate.statusSucceeded")
+              : t("attribution.generate.statusPending")}
+            {" · "}
+            {t("attribution.generate.owed", { count: draft.owed })}
+          </p>
         )}
         {draft && !many && draft.owed > 0 && (
           <label>
@@ -456,7 +626,10 @@ export function GenerateDialog({
           </label>
         )}
         {notice && <p role="status">{notice}</p>}
-        {error && <p role="alert">{error}</p>}
+        {error && !reviewing && <p role="alert">{error}</p>}
+        {error && reviewing && draft && <p role="alert">{error}</p>}
+        </>
+        )}
       </div>
     </Dialog>
     {workspaceId && (
@@ -476,6 +649,96 @@ export function GenerateDialog({
     )}
     </>
   );
+}
+
+function ListingFieldValue({
+  field,
+  value,
+  empty,
+  truncated,
+  galleryCount,
+  stockLine,
+  stockUnknown,
+}: {
+  field: ListingKey;
+  value: ListingSnapshot[ListingKey];
+  empty: string;
+  truncated: string;
+  galleryCount: (count: number) => string;
+  stockLine: (count: number) => string;
+  stockUnknown: string;
+}) {
+  if (value === undefined) return null;
+  if (field === "title") {
+    const text = typeof value === "string" ? value.trim() : "";
+    return <p className="generate-field-value">{text || empty}</p>;
+  }
+  if (field === "price") {
+    const offers = value && typeof value === "object" && "offers" in value ? value.offers ?? [] : [];
+    if (offers.length === 0) return <p className="generate-field-value">{empty}</p>;
+    return (
+      <ul className="generate-offer-list">
+        {offers.map((offer, index) => (
+          <li key={`${offer.currency}-${index}`}>
+            {formatOffer(offer)}
+            {offer.merchant ? ` · ${offer.merchant}` : ""}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (field === "description") {
+    const text = value && typeof value === "object" && "text" in value ? (value.text ?? "").trim() : "";
+    const wasCut = Boolean(value && typeof value === "object" && "truncated" in value && value.truncated);
+    if (!text) return <p className="generate-field-value">{empty}</p>;
+    return (
+      <>
+        <p className="generate-field-value generate-field-scroll">{text}</p>
+        {wasCut && <small>{truncated}</small>}
+      </>
+    );
+  }
+  if (field === "gallery") {
+    const urls = Array.isArray(value) ? value.filter((item) => typeof item === "string" && item) : [];
+    if (urls.length === 0) return <p className="generate-field-value">{empty}</p>;
+    return (
+      <>
+        <ol className="generate-gallery">
+          {urls.slice(0, 8).map((url) => (
+            <li key={url}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- listing CDN */}
+              <img src={url} alt="" />
+            </li>
+          ))}
+        </ol>
+        <small>{galleryCount(urls.length)}</small>
+      </>
+    );
+  }
+  const variations = value && typeof value === "object" && "tiers" in value ? value : null;
+  const tiers = variations?.tiers ?? [];
+  const models = variations?.models ?? [];
+  const stock = variations?.stock;
+  if (tiers.length === 0 && models.length === 0 && (stock === null || stock === undefined)) {
+    return <p className="generate-field-value">{empty}</p>;
+  }
+  return (
+    <div className="generate-field-value">
+      {tiers.map((tier) => (
+        <p key={tier.name || "tier"}>{tier.name}: {(tier.options ?? []).join(", ")}</p>
+      ))}
+      {models.length > 0 && <p>{models.join(", ")}</p>}
+      {typeof stock === "number" ? <p>{stockLine(stock)}</p> : <p>{stockUnknown}</p>}
+    </div>
+  );
+}
+
+function formatOffer(offer: { price_cents: number; currency: string }): string {
+  try {
+    return money(offer.price_cents, offer.currency);
+  } catch {
+    return `${offer.price_cents} ${offer.currency}`;
+  }
 }
 
 async function errorDetail(response: Response, fallback: string): Promise<string> {

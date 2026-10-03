@@ -14,8 +14,11 @@ single row or for many, with the same recipe. The prompt is
 resolved only in `product_creative_recipes.py` and stored on the draft. The
 modal and MCP both display that stored text. The modal's subject is Library
 images picked with the shared Library picker and stored as
-`subject_asset_ids`; an empty list still means the listing gallery. Title,
-price, description, listing pictures, variations, and stock are not sent.
+`subject_asset_ids`; an empty list still means the listing gallery. Listing
+fields (title, price, description, gallery, variations) are sent only when
+selected, and the draft stores the snapshot from confirm in `listing_fields`.
+An empty object means none were sent. Opening a draft line shows that stored
+configuration; Generate media starts a new draft.
 TrendRelay does not generate the pixels. Submitting a file ingests it into
 the Library and writes
 `ProductCreativeLink` only when the draft holds its card count. Both the

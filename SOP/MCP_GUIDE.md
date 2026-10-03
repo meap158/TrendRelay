@@ -192,8 +192,10 @@ When a product is waiting on an image, a carousel, or a video, load
 `attribution.fill-product-creatives` and work one draft at a time:
 
 1. `list_product_creative_drafts` for the pending queue. Open one with
-   `get_product_creative_draft`. Use the stored `prompt`, the `product_images`,
-   and `background_reference` when one is attached. Do not rewrite the prompt.
+   `get_product_creative_draft`. Use the stored `prompt`. If `subject_assets`
+   is non-empty, those images are the subject; otherwise use `product_images`.
+   Use `background_reference` when one is attached, and `listing_fields` only
+   for keys that are present. Do not rewrite the prompt.
 2. Generate that file with the client's own image or video tool. TrendRelay
    does not generate the pixels.
 3. `submit_product_creative_media` with exactly one source: the `media` file,

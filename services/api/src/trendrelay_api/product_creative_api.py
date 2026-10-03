@@ -42,6 +42,9 @@ class DraftBody(BaseModel):
     background_reference: str | None = Field(default=None, max_length=2000)
     card_count: int | None = Field(default=None, ge=1, le=10)
     subject_asset_ids: list[str] | None = Field(default=None, max_length=8)
+    listing_fields: list[
+        Literal["title", "price", "description", "gallery", "variations"]
+    ] | None = Field(default=None, max_length=5)
 
 
 class MediaBody(BaseModel):
@@ -74,6 +77,7 @@ def preview_creative_draft(
         variant=body.variant, background_enabled=body.background_enabled,
         background_reference=body.background_reference, card_count=body.card_count,
         subject_asset_ids=body.subject_asset_ids,
+        listing_fields=body.listing_fields,
     ))}
 
 
@@ -94,6 +98,7 @@ def create_creative_draft(
         variant=body.variant, background_enabled=body.background_enabled,
         background_reference=body.background_reference, card_count=body.card_count,
         subject_asset_ids=body.subject_asset_ids,
+        listing_fields=body.listing_fields,
     ))
     audit(
         session, request, workspace_id, user.id,

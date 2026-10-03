@@ -24,7 +24,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
-from trendrelay_api.opportunity_models import Product
+from trendrelay_api.opportunity_models import Product, ProductOffer
 from trendrelay_api.product_creative_recipes import (
     BED_FLAT_LAY_OFF,
     BED_FLAT_LAY_ON,
@@ -482,3 +482,100 @@ def test_library_images_are_the_subject_and_stay_the_subject() -> None:
     )
     assert again.json()["draft"]["subject_assets"] == draft["subject_assets"]
     assert again.json()["draft"]["prompt"] == draft["prompt"]
+    assert again.json()["draft"]["listing_fields"] == {}
+
+
+def test_selected_listing_fields_are_snapshotted_and_leave_the_prompt_alone() -> None:
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id, image=True, name="Gym gloves")
+    with TestingSession.begin() as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        product.listing = {
+            "title": "Gym gloves",
+            "description": "Padded palms. " * 20,
+            "images": [
+                "https://shop.example/angel.jpg",
+                "https://shop.example/detail.jpg",
+            ],
+            "tier_variations": [{"name": "Size", "options": ["S/M", "L"]}],
+            "models": ["Black"],
+            "stock": 4,
+        }
+        session.add(ProductOffer(
+            workspace_id=workspace_id,
+            product_id=product_id,
+            fingerprint=f"offer-{product_id}",
+            network="shopee",
+            merchant="TOPSportMall",
+            affiliate_url="https://shop.example/affiliate",
+            price_cents=63900,
+            currency="VND",
+            created_by="owner-user",
+        ))
+
+    fields = ["gallery", "title", "price", "description", "variations"]
+    preview = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(product_id, listing_fields=fields),
+    )
+    assert preview.status_code == 200, preview.text
+    shown = preview.json()["draft"]
+    assert shown["prompt"] == BED_FLAT_LAY_OFF
+    assert list(shown["listing_fields"]) == [
+        "title", "price", "description", "gallery", "variations",
+    ]
+    assert shown["listing_fields"]["title"] == "Gym gloves"
+    assert shown["listing_fields"]["price"]["offers"] == [{
+        "price_cents": 63900,
+        "currency": "VND",
+        "merchant": "TOPSportMall",
+    }]
+    assert shown["listing_fields"]["gallery"] == [
+        "https://shop.example/angel.jpg",
+        "https://shop.example/detail.jpg",
+    ]
+    assert shown["listing_fields"]["variations"]["stock"] == 4
+    assert shown["listing_fields"]["variations"]["tiers"] == [
+        {"name": "Size", "options": ["S/M", "L"]},
+    ]
+    assert "Gym gloves" not in shown["prompt"]
+
+    refused = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(product_id, listing_fields=["stock"]),
+    )
+    assert refused.status_code == 422
+
+    created = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id, listing_fields=["title", "price"]),
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()["draft"]
+    assert draft["prompt"] == BED_FLAT_LAY_OFF
+    assert set(draft["listing_fields"]) == {"title", "price"}
+
+    with TestingSession.begin() as session:
+        product = session.get(Product, product_id)
+        assert product is not None
+        product.name = "Renamed later"
+        product.listing = {**(product.listing or {}), "title": "Renamed later"}
+        offer = session.query(ProductOffer).filter_by(product_id=product_id).one()
+        offer.price_cents = 1
+
+    again = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts/{draft['id']}",
+    )
+    stored = again.json()["draft"]["listing_fields"]
+    assert stored["title"] == "Gym gloves"
+    assert stored["price"]["offers"][0]["price_cents"] == 63900
+    assert "description" not in stored
+
+    bare = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(product_id),
+    )
+    assert bare.json()["draft"]["listing_fields"] == {}
+    assert bare.json()["draft"]["prompt"] == BED_FLAT_LAY_OFF

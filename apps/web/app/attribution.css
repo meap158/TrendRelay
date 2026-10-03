@@ -326,6 +326,7 @@
   .product-bulk-actions { inline-size: 100%; flex-wrap: wrap; }
   .product-bulk-campaign-group { inline-size: 100%; padding-inline-start: 0; border-inline-start: 0; border-block-start: 1px solid var(--line); padding-block-start: 6px; }
   .product-bulk .ui-button { min-block-size: 44px; }
+  .product-creative-draft { min-block-size: 44px; }
   .product-tag-campaign { flex: 1 1 180px; inline-size: auto; max-inline-size: none; min-inline-size: 0; }
 }
 
@@ -504,7 +505,7 @@
   white-space: pre-wrap;
 }
 /* What this ask attaches, named, so a long listing is not mistaken for the
-   subject. The chips underneath are the listing fields that stay behind. */
+   subject. Listing fields underneath are off until the operator selects one. */
 .campaign-dialog-form .generate-uses {
   display: grid;
   gap: 10px;
@@ -550,13 +551,65 @@
 .generate-subject-actions small { color: var(--muted); font-size: 11px; font-weight: 400; }
 .campaign-dialog-form .generate-omitted { display: grid; gap: 6px; }
 .generate-omitted ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.generate-omitted li {
+.generate-omitted li { margin: 0; padding: 0; }
+.generate-omitted button {
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 4px 10px;
   color: var(--muted);
   background: var(--panel-raised);
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
 }
+.generate-omitted button:hover:not(:disabled) { color: var(--text); }
+.generate-omitted button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.generate-omitted button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.generate-omitted button:disabled { cursor: default; }
+.generate-field-value {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.generate-field-value p { margin: 0; }
+.generate-field-scroll { max-block-size: 8rem; overflow: auto; }
+.generate-gallery { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.generate-gallery img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+}
+.generate-offer-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.generate-use > small { color: var(--muted); font-size: 11px; font-weight: 400; }
 .product-creatives { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
 .product-creatives a { color: var(--link); }
+.product-creative-draft {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: var(--panel);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+.product-creative-draft:hover { border-color: var(--line-strong); }
+.product-creative-draft:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.product-creative-draft > span:first-child { min-width: 0; }
+.product-creative-view { flex: none; color: var(--link); font-size: 11px; }

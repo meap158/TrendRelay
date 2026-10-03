@@ -77,10 +77,12 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `mirror_selfie` | video | Required, with `variant` `female` or `male`. A mirror draft cannot be queued without a background image. |
 
 When `subject_assets` is non-empty, those Library image ids are the subject,
-in that order, at most 8. Read them with `get_asset_thumbnails`. Do not use
-`product_images`, the title, the price, the description, the variations, or
-the stock. When `subject_assets` is empty, `product_images` (the listing
-gallery) is the subject, and a product with no image cannot be queued. One
+in that order, at most 8. Read them with `get_asset_thumbnails`. When
+`subject_assets` is empty, `product_images` (the listing gallery) is the
+subject, and a product with no image cannot be queued. `listing_fields` is a
+snapshot from confirm. Use a key only when it is present: `title`, `price`,
+`description`, `gallery`, `variations`. An empty object means none of those
+were attached. Do not read the live listing to fill in a missing key. One
 draft is one garment: the product's own piece, not a collage of unrelated
 tops.
 
@@ -93,8 +95,8 @@ in order. Do not submit one picture that contains every card as panels.
 1. Read the draft and generate the file the stored prompt describes. If
    `subject_assets` is non-empty, those Library images are the subject
    (`get_asset_thumbnails`). If it is empty, use `product_images`. Use
-   `background_reference` when it is set. Do not send the title, the price,
-   the description, the variations, or the stock.
+   `background_reference` when it is set. Use `listing_fields` for the keys
+   that are present, and leave out any key that is absent.
 2. `submit_product_creative_media` once for that file. Video ingest finishes
    in the same call; do not poll `get_import_status` for it.
 3. Read the draft again. `owed` is what is left. `linked` is true only when

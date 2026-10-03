@@ -51,6 +51,7 @@ def create_draft(
     background_reference: str | None = None,
     card_count: int | None = None,
     subject_asset_ids: list[str] | None = None,
+    listing_fields: list[str] | None = None,
 ) -> dict[str, Any]:
     return store.create_draft(
         session, workspace_id, LOCAL_ADMIN_ID,
@@ -58,6 +59,7 @@ def create_draft(
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids,
+        listing_fields=listing_fields,
     )
 
 

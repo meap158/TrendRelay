@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from trendrelay_api.config import get_settings
 from trendrelay_api.models import new_id, utc_now
-from trendrelay_api.opportunity_models import Product
+from trendrelay_api.opportunity_models import Product, ProductOffer
 from trendrelay_api.product_creative_models import (
     ProductCreativeDraft,
     ProductCreativeLink,
@@ -35,6 +35,11 @@ MAX_PAGE = 100
 #: thumbnail read, so the assistant that fills the draft can fetch them in
 #: one call.
 MAX_SUBJECT_IMAGES = 8
+#: What an operator may attach from the listing, in the order a read returns
+#: them. Anything else is a refusal. Price is the offer Attribution shows.
+_LISTING_KEYS = ("title", "price", "description", "gallery", "variations")
+_DESCRIPTION_LIMIT = 8000
+_GALLERY_LIMIT = 60
 _KINDS = frozenset({"image", "carousel", "video"})
 _UPLOAD_DIRNAME = "product-creatives"
 
@@ -146,6 +151,105 @@ def _stored_subjects(session: Session, draft: ProductCreativeDraft) -> list[dict
     return stored
 
 
+def _listing_keys(raw: list[str] | None) -> list[str]:
+    """The fields to attach, in a stable order, or a refusal."""
+    chosen: list[str] = []
+    for item in raw or []:
+        text = str(item).strip()
+        if text not in _LISTING_KEYS:
+            raise ValueError(
+                "Listing fields are title, price, description, gallery, and variations."
+            )
+        if text not in chosen:
+            chosen.append(text)
+    return [key for key in _LISTING_KEYS if key in chosen]
+
+
+def _price_offers(session: Session, product_id: str) -> list[dict[str, Any]]:
+    """Prices Attribution already shows, one per offer that has one."""
+    rows = session.scalars(
+        select(ProductOffer)
+        .where(ProductOffer.product_id == product_id)
+        .order_by(ProductOffer.id)
+    ).all()
+    return [
+        {
+            "price_cents": int(offer.price_cents),
+            "currency": offer.currency,
+            "merchant": offer.merchant,
+        }
+        for offer in rows
+        if offer.price_cents is not None
+    ]
+
+
+def _variations(listing: dict[str, Any]) -> dict[str, Any]:
+    """Tiers, model names, and stock, bounded the way the listing itself is."""
+    tiers: list[dict[str, Any]] = []
+    raw_tiers = listing.get("tier_variations")
+    if isinstance(raw_tiers, list):
+        for entry in raw_tiers[:5]:
+            if not isinstance(entry, dict):
+                continue
+            options_raw = entry.get("options")
+            options = [
+                str(option)[:120]
+                for option in (options_raw if isinstance(options_raw, list) else [])[:30]
+            ]
+            name = str(entry.get("name") or "")[:120]
+            if name or options:
+                tiers.append({"name": name, "options": options})
+    models_raw = listing.get("models")
+    models = [
+        str(model)[:160]
+        for model in (models_raw if isinstance(models_raw, list) else [])[:30]
+        if str(model).strip()
+    ]
+    stock = listing.get("stock")
+    return {
+        "tiers": tiers,
+        "models": models,
+        "stock": int(stock) if isinstance(stock, int) and not isinstance(stock, bool) else None,
+    }
+
+
+def _listing_snapshot(
+    session: Session, product: Product, keys: list[str],
+) -> dict[str, Any]:
+    """The selected values as they are now. Empty when nothing was selected.
+
+    The prompt stays the recipe. These values travel beside it, and a confirm
+    stores this object rather than a promise to read the listing again.
+    """
+    if not keys:
+        return {}
+    listing = product.listing if isinstance(product.listing, dict) else {}
+    snapshot: dict[str, Any] = {}
+    if "title" in keys:
+        snapshot["title"] = str(listing.get("title") or product.name or "").strip()[:500]
+    if "price" in keys:
+        snapshot["price"] = {"offers": _price_offers(session, product.id)}
+    if "description" in keys:
+        text = str(listing.get("description") or "")
+        snapshot["description"] = {
+            "text": text[:_DESCRIPTION_LIMIT],
+            "truncated": len(text) > _DESCRIPTION_LIMIT,
+        }
+    if "gallery" in keys:
+        snapshot["gallery"] = [
+            url[:2000] for url in _product_images(product)[:_GALLERY_LIMIT]
+        ]
+    if "variations" in keys:
+        snapshot["variations"] = _variations(listing)
+    return snapshot
+
+
+def _stored_listing(draft: ProductCreativeDraft) -> dict[str, Any]:
+    """What was snapshotted. A missing column-shaped value is nothing sent."""
+    raw = draft.listing_fields if isinstance(draft.listing_fields, dict) else {}
+    return {key: raw[key] for key in _LISTING_KEYS if key in raw}
+
+
 def _background(recipe: str, enabled: bool, reference: str | None) -> tuple[bool, str | None]:
     """The background switch and the URL it attaches, or a refusal."""
     spec = RECIPES[recipe]
@@ -188,6 +292,7 @@ def _prepare(
     background_reference: str | None,
     card_count: int | None,
     subject_asset_ids: list[str] | None = None,
+    listing_fields: list[str] | None = None,
     require_subject: bool = True,
 ) -> dict[str, Any]:
     """Validate an ask and resolve the prompt. Does not write."""
@@ -229,6 +334,7 @@ def _prepare(
         "card_count": _card_count(kind, card_count),
         "product_images": images,
         "subject_assets": subjects,
+        "listing_fields": _listing_snapshot(session, product, _listing_keys(listing_fields)),
     }
 
 
@@ -257,6 +363,7 @@ def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
         "status": draft.status,
         "product_images": images,
         "subject_assets": _stored_subjects(session, draft),
+        "listing_fields": _stored_listing(draft),
         "ingested_asset_ids": staged,
         "owed": _owed(draft),
         "linked": draft.status == "succeeded",
@@ -275,6 +382,7 @@ def preview(
     background_reference: str | None = None,
     card_count: int | None = None,
     subject_asset_ids: list[str] | None = None,
+    listing_fields: list[str] | None = None,
 ) -> dict[str, Any]:
     """The prompt that would be stored, without storing it."""
     prepared = _prepare(
@@ -282,7 +390,8 @@ def preview(
         product_id=product_id, kind=kind, recipe=recipe, variant=variant,
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
-        subject_asset_ids=subject_asset_ids, require_subject=False,
+        subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
+        require_subject=False,
     )
     prepared["status"] = "preview"
     prepared["owed"] = prepared["card_count"]
@@ -304,6 +413,7 @@ def create_draft(
     background_reference: str | None = None,
     card_count: int | None = None,
     subject_asset_ids: list[str] | None = None,
+    listing_fields: list[str] | None = None,
 ) -> dict[str, Any]:
     """Store a pending draft. Does not ingest media and does not link anything."""
     prepared = _prepare(
@@ -311,7 +421,7 @@ def create_draft(
         product_id=product_id, kind=kind, recipe=recipe, variant=variant,
         background_enabled=background_enabled,
         background_reference=background_reference, card_count=card_count,
-        subject_asset_ids=subject_asset_ids,
+        subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
     )
     draft = ProductCreativeDraft(
         id=new_id("pcreative"),
@@ -325,6 +435,7 @@ def create_draft(
         prompt=prepared["prompt"],
         card_count=prepared["card_count"],
         subject_asset_ids=[item["asset_id"] for item in prepared["subject_assets"]],
+        listing_fields=prepared["listing_fields"],
         status="pending",
         staged_asset_ids=[],
         created_by=actor_user_id,

@@ -207,6 +207,8 @@ export function ProductTable({
   const [scope, setScope] = useState<Set<string> | null>(null);
   /** The selection Generate was opened on. One dialog, one draft each. */
   const [generateFor, setGenerateFor] = useState<ProductRow[] | null>(null);
+  /** An existing draft opened so its stored configuration can be read. */
+  const [reviewDraft, setReviewDraft] = useState<{ product: ProductRow; draftId: string } | null>(null);
   const scopeKey = (arrivedWith?.productIds ?? []).join(",");
   const seededScope = useRef("");
   useEffect(() => {
@@ -647,7 +649,10 @@ export function ProductTable({
                   const chosen = [...picked]
                     .map((id) => products.find((item) => item.id === id))
                     .filter((item): item is ProductRow => item !== undefined);
-                  if (chosen.length > 0) setGenerateFor(chosen);
+                  if (chosen.length > 0) {
+                    setReviewDraft(null);
+                    setGenerateFor(chosen);
+                  }
                 }}
               ><ActionIcon name="generate" /> {t("attribution.generate.open")}</Button>
             )}
@@ -926,7 +931,10 @@ export function ProductTable({
                             <Button
                               variant="primary"
                               size="sm"
-                              onClick={() => setGenerateFor([product])}
+                              onClick={() => {
+                                setReviewDraft(null);
+                                setGenerateFor([product]);
+                              }}
                             ><ActionIcon name="generate" /> {t("attribution.generate.open")}</Button>
                           )}
                         </div>
@@ -941,15 +949,27 @@ export function ProductTable({
                             ))}
                             {product.creative_drafts?.map((item) => (
                               <li key={item.id}>
-                                {creativeKind(t, item.kind)}
-                                {" · "}
-                                {creativeRecipe(t, item.recipe)}
-                                {" · "}
-                                {item.status === "succeeded"
-                                  ? t("attribution.generate.statusSucceeded")
-                                  : t("attribution.generate.statusPending")}
-                                {" · "}
-                                {t("attribution.generate.owed", { count: item.owed })}
+                                <button
+                                  type="button"
+                                  className="product-creative-draft"
+                                  onClick={() => {
+                                    setGenerateFor(null);
+                                    setReviewDraft({ product, draftId: item.id });
+                                  }}
+                                >
+                                  <span>
+                                    {creativeKind(t, item.kind)}
+                                    {" · "}
+                                    {creativeRecipe(t, item.recipe)}
+                                    {" · "}
+                                    {item.status === "succeeded"
+                                      ? t("attribution.generate.statusSucceeded")
+                                      : t("attribution.generate.statusPending")}
+                                    {" · "}
+                                    {t("attribution.generate.owed", { count: item.owed })}
+                                  </span>
+                                  <span className="product-creative-view">{t("attribution.generate.viewDraft")}</span>
+                                </button>
                               </li>
                             ))}
                           </ul>
@@ -1004,6 +1024,16 @@ export function ProductTable({
           open
           products={generateFor}
           onClose={() => setGenerateFor(null)}
+          onChanged={onCreativesChanged}
+        />
+      )}
+      {reviewDraft && (
+        <GenerateDialog
+          key={reviewDraft.draftId}
+          open
+          products={[reviewDraft.product]}
+          draftId={reviewDraft.draftId}
+          onClose={() => setReviewDraft(null)}
           onChanged={onCreativesChanged}
         />
       )}

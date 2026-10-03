@@ -24,11 +24,14 @@ and submitted, the same way a campaign post waits for media.
   prompt names a bed only when background is off. The mannequin prompt includes
   the narrow beige hallway only when background is off.
 - **`product_creative_models.py`** — `ProductCreativeDraft` (the stored prompt,
-  kind, card count, staged asset ids, `subject_asset_ids`, status `pending` or
-  `succeeded`) and `ProductCreativeLink` (one row per product and Library
-  asset). Migrations `20261003_0084` and `20261004_0085`. An empty
-  `subject_asset_ids` means the listing gallery is the subject, which is what
-  an older draft and an MCP create without a pick still do.
+  kind, card count, staged asset ids, `subject_asset_ids`, `listing_fields`,
+  status `pending` or `succeeded`) and `ProductCreativeLink` (one row per
+  product and Library asset). Migrations `20261003_0084`, `20261004_0085`, and
+  `20261004_0086`. An empty `subject_asset_ids` means the listing gallery is
+  the subject, which is what an older draft and an MCP create without a pick
+  still do. `listing_fields` is the snapshot of the listing values chosen at
+  confirm (`title`, `price`, `description`, `gallery`, `variations`). An empty
+  object means none of them were sent. The prompt text does not include them.
 - **`product_creative_drafts.py`** — preview does not save. Create stores the
   resolved prompt and commits, because MCP's `_call` closes its session and
   rolls back a flush. Submit ingests through `create_ingest_job` and
@@ -65,9 +68,16 @@ The modal names what the ask attaches. Subject images are chosen from this
 workspace's Library with the shared Library picker (`MediaPicker`), up to 8,
 in pick order, and the same pick is stored on every selected product's own
 draft as `subject_asset_ids`. The background, when one is used, stays an https
-URL. Title, price, description, listing pictures, variations, and stock are
-listed as not sent. Queue stays disabled until at least one Library image is
-picked. The prompt text does not depend on those images.
+URL. Title, price, description, listing pictures, and variations and stock
+are toggles, off until selected. A selected field is snapshotted onto that
+product's draft at confirm and shown with its value before queue. Queue stays
+disabled until at least one Library image is picked. The prompt text does not
+depend on those images or on which listing fields are selected.
+
+Each draft line in the product row opens that draft in the same dialog, read
+only, loaded by its id. The list itself stays a short summary. Generate media
+still starts a new draft. A single draft that still owes a file can take that
+file from the review.
 
 The product table filters to those drafts once any product has one. Beside the
 listing filter: All, Pending draft (a draft is not succeeded, or still owes a
