@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -25,6 +25,7 @@ from trendrelay_api.media_library_api import _asset_view
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base, UserProfile, Workspace
 from trendrelay_api.opportunity_models import Product
+from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
 from trendrelay_api.product_creative_recipes import BED_FLAT_LAY_OFF, MANNEQUIN_OFF
 
 engine = create_engine(
@@ -210,6 +211,92 @@ def test_completion_without_media_is_refused(session) -> None:
     still = product_creatives.get_draft(session, "ws-1", made["id"])
     assert still["status"] == "pending"
     assert still["linked"] is False
+
+
+def test_create_and_submit_survive_the_session_mcp_closes(
+    session, monkeypatch, tmp_path,
+) -> None:
+    """`_call` closes its session on the way out. A flush is gone with it.
+
+    Each write runs in its own session, the way the server does, and the
+    assertions read a later one. The same open session would still see a flush.
+    """
+    _allow_roots(monkeypatch, tmp_path)
+    _fake_process(monkeypatch)
+
+    with Session() as writing:
+        made = product_creatives.create_draft(
+            writing, "ws-1",
+            product_id="product-1", kind="image", recipe="bed_flat_lay",
+        )
+    with Session() as reading:
+        row = reading.get(ProductCreativeDraft, made["id"])
+        assert row is not None
+        assert row.status == "pending"
+        assert row.prompt == BED_FLAT_LAY_OFF
+        assert list(row.staged_asset_ids or []) == []
+
+    with Session() as writing:
+        filled = product_creatives.submit_media(
+            writing, "ws-1", made["id"], media_base64=_png(7), filename="angel.png",
+        )
+    assert filled["linked"] is True
+    assert filled["status"] == "succeeded"
+    with Session() as reading:
+        row = reading.get(ProductCreativeDraft, made["id"])
+        assert row is not None
+        assert row.status == "succeeded"
+        assert list(row.staged_asset_ids or []) == [filled["asset_id"]]
+        link = reading.scalar(
+            select(ProductCreativeLink).where(ProductCreativeLink.draft_id == made["id"])
+        )
+        assert link is not None
+        assert link.product_id == "product-1"
+        assert link.asset_id == filled["asset_id"]
+        product = next(
+            item for item in products_payload(reading, "ws-1")["products"]
+            if item["id"] == "product-1"
+        )
+        assert product["creative_assets"] == [{
+            "asset_id": filled["asset_id"], "draft_id": made["id"], "position": 0,
+        }]
+
+
+def test_a_carousel_card_stays_staged_after_the_session_closes(
+    session, monkeypatch, tmp_path,
+) -> None:
+    _allow_roots(monkeypatch, tmp_path)
+    _fake_process(monkeypatch)
+    with Session() as writing:
+        made = product_creatives.create_draft(
+            writing, "ws-1",
+            product_id="product-1", kind="carousel", recipe="bed_flat_lay", card_count=2,
+        )
+    with Session() as writing:
+        first = product_creatives.submit_media(
+            writing, "ws-1", made["id"], media_base64=_png(8), filename="card-1.png",
+        )
+    with Session() as reading:
+        row = reading.get(ProductCreativeDraft, made["id"])
+        assert row is not None
+        assert row.status == "pending"
+        assert list(row.staged_asset_ids or []) == [first["asset_id"]]
+        assert reading.scalar(
+            select(ProductCreativeLink).where(ProductCreativeLink.draft_id == made["id"])
+        ) is None
+    with Session() as writing:
+        second = product_creatives.submit_media(
+            writing, "ws-1", made["id"], media_base64=_png(9), filename="card-2.png",
+        )
+    assert second["linked"] is True
+    with Session() as reading:
+        row = reading.get(ProductCreativeDraft, made["id"])
+        assert row is not None
+        assert row.status == "succeeded"
+        links = list(reading.scalars(
+            select(ProductCreativeLink).where(ProductCreativeLink.draft_id == made["id"])
+        ))
+        assert {link.asset_id for link in links} == {first["asset_id"], second["asset_id"]}
 
 
 def test_another_workspaces_draft_is_not_visible(session) -> None:

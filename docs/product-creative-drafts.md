@@ -28,11 +28,13 @@ and submitted, the same way a campaign post waits for media.
   `ProductCreativeLink` (one row per product and Library asset). Migration
   `20261003_0084`.
 - **`product_creative_drafts.py`** — preview does not save. Create stores the
-  resolved prompt. Submit ingests through `create_ingest_job` and
+  resolved prompt and commits, because MCP's `_call` closes its session and
+  rolls back a flush. Submit ingests through `create_ingest_job` and
   `run_ingest_job` (source type `product-creative`), including video, in the
-  same call. A link is written only when `len(staged) == card_count`. A failed
-  or refused file writes no link and leaves the draft pending. A carousel's
-  card count is 2–10 and cannot be lowered; there is no update route.
+  same call, then commits the staged ids. A link is written only when
+  `len(staged) == card_count`, and that write commits too. A failed or refused
+  file writes no link and leaves the draft pending. A carousel's card count is
+  2–10 and cannot be lowered; there is no update route.
 - **`product_creative_api.py`** — under
   `/api/workspaces/{id}/attribution/creative-drafts`: preview, create, list,
   get, and `POST .../media`. The modal shows `draft.prompt` from that response

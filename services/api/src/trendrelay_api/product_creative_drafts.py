@@ -243,7 +243,9 @@ def create_draft(
         updated_at=utc_now(),
     )
     session.add(draft)
-    session.flush()
+    # MCP closes the session on the way out and rolls back whatever was only
+    # flushed. The id this returns has to still be a row.
+    session.commit()
     return _view(session, draft)
 
 
@@ -456,16 +458,18 @@ def submit_media(
         draft.staged_asset_ids = staged
     draft.updated_at = utc_now()
     if len(staged) < draft.card_count:
-        session.flush()
         view = _view(session, draft)
         view["asset_id"] = asset_id
+        # The Library asset is already committed by ingest. The staged id has
+        # to be too, or the next card opens a session that never saw this one.
+        session.commit()
         return view
     _write_links(session, draft, staged)
     draft.status = "succeeded"
     draft.updated_at = utc_now()
-    session.flush()
     view = _view(session, draft)
     view["asset_id"] = asset_id
+    session.commit()
     return view
 
 
