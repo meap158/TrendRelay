@@ -1133,6 +1133,7 @@ export const ja: Messages = {
       listingFields: "商品ページの項目",
       listingFieldsHelp: "項目を選ぶとプロンプトと一緒に送られます。選ぶまでオフです。下書きは、キューに入れた時点の値を保持します。",
       listingFieldsReview: "この下書きに保存された項目です。オフの項目は送られていません。",
+      fieldsNone: "なし",
       listingShared: "表示中の値は {name} のものです。選んだ商品ごとに、その商品の値が保存されます。",
       fieldEmpty: "この項目に保存された内容はありません。",
       descriptionTruncated: "保存された説明は短くされています。",

@@ -1145,6 +1145,7 @@ export const fr: Messages = {
       listingFields: "Champs de la fiche",
       listingFieldsHelp: "Sélectionnez un champ pour l'envoyer avec l'invite. Il reste éteint tant que vous ne le faites pas. Un brouillon garde la valeur du moment où vous le mettez en file.",
       listingFieldsReview: "Ce sont les champs enregistrés avec ce brouillon. Un champ éteint n'a pas été envoyé.",
+      fieldsNone: "Aucun",
       listingShared: "Les valeurs affichées sont celles de {name}. Chaque produit sélectionné garde les siennes.",
       fieldEmpty: "Rien n'est enregistré pour ce champ.",
       descriptionTruncated: "La description enregistrée a été raccourcie.",

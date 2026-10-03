@@ -1135,6 +1135,7 @@ export const ar: Messages = {
       listingFields: "حقول صفحة المنتج",
       listingFieldsHelp: "اختر حقلاً لإرساله مع النص. يبقى مطفأً إلى أن تفعل. تحتفظ المسودة بالقيمة في لحظة وضعها في الطابور.",
       listingFieldsReview: "هذه الحقول المحفوظة مع هذه المسودة. الحقل المطفأ لم يُرسل.",
+      fieldsNone: "لا شيء",
       listingShared: "القيم المعروضة تخص {name}. كل منتج محدد يحتفظ بقيمه.",
       fieldEmpty: "لا شيء محفوظ لهذا الحقل.",
       descriptionTruncated: "تم اختصار الوصف المحفوظ.",

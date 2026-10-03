@@ -74,10 +74,12 @@ product's draft at confirm and shown with its value before queue. Queue stays
 disabled until at least one Library image is picked. The prompt text does not
 depend on those images or on which listing fields are selected.
 
-Each draft line in the product row opens that draft in the same dialog, read
-only, loaded by its id. The list itself stays a short summary. Generate media
-still starts a new draft. A single draft that still owes a file can take that
-file from the review.
+Each draft line in an expanded product row shows that draft's stored
+configuration (background, subject, listing fields, and prompt), loaded by
+its id when the row is open. The product list itself stays a short summary.
+View opens the same dialog, read only. Generate media still starts a new
+draft. A single draft that still owes a file can take that file from the
+review.
 
 The product table filters to those drafts once any product has one. Beside the
 listing filter: All, Pending draft (a draft is not succeeded, or still owes a

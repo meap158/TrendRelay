@@ -615,3 +615,33 @@
 .product-creative-draft:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 .product-creative-draft > span:first-child { min-width: 0; }
 .product-creative-view { flex: none; color: var(--link); font-size: 11px; }
+.product-creatives > li { display: grid; gap: 6px; justify-items: start; }
+.product-creative-config {
+  display: grid;
+  gap: 6px;
+  inline-size: 100%;
+  max-inline-size: 42rem;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.product-creative-config > div { display: grid; gap: 2px; min-width: 0; }
+.product-creative-config dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.product-creative-config dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.product-creative-prompt { max-block-size: 7rem; overflow: auto; }
+.product-creative-note { margin: 0; color: var(--muted); font-size: 12px; }

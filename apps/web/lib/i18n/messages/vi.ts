@@ -1133,6 +1133,7 @@ export const vi: Messages = {
       listingFields: "Mục trang sản phẩm",
       listingFieldsHelp: "Chọn một mục để gửi cùng câu lệnh. Mục đó tắt cho đến khi bạn chọn. Bản nháp giữ giá trị tại lúc xếp hàng.",
       listingFieldsReview: "Đây là các mục đã lưu với bản nháp này. Mục đang tắt thì không được gửi.",
+      fieldsNone: "Không có",
       listingShared: "Giá trị đang hiện là của {name}. Mỗi sản phẩm đã chọn lưu giá trị của chính nó.",
       fieldEmpty: "Mục này không có gì được lưu.",
       descriptionTruncated: "Mô tả đã lưu đã được rút ngắn.",

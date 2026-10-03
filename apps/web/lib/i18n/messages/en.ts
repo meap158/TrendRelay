@@ -1137,6 +1137,7 @@ export const en = {
       listingFields: "Listing fields",
       listingFieldsHelp: "Select a field to send it with the prompt. It stays off until you do. A draft keeps the value from the moment you queue it.",
       listingFieldsReview: "These are the fields stored with this draft. A field that is off was not sent.",
+      fieldsNone: "None",
       listingShared: "The values shown are for {name}. Each selected product stores its own.",
       fieldEmpty: "Nothing is stored for this field.",
       descriptionTruncated: "The stored description was shortened.",

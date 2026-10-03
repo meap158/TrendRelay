@@ -16,12 +16,14 @@ import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
 import { GenerateDialog } from "./generate-dialog";
 
+import { useAuth } from "../auth-provider";
 import { Card } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
+import { useWorkspace } from "../workspace-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
 import { productMatches } from "../publish/offer-rows";
@@ -970,6 +972,11 @@ export function ProductTable({
                                   </span>
                                   <span className="product-creative-view">{t("attribution.generate.viewDraft")}</span>
                                 </button>
+                                <CreativeDraftSummary
+                                  draftId={item.id}
+                                  status={item.status}
+                                  owed={item.owed}
+                                />
                               </li>
                             ))}
                           </ul>
@@ -1051,4 +1058,159 @@ function creativeRecipe(t: (path: string) => string, recipe: string): string {
   if (recipe === "mannequin_transition") return t("attribution.generate.recipeMannequin");
   if (recipe === "mirror_selfie") return t("attribution.generate.recipeMirror");
   return t("attribution.generate.recipeBed");
+}
+
+/** The product list carries only id, kind, recipe, status, and owed. */
+const LISTING_FIELD_ORDER = ["title", "price", "description", "gallery", "variations"] as const;
+
+const LISTING_FIELD_LABEL: Record<(typeof LISTING_FIELD_ORDER)[number], string> = {
+  title: "omitTitle",
+  price: "omitPrice",
+  description: "omitDescription",
+  gallery: "omitGallery",
+  variations: "omitVariations",
+};
+
+type StoredSubject = { asset_id: string; title?: string; missing?: boolean };
+
+type DraftConfig = {
+  prompt: string;
+  variant?: string | null;
+  card_count?: number;
+  background_enabled?: boolean;
+  background_reference?: string | null;
+  subject_assets?: StoredSubject[];
+  listing_fields?: Record<string, unknown>;
+};
+
+const draftConfigCache = new Map<string, DraftConfig>();
+
+function draftConfigKey(draftId: string, status: string, owed: number): string {
+  return `${draftId}:${status}:${owed}`;
+}
+
+/**
+ * The saved ask for one draft, under its row.
+ *
+ * Loaded when that row is open. A later file submit changes status or owed,
+ * so the cache key changes and the row reads the draft again.
+ */
+function CreativeDraftSummary({
+  draftId,
+  status,
+  owed,
+}: {
+  draftId: string;
+  status: string;
+  owed: number;
+}) {
+  const t = useT();
+  const { apiFetch } = useAuth();
+  const { workspaceId } = useWorkspace();
+  const key = draftConfigKey(draftId, status, owed);
+  const [config, setConfig] = useState<DraftConfig | null>(() => draftConfigCache.get(key) ?? null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const cached = draftConfigCache.get(key);
+    if (cached) {
+      setConfig(cached);
+      setFailed(false);
+      return;
+    }
+    if (!workspaceId) return;
+    let cancelled = false;
+    setConfig(null);
+    setFailed(false);
+    void (async () => {
+      try {
+        const response = await apiFetch(
+          `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draftId}`,
+        );
+        if (cancelled) return;
+        if (!response.ok) {
+          setFailed(true);
+          return;
+        }
+        const payload = await response.json() as { draft?: DraftConfig };
+        if (!payload.draft?.prompt) {
+          setFailed(true);
+          return;
+        }
+        draftConfigCache.set(key, payload.draft);
+        setConfig(payload.draft);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch, draftId, key, workspaceId]);
+
+  if (failed) {
+    return <p className="product-creative-note">{t("attribution.generate.requestFailed")}</p>;
+  }
+  if (!config) {
+    return (
+      <p className="product-creative-note" aria-busy="true">
+        {t("attribution.generate.loadingDraft")}
+      </p>
+    );
+  }
+
+  const fields = config.listing_fields ?? {};
+  const fieldNames = LISTING_FIELD_ORDER
+    .filter((name) => Object.prototype.hasOwnProperty.call(fields, name))
+    .map((name) => t(`attribution.generate.${LISTING_FIELD_LABEL[name]}`));
+  const subjects = config.subject_assets ?? [];
+  const subjectText = subjects.length === 0
+    ? t("attribution.generate.subjectReviewEmpty")
+    : subjects.map((item) => {
+      const title = item.title?.trim() || item.asset_id;
+      return item.missing
+        ? `${title} — ${t("attribution.generate.subjectMissing")}`
+        : title;
+    }).join(", ");
+  const backgroundText = config.background_enabled && config.background_reference?.trim()
+    ? config.background_reference.trim()
+    : t("attribution.generate.backgroundNone");
+  const cardCount = config.card_count ?? 1;
+
+  return (
+    <dl className="product-creative-config">
+      <div>
+        <dt>{t("attribution.generate.backgroundHeading")}</dt>
+        <dd>{backgroundText}</dd>
+      </div>
+      <div>
+        <dt>{t("attribution.generate.subject")}</dt>
+        <dd>{subjectText}</dd>
+      </div>
+      <div>
+        <dt>{t("attribution.generate.listingFields")}</dt>
+        <dd>{fieldNames.length > 0 ? fieldNames.join(", ") : t("attribution.generate.fieldsNone")}</dd>
+      </div>
+      {(config.variant === "female" || config.variant === "male") && (
+        <div>
+          <dt>{t("attribution.generate.variant")}</dt>
+          <dd>
+            {config.variant === "male"
+              ? t("attribution.generate.variantMale")
+              : t("attribution.generate.variantFemale")}
+          </dd>
+        </div>
+      )}
+      {cardCount > 1 && (
+        <div>
+          <dt>{t("attribution.generate.cards")}</dt>
+          <dd>{cardCount}</dd>
+        </div>
+      )}
+      <div>
+        <dt>{t("attribution.generate.prompt")}</dt>
+        <dd className="product-creative-prompt">{config.prompt}</dd>
+      </div>
+    </dl>
+  );
 }

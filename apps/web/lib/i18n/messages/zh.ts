@@ -1120,6 +1120,7 @@ export const zh: Messages = {
       listingFields: "商品页字段",
       listingFieldsHelp: "选中的字段会和提示词一起送出。未选中时保持关闭。草稿保留排队那一刻的值。",
       listingFieldsReview: "这些是这份草稿保存的字段。关闭的字段没有送出。",
+      fieldsNone: "无",
       listingShared: "这里显示的是 {name} 的值。每个选中的商品各自保存自己的值。",
       fieldEmpty: "这个字段没有保存内容。",
       descriptionTruncated: "保存的描述已被缩短。",
