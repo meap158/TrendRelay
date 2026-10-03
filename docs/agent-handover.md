@@ -7,6 +7,23 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Attribution product creatives (2026-10-03)
+
+Generate on Attribution queues a reviewed prompt for one product. The prompt is
+resolved only in `product_creative_recipes.py` and stored on the draft. The
+modal and MCP both display that stored text. TrendRelay does not generate the
+pixels. Submitting a file ingests it into the Library and writes
+`ProductCreativeLink` only when the draft holds its card count. Both the
+product read (`creative_assets`) and the Library asset read
+(`attribution_products`) show the link. Nothing is published.
+
+Recipes: `bed_flat_lay` (image or carousel, background optional; the word bed
+only when background is off), `mannequin_transition` (video, hallway only when
+background is off), `mirror_selfie` (video, `female` or `male`, background
+required — do not invent a no-background mirror script). Resume detail is
+`docs/product-creative-drafts.md`. The assistant procedure is
+`SOP/attribution/fill-product-creatives.md`.
+
 ## Attribution Shopee product listings fetch fix (2026-10-03)
 
 - **Context & Problem**: In Attribution (`/attribution`), clicking "Fetch listings" for products resulted in all jobs failing with `Shopee blocked the silent product check with verification. Use the Product Offer Excel export instead.` (e.g. 0 of 15 listings fetched · 15 failed).
