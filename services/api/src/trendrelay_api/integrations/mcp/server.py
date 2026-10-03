@@ -19,6 +19,7 @@ from trendrelay_api.integrations.mcp import (
     drafts,
     intake,
     policy,
+    product_creatives,
     products,
     schedules,
     sops,
@@ -99,6 +100,15 @@ INSTRUCTIONS = (
     "`get_product_attribution` reads its campaign performance separately. Avoid "
     "loading every full listing at once, and make only claims supported by the "
     "live record.\n\n"
+    "Pending product creatives — an image, a carousel, or a video still owed "
+    "for one Attribution product — are `list_product_creative_drafts`. "
+    "`get_product_creative_draft` returns the reviewed prompt and the product "
+    "image references, plus the background reference when one was attached. "
+    "`create_product_creative_draft` queues that prompt; it does not generate "
+    "pixels. `submit_product_creative_media` files the finished media in the "
+    "Library and links it to the product once the draft's card count is met. "
+    "A carousel stays pending, with no new link, until every card has landed. "
+    "Nothing here publishes or attaches the asset to a campaign.\n\n"
     "To add a new post: `list_library_assets` finds media the workspace already "
     "holds - look before uploading, because re-importing a file the Library "
     "has records provenance that is not true. `upload_media` brings in one "
@@ -1269,6 +1279,126 @@ def build_server(workspace_id: str) -> FastMCP:
             ),
         )
 
+    @server.tool(
+        name="list_product_creative_drafts",
+        description=(
+            "Pending image, carousel, and video drafts for Attribution "
+            "products, newest first. Each row says the kind, the recipe, how "
+            "many files are still owed, and the product. Filter by status "
+            "(pending or succeeded), kind, or product_id. Pages with limit "
+            "and offset. Publishing stays refused."
+        ),
+    )
+    def list_product_creative_drafts(
+        status: str | None = "pending",
+        kind: str | None = None,
+        product_id: str | None = None,
+        limit: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=product_creatives.MAX_PAGE,
+                description="Drafts to return.",
+            ),
+        ] = product_creatives.DEFAULT_PAGE,
+        offset: Annotated[
+            int, Field(ge=0, description="Zero-based position of the first draft.")
+        ] = 0,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_product_creative_drafts",
+            lambda s: product_creatives.list_drafts(
+                s, workspace_id,
+                status=status, kind=kind, product_id=product_id,
+                limit=limit, offset=offset,
+            ),
+        )
+
+    @server.tool(
+        name="get_product_creative_draft",
+        description=(
+            "One Attribution creative draft: the stored reviewed prompt, the "
+            "product image references, the background reference when one was "
+            "attached, the kind, the card count, and how many files are still "
+            "owed. The prompt is the text stored at confirm, not a fresh "
+            "resolution. Use an id from list_product_creative_drafts."
+        ),
+    )
+    def get_product_creative_draft(draft_id: str) -> dict[str, Any]:
+        return _call(
+            "get_product_creative_draft",
+            lambda s: product_creatives.get_draft(s, workspace_id, draft_id),
+        )
+
+    @server.tool(
+        name="create_product_creative_draft",
+        description=(
+            "Queue a reviewed prompt for one Attribution product. kind is "
+            "image, carousel, or video. recipe is bed_flat_lay (image or "
+            "carousel), mannequin_transition (video), or mirror_selfie "
+            "(video). mirror_selfie requires variant female or male and an "
+            "https background_reference; it has no wording without a "
+            "background. bed_flat_lay and mannequin_transition take an "
+            "optional https background, and the stored prompt changes when "
+            "it is on. A carousel needs card_count from 2 to 10; that count "
+            "cannot be lowered later. Confirm stores the prompt and does not "
+            "ingest media. The product must already have an image. Do not "
+            "publish, and do not mark the draft complete from here."
+        ),
+    )
+    def create_product_creative_draft(
+        product_id: str,
+        kind: str,
+        recipe: str,
+        card_count: int | None = None,
+        variant: str | None = None,
+        background_enabled: bool = False,
+        background_reference: str | None = None,
+    ) -> dict[str, Any]:
+        return _call(
+            "create_product_creative_draft",
+            lambda s: product_creatives.create_draft(
+                s, workspace_id,
+                product_id=product_id, kind=kind, recipe=recipe,
+                card_count=card_count, variant=variant,
+                background_enabled=background_enabled,
+                background_reference=background_reference,
+            ),
+        )
+
+    @server.tool(
+        name="submit_product_creative_media",
+        description=(
+            "File one finished creative for a pending Attribution draft. Send "
+            "exactly one source: the media file, a public https media_url, or "
+            "media_base64. Image and carousel drafts accept an image; a video "
+            "draft accepts a video. The file is ingested into the Library in "
+            "this call. A carousel stays pending, and writes no new product "
+            "link, until every card has landed. A failed or refused file "
+            "writes no link and leaves the draft pending. There is no way to "
+            "mark the draft complete without a real ingested Library asset. "
+            "Do not publish, and do not attach the asset to a campaign."
+        ),
+        meta={"openai/fileParams": ["media"]},
+    )
+    def submit_product_creative_media(
+        draft_id: str,
+        media: OpenAIFile = None,  # type: ignore[assignment]
+        media_url: str | None = None,
+        media_base64: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        return _call(
+            "submit_product_creative_media",
+            lambda s: product_creatives.submit_media(
+                s, workspace_id, draft_id,
+                media=_file_value(media),
+                media_url=media_url,
+                media_base64=media_base64,
+                filename=filename,
+            ),
+        )
+
     return server
 
 
@@ -1322,6 +1452,12 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "create_creation_draft", "update_creation_draft", "render_creation_draft",
         "list_creation_draft_media", "add_creation_draft_media",
     ),
+    # A prompt queued on an Attribution product, then filled into the Library.
+    # Its own group: it makes a product creative, not a campaign post.
+    "Product creatives": (
+        "list_product_creative_drafts", "get_product_creative_draft",
+        "create_product_creative_draft", "submit_product_creative_media",
+    ),
 }
 
 #: The tab where each group's work shows up in the app, so an operator can
@@ -1337,6 +1473,7 @@ CATEGORY_TABS: dict[str, str | None] = {
     "Products": "Campaigns",
     "Posting schedule": "Campaigns",
     "Creation drafts": "Library",
+    "Product creatives": "Attribution",
 }
 TOOL_TAB_OVERRIDES: dict[str, str] = {
     "upload_image": "Library",

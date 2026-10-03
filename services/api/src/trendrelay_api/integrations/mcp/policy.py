@@ -185,6 +185,16 @@ EXPOSURE: dict[str, Access] = {
     # the draft is rendered, does not even reach the Library.
     "list_creation_draft_media": Access.READ,
     "add_creation_draft_media": Access.WORKSPACE_WRITE,
+    # --- Product creatives: a prompt queued, then filled into the Library ---
+    # The same shape as a campaign post waiting for media. Listing and reading
+    # are context. Creating a draft stores the reviewed prompt and publishes
+    # nothing. Submitting media ingests it through the Library and links it to
+    # the product only when the draft's count is met. Approval and publishing
+    # stay refused; there is no operation here that sends anything.
+    "list_product_creative_drafts": Access.READ,
+    "get_product_creative_draft": Access.READ,
+    "create_product_creative_draft": Access.WORKSPACE_WRITE,
+    "submit_product_creative_media": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,

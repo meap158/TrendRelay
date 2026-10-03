@@ -18,6 +18,7 @@ write operation looks convenient.
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
 | Lock posts to concrete slots, or spread a batch of drafts across days | (no SOP yet) | `get_day_slots` |
 | Research products, listings, images, or attribution | (no SOP yet) | `list_products` |
+| Fill a pending Attribution product creative (image, carousel, or video) | `attribution.fill-product-creatives` | `list_product_creative_drafts` |
 
 For an action not listed here, call `list_sops`. Match its canonical action or
 an alias. If no reviewed SOP exists, follow current explicit user direction and
@@ -184,6 +185,34 @@ override the bytes. The exact uploaded image is the immutable `original`
 Library version at its full pixel dimensions; TrendRelay creates a separate
 thumbnail for browsing. Never downscale, recompress, or upload a second version
 merely to make an image import faster.
+
+### Quick path: fill a pending Attribution product creative
+
+When a product is waiting on an image, a carousel, or a video, load
+`attribution.fill-product-creatives` and work one draft at a time:
+
+1. `list_product_creative_drafts` for the pending queue. Open one with
+   `get_product_creative_draft`. Use the stored `prompt`, the `product_images`,
+   and `background_reference` when one is attached. Do not rewrite the prompt.
+2. Generate that file with the client's own image or video tool. TrendRelay
+   does not generate the pixels.
+3. `submit_product_creative_media` with exactly one source: the `media` file,
+   a public https `media_url`, or `media_base64`. An image or carousel draft
+   takes an image; a video draft takes a video. The ingest finishes in this
+   call, including video.
+4. A carousel stays pending, with no new product link, until every card has
+   been submitted. Read `owed`. `linked` is true only when the set is complete.
+   A failed file writes no link.
+5. On success the Library asset is linked to the product and the product is
+   linked back on the asset. Do not publish, and do not attach it to a campaign
+   unless that was asked as its own action.
+
+`create_product_creative_draft` queues a new one for a product that already
+has an image. `bed_flat_lay` is an image or a carousel and may take an optional
+background. `mannequin_transition` is a video and may take one. `mirror_selfie`
+is a video that requires `variant` `female` or `male` and an https background;
+it has no wording without one. A carousel's `card_count` is 2 to 10 and cannot
+be lowered. Confirm stores the prompt and does not ingest media.
 
 ## Authority and safety
 
