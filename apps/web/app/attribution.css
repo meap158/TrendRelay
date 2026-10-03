@@ -327,6 +327,7 @@
   .product-bulk-campaign-group { inline-size: 100%; padding-inline-start: 0; border-inline-start: 0; border-block-start: 1px solid var(--line); padding-block-start: 6px; }
   .product-bulk .ui-button { min-block-size: 44px; }
   .product-creative-draft { min-block-size: 44px; }
+  .generate-omitted button { min-block-size: 44px; padding-inline: 12px; }
   .product-tag-campaign { flex: 1 1 180px; inline-size: auto; max-inline-size: none; min-inline-size: 0; }
 }
 
