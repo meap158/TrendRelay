@@ -546,23 +546,6 @@ export function GenerateDialog({
               <p className="generate-background-none">{t("attribution.generate.backgroundNone")}</p>
             )}
           </div>
-          {many && !reviewing && chosenFields.length > 0 && products[0] && (
-            <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
-          )}
-          {chosenFields.map((key) => (
-            <div className="generate-use" key={key}>
-              <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
-              <ListingFieldValue
-                field={key}
-                value={listingSnapshot[key]}
-                empty={t("attribution.generate.fieldEmpty")}
-                truncated={t("attribution.generate.descriptionTruncated")}
-                galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
-                stockLine={(count) => t("attribution.generate.stockLine", { count })}
-                stockUnknown={t("attribution.generate.stockUnknown")}
-              />
-            </div>
-          ))}
         </section>
         <div className="generate-omitted" role="group" aria-label={t("attribution.generate.listingFields")}>
           <strong>{t("attribution.generate.listingFields")}</strong>
@@ -605,6 +588,27 @@ export function GenerateDialog({
             ? t("attribution.generate.promptStored")
             : t("attribution.generate.promptHelp")}</small>
         </label>
+        {chosenFields.length > 0 && (
+          <section className="generate-attached" aria-label={t("attribution.generate.listingFields")}>
+            {many && !reviewing && products[0] && (
+              <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
+            )}
+            {chosenFields.map((key) => (
+              <div className="generate-use" key={key}>
+                <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
+                <ListingFieldValue
+                  field={key}
+                  value={listingSnapshot[key]}
+                  empty={t("attribution.generate.fieldEmpty")}
+                  truncated={t("attribution.generate.descriptionTruncated")}
+                  galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
+                  stockLine={(count) => t("attribution.generate.stockLine", { count })}
+                  stockUnknown={t("attribution.generate.stockUnknown")}
+                />
+              </div>
+            ))}
+          </section>
+        )}
         {draft && !many && (
           <p role="status">
             {draft.linked

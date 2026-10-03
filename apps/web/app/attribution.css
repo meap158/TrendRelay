@@ -504,8 +504,23 @@
   line-height: 1.45;
   white-space: pre-wrap;
 }
+.campaign-dialog-form .generate-attached {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-block-start: 2px;
+  border-block-start: 1px solid var(--line);
+}
+.campaign-dialog-form .generate-attached > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
 /* What this ask attaches, named, so a long listing is not mistaken for the
-   subject. Listing fields underneath are off until the operator selects one. */
+   subject. Selected listing values follow the prompt, so they do not push it
+   down. */
 .campaign-dialog-form .generate-uses {
   display: grid;
   gap: 10px;

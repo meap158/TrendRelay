@@ -70,7 +70,7 @@ in pick order, and the same pick is stored on every selected product's own
 draft as `subject_asset_ids`. The background, when one is used, stays an https
 URL. Title, price, description, listing pictures, and variations and stock
 are toggles, off until selected. A selected field is snapshotted onto that
-product's draft at confirm and shown with its value before queue. Queue stays
+product's draft at confirm, and its value is shown under the prompt. Queue stays
 disabled until at least one Library image is picked. The prompt text does not
 depend on those images or on which listing fields are selected.
 
