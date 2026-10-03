@@ -206,6 +206,13 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
 
     clicks_by_product = file_by_product(list(clicks))
     conversions_by_product = file_by_product(list(conversions))
+    from trendrelay_api.product_creative_drafts import (
+        creative_assets_by_product,
+        creative_drafts_by_product,
+    )
+
+    creative_assets = creative_assets_by_product(session, workspace_id)
+    creative_drafts = creative_drafts_by_product(session, workspace_id)
 
     rows: list[dict[str, Any]] = []
     for product in products:
@@ -294,6 +301,11 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
             "product_form": (
                 product_editions[0].product_form if product_editions else None
             ),
+            # Filled creatives, and the drafts still waiting. The link is the
+            # association; a pending draft is named so the queue is visible
+            # from the product it belongs to.
+            "creative_assets": creative_assets.get(product.id, []),
+            "creative_drafts": creative_drafts.get(product.id, []),
         })
 
     # Only works this workspace's products actually belong to. A work with no

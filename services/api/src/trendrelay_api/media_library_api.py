@@ -254,11 +254,17 @@ def _asset_view(
     transcripts: list[MediaTranscript] | None = None,
     analysis: CreativeAnalysis | None = None,
     campaigns: list[dict[str, Any]] | None = None,
+    attribution_products: list[dict[str, Any]] | None = None,
     related_loaded: bool = False,
 ) -> dict[str, Any]:
     """Serialize one asset, accepting batched related rows for list views."""
     if not related_loaded:
         campaigns = _campaigns_by_asset(session, [item.id]).get(item.id, [])
+        from trendrelay_api.product_creative_drafts import attribution_products_by_asset
+
+        attribution_products = attribution_products_by_asset(
+            session, item.workspace_id, [item.id]
+        ).get(item.id, [])
         versions = list(session.scalars(
             select(MediaAssetVersion)
             .where(MediaAssetVersion.asset_id == item.id)
@@ -311,6 +317,9 @@ def _asset_view(
         # every asset, which read the same on one that had never been used and
         # on one already queued in two campaigns.
         "campaigns": campaigns or [],
+        # The Attribution product this creative was generated for, when it
+        # was. The same association the product row reads, from this side.
+        "attribution_products": attribution_products or [],
         "original_path": item.original_path,
         "original_sha256": item.original_sha256,
         "mime_type": item.mime_type,
@@ -441,6 +450,13 @@ def _asset_views(session: Session, items: list[MediaAsset]) -> list[dict[str, An
     ).all():
         analyses_by_asset.setdefault(analysis.asset_id, analysis)
     campaigns_by_asset = _campaigns_by_asset(session, asset_ids)
+    from trendrelay_api.product_creative_drafts import attribution_products_by_asset
+
+    products_by_asset: dict[str, list[dict[str, Any]]] = {}
+    if items:
+        products_by_asset = attribution_products_by_asset(
+            session, items[0].workspace_id, asset_ids
+        )
     return [
         _asset_view(
             session,
@@ -449,6 +465,7 @@ def _asset_views(session: Session, items: list[MediaAsset]) -> list[dict[str, An
             transcripts=transcripts_by_asset.get(item.id, []),
             analysis=analyses_by_asset.get(item.id),
             campaigns=campaigns_by_asset.get(item.id, []),
+            attribution_products=products_by_asset.get(item.id, []),
             related_loaded=True,
         )
         for item in items

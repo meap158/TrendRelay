@@ -72,6 +72,7 @@ from trendrelay_api.integrations.trend_sources import live_readers, live_trends_
 from trendrelay_api.media_api import router as media_router
 from trendrelay_api.media_library_api import router as media_library_router
 from trendrelay_api.opportunities_api import router as opportunities_router
+from trendrelay_api.product_creative_api import router as product_creative_router
 from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
 from trendrelay_api.signals_api import router as signals_router
@@ -99,6 +100,7 @@ app = FastAPI(
 )
 app.include_router(foundation_router)
 app.include_router(attribution_router)
+app.include_router(product_creative_router)
 app.include_router(autocut_router)
 app.include_router(storytelling_router)
 app.include_router(creation_drafts_router)
