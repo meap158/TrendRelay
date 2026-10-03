@@ -25,6 +25,12 @@ import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
 import { productMatches } from "../publish/offer-rows";
+import {
+  hasLibraryCreative,
+  hasPendingCreative,
+  matchesCreativeFilter,
+  type CreativeFilter,
+} from "./creative-filter";
 import { SearchSelect } from "../ui/search-select";
 import {
   sortProducts,
@@ -189,6 +195,8 @@ export function ProductTable({
   const [filterSubId, setFilterSubId] = useState("");
   /** Whether a product's listing has been read: this table's own kind axis. */
   const [listingFilter, setListingFilter] = useState<"all" | "with" | "without">("all");
+  /** Pending creative drafts, or creatives already in the Library. */
+  const [creativeFilter, setCreativeFilter] = useState<CreativeFilter>("all");
   /**
    * The products a notification arrived on, while that arrival still stands.
    *
@@ -217,6 +225,7 @@ export function ProductTable({
     setFilterFrom("");
     setFilterTo("");
     setListingFilter("all");
+    setCreativeFilter("all");
   }, [scopeKey]);
 
   function clearScope() {
@@ -285,15 +294,15 @@ export function ProductTable({
     [products],
   );
 
-  const shown = useMemo(() => {
+  const narrowed = useMemo(() => {
     // Arriving from a notification is a scope, not a filter: these products
     // and no others, whatever the controls above say. Applied first so the
     // count beside them describes what is actually on screen.
-    if (scope) return sortProducts(products.filter((product) => scope.has(product.id)), sort);
+    if (scope) return products.filter((product) => scope.has(product.id));
     // The same tested rules the offer picker filters with, at product grain -
     // this table carried its own inline copy, and the inline copy is the one
     // that drifts.
-    const filtered = products.filter((product) => productMatches(product, {
+    return products.filter((product) => productMatches(product, {
       query, campaign: filterCampaign, file: filterFile, from: filterFrom, to: filterTo,
       creator: filterCreator, subId: filterSubId,
     }, campaignsByOffer))
@@ -302,12 +311,27 @@ export function ProductTable({
       // splits videos from images.
       .filter((product) => listingFilter === "all"
         || (listingFilter === "with" ? Boolean(product.listing) : !product.listing));
-    return sortProducts(filtered, sort);
   }, [
-    products, query, sort, filterCampaign, filterFile, filterFrom, filterTo,
+    products, query, filterCampaign, filterFile, filterFrom, filterTo,
     filterCreator, filterSubId,
     campaignsByOffer, listingFilter, scope,
   ]);
+  const shown = useMemo(
+    () => sortProducts(
+      narrowed.filter((product) => matchesCreativeFilter(product, creativeFilter)),
+      sort,
+    ),
+    [narrowed, creativeFilter, sort],
+  );
+  const creativeCounts = useMemo(() => ({
+    all: narrowed.length,
+    pending: narrowed.filter((product) => hasPendingCreative(product)).length,
+    library: narrowed.filter((product) => hasLibraryCreative(product)).length,
+  }), [narrowed]);
+  const showCreativeFilter = useMemo(
+    () => products.some((product) => hasPendingCreative(product) || hasLibraryCreative(product)),
+    [products],
+  );
   const listingCounts = useMemo(() => ({
     all: products.length,
     with: products.filter((product) => product.listing).length,
@@ -394,7 +418,7 @@ export function ProductTable({
         // filtered-down list reports what it is showing, not the whole catalogue.
         count: (query.trim() || filterCampaign || filterFile || filterFrom || filterTo
           || filterCreator || filterSubId.trim()
-          || listingFilter !== "all")
+          || listingFilter !== "all" || creativeFilter !== "all")
           ? shown.length
           : products.length,
       })}
@@ -447,9 +471,30 @@ export function ProductTable({
               ))}
             </div>
           )}
+          {showCreativeFilter && (
+            <div
+              className="product-listing-filter"
+              role="group"
+              aria-label={t("attribution.filterByCreative")}
+            >
+              {([
+                ["all", t("attribution.creativeAll"), creativeCounts.all],
+                ["pending", t("attribution.creativePending"), creativeCounts.pending],
+                ["library", t("attribution.creativeLibrary"), creativeCounts.library],
+              ] as const).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={creativeFilter === value ? "selected" : ""}
+                  aria-pressed={creativeFilter === value}
+                  onClick={() => setCreativeFilter(value)}
+                ><span>{label}</span><b>{count}</b></button>
+              ))}
+            </div>
+          )}
         </div>
         {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates
-          || creatorNames.length > 0) && (
+          || creatorNames.length > 0 || creativeFilter !== "all") && (
           <div className="product-filters">
             {campaigns.length > 0 && (
               <Select
@@ -531,7 +576,7 @@ export function ProductTable({
               </span>
             )}
             {(filterCampaign || filterFile || filterFrom || filterTo
-              || filterCreator || filterSubId) && (
+              || filterCreator || filterSubId || creativeFilter !== "all") && (
               <Button
                 variant="quiet"
                 size="sm"
@@ -542,6 +587,7 @@ export function ProductTable({
                   setFilterTo("");
                   setFilterCreator("");
                   setFilterSubId("");
+                  setCreativeFilter("all");
                 }}
               >
                 {t("attribution.clearFilters")}

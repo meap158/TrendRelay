@@ -11,7 +11,7 @@
 .attribution-import-problems { margin: 8px 0 0; padding-inline-start: 18px; color: var(--warn, var(--warn)); font-size: 12px; }
 .attribution-import-problems li { margin-block: 2px; }
 /* The flexible half of the stable table toolbar. */
-.product-search-bar { display: flex; flex: 1 1 100%; align-items: center; gap: 10px; }
+.product-search-bar { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 10px; }
 .product-search-input-wrap { position: relative; display: flex; flex: 1 1 260px; align-items: center; min-inline-size: 0; }
 .product-search-icon { position: absolute; inset-inline-start: 10px; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
 .product-search { flex: 1 1 0%; min-inline-size: 0; padding: 7px 12px 7px 32px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }

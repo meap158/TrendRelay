@@ -69,6 +69,12 @@ URL. Title, price, description, listing pictures, variations, and stock are
 listed as not sent. Queue stays disabled until at least one Library image is
 picked. The prompt text does not depend on those images.
 
+The product table filters to those drafts once any product has one. Beside the
+listing filter: All, Pending draft (a draft is not succeeded, or still owes a
+file), and In Library (a creative is linked). A product can be in both. The
+count on a button is how many rows that button will show with the other
+filters already on. The Publish offer picker does not grow this control.
+
 ## Tests
 
 `test_product_creative_recipes.py`, `test_product_creative_drafts_api.py`, and
