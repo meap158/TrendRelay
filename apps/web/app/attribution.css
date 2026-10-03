@@ -593,11 +593,12 @@
 .product-creatives { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
 .product-creatives a { color: var(--link); }
 .product-creative-draft {
-  display: flex;
+  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  inline-size: 100%;
+  justify-content: flex-start;
+  gap: 12px;
+  max-inline-size: 100%;
   min-block-size: 32px;
   padding: 6px 8px;
   border: 1px solid var(--line);
