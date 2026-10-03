@@ -326,7 +326,6 @@
   .product-bulk-actions { inline-size: 100%; flex-wrap: wrap; }
   .product-bulk-campaign-group { inline-size: 100%; padding-inline-start: 0; border-inline-start: 0; border-block-start: 1px solid var(--line); padding-block-start: 6px; }
   .product-bulk .ui-button { min-block-size: 44px; }
-  .product-creative-draft { min-block-size: 44px; }
   .generate-omitted button { min-block-size: 44px; padding-inline: 12px; }
   .product-tag-campaign { flex: 1 1 180px; inline-size: auto; max-inline-size: none; min-inline-size: 0; }
 }
@@ -645,3 +644,12 @@
 }
 .product-creative-prompt { max-block-size: 7rem; overflow: auto; }
 .product-creative-note { margin: 0; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 700px) {
+  /* The base draft rule comes later than the shared phone query, so the
+     phone size has to be restated here. The table is wider than the screen;
+     the summary stays within the screen. */
+  .product-creative-draft,
+  .product-creative-config { max-inline-size: calc(100vw - 40px); }
+  .product-creative-draft { min-block-size: 44px; }
+}
