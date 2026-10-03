@@ -629,6 +629,8 @@ type Asset = {
    * rather than merely lists.
    */
   campaigns?: { id: string; name: string; queued: number }[];
+  /** Attribution products this asset was generated for. */
+  attribution_products?: { product_id: string; name: string; draft_id: string }[];
 };
 type CampaignPickerSelection = {
   /** Every selected id, including rows outside the 100 assets painted in the grid. */
@@ -2797,6 +2799,21 @@ function LibraryContent() {
                               </Link>
                               {campaign.queued > 1
                                 && ` ${t("library.queuedTimes", { count: campaign.queued })}`}
+                            </span>
+                          ))}
+                        </span>
+                      </p>
+                    )}
+                    {!!selected.attribution_products?.length && (
+                      <p className="library-in-campaigns">
+                        <span>
+                          {t("library.attributionProducts")}{" "}
+                          {selected.attribution_products.map((product, index) => (
+                            <span key={product.product_id}>
+                              {index > 0 && ", "}
+                              <Link href={`/attribution?products=${encodeURIComponent(product.product_id)}`}>
+                                {product.name}
+                              </Link>
                             </span>
                           ))}
                         </span>

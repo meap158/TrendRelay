@@ -11,7 +11,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+
+import { GenerateDialog } from "./generate-dialog";
 
 import { Card } from "../ui/primitives";
 import { Button } from "../ui/button";
@@ -122,6 +125,8 @@ export function ProductTable({
   onReadListing,
   arrivedWith = null,
   onClearArrival,
+  canQueue = false,
+  onCreativesChanged,
 }: {
   products: ProductRow[];
   onCopyAffiliateLink: (url: string) => void;
@@ -160,6 +165,10 @@ export function ProductTable({
   arrivedWith?: { productIds: string[]; notice: string } | null;
   /** Drop the scope, and let the page take it out of the address bar. */
   onClearArrival?: () => void;
+  /** Same role set as an editor. False leaves Generate off the table. */
+  canQueue?: boolean;
+  /** The page reloads products after a draft is queued or a file lands. */
+  onCreativesChanged?: () => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -188,6 +197,7 @@ export function ProductTable({
    * parameters out of the URL, and a reload does not put the scope back.
    */
   const [scope, setScope] = useState<Set<string> | null>(null);
+  const [generateFor, setGenerateFor] = useState<ProductRow | null>(null);
   const scopeKey = (arrivedWith?.productIds ?? []).join(",");
   const seededScope = useRef("");
   useEffect(() => {
@@ -581,6 +591,17 @@ export function ProductTable({
                 <ActionIcon name="refresh" /> Fetch listings
               </Button>
             )}
+            {canQueue && picked.size === 1 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const id = [...picked][0];
+                  const product = products.find((item) => item.id === id);
+                  if (product) setGenerateFor(product);
+                }}
+              >{t("attribution.generate.open")}</Button>
+            )}
           </div>
           {/* Tagging a selection to a campaign, where the selection already
               is. A hundred products imported for one campaign is one decision,
@@ -850,6 +871,42 @@ export function ProductTable({
                             ))}
                           </ul>
                         ) : <p className="product-no-data">{t("attribution.noOffers")}</p>}
+                        <div className="product-detail-head">
+                          <h4>{t("attribution.generate.creatives")}</h4>
+                          {canQueue && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setGenerateFor(product)}
+                            >{t("attribution.generate.open")}</Button>
+                          )}
+                        </div>
+                        {(product.creative_assets?.length || product.creative_drafts?.length) ? (
+                          <ul className="product-creatives">
+                            {product.creative_assets?.map((asset) => (
+                              <li key={asset.asset_id}>
+                                <Link href={`/library?assets=${encodeURIComponent(asset.asset_id)}`}>
+                                  {t("attribution.generate.assetLink")}
+                                </Link>
+                              </li>
+                            ))}
+                            {product.creative_drafts?.map((item) => (
+                              <li key={item.id}>
+                                {creativeKind(t, item.kind)}
+                                {" · "}
+                                {creativeRecipe(t, item.recipe)}
+                                {" · "}
+                                {item.status === "succeeded"
+                                  ? t("attribution.generate.statusSucceeded")
+                                  : t("attribution.generate.statusPending")}
+                                {" · "}
+                                {t("attribution.generate.owed", { count: item.owed })}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="product-no-data">{t("attribution.generate.noneLinked")}</p>
+                        )}
                         {/* What the product's own page said, laid out the way
                             the page lays it out: gallery beside the buying
                             facts, details and description underneath. The
@@ -892,6 +949,27 @@ export function ProductTable({
           </tbody>
         </table>
       </div>
+      {generateFor && (
+        <GenerateDialog
+          key={generateFor.id}
+          open
+          product={generateFor}
+          onClose={() => setGenerateFor(null)}
+          onChanged={onCreativesChanged}
+        />
+      )}
     </Card>
   );
+}
+
+function creativeKind(t: (path: string) => string, kind: string): string {
+  if (kind === "carousel") return t("attribution.generate.kindCarousel");
+  if (kind === "video") return t("attribution.generate.kindVideo");
+  return t("attribution.generate.kindImage");
+}
+
+function creativeRecipe(t: (path: string) => string, recipe: string): string {
+  if (recipe === "mannequin_transition") return t("attribution.generate.recipeMannequin");
+  if (recipe === "mirror_selfie") return t("attribution.generate.recipeMirror");
+  return t("attribution.generate.recipeBed");
 }

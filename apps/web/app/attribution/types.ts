@@ -78,6 +78,17 @@ export type ProductRow = {
       Null on rows imported before these were recorded, or pasted with no file. */
   import_filename: string | null;
   imported_at: string | null;
+  /** Library assets linked from a filled creative. Optional for older payloads. */
+  creative_assets?: { asset_id: string; draft_id: string; position: number }[];
+  /** Drafts queued for this product, including ones still pending. */
+  creative_drafts?: {
+    id: string;
+    kind: string;
+    recipe: string;
+    status: string;
+    card_count: number;
+    owed: number;
+  }[];
 };
 
 export type WorkCurrency = {

@@ -438,6 +438,8 @@ function AttributionContent() {
           onFetchListings={canImport ? fetchListings : undefined}
           listingBusy={listingBusy}
           onReadListing={readListing}
+          canQueue={canImport}
+          onCreativesChanged={() => { void refresh(); }}
         />
       </section>
       </>}

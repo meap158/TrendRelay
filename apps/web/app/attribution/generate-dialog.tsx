@@ -1,0 +1,370 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import { useAuth } from "../auth-provider";
+import { useT } from "../i18n-provider";
+import { useWorkspace } from "../workspace-provider";
+import { Button } from "../ui/button";
+import { Dialog } from "../ui/dialog";
+import { Select } from "../ui/select";
+
+type Kind = "image" | "carousel" | "video";
+type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
+
+type DraftView = {
+  id: string;
+  prompt: string;
+  status: string;
+  owed: number;
+  linked: boolean;
+  card_count: number;
+};
+
+/**
+ * Queue one reviewed prompt for the product the operator already selected.
+ *
+ * The textarea shows only the prompt the API returns. TrendRelay does not
+ * generate the pixels: after the draft is stored, a finished file can be
+ * submitted into the Library and linked back to this product.
+ */
+export function GenerateDialog({
+  open,
+  product,
+  onClose,
+  onChanged,
+}: {
+  open: boolean;
+  product: { id: string; name: string } | null;
+  onClose: () => void;
+  onChanged?: () => void;
+}) {
+  const t = useT();
+  const { apiFetch } = useAuth();
+  const { workspaceId } = useWorkspace();
+  const [kind, setKind] = useState<Kind>("image");
+  const [recipe, setRecipe] = useState<Recipe>("bed_flat_lay");
+  const [variant, setVariant] = useState<"female" | "male">("female");
+  const [backgroundEnabled, setBackgroundEnabled] = useState(false);
+  const [backgroundReference, setBackgroundReference] = useState("");
+  const [cardCount, setCardCount] = useState(2);
+  const [prompt, setPrompt] = useState("");
+  const [draft, setDraft] = useState<DraftView | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileEpoch, setFileEpoch] = useState(0);
+
+  const mirror = recipe === "mirror_selfie";
+  const backgroundOn = mirror || backgroundEnabled;
+  const backgroundReady = !backgroundOn || backgroundReference.trim().startsWith("https://");
+  const locked = draft !== null;
+  const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}`;
+
+  useEffect(() => {
+    if (draft) return;
+    setPrompt("");
+  }, [shape, draft]);
+
+  function requestBody() {
+    return {
+      product_id: product?.id,
+      kind,
+      recipe,
+      variant: mirror ? variant : null,
+      background_enabled: backgroundOn,
+      background_reference: backgroundOn ? backgroundReference.trim() : null,
+      card_count: kind === "carousel" ? cardCount : null,
+    };
+  }
+
+  useEffect(() => {
+    if (!open || !product || !workspaceId || draft) return;
+    if (!backgroundReady) {
+      setPrompt("");
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
+            { method: "POST", body: JSON.stringify(requestBody()) },
+          );
+          if (cancelled) return;
+          if (!response.ok) {
+            setPrompt("");
+            setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+            return;
+          }
+          const payload = await response.json() as { draft?: { prompt?: string } };
+          setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
+          setError("");
+        } catch (caught) {
+          if (cancelled) return;
+          setPrompt("");
+          setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+        }
+      })();
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // requestBody is derived from the same state listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    open, product, workspaceId, draft, kind, recipe, variant,
+    backgroundEnabled, backgroundReference, cardCount, backgroundReady, apiFetch, t,
+  ]);
+
+  function chooseKind(next: Kind) {
+    setKind(next);
+    setRecipe(next === "video" ? "mannequin_transition" : "bed_flat_lay");
+    setBackgroundEnabled(false);
+    setBackgroundReference("");
+    setError("");
+    setNotice("");
+  }
+
+  async function queue() {
+    if (!product || !workspaceId || !prompt) return;
+    setBusy("queue");
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
+        { method: "POST", body: JSON.stringify(requestBody()) },
+      );
+      if (!response.ok) {
+        setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+        return;
+      }
+      const payload = await response.json() as { draft: DraftView };
+      setDraft(payload.draft);
+      setPrompt(payload.draft.prompt);
+      setNotice(t("attribution.generate.queued"));
+      onChanged?.();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function submitFile() {
+    if (!draft || !file || !workspaceId) return;
+    setBusy("file");
+    setError("");
+    try {
+      const mediaBase64 = await fileToBase64(file);
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draft.id}/media`,
+        {
+          method: "POST",
+          body: JSON.stringify({ media_base64: mediaBase64, filename: file.name }),
+        },
+      );
+      if (!response.ok) {
+        setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+        return;
+      }
+      const payload = await response.json() as { draft: DraftView; linked?: boolean };
+      setDraft(payload.draft);
+      setPrompt(payload.draft.prompt);
+      setNotice(payload.linked
+        ? t("attribution.generate.linked")
+        : t("attribution.generate.partial"));
+      setFile(null);
+      setFileEpoch((current) => current + 1);
+      onChanged?.();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <Dialog
+      open={open && product !== null}
+      title={t("attribution.generate.title")}
+      description={product ? t("attribution.generate.description", { name: product.name }) : undefined}
+      onClose={onClose}
+      footer={(
+        <>
+          <Button variant="quiet" onClick={onClose}>{t("attribution.generate.close")}</Button>
+          {!draft && (
+            <Button
+              variant="primary"
+              busy={busy === "queue"}
+              disabled={!prompt || busy !== ""}
+              onClick={() => void queue()}
+            >{busy === "queue" ? t("attribution.generate.queuing") : t("attribution.generate.queue")}</Button>
+          )}
+          {draft && draft.owed > 0 && (
+            <Button
+              variant="primary"
+              busy={busy === "file"}
+              disabled={!file || busy !== ""}
+              onClick={() => void submitFile()}
+            >{busy === "file" ? t("attribution.generate.submitting") : t("attribution.generate.submitFile")}</Button>
+          )}
+        </>
+      )}
+    >
+      <div className="campaign-dialog-form">
+        <label>
+          {t("attribution.generate.kind")}
+          <Select
+            aria-label={t("attribution.generate.kind")}
+            value={kind}
+            disabled={locked}
+            onChange={(event) => chooseKind(event.target.value as Kind)}
+          >
+            <option value="image">{t("attribution.generate.kindImage")}</option>
+            <option value="carousel">{t("attribution.generate.kindCarousel")}</option>
+            <option value="video">{t("attribution.generate.kindVideo")}</option>
+          </Select>
+        </label>
+        <label>
+          {t("attribution.generate.recipe")}
+          <Select
+            aria-label={t("attribution.generate.recipe")}
+            value={recipe}
+            disabled={locked || kind !== "video"}
+            onChange={(event) => {
+              setRecipe(event.target.value as Recipe);
+              setError("");
+            }}
+          >
+            {kind === "video" ? (
+              <>
+                <option value="mannequin_transition">{t("attribution.generate.recipeMannequin")}</option>
+                <option value="mirror_selfie">{t("attribution.generate.recipeMirror")}</option>
+              </>
+            ) : (
+              <option value="bed_flat_lay">{t("attribution.generate.recipeBed")}</option>
+            )}
+          </Select>
+        </label>
+        {mirror && (
+          <label>
+            {t("attribution.generate.variant")}
+            <Select
+              aria-label={t("attribution.generate.variant")}
+              value={variant}
+              disabled={locked}
+              onChange={(event) => setVariant(event.target.value as "female" | "male")}
+            >
+              <option value="female">{t("attribution.generate.variantFemale")}</option>
+              <option value="male">{t("attribution.generate.variantMale")}</option>
+            </Select>
+          </label>
+        )}
+        {!mirror && (
+          <label className="campaign-dialog-check">
+            <input
+              type="checkbox"
+              checked={backgroundEnabled}
+              disabled={locked}
+              onChange={(event) => {
+                setBackgroundEnabled(event.target.checked);
+                if (!event.target.checked) setBackgroundReference("");
+                setError("");
+              }}
+            />
+            <span>
+              {t("attribution.generate.background")}
+              <small>{t("attribution.generate.backgroundHint")}</small>
+            </span>
+          </label>
+        )}
+        {backgroundOn && (
+          <label>
+            {t("attribution.generate.backgroundUrl")}
+            <input
+              type="url"
+              value={backgroundReference}
+              disabled={locked}
+              placeholder={t("attribution.generate.backgroundPlaceholder")}
+              onChange={(event) => setBackgroundReference(event.target.value)}
+            />
+            {!backgroundReady && <small>{t("attribution.generate.backgroundNeeded")}</small>}
+          </label>
+        )}
+        {kind === "carousel" && (
+          <label>
+            {t("attribution.generate.cards")}
+            <input
+              type="number"
+              min={2}
+              max={10}
+              value={cardCount}
+              disabled={locked}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (Number.isFinite(next)) setCardCount(Math.min(10, Math.max(2, next)));
+              }}
+            />
+          </label>
+        )}
+        <label className="generate-prompt">
+          {t("attribution.generate.prompt")}
+          <textarea readOnly rows={12} value={prompt} />
+          <small>{t("attribution.generate.promptHelp")}</small>
+        </label>
+        {draft && (
+          <p role="status">{t("attribution.generate.owed", { count: draft.owed })}</p>
+        )}
+        {draft && draft.owed > 0 && (
+          <label>
+            {t("attribution.generate.file")}
+            <input
+              key={fileEpoch}
+              type="file"
+              accept={kind === "video" ? "video/mp4,video/quicktime,video/webm,video/x-matroska" : "image/png,image/jpeg,image/webp"}
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+        )}
+        {notice && <p role="status">{notice}</p>}
+        {error && <p role="alert">{error}</p>}
+      </div>
+    </Dialog>
+  );
+}
+
+async function errorDetail(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json() as { detail?: unknown };
+    if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+    if (Array.isArray(body.detail)) {
+      const text = body.detail
+        .map((item) => (
+          item && typeof item === "object" && "msg" in item ? String(item.msg) : ""
+        ))
+        .filter(Boolean)
+        .join(" ");
+      if (text) return text;
+    }
+  } catch {
+    // A non-JSON refusal still needs a sentence.
+  }
+  return fallback;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      const comma = text.indexOf(",");
+      resolve(comma >= 0 ? text.slice(comma + 1) : text);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("unreadable file"));
+    reader.readAsDataURL(file);
+  });
+}

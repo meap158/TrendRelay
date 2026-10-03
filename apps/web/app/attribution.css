@@ -494,3 +494,14 @@
 .shopee-import-campaigns label { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11px; }
 .shopee-import-campaigns label small { color: var(--muted); font-size: 10px; }
 .shopee-import-campaigns > small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+/* The reviewed prompt is the point of the Generate dialog. Monospace so a
+   long script can be read before it is queued. */
+.campaign-dialog-form .generate-prompt textarea {
+  min-height: 180px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.product-creatives { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
+.product-creatives a { color: var(--link); }
