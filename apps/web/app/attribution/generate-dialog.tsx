@@ -22,20 +22,22 @@ type DraftView = {
 };
 
 /**
- * Queue one reviewed prompt for the product the operator already selected.
+ * Queue one reviewed prompt for every product the operator already selected.
  *
- * The textarea shows only the prompt the API returns. TrendRelay does not
- * generate the pixels: after the draft is stored, a finished file can be
- * submitted into the Library and linked back to this product.
+ * The wording is the recipe, so one dialog covers a single row or many. Each
+ * product still gets its own draft. The textarea shows only the prompt the
+ * API returns. TrendRelay does not generate the pixels: a finished file can
+ * be submitted into the Library only while one product is open, because each
+ * product needs its own file.
  */
 export function GenerateDialog({
   open,
-  product,
+  products,
   onClose,
   onChanged,
 }: {
   open: boolean;
-  product: { id: string; name: string } | null;
+  products: { id: string; name: string }[];
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -60,6 +62,8 @@ export function GenerateDialog({
   const backgroundOn = mirror || backgroundEnabled;
   const backgroundReady = !backgroundOn || backgroundReference.trim().startsWith("https://");
   const locked = draft !== null;
+  const many = products.length > 1;
+  const leadId = products[0]?.id ?? "";
   const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}`;
 
   useEffect(() => {
@@ -67,9 +71,9 @@ export function GenerateDialog({
     setPrompt("");
   }, [shape, draft]);
 
-  function requestBody() {
+  function requestBody(productId: string) {
     return {
-      product_id: product?.id,
+      product_id: productId,
       kind,
       recipe,
       variant: mirror ? variant : null,
@@ -80,7 +84,7 @@ export function GenerateDialog({
   }
 
   useEffect(() => {
-    if (!open || !product || !workspaceId || draft) return;
+    if (!open || products.length === 0 || !workspaceId || draft) return;
     if (!backgroundReady) {
       setPrompt("");
       return;
@@ -88,24 +92,38 @@ export function GenerateDialog({
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
-        try {
-          const response = await apiFetch(
-            `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
-            { method: "POST", body: JSON.stringify(requestBody()) },
-          );
+        // The wording does not name the product. A row with no image refuses
+        // the preview, so walk until one row can show the shared prompt.
+        let lastError = "";
+        for (const item of products) {
           if (cancelled) return;
-          if (!response.ok) {
+          try {
+            const response = await apiFetch(
+              `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
+              { method: "POST", body: JSON.stringify(requestBody(item.id)) },
+            );
+            if (cancelled) return;
+            if (!response.ok) {
+              lastError = await errorDetail(response, t("attribution.generate.requestFailed"));
+              if (lastError.toLowerCase().includes("no image")) continue;
+              setPrompt("");
+              setError(lastError);
+              return;
+            }
+            const payload = await response.json() as { draft?: { prompt?: string } };
+            setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
+            setError("");
+            return;
+          } catch (caught) {
+            if (cancelled) return;
             setPrompt("");
-            setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+            setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
             return;
           }
-          const payload = await response.json() as { draft?: { prompt?: string } };
-          setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
-          setError("");
-        } catch (caught) {
-          if (cancelled) return;
+        }
+        if (!cancelled) {
           setPrompt("");
-          setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+          setError(lastError || t("attribution.generate.requestFailed"));
         }
       })();
     }, 200);
@@ -116,7 +134,7 @@ export function GenerateDialog({
     // requestBody is derived from the same state listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    open, product, workspaceId, draft, kind, recipe, variant,
+    open, leadId, products, workspaceId, draft, kind, recipe, variant,
     backgroundEnabled, backgroundReference, cardCount, backgroundReady, apiFetch, t,
   ]);
 
@@ -130,25 +148,40 @@ export function GenerateDialog({
   }
 
   async function queue() {
-    if (!product || !workspaceId || !prompt) return;
+    if (products.length === 0 || !workspaceId || !prompt) return;
     setBusy("queue");
     setError("");
+    const failures: string[] = [];
+    let first: DraftView | null = null;
+    let queued = 0;
     try {
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
-        { method: "POST", body: JSON.stringify(requestBody()) },
-      );
-      if (!response.ok) {
-        setError(await errorDetail(response, t("attribution.generate.requestFailed")));
-        return;
+      for (const item of products) {
+        try {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
+            { method: "POST", body: JSON.stringify(requestBody(item.id)) },
+          );
+          if (!response.ok) {
+            failures.push(`${item.name}: ${await errorDetail(response, t("attribution.generate.requestFailed"))}`);
+            continue;
+          }
+          const payload = await response.json() as { draft: DraftView };
+          queued += 1;
+          if (!first) first = payload.draft;
+        } catch (caught) {
+          const detail = caught instanceof Error ? caught.message : t("attribution.generate.requestFailed");
+          failures.push(`${item.name}: ${detail}`);
+        }
       }
-      const payload = await response.json() as { draft: DraftView };
-      setDraft(payload.draft);
-      setPrompt(payload.draft.prompt);
-      setNotice(t("attribution.generate.queued"));
-      onChanged?.();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+      if (first) {
+        setDraft(first);
+        setPrompt(first.prompt);
+        setNotice(many
+          ? t("attribution.generate.queuedMany", { count: queued })
+          : t("attribution.generate.queued"));
+        onChanged?.();
+      }
+      if (failures.length > 0) setError(failures.join(" "));
     } finally {
       setBusy("");
     }
@@ -189,9 +222,13 @@ export function GenerateDialog({
 
   return (
     <Dialog
-      open={open && product !== null}
+      open={open && products.length > 0}
       title={t("attribution.generate.title")}
-      description={product ? t("attribution.generate.description", { name: product.name }) : undefined}
+      description={many
+        ? t("attribution.generate.descriptionMany", { count: products.length })
+        : products[0]
+          ? t("attribution.generate.description", { name: products[0].name })
+          : undefined}
       onClose={onClose}
       footer={(
         <>
@@ -202,9 +239,13 @@ export function GenerateDialog({
               busy={busy === "queue"}
               disabled={!prompt || busy !== ""}
               onClick={() => void queue()}
-            >{busy === "queue" ? t("attribution.generate.queuing") : t("attribution.generate.queue")}</Button>
+            >{busy === "queue"
+              ? t("attribution.generate.queuing")
+              : many
+                ? t("attribution.generate.queueMany")
+                : t("attribution.generate.queue")}</Button>
           )}
-          {draft && draft.owed > 0 && (
+          {draft && !many && draft.owed > 0 && (
             <Button
               variant="primary"
               busy={busy === "file"}
@@ -316,10 +357,10 @@ export function GenerateDialog({
           <textarea readOnly rows={12} value={prompt} />
           <small>{t("attribution.generate.promptHelp")}</small>
         </label>
-        {draft && (
+        {draft && !many && (
           <p role="status">{t("attribution.generate.owed", { count: draft.owed })}</p>
         )}
-        {draft && draft.owed > 0 && (
+        {draft && !many && draft.owed > 0 && (
           <label>
             {t("attribution.generate.file")}
             <input

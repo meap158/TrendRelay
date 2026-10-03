@@ -49,12 +49,15 @@ and submitted, the same way a campaign post waits for media.
 
 ## Web
 
-Attribution → Generate opens the shared Dialog for one selected product (the
-bulk bar when exactly one row is checked, and the product detail). Optional
-background is a checkbox only for the bed and mannequin recipes. Mirror shows a
-required background URL and a woman/man choice, and no off switch. Confirm
-queues a pending draft. A file can then be submitted; success means the asset
-is in the Library and both sides of the link show it.
+Attribution → Generate sits in the bulk bar with the other selection actions.
+It is enabled for one checked row and for many, and the product detail opens
+the same dialog for that one product. One confirmation queues the same recipe
+for every selected product; each product keeps its own draft. A finished file
+is submitted only while a single product is open, because each product needs
+its own file. Optional background is a checkbox only for the bed and mannequin
+recipes. Mirror shows a required background URL and a woman/man choice, and no
+off switch. Success means the asset is in the Library and both sides of the
+link show it.
 
 ## Tests
 

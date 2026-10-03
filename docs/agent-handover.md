@@ -9,7 +9,8 @@ Read the "Live system" section first. Some of it is posting to real accounts.
 
 ## Attribution product creatives (2026-10-03)
 
-Generate on Attribution queues a reviewed prompt for one product. The prompt is
+Generate on Attribution queues one reviewed prompt per selected product, for a
+single row or for many, with the same recipe. The prompt is
 resolved only in `product_creative_recipes.py` and stored on the draft. The
 modal and MCP both display that stored text. TrendRelay does not generate the
 pixels. Submitting a file ingests it into the Library and writes

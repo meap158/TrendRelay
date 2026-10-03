@@ -197,7 +197,8 @@ export function ProductTable({
    * parameters out of the URL, and a reload does not put the scope back.
    */
   const [scope, setScope] = useState<Set<string> | null>(null);
-  const [generateFor, setGenerateFor] = useState<ProductRow | null>(null);
+  /** The selection Generate was opened on. One dialog, one draft each. */
+  const [generateFor, setGenerateFor] = useState<ProductRow[] | null>(null);
   const scopeKey = (arrivedWith?.productIds ?? []).join(",");
   const seededScope = useRef("");
   useEffect(() => {
@@ -591,14 +592,16 @@ export function ProductTable({
                 <ActionIcon name="refresh" /> Fetch listings
               </Button>
             )}
-            {canQueue && picked.size === 1 && (
+            {canQueue && (
               <Button
                 variant="secondary"
                 size="sm"
+                disabled={picked.size === 0}
                 onClick={() => {
-                  const id = [...picked][0];
-                  const product = products.find((item) => item.id === id);
-                  if (product) setGenerateFor(product);
+                  const chosen = [...picked]
+                    .map((id) => products.find((item) => item.id === id))
+                    .filter((item): item is ProductRow => item !== undefined);
+                  if (chosen.length > 0) setGenerateFor(chosen);
                 }}
               >{t("attribution.generate.open")}</Button>
             )}
@@ -877,7 +880,7 @@ export function ProductTable({
                             <Button
                               variant="secondary"
                               size="sm"
-                              onClick={() => setGenerateFor(product)}
+                              onClick={() => setGenerateFor([product])}
                             >{t("attribution.generate.open")}</Button>
                           )}
                         </div>
@@ -949,11 +952,11 @@ export function ProductTable({
           </tbody>
         </table>
       </div>
-      {generateFor && (
+      {generateFor && generateFor.length > 0 && (
         <GenerateDialog
-          key={generateFor.id}
+          key={generateFor.map((item) => item.id).join(",")}
           open
-          product={generateFor}
+          products={generateFor}
           onClose={() => setGenerateFor(null)}
           onChanged={onCreativesChanged}
         />
