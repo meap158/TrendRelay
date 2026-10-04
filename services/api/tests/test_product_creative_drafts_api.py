@@ -248,6 +248,24 @@ def test_a_product_without_an_image_and_a_mirror_without_a_background_are_refuse
     assert "background" in mirror.json()["detail"].lower()
 
 
+def test_a_background_without_a_host_and_a_choice_without_urls_are_refused() -> None:
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id, image=True)
+    bare_scheme = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id, background_enabled=True, background_reference="https://"),
+    )
+    assert bare_scheme.status_code == 422
+    assert "https" in bare_scheme.json()["detail"].lower()
+
+    # A missing list would otherwise read as "keep none of these pictures".
+    no_urls = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(product_id, included_images=[{"product_id": product_id}]),
+    )
+    assert no_urls.status_code == 422
+
+
 def test_submitting_an_image_and_a_video_links_both_ways(monkeypatch, tmp_path: Path) -> None:
     allow_roots(monkeypatch, tmp_path)
     fake_process(monkeypatch)

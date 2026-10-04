@@ -35,7 +35,9 @@ _EDITORS = {"owner", "editor", "approver"}
 
 class ImageChoice(BaseModel):
     product_id: str = Field(min_length=1, max_length=64)
-    urls: list[str] = Field(default_factory=list, max_length=60)
+    #: Required. An empty list keeps none of that product's pictures, so a
+    #: missing list is not allowed to mean the same thing by accident.
+    urls: list[str] = Field(max_length=60)
 
 
 class DraftBody(BaseModel):

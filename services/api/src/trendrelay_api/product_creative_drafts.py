@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -132,7 +133,9 @@ def _image_choices(raw: list[dict[str, Any]] | None) -> dict[str, list[str]] | N
             raise ValueError("Picture choices have to name a product and its pictures.")
         if product_id in chosen:
             raise ValueError("Name each product once when choosing its pictures.")
-        urls_raw = item.get("urls", [])
+        # No default: an empty list keeps none, and a forgotten key over MCP
+        # must not drop every picture of that product.
+        urls_raw = item.get("urls")
         if not isinstance(urls_raw, list):
             raise ValueError("Picture choices have to name a product and its pictures.")
         urls: list[str] = []
@@ -356,7 +359,7 @@ def _background(recipe: str, enabled: bool, reference: str | None) -> tuple[bool
         )
     text = (reference or "").strip()
     if enabled or required:
-        if not text.startswith("https://"):
+        if urlsplit(text).scheme != "https" or not urlsplit(text).hostname:
             raise ValueError("Attach the background as an https URL.")
         return True, text[:2000]
     if text:
@@ -889,9 +892,6 @@ def submit_media(
         raise ValueError(f"The file was not imported: {error}") from error
 
     draft = _draft(session, workspace_id, draft_id)
-    staged = [str(item) for item in (draft.staged_asset_ids or [])]
-    if asset_id not in staged:
-        staged.append(asset_id)
     # Another submit can land while this file is ingested, and the session
     # keeps what it read before (expire_on_commit is off). Read the row again
     # so that submit is seen rather than overwritten.
@@ -901,6 +901,9 @@ def submit_media(
             "This draft was filled while this file was imported. The file is in "
             f"the Library as {asset_id} and is not linked to a product."
         )
+    staged = [str(item) for item in (draft.staged_asset_ids or [])]
+    if asset_id not in staged:
+        staged.append(asset_id)
         draft.staged_asset_ids = staged
     draft.updated_at = utc_now()
     if len(staged) < draft.card_count:
