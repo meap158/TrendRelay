@@ -1033,6 +1033,13 @@ def creative_drafts_by_product(
         bucket = membership.setdefault(member.draft_id, [])
         if member.product_id not in bucket:
             bucket.append(member.product_id)
+    # A group shot is named by number, oldest first, so "Group 2" is the same
+    # shot on every row, band, and card however the table is filtered or
+    # sorted. Drafts are never deleted, so a number does not move.
+    group_numbers: dict[str, int] = {}
+    for draft in sorted(rows, key=lambda item: (item.created_at, item.id)):
+        if len(membership.get(draft.id) or [draft.product_id]) > 1:
+            group_numbers[draft.id] = len(group_numbers) + 1
     found: dict[str, list[dict[str, Any]]] = {}
     for draft in rows:
         product_ids = membership.get(draft.id) or [draft.product_id]
@@ -1044,6 +1051,7 @@ def creative_drafts_by_product(
             "card_count": draft.card_count,
             "owed": _owed(draft),
             "product_count": len(product_ids),
+            "group_number": group_numbers.get(draft.id),
         }
         for product_id in product_ids:
             found.setdefault(product_id, []).append(summary)

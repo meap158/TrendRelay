@@ -153,6 +153,37 @@ def test_together_shows_on_every_product_and_ignores_extra_ids_otherwise(session
     )
 
 
+def test_group_shots_are_numbered_oldest_first_and_singles_are_not(session) -> None:
+    """One number per group shot, the same on every member's row."""
+    session.add(Product(
+        id="product-2", workspace_id="ws-1", catalog_key="bambi",
+        name="Bambi set", marketplace="shopee",
+        image_url="https://shop.example/bambi.jpg",
+        listing={"title": "Bambi set", "images": ["https://shop.example/bambi.jpg"]},
+        created_by=LOCAL_ADMIN_ID,
+    ))
+    session.commit()
+    single = product_creatives.create_draft(
+        session, "ws-1", product_id="product-1", kind="image", recipe="bed_flat_lay",
+    )
+    first = product_creatives.create_draft(
+        session, "ws-1", product_id="product-1", product_ids=["product-1", "product-2"],
+        together=True, kind="image", recipe="bed_flat_lay",
+    )
+    second = product_creatives.create_draft(
+        session, "ws-1", product_id="product-2", product_ids=["product-2", "product-1"],
+        together=True, kind="image", recipe="bed_flat_lay",
+    )
+    rows = {row["id"]: row for row in products_payload(session, "ws-1")["products"]}
+    for product_id in ("product-1", "product-2"):
+        numbers = {item["id"]: item["group_number"] for item in rows[product_id]["creative_drafts"]}
+        assert numbers[first["id"]] == 1
+        assert numbers[second["id"]] == 2
+    assert {item["id"]: item["group_number"] for item in rows["product-1"]["creative_drafts"]}[
+        single["id"]
+    ] is None
+
+
 def test_included_images_drop_a_listing_picture_the_operator_unchecked(session) -> None:
     session.add(Product(
         id="product-2", workspace_id="ws-1", catalog_key="gloves",
