@@ -23,7 +23,7 @@ from trendrelay_api.auth import LOCAL_ADMIN_ID
 from trendrelay_api.integrations.mcp import policy, product_creatives
 from trendrelay_api.media_library_api import _asset_view
 from trendrelay_api.media_models import MediaAsset
-from trendrelay_api.models import Base, UserProfile, Workspace
+from trendrelay_api.models import Base, UserProfile, Workspace, utc_now
 from trendrelay_api.opportunity_models import Product
 from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
 from trendrelay_api.product_creative_recipes import BED_FLAT_LAY_OFF, MANNEQUIN_OFF
@@ -270,6 +270,43 @@ def test_a_carousel_stays_unlinked_until_every_card_lands(session, monkeypatch, 
         if row["id"] == "product-1"
     )
     assert len(product["creative_assets"]) == 2
+
+
+def test_two_cards_staged_at_the_same_moment_both_count(session, monkeypatch, tmp_path) -> None:
+    """A write between this submit's read and its update is retried on, not lost."""
+    _allow_roots(monkeypatch, tmp_path)
+    _fake_process(monkeypatch)
+    made = product_creatives.create_draft(
+        session, "ws-1",
+        product_id="product-1", kind="carousel", recipe="bed_flat_lay", card_count=3,
+    )
+    other = product_creatives.submit_media(
+        session, "ws-1", made["id"], media_base64=_png(11), filename="card-a.png",
+    )
+    real_existing = product_creative_drafts._existing_assets
+    raced: list[bool] = []
+
+    def existing(active, workspace_id, asset_ids):
+        if not raced:
+            raced.append(True)
+            # Another writer stages a card right after this submit read the row.
+            with Session.begin() as concurrent:
+                row = concurrent.get(ProductCreativeDraft, made["id"])
+                assert row is not None
+                row.staged_asset_ids = [*row.staged_asset_ids, "asset-raced"]
+                row.updated_at = utc_now()
+            return real_existing(active, workspace_id, [*asset_ids, "asset-raced"]) | {
+                "asset-raced"
+            }
+        return real_existing(active, workspace_id, asset_ids) | {"asset-raced"}
+
+    monkeypatch.setattr(product_creative_drafts, "_existing_assets", existing)
+    mine = product_creatives.submit_media(
+        session, "ws-1", made["id"], media_base64=_png(12), filename="card-b.png",
+    )
+
+    assert mine["ingested_asset_ids"] == [other["asset_id"], "asset-raced", mine["asset_id"]]
+    assert mine["status"] == "succeeded"
 
 
 def test_a_staged_card_that_left_the_library_is_owed_again(session, monkeypatch, tmp_path) -> None:

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from trendrelay_api.config import get_settings
@@ -46,6 +46,9 @@ _DESCRIPTION_LIMIT = 8000
 _GALLERY_LIMIT = 60
 _KINDS = frozenset({"image", "carousel", "video"})
 _UPLOAD_DIRNAME = "product-creatives"
+#: Writers that may race on one draft at a time are few: an operator, the
+#: assistant, and one video job.
+_STAGE_ATTEMPTS = 5
 
 
 def _upload_root() -> Path:
@@ -932,38 +935,59 @@ def submit_media(
         raise ValueError(f"The file was not imported: {error}") from error
 
     draft = _draft(session, workspace_id, draft_id)
-    # Another submit can land while this file is ingested, and the session
-    # keeps what it read before (expire_on_commit is off). Read the row again
-    # so that submit is seen rather than overwritten.
-    session.refresh(draft)
-    if draft.status != "pending" or _owed(draft) <= 0:
+    for _attempt in range(_STAGE_ATTEMPTS):
+        # Another submit can land while this file is ingested, and the session
+        # keeps what it read before (expire_on_commit is off). Read the row
+        # again so that submit is seen rather than overwritten.
+        session.refresh(draft)
+        if draft.status != "pending" or _owed(draft) <= 0:
+            raise ValueError(
+                "This draft was filled while this file was imported. The file is in "
+                f"the Library as {asset_id} and is not linked to a product."
+            )
+        seen = draft.updated_at
+        staged = [str(item) for item in (draft.staged_asset_ids or [])]
+        if asset_id not in staged:
+            staged.append(asset_id)
+        # A card deleted from the Library since it was staged is not part of
+        # the set any more. Count only what is still there, so the draft owes
+        # it again rather than linking a file that does not exist.
+        present = _existing_assets(session, workspace_id, staged)
+        staged = [item for item in staged if item in present]
+        complete = len(staged) >= draft.card_count
+        # Write only if nobody else wrote since the read: a second card that
+        # finished at the same moment retries on top of this one instead of
+        # replacing it, and only one writer can complete the set.
+        claimed = session.execute(
+            update(ProductCreativeDraft)
+            .where(
+                ProductCreativeDraft.id == draft.id,
+                ProductCreativeDraft.status == "pending",
+                ProductCreativeDraft.updated_at == seen,
+            )
+            .values(
+                staged_asset_ids=staged,
+                status="succeeded" if complete else "pending",
+                updated_at=utc_now(),
+            )
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        if claimed == 1:
+            break
+        session.rollback()
+    else:
         raise ValueError(
-            "This draft was filled while this file was imported. The file is in "
-            f"the Library as {asset_id} and is not linked to a product."
+            "This draft kept changing while this file was imported. The file is in "
+            f"the Library as {asset_id} and is not linked yet. Submit it again."
         )
-    staged = [str(item) for item in (draft.staged_asset_ids or [])]
-    if asset_id not in staged:
-        staged.append(asset_id)
-    # A card deleted from the Library since it was staged is not part of the
-    # set any more. Count only what is still there, so the draft owes it again
-    # rather than linking a file that does not exist.
-    present = _existing_assets(session, workspace_id, staged)
-    staged = [item for item in staged if item in present]
-    draft.staged_asset_ids = staged
-    draft.updated_at = utc_now()
-    if len(staged) < draft.card_count:
-        view = _view(session, draft)
-        view["asset_id"] = asset_id
-        # The Library asset is already committed by ingest. The staged id has
-        # to be too, or the next card opens a session that never saw this one.
-        session.commit()
-        return view
-    _write_links(session, draft, staged)
-    draft.status = "succeeded"
-    draft.updated_at = utc_now()
+    if complete:
+        _write_links(session, draft, staged)
+    # The Library asset is already committed by ingest. The staged id has to
+    # be too, or the next card opens a session that never saw this one.
+    session.commit()
+    session.refresh(draft)
     view = _view(session, draft)
     view["asset_id"] = asset_id
-    session.commit()
     return view
 
 
