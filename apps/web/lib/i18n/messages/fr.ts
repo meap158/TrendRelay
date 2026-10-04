@@ -692,6 +692,7 @@ export const fr: Messages = {
     switchedOn: "La campagne tourne. Les publications partent à vos heures ; désactivez-la et rien n'est planifié.",
     saved: "Réglages du pilote automatique enregistrés.",
     lastRun: "Dernière exécution :",
+    runSlots: "{used} créneaux sur {total}",
     fixIt: "Configurer",
     needActive: "La campagne est active",
     needDestinations: "Au moins un compte où publier",

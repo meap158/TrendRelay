@@ -116,6 +116,7 @@ import {
   type PublishingPlatform,
 } from "../publishing-icons";
 import { followUpKind, followUpLabel, isThreadPlatform, takesFollowUp } from "../../lib/follow-up";
+import { parseRunNote } from "./run-note";
 
 type Account = {
   id: string;
@@ -4971,11 +4972,50 @@ export function AutopilotPanel({
           </ul>
         )}
 
-        {autopilot.last_note && (
-          <p className="autopilot-note" role="status">
-            <strong>{t("autopilot.lastRun")}</strong> {autopilot.last_note}
-          </p>
-        )}
+        {autopilot.last_note && (() => {
+          // One paragraph from the API, shown as an outcome and one row per
+          // reason, each tied to the destination it names - two pages with
+          // near-identical names are told apart by their network.
+          const note = parseRunNote(autopilot.last_note, destinations, platformLabels);
+          return (
+            <div className="autopilot-note" role="status">
+              <p className="autopilot-note-head">
+                <strong>{t("autopilot.lastRun")}</strong> {note.headline}
+              </p>
+              {note.lines.length > 0 && (
+                <ul className="autopilot-note-lines">
+                  {note.lines.map((line, index) => {
+                    const platform = line.subject?.platform ?? line.platform;
+                    const words = (line.subject?.label.length ?? 0) + line.text.length;
+                    return (
+                      <li
+                        key={`${index}-${line.subject?.label ?? ""}-${line.text}`}
+                        className={words > 64 ? "is-wide" : undefined}
+                      >
+                        {platform
+                          ? <PlatformIcon platform={platform} size={14} />
+                          : <span className="autopilot-note-dot" aria-hidden="true" />}
+                        <span className="autopilot-note-text">
+                          {line.subject && (
+                            <strong title={`${line.subject.label} · ${platformLabels[line.subject.platform]}`}>
+                              {line.subject.label}
+                            </strong>
+                          )}
+                          {line.subject ? " " : ""}{line.text}
+                        </span>
+                        {line.slots && (
+                          <span className="autopilot-note-slots">
+                            {t("autopilot.runSlots", { used: line.slots.used, total: line.slots.total })}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
 
       </Card>
 

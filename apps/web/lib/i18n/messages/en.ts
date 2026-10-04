@@ -686,6 +686,7 @@ export const en = {
     switchedOn: "Campaign is running. Posts go out at your posting times; switch it off and nothing is scheduled.",
     saved: "Autopilot settings saved.",
     lastRun: "Last run:",
+    runSlots: "{used} of {total} slots",
     fixIt: "Set up",
     needActive: "The campaign is active",
     needDestinations: "At least one account to post to",

@@ -1177,6 +1177,19 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-approval-summary strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .autopilot-empty { margin: 0; padding: 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; }
 .autopilot-note { margin: 10px 0 0; padding: 8px 10px; border-inline-start: 3px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+/* The outcome, then one row per reason. Short rows tile into columns so
+   three capped accounts take one line, not three; a long sentence takes
+   the whole width. */
+.autopilot-note-head { margin: 0; }
+.autopilot-note-lines { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 16px; margin: 6px 0 0; padding: 0; list-style: none; }
+.autopilot-note-lines li { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; }
+.autopilot-note-lines li.is-wide { grid-column: 1 / -1; }
+.autopilot-note-lines .platform-icon { flex: none; }
+.autopilot-note-dot { flex: none; width: 14px; height: 14px; display: inline-grid; place-items: center; }
+.autopilot-note-dot::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+.autopilot-note-text { flex: 1 1 auto; min-width: 0; color: var(--muted); }
+.autopilot-note-text strong { color: var(--text); font-weight: 600; }
+.autopilot-note-slots { flex: none; padding: 0 6px; border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* What the composer is not drawing, with the control that draws more of it.
    One line rather than a notice with a button parked underneath, and the
    sentence keeps the room so the control does not drift from its count. */

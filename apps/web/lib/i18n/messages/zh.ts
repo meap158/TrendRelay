@@ -671,6 +671,7 @@ export const zh: Messages = {
     switchedOn: "活动正在运行。将按你的发布时间发帖；关闭后不会安排任何内容。",
     saved: "已保存自动发布设置。",
     lastRun: "上次运行：",
+    runSlots: "{total} 个时段中的 {used} 个",
     fixIt: "去设置",
     needActive: "活动处于进行中",
     needDestinations: "至少一个可发布的账号",

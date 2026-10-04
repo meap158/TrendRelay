@@ -681,6 +681,7 @@ export const ja: Messages = {
     switchedOn: "キャンペーンは稼働中です。投稿時間に沿って公開されます。オフにすると何も予定されません。",
     saved: "オートパイロットの設定を保存しました。",
     lastRun: "前回の実行:",
+    runSlots: "{total} 枠中 {used}",
     fixIt: "設定",
     needActive: "キャンペーンが進行中",
     needDestinations: "配信先アカウントが1つ以上",

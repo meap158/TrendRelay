@@ -679,6 +679,7 @@ export const ar: Messages = {
     switchedOn: "الحملة تعمل. تُنشر المنشورات في أوقاتك المحددة؛ أوقفها ولن يُجدول شيء.",
     saved: "حُفظت إعدادات النشر التلقائي.",
     lastRun: "آخر تشغيل:",
+    runSlots: "{used} من {total} فترات",
     fixIt: "إعداد",
     needActive: "الحملة نشطة",
     needDestinations: "حساب واحد على الأقل للنشر",

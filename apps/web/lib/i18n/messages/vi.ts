@@ -682,6 +682,7 @@ export const vi: Messages = {
     switchedOn: "Chiến dịch đang chạy. Bài sẽ đăng vào các khung giờ của bạn; tắt đi thì không có gì được lên lịch.",
     saved: "Đã lưu thiết lập tự động đăng.",
     lastRun: "Lần chạy gần nhất:",
+    runSlots: "{used}/{total} khung giờ",
     fixIt: "Thiết lập",
     needActive: "Chiến dịch đang hoạt động",
     needDestinations: "Ít nhất một tài khoản để đăng",
