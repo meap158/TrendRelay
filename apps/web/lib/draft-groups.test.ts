@@ -158,4 +158,6 @@ test("a draft that shares some products keeps its band and counts the ones liste
     { id: "big", ids: ["a", "b", "c"], above: 0 },
     { id: "small", ids: ["d"], above: 1 },
   ]);
+  const small = sections[1];
+  assert.deepEqual(small?.kind === "together" ? small.listedIn.map((draft) => draft.id) : null, ["big"]);
 });

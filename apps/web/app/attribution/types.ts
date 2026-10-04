@@ -89,6 +89,8 @@ export type ProductRow = {
     card_count: number;
     owed: number;
     product_count?: number;
+    /** A group shot's number, oldest first, the same on every view. */
+    group_number?: number | null;
   }[];
 };
 

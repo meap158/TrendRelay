@@ -35,6 +35,8 @@ export type CreativeDraftRow = {
   card_count: number;
   owed: number;
   product_count?: number;
+  /** A group shot's number, oldest first, the same on every view. */
+  group_number?: number | null;
 };
 
 export type CreativeAssetRow = { asset_id: string; draft_id: string; position: number };
@@ -61,6 +63,34 @@ function thumbnailOf(assetId: string): LibraryAsset {
     media_kind: "image",
     versions: [{ id: `${assetId}-thumbnail`, kind: "thumbnail" }],
   };
+}
+
+/**
+ * The name of one group shot: "Group 2".
+ *
+ * The same chip is on the group's band, on every row it features, and on
+ * its card, so which rows belong to which shot is read off the label, not
+ * worked out from position. Hovering it lights the rows of that group.
+ */
+export function GroupChip({
+  number,
+  onHover,
+}: {
+  number?: number | null;
+  onHover?: (number: number | null) => void;
+}) {
+  const t = useT();
+  return (
+    <span
+      className="product-group-chip"
+      onMouseEnter={number && onHover ? () => onHover(number) : undefined}
+      onMouseLeave={number && onHover ? () => onHover(null) : undefined}
+    >
+      {number
+        ? t("attribution.generate.groupLabel", { number })
+        : t("attribution.generate.draftGroupTogether")}
+    </span>
+  );
 }
 
 export function isPendingDraft(draft: Pick<CreativeDraftRow, "status" | "owed">): boolean {
@@ -322,7 +352,9 @@ function CreativeCard({
               grid instead of each taking a row of its own. */}
           <span className="product-creative-badge" data-group={together ? "together" : "single"}>
             {together
-              ? `${t("attribution.generate.draftGroupTogether")} · ${t("attribution.generate.featuresProducts", { count: draft.product_count ?? 0 })}`
+              ? `${draft.group_number
+                ? t("attribution.generate.groupLabel", { number: draft.group_number })
+                : t("attribution.generate.draftGroupTogether")} · ${t("attribution.productCount", { count: draft.product_count ?? 0 })}`
               : t("attribution.generate.draftGroupSingle")}
           </span>
         </p>

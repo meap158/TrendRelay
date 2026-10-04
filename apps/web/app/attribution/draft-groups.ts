@@ -14,6 +14,8 @@ export type GroupDraft = {
   kind: string;
   recipe: string;
   product_count?: number;
+  /** A group shot's number, oldest first, the same on every view. */
+  group_number?: number | null;
   /** Carried through so a group heading can say where its creative stands. */
   status?: string;
   owed?: number;
@@ -38,6 +40,8 @@ export type TogetherSection<T> = {
   products: T[];
   /** Products of this draft on screen but listed under an earlier band. */
   listedAbove: number;
+  /** The earlier bands those products are listed under, in band order. */
+  listedIn: GroupDraft[];
   /** Smaller drafts every one of whose products is already listed. */
   also: NestedTogether[];
 };
@@ -133,11 +137,17 @@ export function groupShownDrafts<T extends GroupProduct>(shown: readonly T[]): {
       best?.also.push({ draft, shown: members.length });
       continue;
     }
+    const hosts: GroupDraft[] = [];
+    for (const product of members) {
+      const host = placed.get(product.id)?.draft;
+      if (host && !hosts.includes(host)) hosts.push(host);
+    }
     const section: TogetherSection<T> = {
       kind: "together",
       draft,
       products,
       listedAbove: members.length - products.length,
+      listedIn: hosts,
       also: [],
     };
     for (const product of products) placed.set(product.id, section);

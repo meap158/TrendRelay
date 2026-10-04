@@ -39,6 +39,7 @@ import {
   creativeRecipe,
   CreativeMedia,
   draftAssets,
+  GroupChip,
   isPendingDraft,
   OpenInLibrary,
   ProductCreatives,
@@ -191,6 +192,8 @@ export function ProductTable({
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /** The group shot whose chip is hovered; its rows are lit. */
+  const [focusGroup, setFocusGroup] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<ProductSort>({ key: "product", direction: "asc" });
@@ -807,21 +810,26 @@ export function ProductTable({
                           kind={draft.kind}
                           size="sm"
                         />
-                        <span className="product-draft-group-name">
-                          {t("attribution.generate.draftGroupTogether")}
-                        </span>
+                        <GroupChip number={draft.group_number} onHover={setFocusGroup} />
                         <span>
                           {creativeKind(t, draft.kind)}
                           {" · "}
                           {creativeRecipe(t, draft.recipe)}
                           {" · "}
-                          {t("attribution.generate.featuresProducts", {
+                          {t("attribution.productCount", {
                             count: draft.product_count ?? section.products.length,
                           })}
                           {heading.listedAbove > 0 && (
                             <>
                               {" · "}
-                              {t("attribution.generate.listedAbove", { count: heading.listedAbove })}
+                              {t("attribution.generate.listedAbove", {
+                                count: heading.listedAbove,
+                                groups: heading.listedIn
+                                  .map((host) => (host.group_number
+                                    ? t("attribution.generate.groupLabel", { number: host.group_number })
+                                    : t("attribution.generate.draftGroupTogether")))
+                                  .join(", "),
+                              })}
                             </>
                           )}
                         </span>
@@ -863,19 +871,17 @@ export function ProductTable({
                           kind={draft.kind}
                           size="sm"
                         />
-                        <span className="product-draft-group-name">
-                          {t("attribution.generate.alsoTogether")}
-                        </span>
+                        <GroupChip number={draft.group_number} onHover={setFocusGroup} />
                         <span>
                           {creativeKind(t, draft.kind)}
                           {" · "}
                           {creativeRecipe(t, draft.recipe)}
                           {" · "}
-                          {t("attribution.generate.featuresProducts", {
+                          {t("attribution.productCount", {
                             count: draft.product_count ?? nested.shown,
                           })}
                           {" · "}
-                          {t("attribution.generate.allListedHere", { count: nested.shown })}
+                          {t("attribution.generate.allInThisGroup")}
                         </span>
                         <span className="product-creative-state" data-state={pending ? "pending" : "done"}>
                           {pending
@@ -910,6 +916,7 @@ export function ProductTable({
                   key={product.id}
                   data-chosen={picked.has(product.id) || undefined}
                   data-expanded={open || undefined}
+                  data-group-focus={(focusGroup !== null && groupsOf(product).includes(focusGroup)) || undefined}
                 >
                   <td className="product-choose">
                     <SelectionCheckbox
@@ -972,13 +979,11 @@ export function ProductTable({
                           {listingBusy?.has(product.id) && (
                             <span className="product-listing-loading"> · reading listing…</span>
                           )}
-                          {(() => {
-                            const shots = (product.creative_drafts ?? [])
-                              .filter((draft) => (draft.product_count ?? 0) > 1).length;
-                            return shots > 1
-                              ? <span className="product-together-count"> · {t("attribution.generate.inTogetherShots", { count: shots })}</span>
-                              : null;
-                          })()}
+                          {/* Every group shot this product is in, by the same
+                              name its band and card use. */}
+                          {groupsOf(product).map((number) => (
+                            <GroupChip key={number} number={number} onHover={setFocusGroup} />
+                          ))}
                         </small>
                       </span>
                     </button>
@@ -1183,4 +1188,12 @@ export function ProductTable({
       )}
     </Card>
   );
+}
+
+/** The group shots a product is in, by number, lowest first. */
+function groupsOf(product: ProductRow): number[] {
+  return [...new Set((product.creative_drafts ?? [])
+    .map((draft) => ((draft.product_count ?? 0) > 1 ? draft.group_number ?? null : null))
+    .filter((number): number is number => number !== null))]
+    .sort((a, b) => a - b);
 }

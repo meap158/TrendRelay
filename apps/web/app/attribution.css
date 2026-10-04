@@ -899,7 +899,25 @@
 .product-group-together > .product-draft-group > th { box-shadow: inset 3px 0 0 var(--link); }
 .product-draft-group-name { color: var(--text); font-size: 11px; text-transform: uppercase; }
 .product-draft-group-also { margin-block-start: 4px; padding-block-start: 4px; border-block-start: 1px dashed var(--line); }
-.product-together-count { color: var(--link); }
+/* A group shot's name. The same chip on its band, its rows, and its card;
+   hovering one lights that group's rows. The words carry the meaning, so
+   nothing here depends on telling colours apart. */
+.product-group-chip {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--link) 35%, transparent);
+  border-radius: 999px;
+  background: var(--link-bg);
+  color: var(--link);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: default;
+}
+.product-draft-group-label > .product-group-chip { margin-inline-start: 0; }
+.product-table > tbody > tr[data-group-focus] > * { background: color-mix(in srgb, var(--link) 9%, var(--panel)); }
 .product-draft-group-label {
   display: flex;
   flex-wrap: wrap;
