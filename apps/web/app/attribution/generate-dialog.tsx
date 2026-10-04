@@ -21,6 +21,37 @@ import {
 /** The same ceiling the API stores and a thumbnail read can fetch at once. */
 const SUBJECT_LIMIT = 8;
 
+/** Previews in flight at once when each product is asked about separately. */
+const PREVIEW_CONCURRENCY = 4;
+
+/** The intake ceilings the API applies to a submitted file, in megabytes. */
+const FILE_LIMIT_MB = { image: 25, video: 512 } as const;
+
+/** A background has to be a full https address with a host. */
+function isHttpsUrl(text: string): boolean {
+  try {
+    const parsed = new URL(text.trim());
+    return parsed.protocol === "https:" && parsed.hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
+/** Run at most `limit` calls at once, keeping the input order. */
+async function mapLimit<T, R>(items: T[], limit: number, call: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await call(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 /** Chip labels. Title, description, and listing pictures start on. */
 const FIELD_LABEL: Record<ListingFieldKey, string> = {
   title: "omitTitle",
@@ -186,11 +217,21 @@ export function GenerateDialog({
   const [members, setMembers] = useState<DraftMember[]>([]);
   /** Listing pictures the operator turned off, keyed by product. Absent means all on. */
   const [skipped, setSkipped] = useState<Record<string, string[]>>({});
+  /** Products whose draft was refused in the last each-product queue. */
+  const [failedIds, setFailedIds] = useState<string[]>([]);
+  const [queuedCount, setQueuedCount] = useState(0);
+  // The page passes a fresh callback on every render. Holding it here keeps
+  // the generation poll from restarting, and asking again, each time.
+  const onChangedRef = useRef(onChanged);
+  useEffect(() => {
+    onChangedRef.current = onChanged;
+  }, [onChanged]);
 
   const reviewing = Boolean(draftId);
   const mirror = recipe === "mirror_selfie";
   const backgroundOn = mirror || backgroundEnabled;
-  const backgroundReady = !backgroundOn || backgroundReference.trim().startsWith("https://");
+  const backgroundValid = isHttpsUrl(backgroundReference);
+  const backgroundReady = !backgroundOn || backgroundValid;
   const locked = draft !== null || reviewing;
   const many = products.length > 1;
   const together = !locked && many && scope === "together" && products.length <= SUBJECT_LIMIT;
@@ -381,7 +422,9 @@ export function GenerateDialog({
         // be turned back on.
         try {
           const asks = together ? [leadId] : products.map((item) => item.id);
-          const responses = await Promise.all(asks.map(async (productId) => {
+          // A large selection would otherwise send every preview at once.
+          const responses = await mapLimit(asks, PREVIEW_CONCURRENCY, async (productId) => {
+            if (cancelled) throw new Error("cancelled");
             const response = await apiFetch(
               `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
               {
@@ -395,7 +438,7 @@ export function GenerateDialog({
             return response.json() as Promise<{
               draft?: { prompt?: string; listing_fields?: ListingSnapshot; products?: DraftMember[] };
             }>;
-          }));
+          });
           if (cancelled) return;
           const lead = responses[0]?.draft;
           setPrompt(typeof lead?.prompt === "string" ? lead.prompt : "");
@@ -461,6 +504,44 @@ export function GenerateDialog({
       cancelled = true;
     };
   }, [apiFetch, draft, videoOpen, workspaceId]);
+
+  // A generation keeps running after the dialog closes. Opening the draft
+  // again picks it up, so its progress shows and nothing offers a second run.
+  const openDraftId = videoOpen && draft ? draft.id : "";
+  useEffect(() => {
+    if (!workspaceId || !openDraftId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await apiFetch(
+          `/api/workspaces/${workspaceId}/attribution/creative-drafts/${openDraftId}/generation`,
+        );
+        if (!response.ok || cancelled) return;
+        const payload = await response.json() as { generation?: { id?: string; status?: string } };
+        const running = payload.generation;
+        if (running?.id && (running.status === "queued" || running.status === "running")) {
+          setGeneration((current) => current || running.id || "");
+          setNotice(t("attribution.generate.generationRunning"));
+        }
+      } catch {
+        // Without the answer the buttons stay; the API still refuses a second run.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch, openDraftId, t, workspaceId]);
+
+  // A provider is sent one Library image. Without one it refuses, and a shot
+  // of several products would come back showing none of their own pictures.
+  const providerSubject = (draft?.subject_assets ?? []).find((asset) => !asset.missing) ?? null;
+  const providerBlocked = !videoOpen
+    ? ""
+    : (draft?.product_count ?? 1) > 1
+      ? t("attribution.generate.providerTogether")
+      : providerSubject === null
+        ? t("attribution.generate.providerNeedsSubject")
+        : "";
   const queueNeedsLibrary = !together;
   const attachedLibrary = reviewing ? storedSubjects.length : subjects.length;
   const pictureRows = members.flatMap((member) => (
@@ -471,9 +552,21 @@ export function GenerateDialog({
   ).length;
   const allPicturesOn = pictureRows.length > 0 && skippedPictures === 0;
   const everyPictureOff = pictureRows.length > 0 && skippedPictures === pictureRows.length;
-  const togetherUncovered = together
-    && attachedLibrary === 0
-    && members.some((member) => pictureUrls(member).every((url) => !imageOn(member.product_id, url)));
+  const uncoveredNames = together && attachedLibrary === 0
+    ? members
+      .filter((member) => !pictureUrls(member).some((url) => imageOn(member.product_id, url)))
+      .map((member) => member.name || member.product_id)
+    : [];
+  const togetherUncovered = uncoveredNames.length > 0;
+  // Why Queue is off, said beside it. The picture list that would explain it
+  // is hidden while Listing pictures is off.
+  const queueBlocker = draft || reviewing || !prompt
+    ? ""
+    : queueNeedsLibrary && subjects.length === 0
+      ? t("attribution.generate.blockedPick")
+      : togetherUncovered
+        ? t("attribution.generate.blockedPictures", { names: uncoveredNames.join(", ") })
+        : "";
 
   async function queue() {
     if (products.length === 0 || !workspaceId || !prompt) return;
@@ -496,7 +589,7 @@ export function GenerateDialog({
         setMembers(payload.draft.products ?? []);
         if (payload.draft.listing_fields) setListingSnapshot(payload.draft.listing_fields);
         setNotice(t("attribution.generate.queuedTogether"));
-        onChanged?.();
+        onChangedRef.current?.();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
       } finally {
@@ -504,17 +597,24 @@ export function GenerateDialog({
       }
       return;
     }
+    // A retry asks again only for the products that were refused, so a
+    // product that already has its draft does not get a second one.
+    const targets = failedIds.length > 0
+      ? products.filter((item) => failedIds.includes(item.id))
+      : products;
     const failures: string[] = [];
-    let first: DraftView | null = null;
+    const refused: string[] = [];
+    let first: DraftView | null = draft;
     let queued = 0;
     try {
-      for (const item of products) {
+      for (const item of targets) {
         try {
           const response = await apiFetch(
             `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
             { method: "POST", body: JSON.stringify(requestBody(item.id, true)) },
           );
           if (!response.ok) {
+            refused.push(item.id);
             failures.push(`${item.name}: ${await errorDetail(response, t("attribution.generate.requestFailed"))}`);
             continue;
           }
@@ -522,18 +622,22 @@ export function GenerateDialog({
           queued += 1;
           if (!first) first = payload.draft;
         } catch (caught) {
+          refused.push(item.id);
           const detail = caught instanceof Error ? caught.message : t("attribution.generate.requestFailed");
           failures.push(`${item.name}: ${detail}`);
         }
       }
+      setFailedIds(refused);
+      const total = queuedCount + queued;
+      setQueuedCount(total);
       if (first) {
         setDraft(first);
         setPrompt(first.prompt);
         if (first.listing_fields) setListingSnapshot(first.listing_fields);
         setNotice(many
-          ? t("attribution.generate.queuedMany", { count: queued })
+          ? t("attribution.generate.queuedMany", { count: total })
           : t("attribution.generate.queued"));
-        onChanged?.();
+        if (queued > 0) onChangedRef.current?.();
       }
       if (failures.length > 0) setError(failures.join(" "));
     } finally {
@@ -595,7 +699,7 @@ export function GenerateDialog({
             ? t("attribution.generate.linkedAll")
             : t("attribution.generate.linked"));
           setGeneration("");
-          onChanged?.();
+          onChangedRef.current?.();
         } else if (status === "failed" || status === "cancelled") {
           setError(payload.generation?.error || t("attribution.generate.requestFailed"));
           setGeneration("");
@@ -610,10 +714,15 @@ export function GenerateDialog({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [apiFetch, draft, generation, onChanged, t, workspaceId]);
+  }, [apiFetch, draft, generation, t, workspaceId]);
 
   async function submitFile() {
     if (!draft || !file || !workspaceId) return;
+    const limitMb = draft.kind === "video" ? FILE_LIMIT_MB.video : FILE_LIMIT_MB.image;
+    if (file.size > limitMb * 1024 * 1024) {
+      setError(t("attribution.generate.fileTooLarge", { size: limitMb }));
+      return;
+    }
     setBusy("file");
     setError("");
     try {
@@ -639,7 +748,7 @@ export function GenerateDialog({
         : t("attribution.generate.partial"));
       setFile(null);
       setFileEpoch((current) => current + 1);
-      onChanged?.();
+      onChangedRef.current?.();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
     } finally {
@@ -698,6 +807,10 @@ export function GenerateDialog({
         : (asset.title || asset.asset_id),
     }))
     : subjects.map((asset) => ({ id: asset.id, title: asset.title }));
+  // Listing pictures that are the subject go out even with Listing pictures
+  // off: every product of a group shot, or one product without a Library pick.
+  const subjectPicturesHidden = !selectedFields.has("gallery")
+    && (groupShot || libraryLabels.length === 0);
 
   return (
     <>
@@ -735,6 +848,16 @@ export function GenerateDialog({
               : many && !together
                 ? t("attribution.generate.queueMany")
                 : t("attribution.generate.queue")}</Button>
+          )}
+          {draft && !reviewing && failedIds.length > 0 && (
+            <Button
+              variant="primary"
+              busy={busy === "queue"}
+              disabled={busy !== ""}
+              onClick={() => void queue()}
+            >{busy === "queue"
+              ? t("attribution.generate.queuing")
+              : t("attribution.generate.queueRetry", { count: failedIds.length })}</Button>
           )}
           {draft && oneCreative && draft.owed > 0 && (
             <Button
@@ -937,7 +1060,7 @@ export function GenerateDialog({
                   onChange={(event) => setBackgroundReference(event.target.value)}
                 />
                 {!backgroundReady && <small>{t("attribution.generate.backgroundNeeded")}</small>}
-                {backgroundReady && backgroundReference.trim().startsWith("https://") && (
+                {backgroundValid && (
                   <small>{t("attribution.generate.backgroundSent")}</small>
                 )}
               </label>
@@ -1075,7 +1198,7 @@ export function GenerateDialog({
                 ? t("attribution.generate.promptStored")
                 : t("attribution.generate.promptHelp")}</small>
             </label>
-            {backgroundOn && backgroundReference.trim().startsWith("https://") && (
+            {backgroundOn && backgroundValid && (
               <div className="generate-use">
                 <strong>{t("attribution.generate.backgroundHeading")}</strong>
                 <p className="generate-field-value">{backgroundReference.trim()}</p>
@@ -1093,10 +1216,16 @@ export function GenerateDialog({
                 </ol>
               </div>
             )}
-            {members.length > 1 && chosenFields.length > 0 ? (
-              members.map((member) => (
+            {members.length > 1 ? (
+              (chosenFields.length > 0 || subjectPicturesHidden) && members.map((member) => (
                 <section className="generate-send-product" key={member.product_id}>
                   <span className="generate-member-name" title={member.name}>{member.name}</span>
+                  {subjectPicturesHidden && (
+                    <div className="generate-use">
+                      <strong>{t("attribution.generate.sendPictures")}</strong>
+                      {renderPictureRow(keptPictures(member))}
+                    </div>
+                  )}
                   {renderFields(sentSnapshot(member))}
                 </section>
               ))
@@ -1105,7 +1234,7 @@ export function GenerateDialog({
                 {many && !reviewing && members.length <= 1 && products[0] && chosenFields.length > 0 && (
                   <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
                 )}
-                {members.length === 1 && libraryLabels.length === 0 && !selectedFields.has("gallery") && (
+                {members.length === 1 && subjectPicturesHidden && (
                   <div className="generate-use">
                     <strong>{t("attribution.generate.sendPictures")}</strong>
                     {renderPictureRow(keptPictures(members[0]))}
@@ -1125,8 +1254,18 @@ export function GenerateDialog({
             {t("attribution.generate.owed", { count: draft.owed })}
           </p>
         )}
-        {videoOpen && providers.length > 0 && (
+        {videoOpen && providers.length > 0 && providerBlocked && (
+          <p className="generate-provider-note">{providerBlocked}</p>
+        )}
+        {videoOpen && providers.length > 0 && !providerBlocked && (
           <div className="generate-providers">
+            {providerSubject && (
+              <p className="generate-provider-note">
+                {t("attribution.generate.providerFirstSubject", {
+                  title: providerSubject.title || providerSubject.asset_id,
+                })}
+              </p>
+            )}
             {providers.map((provider) => (
               <Button
                 key={provider.id}
@@ -1151,6 +1290,7 @@ export function GenerateDialog({
             />
           </label>
         )}
+        {queueBlocker && <p className="generate-blocker">{queueBlocker}</p>}
         {notice && <p role="status">{notice}</p>}
         {error && !reviewing && <p role="alert">{error}</p>}
         {error && reviewing && draft && <p role="alert">{error}</p>}
