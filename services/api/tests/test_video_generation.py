@@ -23,7 +23,7 @@ from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base, DurableJob, UserProfile, Workspace
 from trendrelay_api.opportunity_models import Product
-from trendrelay_api.product_creative_models import ProductCreativeDraft
+from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeDraftProduct
 
 engine = create_engine(
     "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -278,6 +278,80 @@ def test_generating_without_confirmation_is_refused() -> None:
 
     assert response.status_code == 400
     assert "confirmation" in response.text.lower()
+
+
+def _counting_adapter(monkeypatch, provider_id: str) -> list[str]:
+    calls: list[str] = []
+
+    def adapter(*_args, **_kwargs):
+        calls.append(provider_id)
+        return b"\x00\x00\x00\x18ftypisom" + b"\x00" * 64
+
+    monkeypatch.setitem(video.ADAPTERS, provider_id, adapter)
+    return calls
+
+
+def test_a_draft_filled_while_the_job_waits_is_not_sent(values, tmp_path, monkeypatch) -> None:
+    """The outside fill is the normal path. A queued job must not pay for a second file."""
+    _ready(values, "gemini")
+    _seed(tmp_path)
+    with Session.begin() as session:
+        job = video.enqueue(session, "ws", "owner", "draft-1", "gemini")
+    with Session.begin() as session:
+        draft = session.get(ProductCreativeDraft, "draft-1")
+        assert draft is not None
+        draft.status = "succeeded"
+        draft.staged_asset_ids = ["asset-1"]
+    calls = _counting_adapter(monkeypatch, "gemini")
+
+    video.run_job(job["id"], factory=Session)
+
+    assert calls == []
+    with Session() as session:
+        stored = session.get(DurableJob, job["id"])
+        assert stored is not None
+        assert stored.status == "failed"
+        assert "Nothing was sent" in (stored.last_error or "")
+
+
+def test_a_provider_switched_off_after_queue_does_not_spend(values, tmp_path, monkeypatch) -> None:
+    _ready(values, "gemini")
+    _seed(tmp_path)
+    with Session.begin() as session:
+        job = video.enqueue(session, "ws", "owner", "draft-1", "gemini")
+    values[video.PROVIDERS["gemini"].enabled_env] = ""
+    calls = _counting_adapter(monkeypatch, "gemini")
+
+    video.run_job(job["id"], factory=Session)
+
+    assert calls == []
+    with Session() as session:
+        stored = session.get(DurableJob, job["id"])
+        assert stored is not None
+        assert stored.status == "failed"
+        assert "not ready" in (stored.last_error or "")
+
+
+def test_a_draft_of_several_products_is_refused_before_a_provider(values, tmp_path) -> None:
+    """One image goes to the provider. A group shot would show none of its products."""
+    _ready(values, "gemini")
+    _seed(tmp_path)
+    with Session.begin() as session:
+        session.add(Product(
+            id="product-2", workspace_id="ws", catalog_key="bambi",
+            name="Bambi set", marketplace="shopee", created_by="owner",
+        ))
+        session.add(ProductCreativeDraftProduct(
+            workspace_id="ws", draft_id="draft-1", product_id="product-1", position=0,
+        ))
+        session.add(ProductCreativeDraftProduct(
+            workspace_id="ws", draft_id="draft-1", product_id="product-2", position=1,
+        ))
+    with Session.begin() as session:
+        with pytest.raises(ValueError, match="several products"):
+            video.enqueue(session, "ws", "owner", "draft-1", "gemini")
+    with Session() as session:
+        assert session.scalars(select(DurableJob).where(DurableJob.kind == video.JOB_KIND)).all() == []
 
 
 def test_a_library_job_records_the_prompt_and_the_provider(values, tmp_path) -> None:

@@ -729,6 +729,11 @@ def _open_jobs(session: Session, workspace_id: str) -> list[DurableJob]:
     ).all())
 
 
+def _still_owed(view: dict[str, Any]) -> bool:
+    """Whether a draft read still waits for its file."""
+    return view.get("status") == "pending" and int(view.get("owed") or 0) > 0
+
+
 def _inflight(session: Session, workspace_id: str, draft_id: str) -> DurableJob | None:
     for item in _open_jobs(session, workspace_id):
         payload = item.payload if isinstance(item.payload, dict) else {}
@@ -769,9 +774,16 @@ def enqueue(
     view = get_draft(session, workspace_id, draft_id)
     if view["kind"] != "video":
         raise ValueError("Video generation is for a video draft.")
-    if view["status"] != "pending" or int(view["owed"]) <= 0:
+    if not _still_owed(view):
         raise ValueError("This draft does not still need a file.")
-    subjects = [item for item in view["subject_assets"] if not item.get("missing")]
+    # A provider is sent one image. A shot of several products would come
+    # back showing none of their own listing pictures.
+    if int(view.get("product_count") or 1) > 1:
+        raise ValueError(
+            "A provider is sent one image, so a draft of several products takes "
+            "its file from outside."
+        )
+    subjects =[item for item in view["subject_assets"] if not item.get("missing")]
     if not subjects:
         raise ValueError("Choose a Library image for this draft before generating.")
     asset_id = str(subjects[0]["asset_id"])
@@ -1011,7 +1023,9 @@ def run_job(
     payload = record["payload"] if isinstance(record.get("payload"), dict) else {}
     provider_id = str(payload.get("provider_id") or "")
     try:
-        provider = PROVIDERS[provider_id]
+        # Switched off in Tools, or its key removed, after this job was queued:
+        # stop here rather than spend.
+        provider = require_ready(provider_id)
         if payload.get("source") == "library":
             prompt = payload.get("prompt")
             if not isinstance(prompt, str) or not prompt.strip():
@@ -1040,12 +1054,35 @@ def run_job(
         else:
             with session_factory() as session:
                 view = get_draft(session, payload["workspace_id"], payload["draft_id"])
+                # The draft can be filled from outside while this job waits.
+                # Ask again before anything is paid for.
+                if not _still_owed(view):
+                    raise VideoError(
+                        "unavailable",
+                        "This draft no longer needs a file. Nothing was sent to the provider.",
+                    )
                 image, mime = _subject_bytes(
                     session, payload["workspace_id"], payload["subject_asset_id"],
                 )
                 prompt = str(view["prompt"])
             object_key = f"product-clips/{payload['draft_id']}/{job_id}.mp4"
             data = _run_adapter(provider, prompt, image, mime, object_key, transport)
+            with session_factory() as session:
+                view = get_draft(session, payload["workspace_id"], payload["draft_id"])
+            if not _still_owed(view):
+                # Filled while the provider worked. The clip is paid for, so it
+                # is kept in the Library instead of being dropped.
+                kept_id = _file_library_clip(
+                    str(payload.get("workspace_id") or ""),
+                    str(payload.get("actor_user_id") or ""),
+                    data,
+                    f"{provider.label} video",
+                )
+                raise VideoError(
+                    "unavailable",
+                    "This draft was filled while the video was generated. The video is "
+                    f"in the Library as {kept_id}, without a product link.",
+                )
             encoded = base64.b64encode(data).decode("ascii")
             with session_factory() as session:
                 filed = submit_media(
