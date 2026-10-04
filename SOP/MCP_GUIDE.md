@@ -199,14 +199,16 @@ When a product is waiting on an image, a carousel, or a video, load
    Use `background_reference` when one is attached, and `listing_fields` only
    for keys that are present. Do not rewrite the prompt.
 2. Generate that file with the client's own image or video tool. TrendRelay
-   does not generate the pixels.
+   does not generate the pixels. Generating it is not the end of the task.
 3. `submit_product_creative_media` with exactly one source: the `media` file,
    a public https `media_url`, or `media_base64`. An image or carousel draft
    takes an image; a video draft takes a video. The ingest finishes in this
-   call, including video.
-4. A carousel stays pending, with no new product link, until every card has
-   been submitted. Read `owed`. `linked` is true only when the set is complete.
-   A failed file writes no link.
+   call, including video. Do this in the same task, including when you queued
+   the draft yourself. A file left on disk or in the chat is unfinished.
+4. Read the draft again. A carousel stays pending, with no new product link,
+   until every card has been submitted. Read `owed`. `linked` is true only
+   when the set is complete. An image or a video is done when `status` is
+   `succeeded` and the Library asset id is known. A failed file writes no link.
 5. On success the Library asset is linked to every product on the draft, and
    each product is linked back on the asset. Do not publish, and do not attach it to a campaign
    unless that was asked as its own action.

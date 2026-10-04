@@ -2,8 +2,8 @@
 id: attribution.fill-product-creatives
 action: attribution.fill-product-creatives
 title: Fill pending Attribution product creatives
-summary: Work the pending product-creative queue one draft at a time. Read the stored prompt and the product's image references, generate that file outside TrendRelay, and submit it. A carousel stays unlinked until every card has landed. Nothing is published.
-version: 1
+summary: Work the pending product-creative queue one draft at a time. Read the stored prompt and the product's image references, generate that file outside TrendRelay, and submit it to the Library before the task is done. A carousel stays unlinked until every card has landed. Nothing is published.
+version: 2
 tags: [attribution, media, creatives, library]
 aliases: [fill-product-creatives, attribution.needs-creatives, generate-product-creative]
 ---
@@ -14,11 +14,28 @@ is campaign posts waiting for pictures. Here the queue is Attribution products
 with a reviewed prompt and no finished file yet.
 
 Use it when an operator, or an earlier turn, queued an image, a carousel, or a
-video for one product and the job is to produce that file and file it in the
-Library, linked back to the product.
+video for one product, or one shot of several products, and the job is to
+produce that file and file it in the Library, linked back to every product on
+the draft.
 
 TrendRelay does not call an image or video model. The pixels are produced by
 the client, then submitted. Confirming a draft only stores the prompt.
+
+## The file is not done until it is in the Library
+
+Generating the picture or the video is one step. The same task then uploads
+that file into the Library. A file that exists only on disk, in the chat, or
+on a still-pending draft is unfinished.
+
+1. `submit_product_creative_media` with the finished file. Send exactly one
+   source. Image and carousel drafts take an image. A video draft takes a video.
+2. Read the draft again. Done means `status` is `succeeded`, `owed` is 0,
+   `linked` is true, and the response names a Library asset id.
+3. A together draft submits once. That one asset is linked to every product
+   in `products`.
+
+Report the creative done only after that read. Queueing with
+`create_product_creative_draft` stores the prompt and does not ingest.
 
 ## 1. The queue is the pending drafts
 
@@ -100,10 +117,14 @@ in order. Do not submit one picture that contains every card as panels.
    (`get_asset_thumbnails`). If it is empty, use `product_images`. Use
    `background_reference` when it is set. Use `listing_fields` for the keys
    that are present, and leave out any key that is absent.
-2. `submit_product_creative_media` once for that file. Video ingest finishes
-   in the same call; do not poll `get_import_status` for it.
+2. `submit_product_creative_media` once for that file. This upload is part of
+   the task, including when you queued the draft yourself in the same turn.
+   Video ingest finishes in the same call; do not poll `get_import_status`
+   for it.
 3. Read the draft again. `owed` is what is left. `linked` is true only when
-   the set is complete.
+   the set is complete. An image or a video is done when `status` is
+   `succeeded` and the Library asset id is known. A carousel stays on this
+   draft until `owed` is 0.
 4. Take the next pending draft.
 
 Finish one draft before starting another. Do not publish the asset, and do
