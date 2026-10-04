@@ -212,10 +212,11 @@ def test_asset_page_batches_related_record_queries(tmp_path: Path) -> None:
             event.remove(engine, "before_cursor_execute", record_statement)
 
     assert len(views) == 20
-    # Versions, transcripts, analyses, and the campaigns each asset is queued
-    # in. Four queries for a page of twenty, and four for a page of a hundred:
-    # what this guards is that the number does not follow the page size.
-    assert len(statements) == 4
+    # Versions, transcripts, analyses, the campaigns each asset is queued in,
+    # and the Attribution products a creative is linked to. Five queries for a
+    # page of twenty, and five for a page of a hundred: what this guards is
+    # that the number does not follow the page size.
+    assert len(statements) == 5
     assert all(" IN (" in statement for statement in statements), statements
 
 
