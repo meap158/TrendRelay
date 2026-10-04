@@ -22,7 +22,8 @@ import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { Select } from "../ui/select";
-import { useT } from "../i18n-provider";
+import { useLocale, useT } from "../i18n-provider";
+import { relativeTime } from "../../lib/relative-time";
 import { useWorkspace } from "../workspace-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
@@ -191,6 +192,7 @@ export function ProductTable({
   onCreativesChanged?: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   /** The group shot whose chip is hovered; its rows are lit. */
   const [focusGroup, setFocusGroup] = useState<number | null>(null);
@@ -281,14 +283,30 @@ export function ProductTable({
    * An import brings in a batch at a time, so a list that can only be scrolled
    * stops being usable at about the second import.
    */
-  /** The distinct import files present, for the file filter's options. */
-  const fileNames = useMemo(() => {
-    const names = new Set<string>();
+  /**
+   * The import files present, newest first, for the file filter's options.
+   *
+   * Each says when it arrived and how many products it brought, the way a
+   * notification says when it happened: a list of export file names that
+   * differ only in a timestamp buried in the middle is not a choice anyone
+   * can make by reading it.
+   */
+  const fileImports = useMemo(() => {
+    const found = new Map<string, { latest: number; count: number }>();
     for (const product of products) {
-      if (product.import_filename) names.add(product.import_filename);
+      if (!product.import_filename) continue;
+      const at = product.imported_at ? Date.parse(product.imported_at) : Number.NaN;
+      const entry = found.get(product.import_filename) ?? { latest: Number.NaN, count: 0 };
+      entry.count += 1;
+      if (!Number.isNaN(at) && !(at <= entry.latest)) entry.latest = at;
+      found.set(product.import_filename, entry);
     }
-    return [...names].sort();
+    return [...found.entries()]
+      .map(([name, entry]) => ({ name, ...entry }))
+      .sort((a, b) => (Number.isNaN(b.latest) ? -1 : b.latest) - (Number.isNaN(a.latest) ? -1 : a.latest)
+        || a.name.localeCompare(b.name));
   }, [products]);
+  const fileNames = useMemo(() => fileImports.map((item) => item.name), [fileImports]);
   /**
    * The creators actually present in these rows, counted.
    *
@@ -551,8 +569,17 @@ export function ProductTable({
                 onChange={(event) => setFilterFile(event.target.value)}
               >
                 <option value="">{t("attribution.allImports")}</option>
-                {fileNames.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                {fileImports.map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {[
+                      item.name,
+                      Number.isNaN(item.latest)
+                        ? null
+                        : relativeTime(new Date(item.latest), { locale })
+                          ?? new Date(item.latest).toLocaleDateString(locale, { month: "short", day: "numeric" }),
+                      t("attribution.productCount", { count: item.count }),
+                    ].filter(Boolean).join(" · ")}
+                  </option>
                 ))}
               </Select>
             )}
