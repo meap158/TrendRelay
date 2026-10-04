@@ -7,6 +7,28 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Generate media review and hardening (2026-10-04)
+
+An adversarial review of Generate media landed as atomic commits after
+`ab3643a4`. Keep these guarantees; tests pin each one.
+
+- Video jobs spend once. The job marks `provider_posting` before the paid
+  request and stores `provider_request` when it returns; retries (up to
+  `MAX_ATTEMPTS`) poll that request and never send another. A mark with no
+  id stops rather than risk a second charge. Job ids are derived from the
+  draft or image and its job count, so a double click collides on one row.
+  The worker must be restarted to pick these up.
+- A provider refuses a draft of several products, and a draft with no
+  Library subject. The dialog explains instead of offering the button.
+- Submit rereads the draft after ingest and stages with a compare-and-set
+  on `updated_at`. A Library delete calls `forget_asset` (SQLite does not
+  enforce the declared cascade).
+- Members see a one-sentence, query-stripped provider error; the full
+  answer is in the server log.
+- Migration 0087's downgrade keeps the lead product's link per card.
+- Generate dialog styles are scoped by `.generate-dialog`, not the shared
+  `.campaign-dialog-form` (stylesheet guard).
+
 ## Attribution product media (2026-10-04)
 
 The operator's requests for Attribution → Products, and where each one stands.
