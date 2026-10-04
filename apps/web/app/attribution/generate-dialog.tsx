@@ -200,6 +200,7 @@ export function GenerateDialog({
   const [providers, setProviders] = useState<{ id: string; label: string }[]>([]);
   /** A generation the dialog is waiting on. Empty when it is not. */
   const [generation, setGeneration] = useState("");
+  const [retrying, setRetrying] = useState(false);
   /** Library images the operator picked, in the order generation will see them. */
   const [subjects, setSubjects] = useState<LibraryAsset[]>([]);
   const [storedSubjects, setStoredSubjects] = useState<StoredSubject[]>([]);
@@ -683,10 +684,12 @@ export function GenerateDialog({
         );
         if (!response.ok || stopped) return;
         const payload = await response.json() as {
-          generation?: { status?: string; error?: string | null; id?: string };
+          generation?: { status?: string; error?: string | null; id?: string; attempt?: number };
         };
         const status = payload.generation?.status;
         if (payload.generation?.id && payload.generation.id !== generation) return;
+        // Queued again after an attempt: the next one polls the same paid request.
+        setRetrying(status === "queued" && (payload.generation?.attempt ?? 0) > 0);
         if (status === "succeeded") {
           const again = await apiFetch(
             `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draft.id}`,
@@ -1289,6 +1292,9 @@ export function GenerateDialog({
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
           </label>
+        )}
+        {generation && retrying && (
+          <p role="status">{t("attribution.generate.generationRetrying")}</p>
         )}
         {queueBlocker && <p className="generate-blocker">{queueBlocker}</p>}
         {notice && <p role="status">{notice}</p>}

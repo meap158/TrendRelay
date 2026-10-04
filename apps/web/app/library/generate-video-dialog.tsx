@@ -15,6 +15,8 @@ type Generation = {
   provider_label?: string | null;
   error?: string | null;
   asset_id?: string | null;
+  /** Attempts already made. Queued again after one means a free retry. */
+  attempt?: number;
 };
 
 /**
@@ -131,6 +133,9 @@ export function GenerateVideoDialog({
   }, [apiFetch, assetId, open, refreshJobs, t, watch, workspaceId]);
 
   const inflight = generation?.status === "queued" || generation?.status === "running";
+  // Back in the queue after an attempt: the provider was slow or the network
+  // dropped, and the next attempt polls the same paid request.
+  const retrying = generation?.status === "queued" && (generation.attempt ?? 0) > 0;
 
   async function generateWith(provider: Provider) {
     const text = prompt.trim();
@@ -196,6 +201,7 @@ export function GenerateVideoDialog({
             : t("library.generateVideoWith", { provider: provider.label })}</Button>
         ))}
       </div>
+      {retrying && <p role="status">{t("library.generateVideoRetrying")}</p>}
       {notice && <p role="status">{notice}</p>}
       {error && <p className="voice-note problem" role="alert">{error}</p>}
     </Dialog>
