@@ -451,7 +451,7 @@ def test_it_schedules_one_post_per_due_slot(session) -> None:
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert len(posts) == 2
     assert [post.at.hour for post in posts] == [12, 18]
-    assert "2 post(s) scheduled" in note
+    assert "2 posts scheduled" in note
 
 
 def test_an_unwritten_package_is_skipped_not_posted(session) -> None:
@@ -1424,13 +1424,13 @@ def test_a_reason_that_happened_once_is_not_counted_at_the_reader() -> None:
     note = scheduler._explain_run([_Post()], ["Account is at its daily cap."], 14)
 
     assert "slots)" not in note
-    assert note == "1 post(s) scheduled across 1 destination(s). Account is at its daily cap."
+    assert note == "1 post scheduled across 1 destination. Account is at its daily cap."
 
 
 def test_a_successful_run_still_leads_with_what_it_did() -> None:
     note = scheduler._explain_run([_Post("d1"), _Post("d2")], [], 6)
 
-    assert note == "2 post(s) scheduled across 2 destination(s)."
+    assert note == "2 posts scheduled across 2 destinations."
 
 
 def test_a_run_with_many_distinct_reasons_counts_the_tail() -> None:

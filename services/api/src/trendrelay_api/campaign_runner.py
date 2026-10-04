@@ -1124,8 +1124,8 @@ def run_campaign(
 
     if held:
         note = (
-            f"{note} {len(held)} post(s) waiting for approval in the "
-            "exception inbox."
+            f"{note} {len(held)} post{'' if len(held) == 1 else 's'} waiting for "
+            "approval in the exception inbox."
         )
         if autopilot.approvals_telegram:
             # Told, not only listed: the inbox is where the approval happens,

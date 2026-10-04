@@ -1547,9 +1547,11 @@ def _explain_run(
     from collections import Counter  # noqa: PLC0415
 
     if scheduled:
+        posts = len(scheduled)
+        places = len({item.destination_id for item in scheduled})
         headline = (
-            f"{len(scheduled)} post(s) scheduled across "
-            f"{len({item.destination_id for item in scheduled})} destination(s)."
+            f"{posts} post{'' if posts == 1 else 's'} scheduled across "
+            f"{places} destination{'' if places == 1 else 's'}."
         )
     else:
         headline = "No posts scheduled."
