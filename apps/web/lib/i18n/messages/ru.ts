@@ -1210,7 +1210,7 @@ export const ru: Messages = {
       promptSettings: "Промпт и настройки",
       generationRunningWith: "Создаётся через {provider}…",
       generationStopped: "Последнее создание остановлено: {error}",
-      openFile: "Открыть файл {index} в библиотеке",
+      previewFile: "Просмотр файла {index} из {count}",
       otherFiles: "Другие связанные файлы",
       providerFirstSubject: "Провайдер начинает с первого изображения из библиотеки, {title}.",
       providerNeedsSubject: "Провайдер начинает с изображения из библиотеки. У этого черновика его нет, поэтому файл добавляется извне.",

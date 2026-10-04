@@ -836,7 +836,17 @@
 .product-creative-settings[open] > summary { margin-block-end: 6px; }
 /* Files as thumbnails. A dashed tile stands for each file still owed. */
 .product-creative-media { display: flex; flex-wrap: wrap; flex: none; gap: 4px; }
-.product-creative-thumb { display: block; border-radius: var(--radius-sm); }
+/* A thumbnail is a button: pressed, it opens the lightbox. */
+.product-creative-thumb {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: zoom-in;
+}
+.product-creative-library { color: var(--link); font-size: 11px; white-space: nowrap; }
+.product-creative-library:hover { text-decoration: underline; }
 .product-creative-thumb:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 .product-creative-thumb .picker-thumb,
 .product-creative-owed { inline-size: 56px; block-size: 56px; }

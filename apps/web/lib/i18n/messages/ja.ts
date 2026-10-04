@@ -1197,7 +1197,7 @@ export const ja: Messages = {
       promptSettings: "プロンプトと設定",
       generationRunningWith: "{provider} で生成中…",
       generationStopped: "前回の生成は停止しました: {error}",
-      openFile: "ファイル {index} をライブラリで開く",
+      previewFile: "ファイル {index}/{count} をプレビュー",
       otherFiles: "その他のリンク済みファイル",
       providerFirstSubject: "プロバイダーはライブラリの最初の画像「{title}」から生成します。",
       providerNeedsSubject: "プロバイダーはライブラリの画像から生成します。この下書きには画像がないため、ファイルは外部から追加します。",

@@ -1201,7 +1201,7 @@ export const en = {
       promptSettings: "Prompt and settings",
       generationRunningWith: "Generating with {provider}…",
       generationStopped: "Last generation stopped: {error}",
-      openFile: "Open file {index} in the Library",
+      previewFile: "Preview file {index} of {count}",
       otherFiles: "Other linked files",
       providerFirstSubject: "The provider starts from the first Library image, {title}.",
       providerNeedsSubject: "A provider starts from a Library image. This draft has none, so its file comes from outside.",

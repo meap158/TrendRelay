@@ -1197,7 +1197,7 @@ export const vi: Messages = {
       promptSettings: "Prompt và cài đặt",
       generationRunningWith: "Đang tạo bằng {provider}…",
       generationStopped: "Lần tạo gần nhất đã dừng: {error}",
-      openFile: "Mở tệp {index} trong Thư viện",
+      previewFile: "Xem trước tệp {index}/{count}",
       otherFiles: "Tệp liên kết khác",
       providerFirstSubject: "Nhà cung cấp bắt đầu từ ảnh Thư viện đầu tiên, {title}.",
       providerNeedsSubject: "Nhà cung cấp bắt đầu từ một ảnh trong Thư viện. Bản nháp này không có ảnh nào, nên tệp của nó được thêm từ bên ngoài.",

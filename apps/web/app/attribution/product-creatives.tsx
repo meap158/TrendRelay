@@ -6,11 +6,11 @@
  * The expanded row used to list one "Open in Library" link per linked file
  * above a list of drafts, so a product with a Single image and a Together
  * shot showed two identical links and no way to tell which was which. Each
- * draft is now one card: its files as thumbnails (each opens in the
- * Library), what it is, where it stands, and - collapsed - the prompt and
- * settings it was made from. A draft that still owes a file says how to
- * finish it right there: generate it when a video provider is ready, add
- * the file otherwise.
+ * draft is now one card: its files as thumbnails that open in the
+ * lightbox, Open in Library as its own control, what it is, where it
+ * stands, and - collapsed - the prompt and settings it was made from. A
+ * draft that still owes a file says how to finish it right there: generate
+ * it when a video provider is ready, add the file otherwise.
  */
 
 import { useEffect, useState } from "react";
@@ -21,6 +21,8 @@ import { useT } from "../i18n-provider";
 import { useWorkspace } from "../workspace-provider";
 import { AssetThumbnail, type LibraryAsset } from "../publish/composer";
 import { Button } from "../ui/button";
+import { Lightbox, useLightboxSet } from "../ui/lightbox";
+import { opaquePreviewUrl } from "../../lib/media-preview";
 import { partitionDrafts } from "./draft-groups";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
@@ -110,59 +112,114 @@ export function useVideoProviders(enabled: boolean): Provider[] {
   return enabled ? providers : [];
 }
 
-/** One linked file as a thumbnail that opens it in the Library. */
-export function CreativeThumb({
-  assetId,
-  label,
-  workspaceId,
-  apiFetch,
-}: {
-  assetId: string;
-  label: string;
-  workspaceId: string;
-  apiFetch: Fetcher;
-}) {
+/**
+ * The full-size bytes of one creative file, for the lightbox.
+ *
+ * Fetched through the API like every served byte - the asset endpoints want
+ * the workspace identity a bare `<img>` does not send - asked for opaque and
+ * retyped into a blob. A picture is its original; a clip uses the stream
+ * endpoint the Library player uses. Empty while loading, which the lightbox
+ * shows as a steady dark stage rather than a broken image.
+ */
+function useCreativeSource(assetId: string | null, video: boolean): string {
+  const { apiFetch } = useAuth();
+  const { workspaceId } = useWorkspace();
+  const [loaded, setLoaded] = useState<{ id: string; url: string } | null>(null);
+  useEffect(() => {
+    if (!assetId || !workspaceId) return;
+    let active = true;
+    let objectUrl = "";
+    const controller = new AbortController();
+    const base = `/api/workspaces/${workspaceId}/media/library/assets/${assetId}`;
+    const path = video ? `${base}/preview/stream?cut=original` : `${base}/content/original`;
+    apiFetch(opaquePreviewUrl(path), { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("unavailable");
+        return response.arrayBuffer();
+      })
+      .then((bytes) => {
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: video ? "video/mp4" : "image/jpeg" }));
+        if (active) setLoaded({ id: assetId, url: objectUrl });
+        else URL.revokeObjectURL(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [apiFetch, assetId, video, workspaceId]);
+  return loaded && loaded.id === assetId ? loaded.url : "";
+}
+
+/** The explicit way to the Library: every file of this creative, as one set. */
+export function OpenInLibrary({ assets }: { assets: CreativeAssetRow[] }) {
+  const t = useT();
+  if (assets.length === 0) return null;
+  const ids = assets.map((item) => item.asset_id).join(",");
   return (
-    <Link
-      className="product-creative-thumb"
-      href={`/library?assets=${encodeURIComponent(assetId)}`}
-      aria-label={label}
-      title={label}
-    >
-      <AssetThumbnail asset={thumbnailOf(assetId)} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
+    <Link className="product-creative-library" href={`/library?assets=${encodeURIComponent(ids)}`}>
+      {t("attribution.generate.assetLink")}
     </Link>
   );
 }
 
-/** The files a draft holds, then a dashed tile for each one it still owes. */
+/**
+ * The files a draft holds, then a dashed tile for each one it still owes.
+ *
+ * A thumbnail is pressed to look at it: the shared lightbox opens on that
+ * file, and a carousel is walked with the arrows in card order, the way
+ * every other strip of pictures in the app behaves. Going to the Library is
+ * the separate `OpenInLibrary` control, so looking never leaves the page.
+ */
 export function CreativeMedia({
   assets,
   owed,
+  kind,
   size = "md",
 }: {
   assets: CreativeAssetRow[];
   owed: number;
+  /** The draft's kind. A video opens in the player, anything else as a picture. */
+  kind: string;
   size?: "sm" | "md";
 }) {
   const t = useT();
   const { apiFetch } = useAuth();
   const { workspaceId } = useWorkspace();
+  const { openAt, open, close, previous, next } = useLightboxSet(assets.length);
+  const video = kind === "video";
+  const source = useCreativeSource(openAt === null ? null : assets[openAt]?.asset_id ?? null, video);
   if (!workspaceId) return null;
   return (
     <span className="product-creative-media" data-size={size}>
       {assets.map((item, index) => (
-        <CreativeThumb
+        <button
           key={item.asset_id}
-          assetId={item.asset_id}
-          label={t("attribution.generate.openFile", { index: index + 1 })}
-          workspaceId={workspaceId}
-          apiFetch={apiFetch}
-        />
+          type="button"
+          className="product-creative-thumb"
+          aria-label={t("attribution.generate.previewFile", { index: index + 1, count: assets.length })}
+          title={t("attribution.generate.previewFile", { index: index + 1, count: assets.length })}
+          onClick={() => open(index)}
+        >
+          <AssetThumbnail asset={thumbnailOf(item.asset_id)} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
+        </button>
       ))}
       {owed > 0 && (
         <span className="product-creative-owed" title={t("attribution.generate.owed", { count: owed })}>
           {owed > 1 ? `+${owed}` : "+"}
         </span>
+      )}
+      {openAt !== null && (
+        <Lightbox
+          open
+          src={source}
+          kind={video ? "video" : "image"}
+          alt={t("attribution.generate.previewFile", { index: openAt + 1, count: assets.length })}
+          onClose={close}
+          onPrevious={previous}
+          onNext={next}
+        />
       )}
     </span>
   );
@@ -256,7 +313,7 @@ function CreativeCard({
   const together = (draft.product_count ?? 0) > 1;
   return (
     <li className="product-creative-card" data-pending={pending || undefined}>
-      <CreativeMedia assets={assets} owed={pending ? draft.owed : 0} />
+      <CreativeMedia assets={assets} owed={pending ? draft.owed : 0} kind={draft.kind} />
       <div className="product-creative-body">
         <p className="product-creative-title">
           <strong>{creativeKind(t, draft.kind)} · {creativeRecipe(t, draft.recipe)}</strong>
@@ -280,6 +337,7 @@ function CreativeCard({
           <Button variant="quiet" size="sm" onClick={() => onReview(draft.id)}>
             {t("attribution.generate.viewDraft")}
           </Button>
+          <OpenInLibrary assets={assets} />
         </div>
         <details
           className="product-creative-settings"
@@ -347,7 +405,8 @@ export function ProductCreatives({
       {loose.length > 0 && (
         <section className="product-creative-group">
           <h5 className="product-creative-group-label">{t("attribution.generate.otherFiles")}</h5>
-          <CreativeMedia assets={loose} owed={0} />
+          <CreativeMedia assets={loose} owed={0} kind="image" />
+          <OpenInLibrary assets={loose} />
         </section>
       )}
     </div>

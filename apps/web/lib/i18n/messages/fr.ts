@@ -1209,7 +1209,7 @@ export const fr: Messages = {
       promptSettings: "Prompt et réglages",
       generationRunningWith: "Génération avec {provider}…",
       generationStopped: "Dernière génération arrêtée : {error}",
-      openFile: "Ouvrir le fichier {index} dans la bibliothèque",
+      previewFile: "Aperçu du fichier {index} sur {count}",
       otherFiles: "Autres fichiers liés",
       providerFirstSubject: "Le fournisseur part de la première image de la bibliothèque, {title}.",
       providerNeedsSubject: "Un fournisseur part d’une image de la bibliothèque. Ce brouillon n’en a pas, son fichier vient donc de l’extérieur.",

@@ -1199,7 +1199,7 @@ export const ar: Messages = {
       promptSettings: "الموجّه والإعدادات",
       generationRunningWith: "يجري الإنشاء باستخدام {provider}…",
       generationStopped: "توقّف آخر إنشاء: {error}",
-      openFile: "فتح الملف {index} في المكتبة",
+      previewFile: "معاينة الملف {index} من {count}",
       otherFiles: "ملفات مرتبطة أخرى",
       providerFirstSubject: "يبدأ المزوّد من أول صورة في المكتبة، {title}.",
       providerNeedsSubject: "يبدأ المزوّد من صورة في المكتبة. لا تحتوي هذه المسودة على أي صورة، لذا يأتي ملفها من الخارج.",

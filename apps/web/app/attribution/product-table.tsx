@@ -40,6 +40,7 @@ import {
   CreativeMedia,
   draftAssets,
   isPendingDraft,
+  OpenInLibrary,
   ProductCreatives,
   ResumeButton,
 } from "./product-creatives";
@@ -797,6 +798,7 @@ export function ProductTable({
                         <CreativeMedia
                           assets={draftAssets(lead, draft.id)}
                           owed={pending ? draft.owed : 0}
+                          kind={draft.kind}
                           size="sm"
                         />
                         <span className="product-draft-group-name">
@@ -816,6 +818,7 @@ export function ProductTable({
                             ? `${t("attribution.generate.statusPending")} · ${t("attribution.generate.owed", { count: draft.owed })}`
                             : t("attribution.generate.statusSucceeded")}
                         </span>
+                        {!pending && <OpenInLibrary assets={draftAssets(lead, draft.id)} />}
                         {pending && canQueue && (
                           <ResumeButton
                             draft={draft}

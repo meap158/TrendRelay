@@ -1184,7 +1184,7 @@ export const zh: Messages = {
       promptSettings: "提示词和设置",
       generationRunningWith: "正在用 {provider} 生成…",
       generationStopped: "上次生成已停止：{error}",
-      openFile: "在资料库中打开文件 {index}",
+      previewFile: "预览第 {index} 个文件（共 {count} 个）",
       otherFiles: "其他已关联文件",
       providerFirstSubject: "服务商从资料库的第一张图片“{title}”开始生成。",
       providerNeedsSubject: "服务商从资料库图片开始生成。这个草稿没有资料库图片，所以文件需从外部添加。",
