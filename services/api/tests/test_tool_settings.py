@@ -30,6 +30,7 @@ def env_file(monkeypatch, tmp_path):
     # the campaign inbox offer Telegram in a test that had set nothing up.
     keys = (
         "ELEVENLABS_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_APPROVER_IDS",
+        "XAI_API_KEY", "GEMINI_API_KEY", "VIDEO_PROVIDER_XAI_ENABLED", "VIDEO_PROVIDER_GEMINI_ENABLED",
     )
     before = {key: os.environ.get(key) for key in keys}
     yield path
@@ -47,7 +48,9 @@ def test_a_tool_with_no_settings_says_so_rather_than_guessing() -> None:
 
 
 def test_the_tools_that_do_have_settings_are_the_ones_that_need_a_key() -> None:
-    assert set(tool_settings.PROVIDERS) == {"mcp-server", "elevenlabs", "pexels", "telegram-bot"}
+    assert set(tool_settings.PROVIDERS) == {
+        "mcp-server", "elevenlabs", "pexels", "telegram-bot", "video-generation",
+    }
 
 
 def test_a_telegram_card_refuses_what_is_not_a_token_or_a_chat(env_file) -> None:
@@ -83,13 +86,33 @@ def test_a_hosted_key_card_refuses_a_setting_that_is_not_its_own(env_file) -> No
     reach the env file through this card.
     """
     for tool_id, foreign in (("elevenlabs", "PEXELS_API_KEY"),
-                             ("pexels", "ELEVENLABS_API_KEY")):
+                             ("pexels", "ELEVENLABS_API_KEY"),
+                             ("video-generation", "PEXELS_API_KEY")):
         try:
             provider_for(tool_id).save({foreign: "x" * 40})
         except tool_settings.SettingsError as error:
             assert foreign in str(error)
         else:
             raise AssertionError(f"{tool_id} wrote {foreign}")
+
+
+def test_a_video_switch_can_change_without_retyping_the_key(env_file) -> None:
+    """An empty secret box means leave the key, which is how a switch is saved."""
+    provider = provider_for("video-generation")
+    provider.save({
+        "XAI_API_KEY": "x" * 20,
+        "VIDEO_PROVIDER_XAI_ENABLED": "on",
+    })
+    written = provider.save({
+        "XAI_API_KEY": "",
+        "VIDEO_PROVIDER_XAI_ENABLED": "off",
+    })
+
+    assert written == ["VIDEO_PROVIDER_XAI_ENABLED"]
+    assert provider.reveal("XAI_API_KEY") == "x" * 20
+    switch = next(field for field in provider.fields() if field["key"] == "VIDEO_PROVIDER_XAI_ENABLED")
+    assert switch["value"] == "off"
+    assert "x" * 20 not in (switch["preview"] or "")
 
 
 def test_a_pexels_key_is_described_and_never_returned(env_file) -> None:

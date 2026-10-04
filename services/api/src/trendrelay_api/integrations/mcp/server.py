@@ -1324,7 +1324,9 @@ def build_server(workspace_id: str) -> FastMCP:
         description=(
             "One Attribution creative draft: the stored reviewed prompt, "
             "subject_assets when Library images were picked (otherwise the "
-            "listing pictures as product_images), the background reference "
+            "listing pictures kept in product_images; a picture absent from "
+            "that list was left out, and a draft with no selection lists the "
+            "whole gallery), the background reference "
             "when one was attached, listing_fields as snapshotted at confirm "
             "(an empty object means title, price, description, gallery, and "
             "variations were not attached), the kind, the card count, and "
@@ -1332,8 +1334,12 @@ def build_server(workspace_id: str) -> FastMCP:
             "features more than one. The prompt is the text stored at "
             "confirm, not a fresh resolution. A field that is present was "
             "sent; do not invent the ones that are absent. On a group draft, "
-            "each product's listing pictures stay the subject, and "
-            "subject_assets are extra. Use an id from "
+            "each product's product_images stay the subject, and "
+            "subject_assets are extra. Each product in products also carries "
+            "its own listing_fields. Keep a picture or a field with that "
+            "product. The top-level product_images and listing_fields repeat "
+            "only the first product. Do not add a listing picture that is "
+            "absent from product_images. Use an id from "
             "list_product_creative_drafts."
         ),
     )
@@ -1366,9 +1372,15 @@ def build_server(workspace_id: str) -> FastMCP:
             "one draft that features every listed product, from 2 to 8, with "
             "product_id kept as the first. Each product's listing pictures "
             "stay the subject. subject_asset_ids, when also sent, are extra "
-            "and do not replace those pictures. Omit together, or leave it "
-            "false, and product_ids is ignored: the draft is the one product. "
-            "Confirm stores the prompt and a snapshot of the selected values "
+            "and do not replace those pictures. Optional included_images "
+            "names, per product, the listing pictures to keep. Omit it and "
+            "every listing picture stays. A product left out of the list "
+            "keeps its whole gallery. A product named there keeps only those "
+            "urls, which must already be on its listing. An empty urls list "
+            "keeps none of that product's pictures. Omit together, or leave "
+            "it false, and product_ids is ignored: the draft is the one "
+            "product. Confirm stores the prompt, the pictures still checked, "
+            "and a snapshot of the selected values "
             "for each product, and does not ingest media. The finished file "
             "links to every product on the draft. Do not publish, and do not "
             "mark the draft complete from here."
@@ -1386,6 +1398,7 @@ def build_server(workspace_id: str) -> FastMCP:
         listing_fields: list[str] | None = None,
         together: bool = False,
         product_ids: list[str] | None = None,
+        included_images: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_product_creative_draft",
@@ -1398,6 +1411,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 subject_asset_ids=subject_asset_ids,
                 listing_fields=listing_fields,
                 together=together, product_ids=product_ids,
+                included_images=included_images,
             ),
         )
 

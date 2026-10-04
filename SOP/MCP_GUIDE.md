@@ -196,8 +196,11 @@ When a product is waiting on an image, a carousel, or a video, load
    more than one product, use each product's `product_images`, and treat
    `subject_assets` as extra. Otherwise, if `subject_assets`
    is non-empty, those images are the subject; otherwise use `product_images`.
-   Use `background_reference` when one is attached, and `listing_fields` only
-   for keys that are present. Do not rewrite the prompt.
+   `product_images` is the kept set. Do not add a picture that is absent from it.
+   Use `background_reference` when one is attached. On a group draft, use each
+   product's own `listing_fields`, and keep that product's fields and pictures
+   with it. Otherwise use `listing_fields` only for keys that are present.
+   Do not rewrite the prompt.
 2. Generate that file with the client's own image or video tool. TrendRelay
    does not generate the pixels. Generating it is not the end of the task.
 3. `submit_product_creative_media` with exactly one source: the `media` file,

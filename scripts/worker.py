@@ -49,6 +49,8 @@ from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND  # noqa: E4
 from trendrelay_api.caption_jobs import run_caption_job  # noqa: E402
 from trendrelay_api.voice_jobs import JOB_KIND as VOICE_JOB_KIND  # noqa: E402
 from trendrelay_api.voice_jobs import run_voice_job  # noqa: E402
+from trendrelay_api.integrations.video_generation import JOB_KIND as VIDEO_JOB_KIND  # noqa: E402
+from trendrelay_api.integrations.video_generation import run_job as run_video_job  # noqa: E402
 from trendrelay_api.database import SessionFactory  # noqa: E402
 from trendrelay_api.jobs import (  # noqa: E402
     abandon_expired_jobs,
@@ -112,6 +114,7 @@ JOB_KINDS = (
     AUTOCUT_JOB_KIND,
     STORY_JOB_KIND,
     AUTOCREATE_JOB_KIND,
+    VIDEO_JOB_KIND,
 )
 
 
@@ -201,6 +204,7 @@ def process_available() -> int:
     autocut_ids = recoverable_job_ids(AUTOCUT_JOB_KIND)
     story_ids = recoverable_job_ids(STORY_JOB_KIND)
     autocreate_ids = recoverable_job_ids(AUTOCREATE_JOB_KIND)
+    video_ids = recoverable_job_ids(VIDEO_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -257,6 +261,13 @@ def process_available() -> int:
     run_job_batch(
         autocreate_ids, run_autocreate_job, label="Storytelling auto-build", workers=1,
         refill=lambda: recoverable_job_ids(AUTOCREATE_JOB_KIND),
+    )
+    # One at a time across every provider. The xAI account allows about two
+    # video requests a second, and a burst is what produced the rate-limit
+    # error. A Gemini clip also takes minutes, so a second one would only wait.
+    run_job_batch(
+        video_ids, run_video_job, label="Video generation", workers=1,
+        refill=lambda: recoverable_job_ids(VIDEO_JOB_KIND),
     )
     # ElevenLabs plans enforce their own concurrency limits. Two requests keep
     # ordinary plans moving without turning a large selection into a burst of

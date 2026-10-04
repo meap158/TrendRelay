@@ -126,6 +126,9 @@ ACTIVITY_PAYLOAD_FIELDS = (
     # hide it) and the template it used (so the card reads as more than "a
     # render"). Both small; the clip list is deliberately not carried.
     "preview", "template_name",
+    # Video generation: which provider the operator picked, so the card can
+    # name it. The prompt and the image stay on the job for the worker only.
+    "provider_label",
     # The auto-build's mode: true went on to queue a render, false stopped at a
     # shot list to review - so the card can say which happened.
     "render",

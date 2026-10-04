@@ -115,6 +115,66 @@ def _product_images(product: Product) -> list[str]:
     return product_images(product)
 
 
+def _image_choices(raw: list[dict[str, Any]] | None) -> dict[str, list[str]] | None:
+    """Which listing pictures to keep, or None when the caller left them all.
+
+    An empty list is the same as omitting the field. A product named here
+    keeps only the addresses listed. An empty address list keeps none.
+    """
+    if not raw:
+        return None
+    chosen: dict[str, list[str]] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("Picture choices have to name a product and its pictures.")
+        product_id = str(item.get("product_id") or "").strip()
+        if not product_id:
+            raise ValueError("Picture choices have to name a product and its pictures.")
+        if product_id in chosen:
+            raise ValueError("Name each product once when choosing its pictures.")
+        urls_raw = item.get("urls", [])
+        if not isinstance(urls_raw, list):
+            raise ValueError("Picture choices have to name a product and its pictures.")
+        urls: list[str] = []
+        for url in urls_raw:
+            text = str(url).strip()
+            if text and text not in urls:
+                urls.append(text)
+        if len(urls) > _GALLERY_LIMIT:
+            raise ValueError(f"Keep at most {_GALLERY_LIMIT} pictures for one product.")
+        chosen[product_id] = urls
+    return chosen
+
+
+def _kept_images(product: Product, chosen: dict[str, list[str]] | None) -> list[str]:
+    """The listing pictures generation will see, in gallery order.
+
+    A product the caller did not name keeps its whole gallery. A named
+    product keeps the intersection, so a later read cannot put a skipped
+    picture back by reordering the request.
+    """
+    gallery = _product_images(product)
+    if chosen is None or product.id not in chosen:
+        return gallery
+    allowed = set(gallery)
+    if any(url not in allowed for url in chosen[product.id]):
+        raise ValueError("That picture is not on this product's listing.")
+    keep = set(chosen[product.id])
+    return [url for url in gallery if url in keep]
+
+
+def _stored_images(product: Product | None, raw: Any) -> list[str]:
+    """Pictures stored at confirm. Null reads the live gallery again."""
+    if isinstance(raw, list):
+        found: list[str] = []
+        for url in raw:
+            text = str(url).strip()
+            if text and text not in found:
+                found.append(text)
+        return found
+    return _product_images(product) if product is not None else []
+
+
 def _subject_ids(raw: list[str] | None) -> list[str]:
     """The pick, in order, without blanks or repeats."""
     found: list[str] = []
@@ -332,6 +392,7 @@ def _prepare(
     require_subject: bool = True,
     together: bool = False,
     product_ids: list[str] | None = None,
+    included_images: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate an ask and resolve the prompt. Does not write."""
     if kind not in _KINDS:
@@ -352,16 +413,23 @@ def _prepare(
         product_id=product_id, together=together, product_ids=product_ids,
     )
     subjects = _subject_assets(session, workspace_id, subject_asset_ids)
+    chosen = _image_choices(included_images)
+    if chosen is not None:
+        member_ids = {product.id for product in products}
+        if any(product_id not in member_ids for product_id in chosen):
+            raise ValueError("Picture choices have to name a product in this draft.")
+    kept = [_kept_images(product, chosen) for product in products]
     # A Library pick replaces the listing for one product. Together keeps
     # every product's own listing pictures, and a shared pick is extra: it
     # does not stand in for the whole group. A member with neither cannot
-    # be queued. Preview skips that gate so the prompt can be read first.
+    # be queued. Pictures the operator unchecked count as absent. Preview
+    # skips that gate so the prompt can be read first.
     if require_subject:
         if len(products) > 1:
             missing = [
                 product.name or product.id
-                for product in products
-                if not _product_images(product) and not subjects
+                for index, product in enumerate(products)
+                if not kept[index] and not subjects
             ]
             if missing:
                 raise ValueError(
@@ -369,7 +437,7 @@ def _prepare(
                     + ", ".join(missing)
                     + "."
                 )
-        elif not subjects and not _product_images(products[0]):
+        elif not subjects and not kept[0]:
             raise ValueError("This product has no image to generate from.")
     enabled, reference = _background(recipe, background_enabled, background_reference)
     group = len(products) > 1
@@ -390,17 +458,22 @@ def _prepare(
         "background_reference": reference,
         "prompt": prompt,
         "card_count": _card_count(kind, card_count),
-        "product_images": _product_images(products[0]),
+        "product_images": kept[0],
         "subject_assets": subjects,
         "listing_fields": snapshots[0],
         "together": group,
         "product_count": len(products),
+        "included_by_product": {
+            product.id: kept[index]
+            for index, product in enumerate(products)
+            if chosen is not None and product.id in chosen
+        },
         "products": [
             {
                 "product_id": product.id,
                 "name": product.name,
                 "position": index,
-                "product_images": _product_images(product),
+                "product_images": kept[index],
                 "listing_fields": snapshots[index],
             }
             for index, product in enumerate(products)
@@ -449,7 +522,7 @@ def _member_views(session: Session, draft: ProductCreativeDraft) -> list[dict[st
             "product_id": row.product_id,
             "name": product.name if product is not None else "",
             "position": int(row.position),
-            "product_images": _product_images(product) if product is not None else [],
+            "product_images": _stored_images(product, row.included_images),
             "listing_fields": _known_listing(row.listing_fields),
         })
     return views
@@ -462,9 +535,16 @@ def _member_product_ids(session: Session, draft: ProductCreativeDraft) -> list[s
 
 def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
     product = session.get(Product, draft.product_id)
-    images = _product_images(product) if product is not None else []
     staged = [str(item) for item in (draft.staged_asset_ids or [])]
     members = _member_views(session, draft)
+    images = next(
+        (
+            item["product_images"]
+            for item in members
+            if item["product_id"] == draft.product_id
+        ),
+        _product_images(product) if product is not None else [],
+    )
     return {
         "id": draft.id,
         "workspace_id": draft.workspace_id,
@@ -504,6 +584,7 @@ def preview(
     listing_fields: list[str] | None = None,
     together: bool = False,
     product_ids: list[str] | None = None,
+    included_images: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The prompt that would be stored, without storing it."""
     prepared = _prepare(
@@ -513,7 +594,9 @@ def preview(
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
         require_subject=False, together=together, product_ids=product_ids,
+        included_images=included_images,
     )
+    prepared.pop("included_by_product", None)
     prepared["status"] = "preview"
     prepared["owed"] = prepared["card_count"]
     prepared["linked"] = False
@@ -537,6 +620,7 @@ def create_draft(
     listing_fields: list[str] | None = None,
     together: bool = False,
     product_ids: list[str] | None = None,
+    included_images: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Store a pending draft. Does not ingest media and does not link anything."""
     prepared = _prepare(
@@ -546,6 +630,7 @@ def create_draft(
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
         together=together, product_ids=product_ids,
+        included_images=included_images,
     )
     now = utc_now()
     draft = ProductCreativeDraft(
@@ -568,14 +653,21 @@ def create_draft(
         updated_at=now,
     )
     session.add(draft)
+    included_by_product = prepared.pop("included_by_product")
     for member in prepared["products"]:
+        product_id = member["product_id"]
         session.add(ProductCreativeDraftProduct(
             id=new_id("pcmember"),
             workspace_id=workspace_id,
             draft_id=draft.id,
-            product_id=member["product_id"],
+            product_id=product_id,
             position=member["position"],
             listing_fields=member["listing_fields"],
+            included_images=(
+                included_by_product[product_id]
+                if product_id in included_by_product
+                else None
+            ),
             created_at=now,
         ))
     # MCP closes the session on the way out and rolls back whatever was only

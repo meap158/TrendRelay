@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
@@ -10,15 +10,19 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
 import { money } from "./format";
+import {
+  DEFAULT_LISTING_FIELDS,
+  LISTING_FIELD_KEYS,
+  readListingFields,
+  writeListingFields,
+  type ListingFieldKey,
+} from "./listing-fields";
 
 /** The same ceiling the API stores and a thumbnail read can fetch at once. */
 const SUBJECT_LIMIT = 8;
 
-/** Listing values an operator can attach. Off until selected. The order matches the API. */
-const LISTING_KEYS = ["title", "price", "description", "gallery", "variations"] as const;
-type ListingKey = (typeof LISTING_KEYS)[number];
-
-const FIELD_LABEL: Record<ListingKey, string> = {
+/** Chip labels. Title, description, and listing pictures start on. */
+const FIELD_LABEL: Record<ListingFieldKey, string> = {
   title: "omitTitle",
   price: "omitPrice",
   description: "omitDescription",
@@ -47,6 +51,57 @@ type DraftMember = {
   product_images?: string[];
 };
 
+function pictureUrls(member: DraftMember): string[] {
+  return (member.product_images ?? []).filter((url) => Boolean(url));
+}
+
+/** Listing files are full size. The checkbox still stores the original address. */
+function picturePreview(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.endsWith("susercontent.com")) return url;
+    if (!parsed.pathname.startsWith("/file/")) return url;
+    if (parsed.pathname.includes("@")) return url;
+    parsed.pathname += "@resize_w96_nl";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** A checkbox that can also sit between on and off. */
+function TriCheckbox({
+  checked,
+  indeterminate,
+  label,
+  title,
+  labelClassName,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  label: string;
+  title?: string;
+  labelClassName?: string;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <label className="campaign-dialog-check generate-picture-all">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className={labelClassName} title={title}>{label}</span>
+    </label>
+  );
+}
+
 type Kind = "image" | "carousel" | "video";
 type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
 
@@ -74,9 +129,11 @@ type DraftView = {
  *
  * Each product is its own draft. Together, when two or more are selected, is
  * one draft of all of them, and the finished file links to every product.
- * The textarea shows only the prompt the API returns. TrendRelay does not
- * generate the pixels. A file is submitted for that one draft, or while a
- * single product is open.
+ * What will be sent starts collapsed: the prompt the API returns, then any
+ * pictures and listing fields. When more than one product is in the ask,
+ * those stay under the product they belong to. A file is submitted
+ * for that one draft, or while a single product is open. A video draft that
+ * still owes a file can also be sent to a ready video provider.
  */
 export function GenerateDialog({
   open,
@@ -108,14 +165,27 @@ export function GenerateDialog({
   const [busy, setBusy] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileEpoch, setFileEpoch] = useState(0);
+  /** Providers whose check has passed. The list comes from the registry. */
+  const [providers, setProviders] = useState<{ id: string; label: string }[]>([]);
+  /** A generation the dialog is waiting on. Empty when it is not. */
+  const [generation, setGeneration] = useState("");
   /** Library images the operator picked, in the order generation will see them. */
   const [subjects, setSubjects] = useState<LibraryAsset[]>([]);
   const [storedSubjects, setStoredSubjects] = useState<StoredSubject[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [selectedFields, setSelectedFields] = useState<Set<ListingKey>>(() => new Set());
+  const [selectedFields, setSelectedFields] = useState<Set<ListingFieldKey>>(() => {
+    // A review shows that draft. A new ask starts from the remembered chips.
+    if (draftId) return new Set();
+    if (typeof window !== "undefined" && workspaceId) {
+      return new Set(readListingFields(window.localStorage, workspaceId));
+    }
+    return new Set(DEFAULT_LISTING_FIELDS);
+  });
   const [listingSnapshot, setListingSnapshot] = useState<ListingSnapshot>({});
   const [scope, setScope] = useState<"each" | "together">("each");
   const [members, setMembers] = useState<DraftMember[]>([]);
+  /** Listing pictures the operator turned off, keyed by product. Absent means all on. */
+  const [skipped, setSkipped] = useState<Record<string, string[]>>({});
 
   const reviewing = Boolean(draftId);
   const mirror = recipe === "mirror_selfie";
@@ -126,7 +196,7 @@ export function GenerateDialog({
   const together = !locked && many && scope === "together" && products.length <= SUBJECT_LIMIT;
   const groupShot = together || (draft?.product_count ?? 0) > 1;
   const leadId = products[0]?.id ?? "";
-  const fieldsKey = LISTING_KEYS.filter((key) => selectedFields.has(key)).join(",");
+  const fieldsKey = LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)).join(",");
   const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}|${together ? "together" : "each"}`;
 
   useEffect(() => {
@@ -135,7 +205,27 @@ export function GenerateDialog({
     setMembers([]);
   }, [shape, draft]);
 
-  function requestBody(productId: string) {
+  function imageOn(productId: string, url: string) {
+    if (!selectedFields.has("gallery")) return true;
+    return !(skipped[productId] ?? []).includes(url);
+  }
+
+  function pictureSelection(onlyProductId?: string) {
+    if (!selectedFields.has("gallery")) return {};
+    const included = members.flatMap((member) => {
+      if (onlyProductId && member.product_id !== onlyProductId) return [];
+      const urls = pictureUrls(member);
+      const off = new Set(skipped[member.product_id] ?? []);
+      if (!urls.some((url) => off.has(url))) return [];
+      return [{
+        product_id: member.product_id,
+        urls: urls.filter((url) => !off.has(url)),
+      }];
+    });
+    return included.length > 0 ? { included_images: included } : {};
+  }
+
+  function requestBody(productId: string, withSelection = false) {
     return {
       product_id: productId,
       kind,
@@ -147,21 +237,70 @@ export function GenerateDialog({
       ...(subjects.length > 0
         ? { subject_asset_ids: subjects.map((asset) => asset.id) }
         : {}),
-      listing_fields: LISTING_KEYS.filter((key) => selectedFields.has(key)),
+      listing_fields: LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)),
+      ...(withSelection ? pictureSelection(together ? undefined : productId) : {}),
       ...(together
         ? { together: true, product_ids: products.map((item) => item.id) }
         : {}),
     };
   }
 
-  function toggleField(key: ListingKey) {
-    setSelectedFields((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+  function setAllPictures(on: boolean) {
+    setError("");
+    if (on) {
+      setSkipped({});
+      return;
+    }
+    const next: Record<string, string[]> = {};
+    for (const member of members) {
+      const urls = pictureUrls(member);
+      if (urls.length > 0) next[member.product_id] = urls;
+    }
+    setSkipped(next);
+  }
+
+  function setProductPictures(productId: string, on: boolean) {
+    setError("");
+    setSkipped((current) => {
+      const next = { ...current };
+      if (on) delete next[productId];
+      else {
+        const member = members.find((item) => item.product_id === productId);
+        next[productId] = pictureUrls(member ?? { product_id: productId, name: "" });
+      }
       return next;
     });
+  }
+
+  function togglePicture(productId: string, url: string) {
     setError("");
+    setSkipped((current) => {
+      const member = members.find((item) => item.product_id === productId);
+      const urls = pictureUrls(member ?? { product_id: productId, name: "" });
+      const off = new Set(current[productId] ?? []);
+      if (off.has(url)) off.delete(url);
+      else off.add(url);
+      const next = { ...current };
+      const skippedUrls = urls.filter((item) => off.has(item));
+      if (skippedUrls.length === 0) delete next[productId];
+      else next[productId] = skippedUrls;
+      return next;
+    });
+  }
+
+  function toggleField(key: ListingFieldKey) {
+    if (locked) return;
+    const next = new Set(selectedFields);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setSelectedFields(next);
+    setError("");
+    if (!workspaceId) return;
+    try {
+      writeListingFields(window.localStorage, workspaceId, next);
+    } catch {
+      // A private window can refuse storage. The choice still applies now.
+    }
   }
 
   function applyStored(stored: DraftView) {
@@ -175,7 +314,7 @@ export function GenerateDialog({
     setPrompt(stored.prompt);
     setStoredSubjects(stored.subject_assets ?? []);
     const fields = stored.listing_fields ?? {};
-    setSelectedFields(new Set(LISTING_KEYS.filter((key) => key in fields)));
+    setSelectedFields(new Set(LISTING_FIELD_KEYS.filter((key) => key in fields)));
     setListingSnapshot(fields);
     setMembers(stored.products ?? []);
     setDraft(stored);
@@ -236,27 +375,34 @@ export function GenerateDialog({
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
-        // The wording does not name the product, so the first selected row
-        // is enough to show the shared prompt.
+        // Together is one preview of every product. Each is one preview per
+        // product: a preview without together returns only the named product.
+        // Picture choices stay off the preview so an unchecked picture can
+        // be turned back on.
         try {
-          const response = await apiFetch(
-            `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
-            { method: "POST", body: JSON.stringify(requestBody(leadId)) },
-          );
+          const asks = together ? [leadId] : products.map((item) => item.id);
+          const responses = await Promise.all(asks.map(async (productId) => {
+            const response = await apiFetch(
+              `/api/workspaces/${workspaceId}/attribution/creative-drafts/preview`,
+              {
+                method: "POST",
+                body: JSON.stringify(requestBody(together ? leadId : productId)),
+              },
+            );
+            if (!response.ok) {
+              throw new Error(await errorDetail(response, t("attribution.generate.requestFailed")));
+            }
+            return response.json() as Promise<{
+              draft?: { prompt?: string; listing_fields?: ListingSnapshot; products?: DraftMember[] };
+            }>;
+          }));
           if (cancelled) return;
-          if (!response.ok) {
-            setPrompt("");
-            setListingSnapshot({});
-            setMembers([]);
-            setError(await errorDetail(response, t("attribution.generate.requestFailed")));
-            return;
-          }
-          const payload = await response.json() as {
-            draft?: { prompt?: string; listing_fields?: ListingSnapshot; products?: DraftMember[] };
-          };
-          setPrompt(typeof payload.draft?.prompt === "string" ? payload.draft.prompt : "");
-          setListingSnapshot(payload.draft?.listing_fields ?? {});
-          setMembers(together && Array.isArray(payload.draft?.products) ? payload.draft.products : []);
+          const lead = responses[0]?.draft;
+          setPrompt(typeof lead?.prompt === "string" ? lead.prompt : "");
+          setListingSnapshot(lead?.listing_fields ?? {});
+          setMembers(responses.flatMap((payload) => (
+            Array.isArray(payload.draft?.products) ? payload.draft.products : []
+          )));
           setError("");
         } catch (caught) {
           if (cancelled) return;
@@ -288,13 +434,46 @@ export function GenerateDialog({
     setNotice("");
   }
 
-  const chosenFields = LISTING_KEYS.filter((key) => selectedFields.has(key));
+  const chosenFields = LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key));
   const oneCreative = !many || (draft?.product_count ?? 0) > 1;
+  const videoOpen = Boolean(
+    draft && draft.kind === "video" && draft.owed > 0 && oneCreative,
+  );
+
+  useEffect(() => {
+    if (!workspaceId || !videoOpen || !draft) {
+      setProviders([]);
+      return;
+    }
+    let cancelled = false;
+    void apiFetch(`/api/workspaces/${workspaceId}/attribution/video-providers`)
+      .then(async (response) => {
+        if (!response.ok) return { providers: [] as { id: string; label: string }[] };
+        return response.json() as Promise<{ providers?: { id: string; label: string }[] }>;
+      })
+      .then((payload) => {
+        if (!cancelled) setProviders(payload.providers ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch, draft, videoOpen, workspaceId]);
   const queueNeedsLibrary = !together;
   const attachedLibrary = reviewing ? storedSubjects.length : subjects.length;
+  const pictureRows = members.flatMap((member) => (
+    pictureUrls(member).map((url) => ({ productId: member.product_id, url }))
+  ));
+  const skippedPictures = pictureRows.filter(
+    (row) => (skipped[row.productId] ?? []).includes(row.url),
+  ).length;
+  const allPicturesOn = pictureRows.length > 0 && skippedPictures === 0;
+  const everyPictureOff = pictureRows.length > 0 && skippedPictures === pictureRows.length;
   const togetherUncovered = together
     && attachedLibrary === 0
-    && members.some((member) => !(member.product_images ?? []).some((url) => Boolean(url)));
+    && members.some((member) => pictureUrls(member).every((url) => !imageOn(member.product_id, url)));
 
   async function queue() {
     if (products.length === 0 || !workspaceId || !prompt) return;
@@ -305,7 +484,7 @@ export function GenerateDialog({
       try {
         const response = await apiFetch(
           `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
-          { method: "POST", body: JSON.stringify(requestBody(leadId)) },
+          { method: "POST", body: JSON.stringify(requestBody(leadId, true)) },
         );
         if (!response.ok) {
           setError(await errorDetail(response, t("attribution.generate.requestFailed")));
@@ -333,7 +512,7 @@ export function GenerateDialog({
         try {
           const response = await apiFetch(
             `/api/workspaces/${workspaceId}/attribution/creative-drafts`,
-            { method: "POST", body: JSON.stringify(requestBody(item.id)) },
+            { method: "POST", body: JSON.stringify(requestBody(item.id, true)) },
           );
           if (!response.ok) {
             failures.push(`${item.name}: ${await errorDetail(response, t("attribution.generate.requestFailed"))}`);
@@ -361,6 +540,77 @@ export function GenerateDialog({
       setBusy("");
     }
   }
+
+  async function generateWith(provider: { id: string; label: string }) {
+    if (!draft || !workspaceId) return;
+    if (!window.confirm(t("attribution.generate.generateConfirm", { provider: provider.label }))) return;
+    setBusy(provider.id);
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draft.id}/generate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ provider_id: provider.id, confirm_external_action: true }),
+        },
+      );
+      if (!response.ok) {
+        setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+        return;
+      }
+      const payload = await response.json() as { job: { id: string } };
+      setGeneration(payload.job.id);
+      setNotice(t("attribution.generate.generateQueued"));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  useEffect(() => {
+    if (!workspaceId || !draft || !generation) return;
+    let stopped = false;
+    async function tick() {
+      if (!draft) return;
+      try {
+        const response = await apiFetch(
+          `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draft.id}/generation`,
+        );
+        if (!response.ok || stopped) return;
+        const payload = await response.json() as {
+          generation?: { status?: string; error?: string | null; id?: string };
+        };
+        const status = payload.generation?.status;
+        if (payload.generation?.id && payload.generation.id !== generation) return;
+        if (status === "succeeded") {
+          const again = await apiFetch(
+            `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draft.id}`,
+          );
+          if (!again.ok || stopped) return;
+          const filed = await again.json() as { draft: DraftView };
+          setDraft(filed.draft);
+          setPrompt(filed.draft.prompt);
+          setNotice((filed.draft.product_count ?? 1) > 1
+            ? t("attribution.generate.linkedAll")
+            : t("attribution.generate.linked"));
+          setGeneration("");
+          onChanged?.();
+        } else if (status === "failed" || status === "cancelled") {
+          setError(payload.generation?.error || t("attribution.generate.requestFailed"));
+          setGeneration("");
+        }
+      } catch {
+        // The next tick asks again. A dropped poll is not a failed generation.
+      }
+    }
+    void tick();
+    const timer = window.setInterval(() => void tick(), 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [apiFetch, draft, generation, onChanged, t, workspaceId]);
 
   async function submitFile() {
     if (!draft || !file || !workspaceId) return;
@@ -397,9 +647,62 @@ export function GenerateDialog({
     }
   }
 
+  function keptPictures(member: DraftMember): string[] {
+    return pictureUrls(member).filter((url) => locked || imageOn(member.product_id, url));
+  }
+
+  function sentSnapshot(member: DraftMember): ListingSnapshot {
+    const snapshot: ListingSnapshot = { ...(member.listing_fields ?? {}) };
+    if (selectedFields.has("gallery")) snapshot.gallery = keptPictures(member);
+    return snapshot;
+  }
+
+  function renderFields(snapshot: ListingSnapshot | undefined) {
+    return chosenFields.map((key) => (
+      <div className="generate-use" key={key}>
+        <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
+        <ListingFieldValue
+          field={key}
+          value={snapshot?.[key]}
+          empty={t("attribution.generate.fieldEmpty")}
+          truncated={t("attribution.generate.descriptionTruncated")}
+          galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
+          stockLine={(count) => t("attribution.generate.stockLine", { count })}
+          stockUnknown={t("attribution.generate.stockUnknown")}
+        />
+      </div>
+    ));
+  }
+
+  function renderPictureRow(urls: string[]) {
+    if (urls.length === 0) {
+      return <p className="generate-field-value">{t("attribution.generate.sendNoPictures")}</p>;
+    }
+    return (
+      <ol className="generate-gallery">
+        {urls.map((url) => (
+          <li key={url}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- listing CDN */}
+            <img src={picturePreview(url)} alt="" />
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
+  const libraryLabels = reviewing
+    ? storedSubjects.map((asset) => ({
+      id: asset.asset_id,
+      title: asset.missing
+        ? `${asset.title || asset.asset_id} — ${t("attribution.generate.subjectMissing")}`
+        : (asset.title || asset.asset_id),
+    }))
+    : subjects.map((asset) => ({ id: asset.id, title: asset.title }));
+
   return (
     <>
     <Dialog
+      className="generate-dialog"
       open={open && products.length > 0}
       title={reviewing ? t("attribution.generate.reviewTitle") : t("attribution.generate.title")}
       description={reviewing
@@ -437,7 +740,7 @@ export function GenerateDialog({
             <Button
               variant="primary"
               busy={busy === "file"}
-              disabled={!file || busy !== ""}
+              disabled={!file || busy !== "" || generation !== ""}
               onClick={() => void submitFile()}
             >{busy === "file" ? t("attribution.generate.submitting") : t("attribution.generate.submitFile")}</Button>
           )}
@@ -480,26 +783,6 @@ export function GenerateDialog({
             <p>{products.length > SUBJECT_LIMIT
               ? t("attribution.generate.scopeLimit")
               : t("attribution.generate.scopeHelp")}</p>
-          </div>
-        )}
-        {groupShot && members.length > 1 && (
-          <div className="generate-scope">
-            <strong>{t("attribution.generate.members")}</strong>
-            <ul className="generate-member-list">
-              {members.map((member) => {
-                const picture = (member.product_images ?? []).find((url) => Boolean(url)) ?? "";
-                const uncovered = attachedLibrary === 0 && !picture;
-                return (
-                  <li key={member.product_id}>
-                    {picture
-                      ? <img src={picture} alt="" />
-                      : <span className="generate-member-missing" aria-hidden="true" />}
-                    <span className="generate-member-name" title={member.name}>{member.name}</span>
-                    {uncovered && <small>{t("attribution.generate.noListingPicture")}</small>}
-                  </li>
-                );
-              })}
-            </ul>
           </div>
         )}
         <label>
@@ -670,7 +953,7 @@ export function GenerateDialog({
             ? t("attribution.generate.listingFieldsReview")
             : t("attribution.generate.listingFieldsHelp")}</p>
           <ul>
-            {LISTING_KEYS.map((key) => (
+            {LISTING_FIELD_KEYS.map((key) => (
               <li key={key}>
                 <button
                   type="button"
@@ -682,6 +965,90 @@ export function GenerateDialog({
             ))}
           </ul>
         </div>
+        {selectedFields.has("gallery") && members.length > 0 && (
+          <div className="generate-scope generate-listing-pictures">
+            <strong>{t("attribution.generate.members")}</strong>
+            {!locked && pictureRows.length > 0 && (
+              <>
+                <p>{t("attribution.generate.picturesHelp")}</p>
+                <TriCheckbox
+                  checked={allPicturesOn}
+                  indeterminate={!allPicturesOn && !everyPictureOff}
+                  label={t("attribution.generate.checkAllPictures")}
+                  onChange={setAllPictures}
+                />
+              </>
+            )}
+            <ul className="generate-member-list">
+              {members.map((member) => {
+                const urls = pictureUrls(member);
+                const kept = urls.filter((url) => locked || imageOn(member.product_id, url));
+                const uncovered = !locked && attachedLibrary === 0 && kept.length === 0;
+                const productAll = urls.length > 0 && kept.length === urls.length;
+                return (
+                  <li key={member.product_id}>
+                    <div className="generate-member-head">
+                      {!locked && urls.length > 0 ? (
+                        <TriCheckbox
+                          checked={productAll}
+                          indeterminate={kept.length > 0 && !productAll}
+                          label={member.name}
+                          title={member.name}
+                          labelClassName="generate-member-name"
+                          onChange={(on) => setProductPictures(member.product_id, on)}
+                        />
+                      ) : (
+                        <>
+                          {urls.length === 0 && (
+                            <span className="generate-member-missing" aria-hidden="true" />
+                          )}
+                          <span className="generate-member-name" title={member.name}>{member.name}</span>
+                        </>
+                      )}
+                    </div>
+                    {urls.length > 0 && (
+                      <ul className="generate-picture-choices">
+                        {urls.map((url, index) => {
+                          const on = locked || imageOn(member.product_id, url);
+                          if (locked) {
+                            return (
+                              <li key={url}>
+                                <img src={picturePreview(url)} alt="" />
+                              </li>
+                            );
+                          }
+                          return (
+                            <li key={url}>
+                              <label className={on ? "is-on" : "is-off"}>
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  aria-label={t("attribution.generate.pictureLabel", {
+                                    name: member.name,
+                                    index: index + 1,
+                                  })}
+                                  onChange={() => togglePicture(member.product_id, url)}
+                                />
+                                <img src={picturePreview(url)} alt="" />
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {uncovered && (
+                      <small>
+                        {urls.length === 0
+                          ? t("attribution.generate.noListingPicture")
+                          : t("attribution.generate.noPictureSelected")}
+                      </small>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
         {kind === "carousel" && (
           <label>
             {t("attribution.generate.cards")}
@@ -698,58 +1065,57 @@ export function GenerateDialog({
             />
           </label>
         )}
-        <label className="generate-prompt">
-          {t("attribution.generate.prompt")}
-          <textarea readOnly rows={12} value={prompt} />
-          <small>{reviewing || draft
-            ? t("attribution.generate.promptStored")
-            : t("attribution.generate.promptHelp")}</small>
-        </label>
-        {chosenFields.length > 0 && (
-          <section className="generate-attached" aria-label={t("attribution.generate.listingFields")}>
-            {groupShot && members.length > 1 ? (
-              members.map((member) => (
-                <div className="generate-member" key={member.product_id}>
-                  <strong>{member.name}</strong>
-                  {chosenFields.map((key) => (
-                    <div className="generate-use" key={key}>
-                      <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
-                      <ListingFieldValue
-                        field={key}
-                        value={member.listing_fields?.[key]}
-                        empty={t("attribution.generate.fieldEmpty")}
-                        truncated={t("attribution.generate.descriptionTruncated")}
-                        galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
-                        stockLine={(count) => t("attribution.generate.stockLine", { count })}
-                        stockUnknown={t("attribution.generate.stockUnknown")}
-                      />
-                    </div>
+        <details className="generate-send">
+          <summary>{t("attribution.generate.sendPreview")}</summary>
+          <div className="generate-send-body">
+            <label className="generate-prompt">
+              {t("attribution.generate.prompt")}
+              <textarea readOnly rows={8} value={prompt} />
+              <small>{reviewing || draft
+                ? t("attribution.generate.promptStored")
+                : t("attribution.generate.promptHelp")}</small>
+            </label>
+            {backgroundOn && backgroundReference.trim().startsWith("https://") && (
+              <div className="generate-use">
+                <strong>{t("attribution.generate.backgroundHeading")}</strong>
+                <p className="generate-field-value">{backgroundReference.trim()}</p>
+              </div>
+            )}
+            {libraryLabels.length > 0 && (
+              <div className="generate-use">
+                <strong>{groupShot
+                  ? t("attribution.generate.sendExtra")
+                  : t("attribution.generate.sendPictures")}</strong>
+                <ol className="generate-offer-list">
+                  {libraryLabels.map((item, index) => (
+                    <li key={item.id}>{index + 1}. {item.title}</li>
                   ))}
-                </div>
+                </ol>
+              </div>
+            )}
+            {members.length > 1 && chosenFields.length > 0 ? (
+              members.map((member) => (
+                <section className="generate-send-product" key={member.product_id}>
+                  <span className="generate-member-name" title={member.name}>{member.name}</span>
+                  {renderFields(sentSnapshot(member))}
+                </section>
               ))
             ) : (
               <>
-                {many && !reviewing && products[0] && (
+                {many && !reviewing && members.length <= 1 && products[0] && chosenFields.length > 0 && (
                   <p>{t("attribution.generate.listingShared", { name: products[0].name })}</p>
                 )}
-                {chosenFields.map((key) => (
-                  <div className="generate-use" key={key}>
-                    <strong>{t(`attribution.generate.${FIELD_LABEL[key]}`)}</strong>
-                    <ListingFieldValue
-                      field={key}
-                      value={listingSnapshot[key]}
-                      empty={t("attribution.generate.fieldEmpty")}
-                      truncated={t("attribution.generate.descriptionTruncated")}
-                      galleryCount={(count) => t("attribution.generate.galleryCount", { count })}
-                      stockLine={(count) => t("attribution.generate.stockLine", { count })}
-                      stockUnknown={t("attribution.generate.stockUnknown")}
-                    />
+                {members.length === 1 && libraryLabels.length === 0 && !selectedFields.has("gallery") && (
+                  <div className="generate-use">
+                    <strong>{t("attribution.generate.sendPictures")}</strong>
+                    {renderPictureRow(keptPictures(members[0]))}
                   </div>
-                ))}
+                )}
+                {renderFields(members.length === 1 ? sentSnapshot(members[0]) : listingSnapshot)}
               </>
             )}
-          </section>
-        )}
+          </div>
+        </details>
         {draft && oneCreative && (
           <p role="status">
             {draft.linked
@@ -758,6 +1124,21 @@ export function GenerateDialog({
             {" · "}
             {t("attribution.generate.owed", { count: draft.owed })}
           </p>
+        )}
+        {videoOpen && providers.length > 0 && (
+          <div className="generate-providers">
+            {providers.map((provider) => (
+              <Button
+                key={provider.id}
+                variant="primary"
+                busy={busy === provider.id || generation !== ""}
+                disabled={busy !== "" || generation !== ""}
+                onClick={() => void generateWith(provider)}
+              >{busy === provider.id
+                ? t("attribution.generate.generating")
+                : t("attribution.generate.generateWith", { provider: provider.label })}</Button>
+            ))}
+          </div>
         )}
         {draft && oneCreative && draft.owed > 0 && (
           <label>
@@ -805,8 +1186,8 @@ function ListingFieldValue({
   stockLine,
   stockUnknown,
 }: {
-  field: ListingKey;
-  value: ListingSnapshot[ListingKey];
+  field: ListingFieldKey;
+  value: ListingSnapshot[ListingFieldKey];
   empty: string;
   truncated: string;
   galleryCount: (count: number) => string;
@@ -852,7 +1233,7 @@ function ListingFieldValue({
           {urls.slice(0, 8).map((url) => (
             <li key={url}>
               {/* eslint-disable-next-line @next/next/no-img-element -- listing CDN */}
-              <img src={url} alt="" />
+              <img src={picturePreview(url)} alt="" />
             </li>
           ))}
         </ol>

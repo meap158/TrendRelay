@@ -122,6 +122,10 @@ class ProductCreativeDraftProduct(Base):
     )
     position: Mapped[int] = mapped_column(Integer, default=0)
     listing_fields: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    #: Listing picture URLs the operator kept, in gallery order. Null means
+    #: every listing picture, which is an older draft or a create that omitted
+    #: the choice. An empty list means none of that product's pictures.
+    included_images: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 

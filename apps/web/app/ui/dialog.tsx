@@ -41,6 +41,7 @@ export function Dialog({
   children,
   footer,
   headerAction,
+  className,
   size = "default",
   suspendDismiss = false,
 }: {
@@ -52,6 +53,8 @@ export function Dialog({
   footer?: ReactNode;
   /** The affirmative action, beside the ×. A settings panel's Save. */
   headerAction?: ReactNode;
+  /** Extra class on the panel, for a footer or width that one dialog needs. */
+  className?: string;
   /**
    * Keep this panel up while another dialog is open on top of it.
    *
@@ -74,7 +77,7 @@ export function Dialog({
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="ui-dialog-overlay" />
         <RadixDialog.Content
-          className={size === "wide" ? "ui-dialog ui-dialog-wide" : "ui-dialog"}
+          className={["ui-dialog", size === "wide" && "ui-dialog-wide", className].filter(Boolean).join(" ")}
           onPointerDownOutside={
             suspendDismiss ? (event) => event.preventDefault() : undefined
           }

@@ -26,7 +26,10 @@ from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product, ProductOffer
 from trendrelay_api.product_creative_drafts import creative_drafts_by_product
-from trendrelay_api.product_creative_models import ProductCreativeLink
+from trendrelay_api.product_creative_models import (
+    ProductCreativeDraftProduct,
+    ProductCreativeLink,
+)
 from trendrelay_api.product_creative_recipes import (
     BED_FLAT_LAY_OFF,
     BED_FLAT_LAY_ON,
@@ -728,3 +731,183 @@ def test_together_refuses_a_product_with_no_picture_and_a_group_past_eight() -> 
     )
     assert too_many.status_code == 422
     assert "8" in too_many.json()["detail"]
+
+
+def test_unchecked_listing_pictures_stay_out_of_the_draft() -> None:
+    workspace_id = make_workspace()
+    first = add_product(workspace_id, image=True, name="Gym gloves")
+    second = add_product(workspace_id, image=True, name="Bambi set")
+    clean = "https://shop.example/glove-clean.jpg"
+    collage = "https://shop.example/glove-collage.jpg"
+    bambi = "https://shop.example/bambi.jpg"
+    with TestingSession.begin() as session:
+        gloves = session.get(Product, first)
+        assert gloves is not None
+        gloves.image_url = clean
+        gloves.listing = {"title": "Gym gloves", "images": [clean, collage]}
+        other = session.get(Product, second)
+        assert other is not None
+        other.image_url = bambi
+        other.listing = {"title": "Bambi set", "images": [bambi]}
+
+    omitted = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(first, together=True, product_ids=[first, second]),
+    )
+    assert omitted.status_code == 201, omitted.text
+    assert omitted.json()["draft"]["products"][0]["product_images"] == [clean, collage]
+    assert omitted.json()["draft"]["prompt"] != BED_FLAT_LAY_OFF
+
+    unknown = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            included_images=[{"product_id": first, "urls": ["https://shop.example/nope.jpg"]}],
+        ),
+    )
+    assert unknown.status_code == 422
+    assert unknown.json()["detail"] == "That picture is not on this product's listing."
+
+    stranger = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            included_images=[{"product_id": "product_missing", "urls": []}],
+        ),
+    )
+    assert stranger.status_code == 422
+    assert stranger.json()["detail"] == "Picture choices have to name a product in this draft."
+
+    doubled = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            included_images=[
+                {"product_id": first, "urls": [clean]},
+                {"product_id": first, "urls": [collage]},
+            ],
+        ),
+    )
+    assert doubled.status_code == 422
+    assert doubled.json()["detail"] == "Name each product once when choosing its pictures."
+
+    created = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            listing_fields=["gallery"],
+            included_images=[{"product_id": first, "urls": [collage, clean]}],
+        ),
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()["draft"]
+    assert draft["prompt"] == omitted.json()["draft"]["prompt"]
+    assert draft["product_images"] == [clean, collage]
+    assert draft["products"][0]["product_images"] == [clean, collage]
+    assert draft["products"][1]["product_images"] == [bambi]
+    assert draft["products"][0]["listing_fields"]["gallery"] == [clean, collage]
+
+    narrowed = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            included_images=[{"product_id": first, "urls": [clean]}],
+        ),
+    )
+    assert narrowed.status_code == 201, narrowed.text
+    kept = narrowed.json()["draft"]
+    assert kept["prompt"] == draft["prompt"]
+    assert kept["product_images"] == [clean]
+    assert kept["products"][0]["product_images"] == [clean]
+    assert kept["products"][1]["product_images"] == [bambi]
+    assert collage not in kept["products"][0]["product_images"]
+
+    with TestingSession.begin() as session:
+        gloves = session.get(Product, first)
+        assert gloves is not None
+        gloves.listing = {"title": "Gym gloves", "images": [collage, clean, "https://shop.example/glove-new.jpg"]}
+        rows = session.scalars(
+            select(ProductCreativeDraftProduct).where(
+                ProductCreativeDraftProduct.draft_id == kept["id"],
+            )
+        ).all()
+        stored = {row.product_id: row.included_images for row in rows}
+    assert stored[first] == [clean]
+    assert stored[second] is None
+
+    again = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts/{kept['id']}",
+    )
+    assert again.status_code == 200, again.text
+    reread = again.json()["draft"]
+    assert reread["products"][0]["product_images"] == [clean]
+    assert "https://shop.example/glove-new.jpg" not in reread["products"][0]["product_images"]
+    assert collage not in reread["products"][0]["product_images"]
+    assert reread["products"][1]["product_images"] == [bambi]
+
+    frozen = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts/{draft['id']}",
+    )
+    assert frozen.json()["draft"]["products"][0]["product_images"] == [clean, collage]
+
+    grown = request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/attribution/creative-drafts/{omitted.json()['draft']['id']}",
+    )
+    assert grown.json()["draft"]["products"][0]["product_images"] == [
+        collage, clean, "https://shop.example/glove-new.jpg",
+    ]
+
+    empty = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            included_images=[{"product_id": first, "urls": []}],
+        ),
+    )
+    assert empty.status_code == 422
+    assert empty.json()["detail"] == (
+        "These products have no image to generate from: Gym gloves."
+    )
+
+    own = add_library_image(workspace_id, "asset-cover", title="Cover")
+    covered = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            subject_asset_ids=[own],
+            included_images=[{"product_id": first, "urls": []}],
+        ),
+    )
+    assert covered.status_code == 201, covered.text
+    assert covered.json()["draft"]["products"][0]["product_images"] == []
+    assert covered.json()["draft"]["products"][1]["product_images"] == [bambi]
+
+    alone = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(first, included_images=[{"product_id": first, "urls": [clean]}]),
+    )
+    assert alone.status_code == 201, alone.text
+    assert alone.json()["draft"]["prompt"] == BED_FLAT_LAY_OFF
+    assert alone.json()["draft"]["product_images"] == [clean]
+    assert alone.json()["draft"]["products"][0]["product_images"] == [clean]
+
+    bare = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts",
+        json=draft_body(first, included_images=[{"product_id": first, "urls": []}]),
+    )
+    assert bare.status_code == 422
+    assert bare.json()["detail"] == "This product has no image to generate from."
+
+    preview = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json=draft_body(
+            first, together=True, product_ids=[first, second],
+            included_images=[{"product_id": first, "urls": []}],
+        ),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["draft"]["products"][0]["product_images"] == []
+    assert preview.json()["draft"]["prompt"] == omitted.json()["draft"]["prompt"]

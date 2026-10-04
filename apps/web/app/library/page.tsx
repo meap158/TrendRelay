@@ -65,6 +65,7 @@ const AUTOCUT_MIN_IMAGES = 2;
 const BatchTranscribe = dynamic(() => import("./batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
+const GenerateVideoDialog = dynamic(() => import("./generate-video-dialog").then((m) => m.GenerateVideoDialog), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
 const TranscriptDraft = dynamic(() => import("./auto-transcribe").then((m) => m.TranscriptDraft), { ssr: false });
 const TranscriptReader = dynamic(() => import("./transcript-reader").then((m) => m.TranscriptReader), { ssr: false });
@@ -1410,6 +1411,8 @@ function LibraryContent() {
   const [transcribeOpen, setTranscribeOpen] = useState(false);
   const [captionsOpen, setCaptionsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [generateVideoOpen, setGenerateVideoOpen] = useState(false);
+  const [videoProviders, setVideoProviders] = useState<{ id: string; label: string }[]>([]);
   /** What the campaign picker is about to add. Null closes it. */
   const [campaignPickerFor, setCampaignPickerFor] = useState<CampaignPickerSelection | null>(null);
   const [autoCutOpen, setAutoCutOpen] = useState(false);
@@ -1465,6 +1468,35 @@ function LibraryContent() {
       .then((body) => { if (live && Array.isArray(body.items)) setCreationDrafts(body.items); })
       .catch(() => undefined);
     return () => { live = false; };
+  }, [workspaceId, apiFetch]);
+  // The editing row offers Generate only when a provider is actually ready.
+  // This read is our own list. It does not call a vendor. Coming back to the
+  // tab picks up a key that was just saved and checked.
+  useEffect(() => {
+    if (!workspaceId) {
+      setVideoProviders([]);
+      return undefined;
+    }
+    let live = true;
+    function load() {
+      void apiFetch(`/api/workspaces/${workspaceId}/media/library/video-providers`)
+        .then(async (response) => {
+          if (!response.ok) return [] as { id: string; label: string }[];
+          const payload = await response.json() as { providers?: { id: string; label: string }[] };
+          return payload.providers ?? [];
+        })
+        .then((rows) => { if (live) setVideoProviders(rows); })
+        .catch(() => { if (live) setVideoProviders([]); });
+    }
+    load();
+    function onVisible() {
+      if (document.visibilityState === "visible") load();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      live = false;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [workspaceId, apiFetch]);
   // "Unfinished" is a draft still being built or one mid-render - a rendered one
   // is already a video in the Library, not something to pick up.
@@ -2746,6 +2778,16 @@ function LibraryContent() {
                           : "A voiceover needs a clip to put it on"}
                         onClick={() => setVoiceOpen(true)}
                       ><ActionIcon name="voiceover" />Voiceover</Button>
+                      {videoProviders.length > 0 && (
+                        <Button
+                          variant="secondary"
+                          disabled={!canImport || selected.media_kind !== "image"}
+                          title={selected.media_kind === "image"
+                            ? t("library.generateVideoHelp")
+                            : t("library.generateVideoImageOnly")}
+                          onClick={() => setGenerateVideoOpen(true)}
+                        ><ActionIcon name="generate" />{t("library.generateVideo")}</Button>
+                      )}
                     </div>
                     <EffectActivity
                       assetId={selected.id}
@@ -2805,19 +2847,18 @@ function LibraryContent() {
                       </p>
                     )}
                     {!!selected.attribution_products?.length && (
-                      <p className="library-in-campaigns">
-                        <span>
-                          {t("library.attributionProducts")}{" "}
-                          {selected.attribution_products.map((product, index) => (
-                            <span key={product.product_id}>
-                              {index > 0 && ", "}
+                      <div className="library-in-campaigns library-attribution-links">
+                        <span>{t("library.attributionProducts")}</span>
+                        <ul>
+                          {selected.attribution_products.map((product) => (
+                            <li key={product.product_id}>
                               <Link href={`/attribution?products=${encodeURIComponent(product.product_id)}`}>
                                 {product.name}
                               </Link>
-                            </span>
+                            </li>
                           ))}
-                        </span>
-                      </p>
+                        </ul>
+                      </div>
                     )}
                   </section>
 
@@ -3087,6 +3128,21 @@ function LibraryContent() {
           canEdit={canImport}
           apiFetch={apiFetch}
           onClose={() => setVoiceOpen(false)}
+        />
+      )}
+      {workspaceId && selected && (videoProviders.length > 0 || generateVideoOpen) && (
+        <GenerateVideoDialog
+          open={generateVideoOpen}
+          workspaceId={workspaceId}
+          assetId={selected.id}
+          apiFetch={apiFetch}
+          onClose={() => setGenerateVideoOpen(false)}
+          onFinished={(assetId) => {
+            setGenerateVideoOpen(false);
+            setMessage(t("library.generateVideoReady"));
+            setSelectedId(assetId);
+            void refresh();
+          }}
         />
       )}
       {workspaceId && (

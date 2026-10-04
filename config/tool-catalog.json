@@ -639,6 +639,33 @@
       "block_reason": "Nothing to install: it is a hosted service and the API key is the switch."
     },
     {
+      "id": "video-generation",
+      "name": "Video generation",
+      "repository": "https://docs.x.ai/developers/model-capabilities/video/generation",
+      "revision": "current",
+      "version": "current",
+      "license": "Commercial service terms",
+      "license_url": "https://x.ai/legal/terms-of-service",
+      "category": "Video generation",
+      "summary": "Hosted video from a stored prompt and a Library image. Each provider is a key and a switch. A video draft lists the ones that are on and whose check passed.",
+      "capabilities": [
+        "Save a key and a switch for each video provider",
+        "Check a key without starting a video",
+        "Offer every ready provider on an Attribution video draft",
+        "File the finished clip through the Library's own ingest"
+      ],
+      "integration_status": "key-and-quota",
+      "commercial_use": "allowed",
+      "install_strategy": "hosted-api",
+      "install_allowed": false,
+      "activation_allowed": false,
+      "default_active": false,
+      "block_reason": "Nothing to install: it is a hosted service and the API key is the switch.",
+      "documentation": "docs/third-party/video-generation.md",
+      "surface": "library",
+      "runs": "network"
+    },
+    {
       "id": "telegram-bot",
       "name": "Telegram approvals",
       "repository": "https://github.com/python-telegram-bot/python-telegram-bot",

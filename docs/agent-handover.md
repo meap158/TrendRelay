@@ -7,33 +7,103 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
-## Attribution product creatives (2026-10-03)
+## Attribution product media (2026-10-04)
 
-Generate on Attribution queues one reviewed prompt per selected product, for a
-single row or for many, with the same recipe. The prompt is
-resolved only in `product_creative_recipes.py` and stored on the draft. The
-modal and MCP both display that stored text. The modal's subject is Library
-images picked with the shared Library picker and stored as
-`subject_asset_ids`; an empty list still means the listing gallery. Listing
-fields (title, price, description, gallery, variations) are sent only when
-selected, and the draft stores the snapshot from confirm in `listing_fields`.
-An empty object means none were sent. The expanded product row shows that
-stored configuration, and View opens the same draft read only. Generate media
-starts a new draft. Together, when several products are selected, queues
-one draft for all of them and links the finished Library file to every
-product. Each product stays the default.
-TrendRelay does not generate the pixels. Submitting a file ingests it into
-the Library and writes
-`ProductCreativeLink` only when the draft holds its card count. Both the
-product read (`creative_assets`) and the Library asset read
-(`attribution_products`) show the link. Nothing is published.
+The operator's requests for Attribution → Products, and where each one stands.
+Resume detail is `docs/product-creative-drafts.md`. The fill procedure is
+`SOP/attribution/fill-product-creatives.md`. The page is
+http://127.0.0.1:3001/attribution. Workspace
+`ws_03c59534908647d892d8e0dab62780e8`. Prompt text is resolved only in
+`product_creative_recipes.py`. Single-product recipe strings stay
+byte-identical. Nothing is published, and a draft is not attached to a campaign.
+
+These requests are landed. Do not rebuild them.
+
+- Generate opens one dialog for the selection, shows the full stored prompt,
+  and queues a pending draft. An external assistant uses the same queue over
+  MCP (`list_product_creative_drafts`, `get_product_creative_draft`,
+  `create_product_creative_draft`, `submit_product_creative_media`). Create
+  commits before the MCP session closes.
+- The control is labeled Generate media, uses the Sparkles icon, and is
+  primary blue. It is on the bulk bar and the open row, for one product or
+  many.
+- What generation uses: subject images from the Library picker, up to 8, in
+  pick order (`subject_asset_ids`). An empty pick still uses the listing
+  gallery. A sent pick replaces the listing on a single-product draft.
+  Invalid ids are 422.
+- A creative filter sits beside the listing filter: All, Pending draft, In
+  Library. Pending means status is not succeeded or owed is greater than 0.
+  In Library means `creative_assets` is not empty. A product can match both.
+  Counts follow the other filters. The predicate stays out of
+  `productMatches`.
+- Listing fields are title, price, description, gallery, and variations.
+  Title, description, and listing pictures start on. Price and variations
+  start off. Turning a chip on or off is remembered for this workspace,
+  for Single and Together. A selected field is stored beside the prompt in
+  `listing_fields` and rendered under the prompt. The prompt text does not
+  change. The stored gallery snapshot stays the full gallery. View shows
+  the saved configuration and does not change the remembered chips.
+  Generate media starts a new draft.
+- Together, optional from 2 products and capped at 8, makes one creative and
+  links the finished file to every member. Each product stays the default.
+  Each product's listing pictures remain the subject. A shared Library pick
+  is extra. Queue can proceed without a Library pick when every member has
+  a listing picture.
+- Picture checkboxes appear under Listing fields for one product and for
+  many, on Single and on Together, only while Listing pictures is selected.
+  Unchecking one leaves it out of that draft. The choice is not remembered
+  next time. It is `included_images` on create (migration `20261004_0088`).
+  Preview still returns the full gallery. Null means the whole live
+  gallery.
+- What will be sent starts collapsed. When more than one product is in the
+  ask, each product's pictures and fields are under that product's name.
+  Top-level `product_images` and `listing_fields` repeat only the lead
+  product.
+- The product table names Single and Together. A Together draft
+  (`product_count` greater than 1) keeps its members on consecutive rows
+  under one heading (Together, kind, recipe, and how many products). A
+  product in two Together drafts is listed once, under the larger draft.
+  The open row names each kind that product has. Pending and In Library
+  keep their meanings and their product counts.
+- A finished file is part of the same task as the draft. Done means
+  `submit_product_creative_media` succeeded and a reread shows succeeded,
+  owed 0, linked, and a Library asset id. One Together file links every
+  member. Library detail lists those products one by one.
 
 Recipes: `bed_flat_lay` (image or carousel, background optional; the word bed
 only when background is off), `mannequin_transition` (video, hallway only when
 background is off), `mirror_selfie` (video, `female` or `male`, background
-required — do not invent a no-background mirror script). Resume detail is
-`docs/product-creative-drafts.md`. The assistant procedure is
-`SOP/attribution/fill-product-creatives.md`.
+required — do not invent a no-background mirror script). Image drafts are
+still filled from outside. A video draft can be filled by a provider that
+Tools reports ready (Video generation: a key, a switch, and a check that does
+not spend a clip). With nobody ready, the file still comes from outside. The
+same ready providers also appear on a Library image, in the editing row, and
+file a new video without a product link. That video-provider path is
+uncommitted in this checkout. Leave it in place.
+
+Filed, and not to be regenerated: gym-gloves draft
+`pcreative_1215e31071154383a68dde1d9ad06393`, Library asset
+`asset_a79cc7b0e2d84790b3ef75c32100db84`; together bed draft
+`pcreative_d139e7bf2a014c27afae74ccef5c838a`, Library asset
+`asset_493101c126e0411aa869e455fa273045`, eight products.
+
+Still open, and not a code task: two pending together bed drafts still owe a
+file. `pcreative_931bab3dbfcd4ec4b3880edff77213e6` features eight Mây Meo
+Sleepwear products (Sugar Doll leads). `pcreative_df7edc3ffc5c412b93d56de5fb8f3faa`
+features three of them (Sugar Doll, Angel, Bambi). The table shows the eight
+under the larger draft. Filling one means an outside image and
+`submit_product_creative_media`. Do not queue another draft to do it.
+
+One Attribution recipe is still scheduled. `c2639491-550b-4259-ad6a-8109cf30e9e9`
+adds the six-pieces reference to the Generate recipe dropdown as video
+recipe `six_pieces`, once, at 09:30 Asia/Bangkok on 2026-10-05. The wording
+is the two blocks in `References/Products/6 pieces go on one at a time in
+22 seconds.txt`. Do not add that option before then. These three are paused.
+Do not unpause them, and do not run them now.
+
+- `0b70fbb0-5b4d-4d5c-aa19-c87f60bfa46c` — Separate single and together creative drafts. Landed.
+- `0a7f1609-23dc-4765-bb3f-f2e13c2bc1bb` — Filter Attribution products by creative draft. Landed.
+- `8d6f5846-371e-4120-91e2-4deeeb30f85c` — BNF / Kotegawa strategy research. Unrelated. Leave it paused.
 
 ## Attribution Shopee product listings fetch fix (2026-10-03)
 

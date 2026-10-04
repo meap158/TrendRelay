@@ -308,7 +308,7 @@
 .product-table th[aria-sort="descending"] .product-sort-button svg { opacity: 1; }
 .product-table th.numeric .product-sort-button { justify-content: flex-end; }
 .product-table th.product-count .product-sort-button { justify-content: center; }
-.product-table > tbody > tr:not(.product-detail-row):hover > * { background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
+.product-table > tbody > tr:not(.product-detail-row):not(.product-draft-group):hover > * { background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
 .product-table > tbody > tr[data-chosen] > *,
 .product-table > tbody > tr[data-expanded] > * { background: var(--panel-raised); }
 .product-table > tbody > tr[data-expanded] > * { border-block-end-color: transparent; }
@@ -497,6 +497,11 @@
 .shopee-import-campaigns > small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 /* The reviewed prompt is the point of the Generate dialog. Monospace so a
    long script can be read before it is queued. */
+.campaign-dialog-form .generate-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .campaign-dialog-form .generate-prompt textarea {
   min-height: 180px;
   resize: vertical;
@@ -504,6 +509,46 @@
   line-height: 1.45;
   white-space: pre-wrap;
 }
+.campaign-dialog-form .generate-send {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+/* The prompt is the last thing in the scroller, and Close / Queue drafts
+   sat in the same white with only the panel gap between them. The action
+   row is its own bar, and the line runs the full width of the dialog. */
+.generate-dialog .ui-dialog-foot {
+  margin-inline: -18px;
+  margin-block-end: -18px;
+  padding: 12px 18px;
+  border-block-start: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+.campaign-dialog-form .generate-send > summary {
+  cursor: pointer;
+  min-block-size: 32px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.campaign-dialog-form .generate-send > summary:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+.generate-send-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 10px 12px;
+}
+.generate-send-product {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--line);
+}
+.generate-send-product > .generate-member-name { font-weight: 600; }
 .campaign-dialog-form .generate-attached {
   display: grid;
   gap: 8px;
@@ -586,6 +631,7 @@
 .generate-omitted button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 .generate-omitted button:disabled { cursor: default; }
 .generate-scope { display: grid; gap: 6px; }
+.generate-listing-pictures { margin-block-start: 4px; }
 .generate-scope > strong {
   margin: 0;
   color: var(--muted);
@@ -603,26 +649,26 @@
 }
 .generate-scope .product-listing-filter { align-self: start; }
 .generate-scope .product-listing-filter button:disabled { cursor: not-allowed; opacity: .5; }
-.generate-member-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.generate-member-list li {
+.generate-member-list {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  column-gap: 8px;
-  align-items: center;
+  gap: 12px;
+  max-block-size: min(420px, 60vh);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
 }
-.generate-member-list img,
+.generate-member-list li { display: grid; gap: 6px; min-width: 0; }
+.generate-member-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .generate-member-missing {
-  grid-column: 1;
-  grid-row: 1 / -1;
+  flex: 0 0 auto;
   inline-size: 32px;
   block-size: 32px;
-  object-fit: cover;
   border-radius: var(--radius-sm);
   background: var(--panel-raised);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
-.generate-member-missing { box-shadow: inset 0 0 0 1px var(--line); }
 .generate-member-name {
-  grid-column: 2;
   min-width: 0;
   color: var(--text);
   font-size: 12px;
@@ -633,7 +679,62 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
-.generate-member-list small { grid-column: 2; color: var(--muted); font-size: 11px; font-weight: 400; }
+.campaign-dialog-form label.generate-picture-all {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+}
+.campaign-dialog-form label.generate-picture-all > span.generate-member-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.generate-member-list small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.generate-picture-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.campaign-dialog-form .generate-picture-choices label {
+  position: relative;
+  display: block;
+  inline-size: 64px;
+  block-size: 64px;
+  gap: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.generate-picture-choices img,
+.campaign-dialog-form .generate-picture-choices img {
+  inline-size: 64px;
+  block-size: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+}
+.campaign-dialog-form .generate-picture-choices input[type="checkbox"] {
+  position: absolute;
+  z-index: 1;
+  inline-size: 16px;
+  block-size: 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--panel);
+  accent-color: var(--link);
+  inset-block-start: 4px;
+  inset-inline-start: 4px;
+}
+.generate-picture-choices label.is-on img { box-shadow: inset 0 0 0 2px var(--link); }
+.generate-picture-choices label.is-off img { opacity: .45; }
+.generate-picture-choices label:focus-within { outline: 2px solid var(--link); outline-offset: 1px; }
 .product-creative-members { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .generate-member { display: grid; gap: 8px; }
 .generate-member > strong { color: var(--text); font-size: 12px; }
@@ -682,6 +783,48 @@
 .product-creative-draft > span:first-child { min-width: 0; }
 .product-creative-view { flex: none; color: var(--link); font-size: 11px; }
 .product-creatives > li { display: grid; gap: 6px; justify-items: start; }
+/* Single and Together are named. Weight and size match the section label
+   above this list. Both groups share one color; the words are the difference. */
+.product-creative-group { margin-block-start: 6px; }
+.product-creative-group-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: none;
+}
+.product-creative-group ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.product-creative-group li { display: grid; gap: 6px; justify-items: start; }
+/* A Together draft is one creative, so its products sit under one band.
+   The band is not a row you can select. The label stays in the product
+   column and within the screen while the wide table scrolls sideways. */
+.product-draft-group > th {
+  padding: 7px 10px;
+  background: var(--panel-raised);
+  font-weight: 400;
+}
+.product-draft-group-label {
+  display: block;
+  position: sticky;
+  inset-inline-start: 34px;
+  z-index: 1;
+  max-inline-size: min(40rem, calc(100vw - 96px));
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+  text-transform: none;
+}
 .product-creative-config {
   display: grid;
   gap: 6px;
@@ -725,5 +868,14 @@
     justify-content: center;
     min-block-size: 44px;
     padding-inline: 12px;
+  }
+  .campaign-dialog-form label.generate-picture-all {
+    align-items: center;
+    min-block-size: 44px;
+  }
+  .campaign-dialog-form .generate-send > summary {
+    display: flex;
+    align-items: center;
+    min-block-size: 44px;
   }
 }

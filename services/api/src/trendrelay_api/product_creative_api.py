@@ -33,6 +33,11 @@ DatabaseSession = Annotated[Session, Depends(get_session)]
 _EDITORS = {"owner", "editor", "approver"}
 
 
+class ImageChoice(BaseModel):
+    product_id: str = Field(min_length=1, max_length=64)
+    urls: list[str] = Field(default_factory=list, max_length=60)
+
+
 class DraftBody(BaseModel):
     product_id: str = Field(min_length=1, max_length=64)
     kind: Literal["image", "carousel", "video"]
@@ -49,12 +54,28 @@ class DraftBody(BaseModel):
     #: that names one product stays one product.
     together: bool = False
     product_ids: list[str] | None = Field(default=None, max_length=100)
+    #: Listing pictures to keep, per product. Omit it and every picture stays.
+    #: A product left out of the list keeps its whole gallery.
+    included_images: list[ImageChoice] | None = Field(default=None, max_length=8)
 
 
 class MediaBody(BaseModel):
     media_url: str | None = None
     media_base64: str | None = None
     filename: str | None = Field(default=None, max_length=300)
+
+
+class GenerateBody(BaseModel):
+    """One confirmed call to a provider the registry currently reports ready."""
+
+    provider_id: str = Field(min_length=1, max_length=64)
+    confirm_external_action: bool = False
+
+
+def _choices(body: DraftBody) -> list[dict[str, Any]] | None:
+    if body.included_images is None:
+        return None
+    return [item.model_dump() for item in body.included_images]
 
 
 def _call(fn):
@@ -83,6 +104,7 @@ def preview_creative_draft(
         subject_asset_ids=body.subject_asset_ids,
         listing_fields=body.listing_fields,
         together=body.together, product_ids=body.product_ids,
+        included_images=_choices(body),
     ))}
 
 
@@ -105,6 +127,7 @@ def create_creative_draft(
         subject_asset_ids=body.subject_asset_ids,
         listing_fields=body.listing_fields,
         together=body.together, product_ids=body.product_ids,
+        included_images=_choices(body),
     ))
     audit(
         session, request, workspace_id, user.id,
@@ -169,3 +192,57 @@ def submit_creative_media(
         {"asset_id": view.get("asset_id"), "status": view.get("status")},
     )
     return {"draft": view, "asset_id": view.get("asset_id"), "linked": view.get("linked")}
+
+
+@router.get("/video-providers")
+def list_video_providers(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Providers a video draft may offer. Empty when none are ready."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.video_generation import ready_providers
+
+    return {"providers": ready_providers()}
+
+
+@router.post("/creative-drafts/{draft_id}/generate", status_code=202)
+def generate_creative_video(
+    workspace_id: str,
+    draft_id: str,
+    body: GenerateBody,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue a video for one draft. Does not call a second provider on refusal."""
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Generating a video requires confirmation.")
+    require_role(membership(session, workspace_id, user.id), _EDITORS)
+    ensure_profile(session, user)
+    from trendrelay_api.integrations.video_generation import enqueue
+
+    job = _call(lambda: enqueue(
+        session, workspace_id, user.id, draft_id, body.provider_id,
+    ))
+    audit(
+        session, request, workspace_id, user.id,
+        "attribution.creative_video_queued", "product_creative_draft", draft_id,
+        {"provider_id": body.provider_id, "job_id": job.get("id")},
+    )
+    return {"job": job}
+
+
+@router.get("/creative-drafts/{draft_id}/generation")
+def read_creative_generation(
+    workspace_id: str,
+    draft_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Where the latest generation for this draft has got to."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.video_generation import generation_status
+
+    return {"generation": _call(lambda: generation_status(session, workspace_id, draft_id))}

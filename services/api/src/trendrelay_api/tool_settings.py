@@ -449,6 +449,29 @@ class _Telegram:
         return value
 
 
+class _VideoGeneration:
+    """Keys and switches for every video provider the registry declares.
+
+    The form is built from that registry, so a new provider grows a key and
+    a switch here without a second list of names.
+    """
+
+    def fields(self) -> list[dict[str, Any]]:
+        from trendrelay_api.integrations.video_generation import describe_fields
+
+        return describe_fields()
+
+    def save(self, values: dict[str, str]) -> list[str]:
+        from trendrelay_api.integrations.video_generation import save_settings
+
+        return save_settings(values)
+
+    def reveal(self, key: str) -> str:
+        from trendrelay_api.integrations.video_generation import reveal_setting
+
+        return reveal_setting(key)
+
+
 #: Tool id to its settings. A tool absent here has none, which is the honest
 #: answer for a model that is configured by being downloaded.
 PROVIDERS: dict[str, SettingsProvider] = {
@@ -456,6 +479,7 @@ PROVIDERS: dict[str, SettingsProvider] = {
     "elevenlabs": _ElevenLabs(),
     "pexels": _Pexels(),
     "telegram-bot": _Telegram(),
+    "video-generation": _VideoGeneration(),
 }
 
 

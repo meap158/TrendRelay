@@ -103,6 +103,8 @@ type SetupAction = {
   href?: string;
   provider?: string;
   requires_confirmation?: boolean;
+  /** Shown instead of the generic setup prompt when this action reaches a service. */
+  confirm?: string;
 };
 type MediaAiJob = {
   status: string;
@@ -192,6 +194,9 @@ const guidedSetup = new Set([
   // The other hosted one, and the same story: one free key, and without it
   // the b-roll search in Storytelling can only say what is missing.
   "pexels",
+  // Hosted video. Setup is the key and the switch for each provider. The
+  // Generate dialog only lists a provider after that check has passed.
+  "video-generation",
   // Installed from here into its own runtime, then a bot token and a chat
   // saved on the card, then a test message - the whole setup is the card.
   "telegram-bot",
@@ -548,7 +553,10 @@ export default function ToolsPage() {
       // they should just run. Only an action that asks for a prompt gets one.
       if (
         action.requires_confirmation !== false
-        && !window.confirm(`Open the guided ${setup.title.replace("Set up ", "")} setup step?`)
+        && !window.confirm(
+          action.confirm
+            ?? `Open the guided ${setup.title.replace("Set up ", "")} setup step?`,
+        )
       ) return;
       setBusy(`${setup.tool_id}-${action.id}`);
       setError(null);

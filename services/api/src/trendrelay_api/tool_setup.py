@@ -534,6 +534,10 @@ def setup_report(tool_id: str) -> dict[str, Any]:
         from trendrelay_api.integrations.telegram_setup import setup_report
 
         report.update(setup_report())
+    elif tool_id == "video-generation":
+        from trendrelay_api.integrations.video_generation import setup_report
+
+        report.update(setup_report())
     elif tool_id == "mediacrawler":
         report.update(
             summary=(
@@ -586,6 +590,10 @@ def launch_setup_action(tool_id: str, action_id: str) -> dict[str, Any]:
         return _launch_mcp_action(action_id)
     if tool_id == "telegram-bot":
         from trendrelay_api.integrations.telegram_setup import launch_action
+
+        return launch_action(action_id)
+    if tool_id == "video-generation":
+        from trendrelay_api.integrations.video_generation import launch_action
 
         return launch_action(action_id)
     allowed_actions = {

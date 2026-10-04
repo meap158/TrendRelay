@@ -69,6 +69,54 @@ def test_object_key_is_content_addressed_so_a_cut_cannot_be_confused() -> None:
     assert media_hosting.object_key("a" * 64, ".MP4") == original
 
 
+def test_a_presigned_put_carries_the_signature_in_the_query() -> None:
+    """xAI writes the file itself, so the secret cannot stay in a header.
+
+    The canonical request is spelled out here, rather than calling the signer
+    twice, so a drift in header order or in the unsigned payload fails.
+    """
+    from datetime import UTC, datetime
+
+    values = {
+        "R2_ACCOUNT_ID": "abc123",
+        "R2_BUCKET": "trendrelay",
+        "R2_ACCESS_KEY_ID": "AKID",
+        "R2_SECRET_ACCESS_KEY": "secret",
+    }
+    moment = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
+    url = media_hosting.presigned_put_url(
+        values, "product-clips/draft/job.mp4", expires_seconds=3600, now=moment,
+    )
+
+    assert url.startswith("https://abc123.r2.cloudflarestorage.com/trendrelay/product-clips/draft/job.mp4?")
+    assert "X-Amz-Expires=3600" in url
+    assert "X-Amz-SignedHeaders=host" in url
+    assert "X-Amz-Algorithm=AWS4-HMAC-SHA256" in url
+    assert "secret" not in url
+    query = url.split("?", 1)[1].rsplit("&X-Amz-Signature=", 1)[0]
+    canonical = "\n".join([
+        "PUT",
+        "/trendrelay/product-clips/draft/job.mp4",
+        query,
+        "host:abc123.r2.cloudflarestorage.com\n",
+        "host",
+        "UNSIGNED-PAYLOAD",
+    ])
+    scope = "20261004/auto/s3/aws4_request"
+    to_sign = "\n".join([
+        "AWS4-HMAC-SHA256",
+        "20261004T120000Z",
+        scope,
+        hashlib.sha256(canonical.encode()).hexdigest(),
+    ])
+    signature = hmac.new(
+        media_hosting.signing_key("secret", "20261004"),
+        to_sign.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    assert url.endswith(f"&X-Amz-Signature={signature}")
+
+
 def test_public_url_joins_without_doubling_the_separator() -> None:
     assert (
         media_hosting.public_url("https://cdn.example.com/", "media/ab/x.mp4")

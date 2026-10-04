@@ -588,6 +588,7 @@ def media_processing_jobs(
     from trendrelay_api.storytelling.autocreate import JOB_KIND as AUTOCREATE_JOB_KIND
     from trendrelay_api.storytelling.jobs import JOB_KIND as STORY_JOB_KIND
     from trendrelay_api.voice_jobs import JOB_KIND as VOICE_JOB_KIND
+    from trendrelay_api.integrations.video_generation import JOB_KIND as VIDEO_JOB_KIND
 
     kinds = {
         EFFECT_JOB_KIND,
@@ -601,6 +602,7 @@ def media_processing_jobs(
         # The autonomous build, which fills a script's pictures and then queues
         # one of the storytelling renders above - both show in the bell.
         AUTOCREATE_JOB_KIND,
+        VIDEO_JOB_KIND,
     }
     jobs = list_job_records_for_kinds(workspace_id, kinds, limit, session=session)
     # A preview is watched in its own dialog and pruned within the hour; only the
@@ -4351,6 +4353,85 @@ def generate_voiceover(
         },
     )
     return {"job": _stamp_batch(session, job, body.batch)}
+
+
+class LibraryVideoBody(BaseModel):
+    """One confirmed call. The prompt is what the operator wrote."""
+
+    provider_id: str = Field(min_length=1, max_length=64)
+    prompt: str = Field(min_length=1, max_length=4000)
+    confirm_external_action: bool = False
+
+
+@router.get("/video-providers")
+def list_library_video_providers(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Providers the editing row may offer. Empty when none are ready."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.video_generation import ready_providers
+
+    return {"providers": ready_providers()}
+
+
+@router.post("/assets/{asset_id}/generate-video", status_code=202)
+def generate_library_video(
+    workspace_id: str,
+    asset_id: str,
+    body: LibraryVideoBody,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue a clip from this Library image. Does not link a product."""
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Generating a video requires confirmation.")
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "approver"},
+    )
+    ensure_profile(session, user)
+    from trendrelay_api.integrations.video_generation import enqueue_library
+
+    try:
+        job = enqueue_library(
+            session, workspace_id, user.id, asset_id, body.provider_id, body.prompt,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media_library.video_queued",
+        "media_asset",
+        asset_id,
+        {"provider_id": body.provider_id, "job_id": job.get("id")},
+    )
+    return {"job": job}
+
+
+@router.get("/assets/{asset_id}/generation")
+def read_library_generation(
+    workspace_id: str,
+    asset_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Where the latest generation for this image has got to."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.video_generation import library_generation_status
+
+    try:
+        generation = library_generation_status(session, workspace_id, asset_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {"generation": generation}
 
 
 @router.get("/voice/jobs")

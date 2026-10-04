@@ -234,6 +234,14 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         done: "Story video is ready",
         detail: "Narrated video",
       },
+      video_generation: {
+        category: "render",
+        working: "Generating a video",
+        done: "Generated video is in the Library",
+        detail: job?.payload?.provider_label
+          ? `${job.payload.provider_label} video`
+          : "Generated video",
+      },
       storytelling_autocreate: {
         category: "render",
         working: job?.payload?.render ? "Building your story" : "Finding b-roll",

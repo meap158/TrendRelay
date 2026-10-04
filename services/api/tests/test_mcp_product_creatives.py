@@ -153,6 +153,36 @@ def test_together_shows_on_every_product_and_ignores_extra_ids_otherwise(session
     )
 
 
+def test_included_images_drop_a_listing_picture_the_operator_unchecked(session) -> None:
+    session.add(Product(
+        id="product-2", workspace_id="ws-1", catalog_key="gloves",
+        name="Gym gloves", marketplace="shopee",
+        image_url="https://shop.example/glove-clean.jpg",
+        listing={
+            "title": "Gym gloves",
+            "images": [
+                "https://shop.example/glove-clean.jpg",
+                "https://shop.example/glove-collage.jpg",
+            ],
+        },
+        created_by=LOCAL_ADMIN_ID,
+    ))
+    session.commit()
+    made = product_creatives.create_draft(
+        session, "ws-1",
+        product_id="product-1", product_ids=["product-1", "product-2"],
+        together=True, kind="image", recipe="bed_flat_lay",
+        included_images=[{
+            "product_id": "product-2",
+            "urls": ["https://shop.example/glove-clean.jpg"],
+        }],
+    )
+    assert made["products"][1]["product_images"] == ["https://shop.example/glove-clean.jpg"]
+    got = product_creatives.get_draft(session, "ws-1", made["id"])
+    assert got["products"][1]["product_images"] == ["https://shop.example/glove-clean.jpg"]
+    assert "https://shop.example/glove-collage.jpg" not in got["products"][1]["product_images"]
+
+
 def test_list_and_get_return_the_stored_prompt_and_image_references(session) -> None:
     made = product_creatives.create_draft(
         session, "ws-1",

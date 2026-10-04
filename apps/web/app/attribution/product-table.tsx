@@ -33,6 +33,7 @@ import {
   matchesCreativeFilter,
   type CreativeFilter,
 } from "./creative-filter";
+import { groupShownDrafts, partitionDrafts } from "./draft-groups";
 import { SearchSelect } from "../ui/search-select";
 import {
   sortProducts,
@@ -327,6 +328,21 @@ export function ProductTable({
     ),
     [narrowed, creativeFilter, sort],
   );
+  /**
+   * Together members stay on consecutive rows. With only Single drafts on
+   * screen the sorted list is left as it is.
+   */
+  const tableBodies = useMemo(() => {
+    const layout = groupShownDrafts(shown);
+    if (!layout.grouped) {
+      return [{ key: "all", heading: null, products: shown }];
+    }
+    return layout.sections.map((section) => ({
+      key: section.kind === "together" ? `together-${section.draft.id}` : section.kind,
+      heading: section.kind === "plain" ? null : section,
+      products: section.products,
+    }));
+  }, [shown]);
   const creativeCounts = useMemo(() => ({
     all: narrowed.length,
     pending: narrowed.filter((product) => hasPendingCreative(product)).length,
@@ -741,8 +757,32 @@ export function ProductTable({
                 sort={sort} onSort={changeSort} className="product-count" />
             </tr>
           </thead>
-          <tbody>
-            {shown.map((product) => {
+          {tableBodies.map((section) => (
+          <tbody key={section.key}>
+            {section.heading && (
+              <tr className="product-draft-group">
+                <th colSpan={columnCount} scope="rowgroup">
+                  <span className="product-draft-group-label">
+                    {section.heading.kind === "single"
+                      ? t("attribution.generate.draftGroupSingle")
+                      : (
+                        <>
+                          {t("attribution.generate.draftGroupTogether")}
+                          {" · "}
+                          {creativeKind(t, section.heading.draft.kind)}
+                          {" · "}
+                          {creativeRecipe(t, section.heading.draft.recipe)}
+                          {" · "}
+                          {t("attribution.generate.featuresProducts", {
+                            count: section.heading.draft.product_count ?? section.products.length,
+                          })}
+                        </>
+                      )}
+                  </span>
+                </th>
+              </tr>
+            )}
+            {section.products.map((product) => {
               const open = expanded.has(product.id);
               const detailId = `product-detail-${product.id}`;
               const directOffers = product.offers.filter(
@@ -949,42 +989,13 @@ export function ProductTable({
                                 </Link>
                               </li>
                             ))}
-                            {product.creative_drafts?.map((item) => (
-                              <li key={item.id}>
-                                <button
-                                  type="button"
-                                  className="product-creative-draft"
-                                  onClick={() => {
-                                    setGenerateFor(null);
-                                    setReviewDraft({ product, draftId: item.id });
-                                  }}
-                                >
-                                  <span>
-                                    {creativeKind(t, item.kind)}
-                                    {" · "}
-                                    {creativeRecipe(t, item.recipe)}
-                                    {" · "}
-                                    {item.status === "succeeded"
-                                      ? t("attribution.generate.statusSucceeded")
-                                      : t("attribution.generate.statusPending")}
-                                    {" · "}
-                                    {t("attribution.generate.owed", { count: item.owed })}
-                                    {(item.product_count ?? 0) > 1 && (
-                                      <>
-                                        {" · "}
-                                        {t("attribution.generate.featuresProducts", { count: item.product_count ?? 0 })}
-                                      </>
-                                    )}
-                                  </span>
-                                  <span className="product-creative-view">{t("attribution.generate.viewDraft")}</span>
-                                </button>
-                                <CreativeDraftSummary
-                                  draftId={item.id}
-                                  status={item.status}
-                                  owed={item.owed}
-                                />
-                              </li>
-                            ))}
+                            <ProductDraftGroups
+                              product={product}
+                              onReview={(draftId) => {
+                                setGenerateFor(null);
+                                setReviewDraft({ product, draftId });
+                              }}
+                            />
                           </ul>
                         ) : (
                           <p className="product-no-data">{t("attribution.generate.noneLinked")}</p>
@@ -1021,7 +1032,7 @@ export function ProductTable({
                 ),
               ];
             })}
-            {shown.length === 0 && (
+            {section.key === "all" && shown.length === 0 && (
               <tr>
                 <td className="product-no-results" colSpan={columnCount}>
                   {t("attribution.noProductMatches")}
@@ -1029,6 +1040,7 @@ export function ProductTable({
               </tr>
             )}
           </tbody>
+          ))}
         </table>
       </div>
       {generateFor && generateFor.length > 0 && (
@@ -1051,6 +1063,70 @@ export function ProductTable({
         />
       )}
     </Card>
+  );
+}
+
+function ProductDraftGroups({
+  product,
+  onReview,
+}: {
+  product: ProductRow;
+  onReview: (draftId: string) => void;
+}) {
+  const t = useT();
+  const groups = partitionDrafts(product.creative_drafts);
+  return (
+    <>
+      {(["single", "together"] as const).map((kind) => {
+        const drafts = groups[kind];
+        if (drafts.length === 0) return null;
+        const labelId = `${product.id}-${kind}-drafts`;
+        return (
+          <li key={kind} className="product-creative-group">
+            <h5 id={labelId} className="product-creative-group-label">
+              {t(kind === "single"
+                ? "attribution.generate.draftGroupSingle"
+                : "attribution.generate.draftGroupTogether")}
+            </h5>
+            <ul aria-labelledby={labelId}>
+              {drafts.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className="product-creative-draft"
+                    onClick={() => onReview(item.id)}
+                  >
+                    <span>
+                      {creativeKind(t, item.kind)}
+                      {" · "}
+                      {creativeRecipe(t, item.recipe)}
+                      {" · "}
+                      {item.status === "succeeded"
+                        ? t("attribution.generate.statusSucceeded")
+                        : t("attribution.generate.statusPending")}
+                      {" · "}
+                      {t("attribution.generate.owed", { count: item.owed })}
+                      {(item.product_count ?? 0) > 1 && (
+                        <>
+                          {" · "}
+                          {t("attribution.generate.featuresProducts", { count: item.product_count ?? 0 })}
+                        </>
+                      )}
+                    </span>
+                    <span className="product-creative-view">{t("attribution.generate.viewDraft")}</span>
+                  </button>
+                  <CreativeDraftSummary
+                    draftId={item.id}
+                    status={item.status}
+                    owed={item.owed}
+                  />
+                </li>
+              ))}
+            </ul>
+          </li>
+        );
+      })}
+    </>
   );
 }
 

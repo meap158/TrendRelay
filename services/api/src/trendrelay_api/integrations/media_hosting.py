@@ -256,6 +256,83 @@ def public_url(base: str, key: str) -> str:
     return f"{base.rstrip('/')}/{key}"
 
 
+def presigned_put_url(
+    values: dict[str, str],
+    key: str,
+    *,
+    expires_seconds: int = 3600,
+    now: datetime | None = None,
+) -> str:
+    """A URL another service can PUT to, with the signature in the query.
+
+    The header signature this module uses is for a request TrendRelay sends
+    itself. A video service writes the file from its own network, so it needs
+    a URL that already carries the signature. The payload is left unsigned:
+    the writer does not know the video's hash when the URL is minted.
+    """
+    moment = now or datetime.now(UTC)
+    timestamp = moment.strftime("%Y%m%dT%H%M%SZ")
+    stamp = timestamp[:8]
+    host = f"{values['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+    path = f"/{values['R2_BUCKET']}/{quote(key, safe='/')}"
+    scope = f"{stamp}/{REGION}/{SERVICE}/aws4_request"
+    credential = f"{values['R2_ACCESS_KEY_ID']}/{scope}"
+    names = {
+        "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+        "X-Amz-Credential": credential,
+        "X-Amz-Date": timestamp,
+        "X-Amz-Expires": str(int(expires_seconds)),
+        "X-Amz-SignedHeaders": "host",
+    }
+    query = "&".join(
+        f"{quote(name, safe='')}={quote(names[name], safe='')}" for name in sorted(names)
+    )
+    # The trailing newline on the host header is what leaves the blank line
+    # SigV4 requires between the headers and the signed-header list.
+    canonical = "\n".join([
+        "PUT",
+        path,
+        query,
+        f"host:{host}\n",
+        "host",
+        "UNSIGNED-PAYLOAD",
+    ])
+    to_sign = "\n".join([
+        "AWS4-HMAC-SHA256",
+        timestamp,
+        scope,
+        hashlib.sha256(canonical.encode()).hexdigest(),
+    ])
+    signature = hmac.new(
+        signing_key(values["R2_SECRET_ACCESS_KEY"], stamp),
+        to_sign.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"https://{host}{path}?{query}&X-Amz-Signature={signature}"
+
+
+def presign_put(key: str, *, expires_seconds: int = 3600, now: datetime | None = None) -> str:
+    """Sign an upload into the bucket Publish already configured."""
+    return presigned_put_url(_settings(), key, expires_seconds=expires_seconds, now=now)
+
+
+def get_object(key: str) -> bytes:
+    """Read one object back with the same credentials that signed the upload."""
+    values = _settings()
+    path = f"/{values['R2_BUCKET']}/{quote(key, safe='/')}"
+    request = _signed_request("GET", values, path)
+    try:
+        with urllib.request.urlopen(request, timeout=UPLOAD_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")[:400]
+        raise MediaHostingUnavailable(
+            f"Object storage refused the read ({error.code}): {detail}"
+        ) from error
+    except (OSError, urllib.error.URLError) as error:
+        raise MediaHostingUnavailable(f"Could not reach object storage: {error}") from error
+
+
 def status() -> dict[str, Any]:
     """Report configuration without raising, for a status surface."""
     configured = configured_keys(CREDENTIAL_KEYS)

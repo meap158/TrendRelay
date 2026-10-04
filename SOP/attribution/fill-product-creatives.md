@@ -103,8 +103,14 @@ were attached. Do not read the live listing to fill in a missing key. One
 draft is one garment: the product's own piece, not a collage of unrelated
 tops. A draft can instead feature up to eight products in one shot. Read
 `products`. Each product's `product_images` stay the subject, and
-`subject_assets` are extra when present. Submit the one file once; it links
-to every product in `products`.
+`subject_assets` are extra when present. `product_images` is the set the
+operator kept. When that choice was left unset, it is the full listing
+gallery. Do not add a listing picture that is not in `product_images`.
+Each item in `products` names that product and carries its own `product_images`
+and `listing_fields`. Keep a picture or a field with the product it is listed
+under. The top-level `product_images` and `listing_fields` repeat only the
+first product.
+Submit the one file once; it links to every product in `products`.
 
 A carousel's `card_count` is fixed at confirm, from 2 to 10. It cannot be
 lowered. Generate that many separate images and submit them one at a time,
@@ -112,11 +118,17 @@ in order. Do not submit one picture that contains every card as panels.
 
 ## 4. One draft, then the next
 
-1. Read the draft and generate the file the stored prompt describes. If
+1. Read the draft and generate the file the stored prompt describes. When
+   `products` lists more than one product, each product's `product_images`
+   are the subject and `subject_assets` are extra. Otherwise, if
    `subject_assets` is non-empty, those Library images are the subject
-   (`get_asset_thumbnails`). If it is empty, use `product_images`. Use
-   `background_reference` when it is set. Use `listing_fields` for the keys
-   that are present, and leave out any key that is absent.
+   (`get_asset_thumbnails`). If it is empty, use `product_images`. Do not
+   add a listing picture that is absent from `product_images`. Use
+   `background_reference` when it is set. When `products` lists more than one
+   product, use each product's own `listing_fields` for the keys present on
+   that product. Do not give one product another product's title, price,
+   description, or pictures. Otherwise use the draft's `listing_fields` for
+   the keys that are present, and leave out any key that is absent.
 2. `submit_product_creative_media` once for that file. This upload is part of
    the task, including when you queued the draft yourself in the same turn.
    Video ingest finishes in the same call; do not poll `get_import_status`
