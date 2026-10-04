@@ -93,6 +93,34 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The old key allows one link per card of a draft, so a file shared by
+    # every product in the shot cannot be kept for all of them. Keep the lead
+    # product's link, which is what the older schema stored, and drop the
+    # others before the old key is restored - otherwise the copy that
+    # batch_alter_table makes fails on the first filed group shot.
+    op.execute(
+        """
+        DELETE FROM product_creative_links
+        WHERE EXISTS (
+            SELECT 1
+            FROM product_creative_links AS lead
+            JOIN product_creative_drafts AS draft ON draft.id = lead.draft_id
+            WHERE lead.draft_id = product_creative_links.draft_id
+              AND lead.position = product_creative_links.position
+              AND lead.product_id = draft.product_id
+              AND lead.id <> product_creative_links.id
+        )
+        """
+    )
+    # A card whose lead link is gone keeps one of the others.
+    op.execute(
+        """
+        DELETE FROM product_creative_links
+        WHERE id NOT IN (
+            SELECT MIN(id) FROM product_creative_links GROUP BY draft_id, position
+        )
+        """
+    )
     with op.batch_alter_table("product_creative_links") as batch:
         batch.drop_constraint("unique_product_creative_position", type_="unique")
         batch.create_unique_constraint(
