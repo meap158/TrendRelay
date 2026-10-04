@@ -17,34 +17,56 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import http.client
 import json
+import logging
+import re
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from trendrelay_api.env_store import effective_value, masked_value, write_env_values
 from trendrelay_api.jobs import (
+    cancellation_requested,
     claim_job,
     complete_job,
     create_job_record,
     fail_job,
     get_job_record,
+    heartbeat_job,
+    merge_running_result,
 )
 from trendrelay_api.models import DurableJob
 from trendrelay_api.project_storage import DATA_ROOT
 from trendrelay_api.tool_settings import SettingsError
 
+logger = logging.getLogger(__name__)
+
 JOB_KIND = "video_generation"
+#: Renewed on every status check, so it only has to cover one wait.
 LEASE_SECONDS = 720
 POLL_TIMEOUT_SECONDS = 480
 POLL_INTERVAL_SECONDS = 10
+#: A later attempt only ever resumes a request an earlier one paid for. It
+#: never sends a second one, so retrying costs nothing.
+MAX_ATTEMPTS = 3
+#: Answers a status check or a download can get while the provider is fine:
+#: a slow gateway, a brief overload, a limit on reads.
+_TRANSIENT_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+#: Failed reads in a row before a wait hands over to the job's own retry.
+_TRANSIENT_LIMIT = 5
+#: A broken connection, a timeout, a reset, a truncated body.
+_NETWORK_ERRORS = (OSError, http.client.HTTPException)
+_ERROR_CODES = frozenset({"moderation", "auth", "quota", "unavailable", "transient", "cancelled"})
+_QUERY = re.compile(r"(https?://[^\s\"'?#]+)\?[^\s\"']*")
 #: A subject still, not a video. Large enough for a listing photo.
 MAX_SUBJECT_BYTES = 8_000_000
 CHECKS_PATH = DATA_ROOT / "video-generation" / "checks.json"
@@ -62,6 +84,31 @@ class VideoError(Exception):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
         super().__init__(message)
+
+
+class _Cancelled(Exception):
+    """The operator asked this job to stop."""
+
+
+def _noop(*_args: Any) -> None:
+    return None
+
+
+@dataclass(frozen=True)
+class Progress:
+    """What a running job lets an adapter do between its calls.
+
+    `resume` is the provider's id for a request an earlier attempt already
+    paid for; an adapter given one polls it instead of sending another.
+    `posting` runs just before a paid request leaves, `sent` stores its id
+    as soon as it is known, and `alive` renews the lease and stops the work
+    when the operator cancelled it.
+    """
+
+    resume: str = ""
+    posting: Callable[[], None] = field(default=_noop)
+    sent: Callable[[str], None] = field(default=_noop)
+    alive: Callable[[], None] = field(default=_noop)
 
 
 @dataclass(frozen=True)
@@ -451,11 +498,46 @@ def setup_report() -> dict[str, Any]:
     }
 
 
+def _redact(text: str, limit: int = 300) -> str:
+    """Text a workspace member may read: no query strings, and short.
+
+    A signed upload address carries its credentials in the query string,
+    and a provider can echo the request it was sent.
+    """
+    return _QUERY.sub(r"\1", " ".join(text.split()))[:limit]
+
+
+def _message_in(value: Any) -> str:
+    """The sentence a provider put in its error, wherever it nested it."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("message", "error", "detail", "reason", "status_message"):
+            if key in value:
+                found = _message_in(value[key])
+                if found:
+                    return found
+    if isinstance(value, list) and value:
+        return _message_in(value[0])
+    return ""
+
+
+def _provider_message(raw: str, fallback: str) -> str:
+    try:
+        loaded: Any = json.loads(raw)
+    except (TypeError, ValueError):
+        loaded = raw
+    return _redact(_message_in(loaded) or fallback)
+
+
 def _classify(status: int, body: bytes) -> VideoError | None:
     if 200 <= status < 300:
         return None
-    text = body.decode("utf-8", "replace").strip()[:500] or f"HTTP {status}"
-    lowered = text.lower()
+    raw = body.decode("utf-8", "replace").strip()
+    # The whole answer stays in the operator's log. Members see one sentence.
+    logger.warning("Video provider answered HTTP %s: %s", status, _redact(raw, 2000))
+    text = _provider_message(raw, f"HTTP {status}")
+    lowered = raw.lower()
     if "content-moderated" in lowered or "content moderation" in lowered or "safety" in lowered:
         return VideoError("moderation", text)
     if status in {401, 403}:
@@ -476,8 +558,10 @@ def _json_body(body: bytes) -> dict[str, Any]:
 
 
 def _failure_text(payload: dict[str, Any]) -> VideoError:
-    text = json.dumps(payload)[:500]
-    lowered = text.lower()
+    raw = json.dumps(payload)
+    logger.warning("Video provider reported a failure: %s", _redact(raw, 2000))
+    text = _redact(_message_in(payload) or "The video service stopped without saying why.")
+    lowered = raw.lower()
     if "moderat" in lowered or "safety" in lowered:
         return VideoError("moderation", text)
     return VideoError("unavailable", text)
@@ -502,25 +586,76 @@ def _poll(
     done,
     sleep: Sleep,
     now: Clock,
+    alive: Callable[[], None] = _noop,
 ) -> dict[str, Any]:
     """Poll until `done` returns the payload, or the wait is over.
 
     A pending status is not a retry of a refusal. A refusal raises and the
-    caller stops.
+    caller stops. A dropped connection or an overloaded gateway is not a
+    refusal: the request is already paid for, so the check is simply asked
+    again. Too many in a row, or a wait that runs out, is `transient`, which
+    the job retries by polling the same request.
     """
     started = now()
+    misses = 0
     while True:
-        status, body = call(method, url, headers, None, 30)
-        failed = _classify(status, body)
-        if failed is not None:
-            raise failed
-        payload = _json_body(body)
-        finished = done(payload)
-        if finished is not None:
-            return finished
+        alive()
+        try:
+            status, body = call(method, url, headers, None, 30)
+        except _NETWORK_ERRORS as error:
+            logger.warning("Video status check failed: %s", _redact(str(error)))
+            status, body = 0, b""
+        if status == 0 or status in _TRANSIENT_STATUSES:
+            misses += 1
+            if misses >= _TRANSIENT_LIMIT:
+                raise VideoError(
+                    "transient",
+                    "The video service could not be reached while the video was being made.",
+                )
+        else:
+            misses = 0
+            failed = _classify(status, body)
+            if failed is not None:
+                raise failed
+            finished = done(_json_body(body))
+            if finished is not None:
+                return finished
         if now() - started >= POLL_TIMEOUT_SECONDS:
-            raise VideoError("unavailable", "The video service did not finish in time.")
+            raise VideoError("transient", "The video service did not finish in time.")
         sleep(POLL_INTERVAL_SECONDS)
+
+
+def _fetch_with_retries(
+    fetch: Callable[[], bytes],
+    *,
+    sleep: Sleep,
+    alive: Callable[[], None] = _noop,
+) -> bytes:
+    """Download a finished video, asking again after a failed read.
+
+    The video is paid for by now. Losing it to one reset would mean paying
+    for it again.
+    """
+    last = ""
+    for attempt in range(_TRANSIENT_LIMIT):
+        if attempt:
+            sleep(min(POLL_INTERVAL_SECONDS * attempt, 60))
+        alive()
+        try:
+            data = fetch()
+        except VideoError as error:
+            if error.code != "transient":
+                raise
+            last = str(error)
+            continue
+        except Exception as error:  # noqa: BLE001 - network or storage, both worth another read
+            last = _redact(str(error))
+            logger.warning("Video download failed: %s", last)
+            continue
+        if data:
+            return data
+        last = "The download was empty."
+    raise VideoError("transient", f"The finished video could not be downloaded. {last}".strip())
 
 
 def _xai_headers(key: str) -> dict[str, str]:
@@ -543,6 +678,7 @@ def generate_xai(
     download: Callable[[str], bytes] | None = None,
     sleep: Sleep = time.sleep,
     now: Clock = time.monotonic,
+    progress: Progress | None = None,
 ) -> bytes:
     """Reference-to-video. The still is the garment, not a locked first frame.
 
@@ -557,31 +693,38 @@ def generate_xai(
     key = _key(provider)
     sign = presign or presign_put
     fetch = download or get_object
-    upload_url = sign(object_key, expires_seconds=3600)
-    data_uri = f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}"
-    payload = {
-        "model": provider.model,
-        "prompt": prompt,
-        "duration": provider.duration_seconds,
-        "aspect_ratio": "9:16",
-        "resolution": "720p",
-        "reference_images": [{"url": data_uri}],
-        "output": {"upload_url": upload_url},
-    }
+    progress = progress or Progress()
     call = transport or _transport
-    status, body = call(
-        "POST",
-        f"{XAI_BASE}/videos/generations",
-        _xai_headers(key),
-        json.dumps(payload).encode("utf-8"),
-        60,
-    )
-    failed = _classify(status, body)
-    if failed is not None:
-        raise failed
-    request_id = str(_json_body(body).get("request_id") or "").strip()
+    # The object key is the job's, so a resumed request writes where the
+    # first attempt told it to.
+    request_id = progress.resume
     if not request_id:
-        raise VideoError("unavailable", "The video service did not return a request to follow.")
+        upload_url = sign(object_key, expires_seconds=3600)
+        data_uri = f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}"
+        payload = {
+            "model": provider.model,
+            "prompt": prompt,
+            "duration": provider.duration_seconds,
+            "aspect_ratio": "9:16",
+            "resolution": "720p",
+            "reference_images": [{"url": data_uri}],
+            "output": {"upload_url": upload_url},
+        }
+        progress.posting()
+        status, body = call(
+            "POST",
+            f"{XAI_BASE}/videos/generations",
+            _xai_headers(key),
+            json.dumps(payload).encode("utf-8"),
+            60,
+        )
+        failed = _classify(status, body)
+        if failed is not None:
+            raise failed
+        request_id = str(_json_body(body).get("request_id") or "").strip()
+        if not request_id:
+            raise VideoError("unavailable", "The video service did not return a request to follow.")
+        progress.sent(request_id)
 
     def done(polled: dict[str, Any]) -> dict[str, Any] | None:
         state = str(polled.get("status") or "")
@@ -599,14 +742,9 @@ def generate_xai(
         done=done,
         sleep=sleep,
         now=now,
+        alive=progress.alive,
     )
-    try:
-        found = fetch(object_key)
-    except Exception as error:
-        raise VideoError("unavailable", f"The video was not in the bucket: {error}") from error
-    if not found:
-        raise VideoError("unavailable", "The bucket object was empty.")
-    return found
+    return _fetch_with_retries(lambda: fetch(object_key), sleep=sleep, alive=progress.alive)
 
 
 def generate_gemini(
@@ -619,44 +757,52 @@ def generate_gemini(
     transport: Transport | None = None,
     sleep: Sleep = time.sleep,
     now: Clock = time.monotonic,
+    progress: Progress | None = None,
 ) -> bytes:
     """Image-conditioned video. Gemini returns an address; there is no bucket."""
     # Gemini returns the file itself, so the bucket key the shared adapter
     # passes is unused here.
     del object_key
     key = _key(provider)
+    progress = progress or Progress()
     headers = {
         "x-goog-api-key": key,
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    payload = {
-        "instances": [{
-            "prompt": prompt,
-            "image": {
-                "bytesBase64Encoded": base64.b64encode(image).decode("ascii"),
-                "mimeType": mime,
-            },
-        }],
-        "parameters": {
-            "aspectRatio": "9:16",
-            "durationSeconds": provider.duration_seconds,
-        },
-    }
     call = transport or _transport
-    status, body = call(
-        "POST",
-        f"{GEMINI_BASE}/models/{provider.model}:predictLongRunning",
-        headers,
-        json.dumps(payload).encode("utf-8"),
-        60,
-    )
-    failed = _classify(status, body)
-    if failed is not None:
-        raise failed
-    name = str(_json_body(body).get("name") or "").strip()
+    name = progress.resume
     if not name:
-        raise VideoError("unavailable", "The video service did not return an operation to follow.")
+        payload = {
+            "instances": [{
+                "prompt": prompt,
+                "image": {
+                    "bytesBase64Encoded": base64.b64encode(image).decode("ascii"),
+                    "mimeType": mime,
+                },
+            }],
+            "parameters": {
+                "aspectRatio": "9:16",
+                "durationSeconds": provider.duration_seconds,
+            },
+        }
+        progress.posting()
+        status, body = call(
+            "POST",
+            f"{GEMINI_BASE}/models/{provider.model}:predictLongRunning",
+            headers,
+            json.dumps(payload).encode("utf-8"),
+            60,
+        )
+        failed = _classify(status, body)
+        if failed is not None:
+            raise failed
+        name = str(_json_body(body).get("name") or "").strip()
+        if not name:
+            raise VideoError(
+                "unavailable", "The video service did not return an operation to follow.",
+            )
+        progress.sent(name)
 
     def done(polled: dict[str, Any]) -> dict[str, Any] | None:
         if polled.get("error"):
@@ -673,6 +819,7 @@ def generate_gemini(
         done=done,
         sleep=sleep,
         now=now,
+        alive=progress.alive,
     )
     response = finished.get("response") if isinstance(finished.get("response"), dict) else {}
     samples = (response.get("generateVideoResponse") or {}).get("generatedSamples") or []
@@ -686,13 +833,17 @@ def generate_gemini(
             uri = str(videos[0].get("uri") or "")
     if not uri:
         raise VideoError("unavailable", "The video service finished without a file address.")
-    status, body = call("GET", uri, {"x-goog-api-key": key}, None, 120)
-    failed = _classify(status, body)
-    if failed is not None:
-        raise failed
-    if not body:
-        raise VideoError("unavailable", "The video download was empty.")
-    return body
+
+    def download() -> bytes:
+        status, body = call("GET", uri, {"x-goog-api-key": key}, None, 120)
+        if status in _TRANSIENT_STATUSES:
+            raise VideoError("transient", f"The download answered HTTP {status}.")
+        failed = _classify(status, body)
+        if failed is not None:
+            raise failed
+        return body
+
+    return _fetch_with_retries(download, sleep=sleep, alive=progress.alive)
 
 
 ADAPTERS: dict[str, Callable[..., bytes]] = {
@@ -734,10 +885,59 @@ def _still_owed(view: dict[str, Any]) -> bool:
     return view.get("status") == "pending" and int(view.get("owed") or 0) > 0
 
 
+def _is_draft_job(payload: dict[str, Any], draft_id: str) -> bool:
+    return payload.get("source") != "library" and payload.get("draft_id") == draft_id
+
+
+def _is_library_job(payload: dict[str, Any], asset_id: str) -> bool:
+    return payload.get("source") == "library" and payload.get("subject_asset_id") == asset_id
+
+
+def _create_once(
+    session: Session,
+    workspace_id: str,
+    scope: str,
+    belongs: Callable[[dict[str, Any]], bool],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Insert this scope's next job, or return the one a racing request made.
+
+    The id is derived from the scope and how many jobs it already has, not
+    from the clock. Two clicks that both found nothing in flight therefore
+    name the same row, and the second insert collides instead of queueing a
+    second paid generation.
+    """
+    earlier = sum(
+        1
+        for item in session.scalars(
+            select(DurableJob).where(
+                DurableJob.workspace_key == workspace_id,
+                DurableJob.kind == JOB_KIND,
+            )
+        ).all()
+        if belongs(item.payload if isinstance(item.payload, dict) else {})
+    )
+    seed = f"{workspace_id}:{scope}:{earlier}"
+    job_id = "vid_" + hashlib.sha256(seed.encode()).hexdigest()[:16]
+    try:
+        with session.begin_nested():
+            record = create_job_record(
+                job_id, workspace_id, JOB_KIND, payload,
+                max_attempts=MAX_ATTEMPTS, session=session,
+            )
+    except IntegrityError:
+        record = get_job_record(job_id, session=session)
+        existing = session.get(DurableJob, job_id)
+        record["provider_id"] = ((existing.payload if existing else None) or {}).get("provider_id")
+        return record
+    record["provider_id"] = payload["provider_id"]
+    return record
+
+
 def _inflight(session: Session, workspace_id: str, draft_id: str) -> DurableJob | None:
     for item in _open_jobs(session, workspace_id):
         payload = item.payload if isinstance(item.payload, dict) else {}
-        if payload.get("source") != "library" and payload.get("draft_id") == draft_id:
+        if _is_draft_job(payload, draft_id):
             return item
     return None
 
@@ -745,7 +945,7 @@ def _inflight(session: Session, workspace_id: str, draft_id: str) -> DurableJob 
 def _inflight_library(session: Session, workspace_id: str, asset_id: str) -> DurableJob | None:
     for item in _open_jobs(session, workspace_id):
         payload = item.payload if isinstance(item.payload, dict) else {}
-        if payload.get("source") == "library" and payload.get("subject_asset_id") == asset_id:
+        if _is_library_job(payload, asset_id):
             return item
     return None
 
@@ -793,12 +993,11 @@ def enqueue(
         _subject_bytes(session, workspace_id, asset_id)
     except VideoError as error:
         raise ValueError(str(error)) from error
-    nonce = f"{workspace_id}:{draft_id}:{provider.id}:{datetime.now(UTC).isoformat()}"
-    job_id = "vid_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
-    record = create_job_record(
-        job_id,
+    return _create_once(
+        session,
         workspace_id,
-        JOB_KIND,
+        f"draft:{draft_id}",
+        lambda payload: _is_draft_job(payload, draft_id),
         {
             "draft_id": draft_id,
             "provider_id": provider.id,
@@ -807,11 +1006,7 @@ def enqueue(
             "actor_user_id": actor_user_id,
             "subject_asset_id": asset_id,
         },
-        max_attempts=1,
-        session=session,
     )
-    record["provider_id"] = provider.id
-    return record
 
 
 def enqueue_library(
@@ -842,12 +1037,11 @@ def enqueue_library(
         _subject_bytes(session, workspace_id, asset_id)
     except VideoError as error:
         raise ValueError(str(error)) from error
-    nonce = f"{workspace_id}:{asset_id}:{provider.id}:{datetime.now(UTC).isoformat()}"
-    job_id = "vid_" + hashlib.sha256(nonce.encode()).hexdigest()[:16]
-    record = create_job_record(
-        job_id,
+    return _create_once(
+        session,
         workspace_id,
-        JOB_KIND,
+        f"library:{asset_id}",
+        lambda payload: _is_library_job(payload, asset_id),
         {
             "source": "library",
             "subject_asset_id": asset_id,
@@ -858,11 +1052,32 @@ def enqueue_library(
             "workspace_id": workspace_id,
             "actor_user_id": actor_user_id,
         },
-        max_attempts=1,
-        session=session,
     )
-    record["provider_id"] = provider.id
-    return record
+
+
+def _status_view(item: DurableJob, payload: dict[str, Any]) -> dict[str, Any]:
+    """One generation as the dialog reads it.
+
+    A failure is stored as "code: sentence". The code is split off so the
+    dialog shows the sentence, and `error_code` says which kind it was.
+    """
+    result = item.result if isinstance(item.result, dict) else {}
+    error = item.last_error
+    code = result.get("error_code")
+    if error:
+        prefix, sep, rest = error.partition(": ")
+        if sep and prefix in _ERROR_CODES:
+            code, error = code or prefix, rest
+    return {
+        "id": item.id,
+        "status": item.status,
+        "provider_id": payload.get("provider_id"),
+        "provider_label": payload.get("provider_label"),
+        "error": error,
+        "error_code": code,
+        "asset_id": result.get("asset_id"),
+        "attempt": item.attempt_count,
+    }
 
 
 def generation_status(session: Session, workspace_id: str, draft_id: str) -> dict[str, Any]:
@@ -880,18 +1095,9 @@ def generation_status(session: Session, workspace_id: str, draft_id: str) -> dic
     ).all()
     for item in rows:
         payload = item.payload if isinstance(item.payload, dict) else {}
-        if payload.get("source") == "library" or payload.get("draft_id") != draft_id:
+        if not _is_draft_job(payload, draft_id):
             continue
-        result = item.result if isinstance(item.result, dict) else {}
-        return {
-            "id": item.id,
-            "status": item.status,
-            "provider_id": payload.get("provider_id"),
-            "provider_label": payload.get("provider_label"),
-            "error": item.last_error,
-            "error_code": result.get("error_code"),
-            "asset_id": result.get("asset_id"),
-        }
+        return _status_view(item, payload)
     return {"status": "none"}
 
 
@@ -914,18 +1120,9 @@ def library_generation_status(
     ).all()
     for item in rows:
         payload = item.payload if isinstance(item.payload, dict) else {}
-        if payload.get("source") != "library" or payload.get("subject_asset_id") != asset_id:
+        if not _is_library_job(payload, asset_id):
             continue
-        result = item.result if isinstance(item.result, dict) else {}
-        return {
-            "id": item.id,
-            "status": item.status,
-            "provider_id": payload.get("provider_id"),
-            "provider_label": payload.get("provider_label"),
-            "error": item.last_error,
-            "error_code": result.get("error_code"),
-            "asset_id": result.get("asset_id"),
-        }
+        return _status_view(item, payload)
     return {"status": "none"}
 
 
@@ -993,11 +1190,15 @@ def _run_adapter(
     mime: str,
     object_key: str,
     transport: Transport | None,
+    progress: Progress,
 ) -> bytes:
     adapter = ADAPTERS.get(provider.id)
     if adapter is None:
         raise VideoError("unavailable", f"{provider.label} has no adapter.")
-    return adapter(provider, prompt, image, mime, object_key, transport=transport)
+    return adapter(
+        provider, prompt, image, mime, object_key,
+        transport=transport, progress=progress,
+    )
 
 
 def run_job(
@@ -1009,8 +1210,17 @@ def run_job(
 ) -> None:
     """Claim one generation, call only that provider, and file the video.
 
-    max_attempts is 1 and a VideoError is not retried. A moderation refusal
-    in particular must not be sent again, to this provider or to another.
+    A refusal - moderation, a rejected key, a spent quota, a provider that
+    reports a failed video - is final. A moderation refusal in particular
+    must not be sent again, to this provider or to another.
+
+    Spending happens once. The job marks itself just before the paid request
+    leaves and stores the provider's id as soon as it comes back. A later
+    attempt finds that id and polls the same request, so a dropped
+    connection, a slow provider, a failed download, or a failed import is
+    retried without paying again. An attempt that finds the mark but no id
+    cannot know whether the first request started, and stops rather than
+    risk a second charge.
     """
     from trendrelay_api.database import SessionFactory
     from trendrelay_api.product_creative_drafts import get_draft, submit_media
@@ -1021,102 +1231,150 @@ def run_job(
     except (FileNotFoundError, PermissionError):
         return
     payload = record["payload"] if isinstance(record.get("payload"), dict) else {}
+    earlier = record["result"] if isinstance(record.get("result"), dict) else {}
     provider_id = str(payload.get("provider_id") or "")
+    resume = str(earlier.get("provider_request") or "")
+    state = {"resume": resume, "posted": bool(resume or earlier.get("provider_posting"))}
+    workspace_id = str(payload.get("workspace_id") or "")
+    actor_user_id = str(payload.get("actor_user_id") or "")
+
+    def posting() -> None:
+        state["posted"] = True
+        merge_running_result(job_id, worker_id, {"provider_posting": True}, factory=session_factory)
+
+    def sent(request_id: str) -> None:
+        state["resume"] = request_id
+        merge_running_result(
+            job_id, worker_id, {"provider_request": request_id}, factory=session_factory,
+        )
+
+    def alive() -> None:
+        heartbeat_job(job_id, worker_id, lease_seconds=LEASE_SECONDS, factory=session_factory)
+        if cancellation_requested(job_id, factory=session_factory):
+            raise _Cancelled()
+
+    progress = Progress(resume=resume, posting=posting, sent=sent, alive=alive)
     try:
-        # Switched off in Tools, or its key removed, after this job was queued:
-        # stop here rather than spend.
-        provider = require_ready(provider_id)
+        if state["posted"] and not resume:
+            raise VideoError(
+                "unavailable",
+                "An earlier attempt may already have started this video, so it is not "
+                "sent again. Generate again only if no clip arrives.",
+            )
+        if resume:
+            # Already paid for. Switching the provider off now must not throw
+            # that away; only its key is needed to read the result.
+            provider = PROVIDERS.get(provider_id)
+            if provider is None:
+                raise VideoError("unavailable", f"Unknown video provider {provider_id!r}.")
+        else:
+            # Switched off in Tools, or its key removed, after this job was
+            # queued: stop here rather than spend.
+            provider = require_ready(provider_id)
         if payload.get("source") == "library":
             prompt = payload.get("prompt")
             if not isinstance(prompt, str) or not prompt.strip():
                 raise VideoError("unavailable", "This generation has no prompt.")
             asset_id = str(payload.get("subject_asset_id") or "")
             with session_factory() as session:
-                image, mime = _subject_bytes(session, payload["workspace_id"], asset_id)
+                image, mime = _subject_bytes(session, workspace_id, asset_id)
             object_key = f"library-clips/{asset_id}/{job_id}.mp4"
-            data = _run_adapter(provider, prompt, image, mime, object_key, transport)
+            data = _run_adapter(provider, prompt, image, mime, object_key, transport, progress)
             filed_id = _file_library_clip(
-                str(payload.get("workspace_id") or ""),
-                str(payload.get("actor_user_id") or ""),
-                data,
-                f"{provider.label} video",
+                workspace_id, actor_user_id, data, f"{provider.label} video",
             )
             complete_job(
                 job_id,
                 worker_id,
-                {
-                    "provider_id": provider.id,
-                    "asset_id": filed_id,
-                    "error_code": None,
-                },
+                {"provider_id": provider.id, "asset_id": filed_id, "error_code": None},
                 factory=session_factory,
             )
-        else:
-            with session_factory() as session:
-                view = get_draft(session, payload["workspace_id"], payload["draft_id"])
-                # The draft can be filled from outside while this job waits.
-                # Ask again before anything is paid for.
-                if not _still_owed(view):
-                    raise VideoError(
-                        "unavailable",
-                        "This draft no longer needs a file. Nothing was sent to the provider.",
-                    )
-                image, mime = _subject_bytes(
-                    session, payload["workspace_id"], payload["subject_asset_id"],
-                )
-                prompt = str(view["prompt"])
-            object_key = f"product-clips/{payload['draft_id']}/{job_id}.mp4"
-            data = _run_adapter(provider, prompt, image, mime, object_key, transport)
-            with session_factory() as session:
-                view = get_draft(session, payload["workspace_id"], payload["draft_id"])
-            if not _still_owed(view):
-                # Filled while the provider worked. The clip is paid for, so it
-                # is kept in the Library instead of being dropped.
-                kept_id = _file_library_clip(
-                    str(payload.get("workspace_id") or ""),
-                    str(payload.get("actor_user_id") or ""),
-                    data,
-                    f"{provider.label} video",
-                )
+            return
+        draft_id = str(payload["draft_id"])
+        with session_factory() as session:
+            view = get_draft(session, workspace_id, draft_id)
+            # The draft can be filled from outside while this job waits. Ask
+            # again before anything is paid for.
+            if not resume and not _still_owed(view):
                 raise VideoError(
                     "unavailable",
-                    "This draft was filled while the video was generated. The video is "
-                    f"in the Library as {kept_id}, without a product link.",
+                    "This draft no longer needs a file. Nothing was sent to the provider.",
                 )
-            encoded = base64.b64encode(data).decode("ascii")
-            with session_factory() as session:
-                filed = submit_media(
-                    session,
-                    payload["workspace_id"],
-                    payload["actor_user_id"],
-                    payload["draft_id"],
-                    media_base64=encoded,
-                    filename=f"{provider.id}-clip.mp4",
-                )
-            complete_job(
-                job_id,
-                worker_id,
-                {
-                    "provider_id": provider.id,
-                    "draft_id": payload["draft_id"],
-                    "asset_id": filed.get("asset_id"),
-                    "error_code": None,
-                },
-                factory=session_factory,
+            image, mime = _subject_bytes(session, workspace_id, payload["subject_asset_id"])
+            prompt = str(view["prompt"])
+        object_key = f"product-clips/{draft_id}/{job_id}.mp4"
+        data = _run_adapter(provider, prompt, image, mime, object_key, transport, progress)
+        with session_factory() as session:
+            view = get_draft(session, workspace_id, draft_id)
+        if not _still_owed(view):
+            # Filled while the provider worked. The clip is paid for, so it is
+            # kept in the Library instead of being dropped.
+            kept_id = _file_library_clip(
+                workspace_id, actor_user_id, data, f"{provider.label} video",
             )
+            raise VideoError(
+                "unavailable",
+                "This draft was filled while the video was generated. The video is "
+                f"in the Library as {kept_id}, without a product link.",
+            )
+        encoded = base64.b64encode(data).decode("ascii")
+        with session_factory() as session:
+            filed = submit_media(
+                session,
+                workspace_id,
+                actor_user_id,
+                draft_id,
+                media_base64=encoded,
+                filename=f"{provider.id}-clip.mp4",
+            )
+        complete_job(
+            job_id,
+            worker_id,
+            {
+                "provider_id": provider.id,
+                "draft_id": draft_id,
+                "asset_id": filed.get("asset_id"),
+                "error_code": None,
+            },
+            factory=session_factory,
+        )
+    except PermissionError:
+        # The lease was lost to another worker, which now owns the job.
+        return
+    except _Cancelled:
+        _fail(job_id, worker_id, "cancelled: The generation was stopped.", False, session_factory)
     except VideoError as error:
-        fail_job(
-            job_id,
-            worker_id,
-            f"{error.code}: {error}",
-            retry_allowed=False,
-            factory=session_factory,
-        )
-    except Exception as error:
-        fail_job(
-            job_id,
-            worker_id,
-            f"unavailable: {error}",
-            retry_allowed=False,
-            factory=session_factory,
-        )
+        # Only a paid request is worth another attempt, and only for a
+        # failure that is not the provider's answer.
+        retry = error.code == "transient" and bool(state["resume"])
+        _fail(job_id, worker_id, f"{error.code}: {error}", retry, session_factory)
+    except Exception as error:  # noqa: BLE001 - the job must end in a state the operator can read
+        logger.exception("Video generation %s failed", job_id)
+        if state["posted"] and not state["resume"]:
+            message = (
+                "unavailable: The request to the video service did not complete "
+                f"({_redact(str(error), 160)}). It may have started anyway, "
+                "so it is not sent again."
+            )
+            _fail(job_id, worker_id, message, False, session_factory)
+        else:
+            # A download, a storage write, or the import failed. With the
+            # request stored, the next attempt reads the same video again.
+            _fail(
+                job_id, worker_id, f"unavailable: {_redact(str(error))}",
+                bool(state["resume"]), session_factory,
+            )
+
+
+def _fail(
+    job_id: str,
+    worker_id: str,
+    message: str,
+    retry: bool,
+    factory: sessionmaker[Session],
+) -> None:
+    try:
+        fail_job(job_id, worker_id, message, retry_allowed=retry, factory=factory)
+    except PermissionError:
+        # Another worker took the lease; its outcome stands.
+        return

@@ -8,6 +8,7 @@ provider. xAI stays off the list while the Publish bucket is missing.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -158,7 +159,7 @@ def test_the_job_records_the_provider_the_operator_picked(values, tmp_path) -> N
         stored = session.get(DurableJob, job["id"])
         assert stored is not None
         assert stored.payload["provider_id"] == "gemini"
-        assert stored.max_attempts == 1
+        assert stored.max_attempts == video.MAX_ATTEMPTS
 
 
 def test_a_second_enqueue_does_not_start_another_job(values, tmp_path) -> None:
@@ -365,7 +366,7 @@ def test_a_library_job_records_the_prompt_and_the_provider(values, tmp_path) -> 
     with Session() as session:
         stored = session.get(DurableJob, job["id"])
         assert stored is not None
-        assert stored.max_attempts == 1
+        assert stored.max_attempts == video.MAX_ATTEMPTS
         assert stored.payload["source"] == "library"
         assert stored.payload["prompt"] == prompt
         assert stored.payload["provider_id"] == "xai"
@@ -441,7 +442,7 @@ def test_a_library_job_files_a_clip_without_a_product_draft(values, tmp_path, mo
     calls: list[tuple[str, str, str]] = []
     filed: list[tuple[str, str, bytes, str]] = []
 
-    def xai_adapter(provider, prompt, image, mime, object_key, transport=None):
+    def xai_adapter(provider, prompt, image, mime, object_key, transport=None, progress=None):
         calls.append((provider.id, prompt, object_key))
         return b"\x00\x00\x00\x18ftypisom"
 
@@ -474,7 +475,7 @@ def test_a_library_job_files_a_clip_without_a_product_draft(values, tmp_path, mo
         assert stored is not None
         assert stored.status == "succeeded"
         assert stored.result["asset_id"] == "asset-new"
-        assert stored.max_attempts == 1
+        assert stored.max_attempts == video.MAX_ATTEMPTS
 
 
 def test_library_generation_without_confirmation_is_refused() -> None:
@@ -507,3 +508,173 @@ def test_library_generation_without_confirmation_is_refused() -> None:
 
     assert response.status_code == 400
     assert "confirmation" in response.text.lower()
+
+
+def _make_available(job_id: str) -> None:
+    """Skip the retry wait so the test can claim the next attempt now."""
+    with Session.begin() as session:
+        stored = session.get(DurableJob, job_id)
+        assert stored is not None
+        stored.available_at = datetime.now(UTC) - timedelta(seconds=1)
+
+
+def test_a_dropped_status_check_is_asked_again_not_lost(values) -> None:
+    """The POST is paid for. A reset while polling must not throw the clip away."""
+    values["GEMINI_API_KEY"] = "g" * 20
+    answers: list[object] = [
+        (200, b'{"name":"operations/op-1"}'),
+        OSError("connection reset"),
+        (503, b"busy"),
+        (200, b'{"done":true,"response":{"videos":[{"uri":"https://files.example/v.mp4"}]}}'),
+        OSError("timed out"),
+        (200, b"\x00\x00\x00\x18ftypisom"),
+    ]
+    methods: list[str] = []
+
+    def transport(method, url, headers, body, timeout):
+        methods.append(method)
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    data = video.generate_gemini(
+        video.PROVIDERS["gemini"], "A silent hallway.", b"\xff\xd8\xff\x00", "image/jpeg",
+        transport=transport, sleep=lambda _seconds: None, now=lambda: 0,
+    )
+
+    assert data.startswith(b"\x00\x00\x00\x18ftyp")
+    assert methods.count("POST") == 1
+
+
+def test_a_resumed_request_is_polled_and_never_sent_again(values) -> None:
+    values["GEMINI_API_KEY"] = "g" * 20
+    seen: list[tuple[str, str]] = []
+
+    def transport(method, url, headers, body, timeout):
+        seen.append((method, url))
+        if url.endswith("operations/op-1"):
+            return 200, b'{"done":true,"response":{"videos":[{"uri":"https://files.example/v.mp4"}]}}'
+        return 200, b"\x00\x00\x00\x18ftypisom"
+
+    video.generate_gemini(
+        video.PROVIDERS["gemini"], "A silent hallway.", b"\xff\xd8\xff\x00", "image/jpeg",
+        transport=transport, sleep=lambda _seconds: None, now=lambda: 0,
+        progress=video.Progress(resume="operations/op-1"),
+    )
+
+    assert [method for method, _url in seen] == ["GET", "GET"]
+
+
+def test_a_paid_request_that_fails_to_arrive_resumes_on_the_next_attempt(
+    values, tmp_path, monkeypatch,
+) -> None:
+    _ready(values, "gemini")
+    _seed(tmp_path)
+    resumed: list[str] = []
+
+    def adapter(provider, prompt, image, mime, object_key, transport=None, progress=None):
+        assert progress is not None
+        if not progress.resume:
+            progress.posting()
+            progress.sent("operations/op-1")
+            raise video.VideoError("transient", "The video service did not finish in time.")
+        resumed.append(progress.resume)
+        return b"\x00\x00\x00\x18ftypisom"
+
+    filed: list[str] = []
+
+    def submit_media(_session, _workspace, _actor, draft_id, **_kwargs):
+        filed.append(draft_id)
+        return {"asset_id": "asset-clip"}
+
+    monkeypatch.setitem(video.ADAPTERS, "gemini", adapter)
+    monkeypatch.setattr("trendrelay_api.product_creative_drafts.submit_media", submit_media)
+    with Session.begin() as session:
+        job = video.enqueue(session, "ws", "owner", "draft-1", "gemini")
+
+    video.run_job(job["id"], factory=Session)
+    with Session() as session:
+        stored = session.get(DurableJob, job["id"])
+        assert stored is not None
+        assert stored.status == "queued"
+        assert stored.result["provider_request"] == "operations/op-1"
+
+    _make_available(job["id"])
+    video.run_job(job["id"], factory=Session)
+
+    assert resumed == ["operations/op-1"]
+    assert filed == ["draft-1"]
+    with Session() as session:
+        stored = session.get(DurableJob, job["id"])
+        assert stored is not None
+        assert stored.status == "succeeded"
+
+
+def test_a_request_that_may_have_started_is_not_sent_twice(values, tmp_path, monkeypatch) -> None:
+    """Marked as sending, with no id back: the next attempt cannot know, so it stops."""
+    _ready(values, "gemini")
+    _seed(tmp_path)
+
+    def adapter(provider, prompt, image, mime, object_key, transport=None, progress=None):
+        assert progress is not None
+        progress.posting()
+        raise OSError("connection reset")
+
+    monkeypatch.setitem(video.ADAPTERS, "gemini", adapter)
+    with Session.begin() as session:
+        job = video.enqueue(session, "ws", "owner", "draft-1", "gemini")
+
+    video.run_job(job["id"], factory=Session)
+
+    with Session() as session:
+        stored = session.get(DurableJob, job["id"])
+        assert stored is not None
+        assert stored.status == "failed"
+        assert "not sent again" in (stored.last_error or "")
+
+
+def test_a_double_click_names_the_same_job(values, tmp_path, monkeypatch) -> None:
+    """Two requests that both saw nothing in flight collide on one id."""
+    _ready(values, "gemini")
+    _ready(values, "xai")
+    _seed(tmp_path)
+    with Session.begin() as session:
+        first = video.enqueue(session, "ws", "owner", "draft-1", "gemini")
+    # The second request read before the first committed: it finds no job in
+    # flight and counts none before it.
+    monkeypatch.setattr(video, "_inflight", lambda *_args: None)
+    monkeypatch.setattr(video, "_is_draft_job", lambda *_args: False)
+    with Session.begin() as session:
+        second = video.enqueue(session, "ws", "owner", "draft-1", "xai")
+
+    assert second["id"] == first["id"]
+    assert second["provider_id"] == "gemini"
+    with Session() as session:
+        assert len(session.scalars(select(DurableJob)).all()) == 1
+
+
+def test_a_failure_shows_one_redacted_sentence_and_its_code(values, tmp_path) -> None:
+    body = (
+        b'{"error":{"message":"Upload to https://bucket.example/put?X-Amz-Signature=secret failed",'
+        b'"request":{"prompt":"long"}}}'
+    )
+    refused = video._classify(500, body)
+
+    assert refused is not None
+    assert "X-Amz" not in str(refused)
+    assert str(refused) == "Upload to https://bucket.example/put failed"
+
+    _seed(tmp_path)
+    with Session.begin() as session:
+        session.add(DurableJob(
+            id="vid_x", workspace_key="ws", kind=video.JOB_KIND, status="failed",
+            payload={"draft_id": "draft-1", "provider_id": "xai"},
+            attempt_count=1, max_attempts=3, cancellation_requested=False,
+            last_error="moderation: Generated video rejected by content moderation.",
+        ))
+    with Session() as session:
+        status = video.generation_status(session, "ws", "draft-1")
+
+    assert status["error_code"] == "moderation"
+    assert status["error"] == "Generated video rejected by content moderation."
