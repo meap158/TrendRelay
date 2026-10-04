@@ -497,19 +497,19 @@
 .shopee-import-campaigns > small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 /* The reviewed prompt is the point of the Generate dialog. Monospace so a
    long script can be read before it is queued. */
-.campaign-dialog-form .generate-providers {
+.generate-dialog .campaign-dialog-form .generate-providers {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.campaign-dialog-form .generate-prompt textarea {
+.generate-dialog .campaign-dialog-form .generate-prompt textarea {
   min-height: 180px;
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   line-height: 1.45;
   white-space: pre-wrap;
 }
-.campaign-dialog-form .generate-send {
+.generate-dialog .campaign-dialog-form .generate-send {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel);
@@ -524,7 +524,7 @@
   border-block-start: 1px solid var(--line);
   background: var(--panel-raised);
 }
-.campaign-dialog-form .generate-send > summary {
+.generate-dialog .campaign-dialog-form .generate-send > summary {
   cursor: pointer;
   min-block-size: 32px;
   padding: 8px 10px;
@@ -532,7 +532,7 @@
   font-size: 12px;
   font-weight: 600;
 }
-.campaign-dialog-form .generate-send > summary:focus-visible {
+.generate-dialog .campaign-dialog-form .generate-send > summary:focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 1px;
 }
@@ -549,14 +549,14 @@
   border-block-start: 1px solid var(--line);
 }
 .generate-send-product > .generate-member-name { font-weight: 600; }
-.campaign-dialog-form .generate-attached {
+.generate-dialog .campaign-dialog-form .generate-attached {
   display: grid;
   gap: 8px;
   margin: 0;
   padding-block-start: 2px;
   border-block-start: 1px solid var(--line);
 }
-.campaign-dialog-form .generate-attached > p {
+.generate-dialog .campaign-dialog-form .generate-attached > p {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
@@ -566,15 +566,15 @@
 /* What this ask attaches, named, so a long listing is not mistaken for the
    subject. Selected listing values follow the prompt, so they do not push it
    down. */
-.campaign-dialog-form .generate-uses {
+.generate-dialog .campaign-dialog-form .generate-uses {
   display: grid;
   gap: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
 }
-.campaign-dialog-form .generate-uses h3,
-.campaign-dialog-form .generate-omitted > strong {
+.generate-dialog .campaign-dialog-form .generate-uses h3,
+.generate-dialog .campaign-dialog-form .generate-omitted > strong {
   margin: 0;
   color: var(--muted);
   font-size: 10px;
@@ -582,18 +582,18 @@
   letter-spacing: .04em;
   text-transform: uppercase;
 }
-.campaign-dialog-form .generate-uses > p,
-.campaign-dialog-form .generate-use p,
-.campaign-dialog-form .generate-omitted > p,
-.campaign-dialog-form .generate-background-none {
+.generate-dialog .campaign-dialog-form .generate-uses > p,
+.generate-dialog .campaign-dialog-form .generate-use p,
+.generate-dialog .campaign-dialog-form .generate-omitted > p,
+.generate-dialog .campaign-dialog-form .generate-background-none {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.45;
 }
-.campaign-dialog-form .generate-use { display: grid; gap: 6px; }
-.campaign-dialog-form .generate-use > strong { color: var(--text); font-size: 12px; }
+.generate-dialog .campaign-dialog-form .generate-use { display: grid; gap: 6px; }
+.generate-dialog .campaign-dialog-form .generate-use > strong { color: var(--text); font-size: 12px; }
 .generate-subject-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .generate-subject-list li { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .generate-subject-list li > span {
@@ -609,7 +609,7 @@
 .generate-subject-list .picker-thumb { flex: 0 0 auto; width: 76px; height: 44px; }
 .generate-subject-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .generate-subject-actions small { color: var(--muted); font-size: 11px; font-weight: 400; }
-.campaign-dialog-form .generate-omitted { display: grid; gap: 6px; }
+.generate-dialog .campaign-dialog-form .generate-omitted { display: grid; gap: 6px; }
 .generate-omitted ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .generate-omitted li { margin: 0; padding: 0; }
 .generate-omitted button {
@@ -679,12 +679,12 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
-.campaign-dialog-form label.generate-picture-all {
+.generate-dialog .campaign-dialog-form label.generate-picture-all {
   color: var(--text);
   font-size: 12px;
   font-weight: 400;
 }
-.campaign-dialog-form label.generate-picture-all > span.generate-member-name {
+.generate-dialog .campaign-dialog-form label.generate-picture-all > span.generate-member-name {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -699,7 +699,7 @@
   padding: 0;
   list-style: none;
 }
-.campaign-dialog-form .generate-picture-choices label {
+.generate-dialog .campaign-dialog-form .generate-picture-choices label {
   position: relative;
   display: block;
   inline-size: 64px;
@@ -709,14 +709,14 @@
   cursor: pointer;
 }
 .generate-picture-choices img,
-.campaign-dialog-form .generate-picture-choices img {
+.generate-dialog .campaign-dialog-form .generate-picture-choices img {
   inline-size: 64px;
   block-size: 64px;
   object-fit: cover;
   border-radius: var(--radius-sm);
   background: var(--panel-raised);
 }
-.campaign-dialog-form .generate-picture-choices input[type="checkbox"] {
+.generate-dialog .campaign-dialog-form .generate-picture-choices input[type="checkbox"] {
   position: absolute;
   z-index: 1;
   inline-size: 16px;
@@ -869,11 +869,11 @@
     min-block-size: 44px;
     padding-inline: 12px;
   }
-  .campaign-dialog-form label.generate-picture-all {
+  .generate-dialog .campaign-dialog-form label.generate-picture-all {
     align-items: center;
     min-block-size: 44px;
   }
-  .campaign-dialog-form .generate-send > summary {
+  .generate-dialog .campaign-dialog-form .generate-send > summary {
     display: flex;
     align-items: center;
     min-block-size: 44px;
