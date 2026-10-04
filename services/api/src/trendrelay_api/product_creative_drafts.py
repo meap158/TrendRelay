@@ -892,6 +892,15 @@ def submit_media(
     staged = [str(item) for item in (draft.staged_asset_ids or [])]
     if asset_id not in staged:
         staged.append(asset_id)
+    # Another submit can land while this file is ingested, and the session
+    # keeps what it read before (expire_on_commit is off). Read the row again
+    # so that submit is seen rather than overwritten.
+    session.refresh(draft)
+    if draft.status != "pending" or _owed(draft) <= 0:
+        raise ValueError(
+            "This draft was filled while this file was imported. The file is in "
+            f"the Library as {asset_id} and is not linked to a product."
+        )
         draft.staged_asset_ids = staged
     draft.updated_at = utc_now()
     if len(staged) < draft.card_count:

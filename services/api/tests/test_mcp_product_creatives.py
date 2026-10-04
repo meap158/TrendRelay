@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import trendrelay_api.main  # noqa: F401 - registers every model on Base
-from trendrelay_api import media_library
+from trendrelay_api import media_library, product_creative_drafts
 from trendrelay_api.attribution_products import products_payload
 from trendrelay_api.auth import LOCAL_ADMIN_ID
 from trendrelay_api.integrations.mcp import policy, product_creatives
@@ -270,6 +270,41 @@ def test_a_carousel_stays_unlinked_until_every_card_lands(session, monkeypatch, 
         if row["id"] == "product-1"
     )
     assert len(product["creative_assets"]) == 2
+
+
+def test_a_submit_that_lands_during_ingest_is_not_overwritten(session, monkeypatch, tmp_path) -> None:
+    """The session keeps its first read. Without a fresh one the draft took two files."""
+    _allow_roots(monkeypatch, tmp_path)
+    _fake_process(monkeypatch)
+    made = product_creatives.create_draft(
+        session, "ws-1", product_id="product-1", kind="image", recipe="bed_flat_lay",
+    )
+    real_ingest = product_creative_drafts._ingest
+    nested: list[dict] = []
+    started: list[bool] = []
+
+    def ingest(*args, **kwargs):
+        asset_id = real_ingest(*args, **kwargs)
+        if not started:
+            started.append(True)
+            with Session() as other:
+                nested.append(product_creatives.submit_media(
+                    other, "ws-1", made["id"], media_base64=_png(9), filename="other.png",
+                ))
+        return asset_id
+
+    monkeypatch.setattr(product_creative_drafts, "_ingest", ingest)
+    with pytest.raises(ValueError, match="filled while this file was imported"):
+        product_creatives.submit_media(
+            session, "ws-1", made["id"], media_base64=_png(8), filename="mine.png",
+        )
+
+    assert nested[0]["linked"] is True
+    draft = session.get(ProductCreativeDraft, made["id"])
+    assert draft is not None
+    session.refresh(draft)
+    assert draft.staged_asset_ids == [nested[0]["asset_id"]]
+    assert len(session.scalars(select(ProductCreativeLink)).all()) == 1
 
 
 def test_completion_without_media_is_refused(session) -> None:
