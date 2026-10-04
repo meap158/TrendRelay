@@ -1194,6 +1194,7 @@ export const ja: Messages = {
       generationRunning: "この下書きの生成はすでに実行中です。",
       generationRetrying: "プロバイダーが時間内に応答しませんでした。同じリクエストをもう一度確認しているため、二重に課金されることはありません。",
       groupLabel: "グループ {number}",
+      selectGroup: "{group} の商品をすべて選択",
       allInThisGroup: "すべてこのグループ内",
       listedAbove: "{count, plural, other {# 件は {groups} に表示}}",
       generatedHelp: "この商品のためにここで作成。ショップの掲載内容ではありません。",

@@ -1196,6 +1196,7 @@ export const ar: Messages = {
       generationRunning: "يجري إنشاء لهذه المسودة بالفعل.",
       generationRetrying: "لم يردّ المزوّد في الوقت المحدد. يُعاد فحص الطلب نفسه، فلا يُدفع ثمنه مرتين.",
       groupLabel: "المجموعة {number}",
+      selectGroup: "تحديد كل المنتجات في {group}",
       allInThisGroup: "كلها في هذه المجموعة",
       listedAbove: "{count, plural, zero {لا شيء معروض ضمن {groups}} one {واحد معروض ضمن {groups}} two {اثنان معروضان ضمن {groups}} few {# معروضة ضمن {groups}} many {# معروضًا ضمن {groups}} other {# معروض ضمن {groups}}}",
       generatedHelp: "أُنشئت هنا لهذا المنتج. ليست جزءًا من قائمة المتجر.",

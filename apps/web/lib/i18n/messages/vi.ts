@@ -1194,6 +1194,7 @@ export const vi: Messages = {
       generationRunning: "Bản nháp này đang được tạo.",
       generationRetrying: "Nhà cung cấp chưa phản hồi kịp. Cùng yêu cầu đó đang được kiểm tra lại, nên không bị tính phí hai lần.",
       groupLabel: "Nhóm {number}",
+      selectGroup: "Chọn mọi sản phẩm trong {group}",
       allInThisGroup: "đều trong nhóm này",
       listedAbove: "{count, plural, other {# hiện trong {groups}}}",
       generatedHelp: "Tạo tại đây cho sản phẩm này. Không thuộc trang bán của shop.",

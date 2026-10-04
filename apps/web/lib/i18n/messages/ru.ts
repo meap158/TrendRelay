@@ -1207,6 +1207,7 @@ export const ru: Messages = {
       generationRunning: "Для этого черновика генерация уже идёт.",
       generationRetrying: "Провайдер не ответил вовремя. Тот же запрос проверяется снова, поэтому повторной оплаты не будет.",
       groupLabel: "Группа {number}",
+      selectGroup: "Выбрать все товары в {group}",
       allInThisGroup: "все в этой группе",
       listedAbove: "{count, plural, one {# показан в {groups}} few {# показаны в {groups}} many {# показаны в {groups}} other {# показаны в {groups}}}",
       generatedHelp: "Сделано здесь для этого товара. Не часть страницы магазина.",

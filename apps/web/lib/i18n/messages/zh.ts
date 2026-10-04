@@ -1181,6 +1181,7 @@ export const zh: Messages = {
       generationRunning: "这个草稿已经在生成中。",
       generationRetrying: "服务商未及时响应。正在重新查询同一个请求，因此不会重复计费。",
       groupLabel: "第 {number} 组",
+      selectGroup: "选择{group}中的所有商品",
       allInThisGroup: "都在本组",
       listedAbove: "{count, plural, other {# 个显示在{groups}下}}",
       generatedHelp: "在这里为此商品制作，不属于店铺商品页。",

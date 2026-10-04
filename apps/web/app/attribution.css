@@ -917,6 +917,7 @@
   cursor: default;
 }
 .product-draft-group-label > .product-group-chip { margin-inline-start: 0; }
+.product-group-choose { display: inline-grid; flex: none; place-items: center; inline-size: 24px; }
 .product-table > tbody > tr[data-group-focus] > * { background: color-mix(in srgb, var(--link) 9%, var(--panel)); }
 .product-draft-group-label {
   display: flex;
@@ -924,7 +925,7 @@
   align-items: center;
   gap: 4px 10px;
   position: sticky;
-  inset-inline-start: 34px;
+  inset-inline-start: 0;
   z-index: 1;
   max-inline-size: min(72rem, calc(100vw - 96px));
   overflow-wrap: anywhere;

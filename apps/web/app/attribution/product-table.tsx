@@ -444,6 +444,46 @@ export function ProductTable({
     });
   }
 
+  /**
+   * Every product of one group shot that is on screen, on or off together.
+   *
+   * Members listed under another band are included: the group is the set,
+   * wherever its rows are drawn. The selection ceiling still applies.
+   */
+  function groupMembers(draftId: string): string[] {
+    return shown
+      .filter((row) => (row.creative_drafts ?? []).some((draft) => draft.id === draftId))
+      .map((row) => row.id);
+  }
+
+  function chooseGroup(draftId: string, on: boolean) {
+    const members = groupMembers(draftId);
+    setPicked((current) => {
+      const next = new Set(current);
+      for (const id of members) {
+        if (!on) next.delete(id);
+        else if (next.size < SELECTION_LIMIT) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  /** The tri-state box on a group's band: all, some, or none of it chosen. */
+  function groupBox(draftId: string, label: string) {
+    const members = groupMembers(draftId);
+    const chosen = members.filter((id) => picked.has(id)).length;
+    return (
+      <span className="product-group-choose">
+        <SelectionCheckbox
+          aria-label={t("attribution.generate.selectGroup", { group: label })}
+          checked={members.length > 0 && chosen === members.length}
+          indeterminate={chosen > 0 && chosen < members.length}
+          onChange={(event) => chooseGroup(draftId, event.target.checked)}
+        />
+      </span>
+    );
+  }
+
   /** Everything on screen, which is what a search has narrowed it to. */
   function chooseShown(all: boolean) {
     setPicked(all ? new Set(shown.slice(0, SELECTION_LIMIT).map((row) => row.id)) : new Set());
@@ -831,6 +871,7 @@ export function ProductTable({
                     const lead = section.products[0];
                     return (
                       <span className="product-draft-group-label">
+                        {groupBox(draft.id, groupName(t, draft.group_number))}
                         <CreativeMedia
                           assets={draftAssets(lead, draft.id)}
                           owed={pending ? draft.owed : 0}
@@ -892,6 +933,7 @@ export function ProductTable({
                       .some((entry) => entry.id === draft.id)) ?? section.products[0];
                     return (
                       <span key={draft.id} className="product-draft-group-label product-draft-group-also">
+                        {groupBox(draft.id, groupName(t, draft.group_number))}
                         <CreativeMedia
                           assets={draftAssets(lead, draft.id)}
                           owed={pending ? draft.owed : 0}
@@ -1223,4 +1265,11 @@ function groupsOf(product: ProductRow): number[] {
     .map((draft) => ((draft.product_count ?? 0) > 1 ? draft.group_number ?? null : null))
     .filter((number): number is number => number !== null))]
     .sort((a, b) => a - b);
+}
+
+/** "Group 2", or plain Together for a shot without a number. */
+function groupName(t: ReturnType<typeof useT>, number?: number | null): string {
+  return number
+    ? t("attribution.generate.groupLabel", { number })
+    : t("attribution.generate.draftGroupTogether");
 }

@@ -1206,6 +1206,7 @@ export const fr: Messages = {
       generationRunning: "Une génération est déjà en cours pour ce brouillon.",
       generationRetrying: "Le fournisseur n’a pas répondu à temps. La même demande est vérifiée de nouveau, elle n’est donc pas payée deux fois.",
       groupLabel: "Groupe {number}",
+      selectGroup: "Sélectionner tous les produits de {group}",
       allInThisGroup: "tous dans ce groupe",
       listedAbove: "{count, plural, one {# affiché sous {groups}} other {# affichés sous {groups}}}",
       generatedHelp: "Créé ici pour ce produit. Ne fait pas partie de la fiche boutique.",

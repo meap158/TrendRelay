@@ -1198,6 +1198,7 @@ export const en = {
       generationRunning: "A generation is already running for this draft.",
       generationRetrying: "The provider did not answer in time. The same request is being checked again, so it is not paid for twice.",
       groupLabel: "Group {number}",
+      selectGroup: "Select every product in {group}",
       allInThisGroup: "all in this group",
       listedAbove: "{count, plural, one {# shown under {groups}} other {# shown under {groups}}}",
       generatedHelp: "Made here for this product. Not part of its shop listing.",
