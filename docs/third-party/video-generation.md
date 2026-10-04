@@ -73,9 +73,31 @@ the effect stack, and it is not an OpenMontage clip plan.
 Storytelling's "Make the video" still assembles stills, voice, and stock
 on this machine. Nothing is published.
 
+A draft that features several products is refused before anything is sent:
+a provider is sent one image, so a group shot would show none of the
+products' own pictures. Its file comes from outside.
+
 ## When a generation is refused
 
 The draft shows the service's message and stops. There is no second
 attempt, no rewritten prompt, and no cropping of the subject. Auth, quota,
-moderation, and unavailable are the four names, and the service's own
-words stay with them.
+moderation, and unavailable are the names, and the service's own sentence
+stays with them. Members see that one sentence with any address's query
+string removed; the full answer is in the server log.
+
+## When the network fails after the request was paid for
+
+A generation is paid for when its request is accepted. The job marks
+itself just before that request leaves and stores the provider's request
+id as soon as it comes back. Status checks and the download ride out a
+dropped connection or a 5xx/429 answer and ask again. If the job still
+fails - a long outage, a failed download, a failed import - it is retried
+up to three attempts, and every retry polls the stored request rather than
+sending a new one. A job that marked itself but never got an id back
+cannot tell whether the request started, so it stops instead of risking a
+second charge. These failures are named transient. Each status check
+renews the job's lease and honours a cancel.
+
+A draft filled from outside while its job waited is not sent at all. A
+draft filled while the provider was working keeps the paid clip as a
+Library video without a product link.
