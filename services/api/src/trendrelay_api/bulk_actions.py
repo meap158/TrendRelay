@@ -107,11 +107,15 @@ def _delete_asset(workspace_id: str, asset: AssetView, factory: Any = None) -> d
     except OSError:
         directory = None
 
+    from trendrelay_api.product_creative_drafts import forget_asset
+
     session_factory = factory or SessionFactory
     with session_factory.begin() as session:
         session.execute(
             delete(MediaAssetVersion).where(MediaAssetVersion.asset_id == asset.id)
         )
+        # Attribution links and staged carousel cards point at this asset.
+        forget_asset(session, workspace_id, asset.id)
         session.execute(
             delete(MediaAsset).where(
                 MediaAsset.workspace_id == workspace_id, MediaAsset.id == asset.id

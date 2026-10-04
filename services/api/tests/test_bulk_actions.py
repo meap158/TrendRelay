@@ -328,6 +328,38 @@ def test_delete_also_removes_the_version_rows(store, tmp_path, monkeypatch) -> N
     assert remaining == []
 
 
+def test_delete_unlinks_the_asset_from_attribution_creatives(store, tmp_path, monkeypatch) -> None:
+    """SQLite does not enforce the declared cascade, so the delete does it.
+
+    A filed creative stops listing the gone file, and a carousel that had it
+    staged owes that card again instead of linking a file that is not there.
+    """
+    from sqlalchemy import select
+
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    _library_asset(store, tmp_path, monkeypatch)
+    with store.begin() as session:
+        session.add(ProductCreativeLink(
+            id="link-1", workspace_id="w1", product_id="p1", asset_id="a1",
+            draft_id="d-filed", position=0,
+        ))
+        session.add(ProductCreativeDraft(
+            id="d-carousel", workspace_id="w1", product_id="p1", kind="carousel",
+            recipe="bed_flat_lay", prompt="Cards.", card_count=2, status="pending",
+            subject_asset_ids=[], listing_fields={}, staged_asset_ids=["a1"],
+            created_by="tester",
+        ))
+
+    bulk_actions.run("w1", "delete", ["a1"], factory=store)
+
+    with store() as session:
+        assert session.scalars(select(ProductCreativeLink)).all() == []
+        carousel = session.get(ProductCreativeDraft, "d-carousel")
+        assert carousel is not None
+        assert carousel.staged_asset_ids == []
+
+
 def test_delete_is_held_to_the_stricter_roles() -> None:
     """Editors can blur, which is reversible; deleting is not."""
     assert bulk_actions.resolve("delete").roles == frozenset({"owner", "approver"})

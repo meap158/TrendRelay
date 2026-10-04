@@ -272,7 +272,36 @@ def test_a_carousel_stays_unlinked_until_every_card_lands(session, monkeypatch, 
     assert len(product["creative_assets"]) == 2
 
 
-def test_a_submit_that_lands_during_ingest_is_not_overwritten(session, monkeypatch, tmp_path) -> None:
+def test_a_staged_card_that_left_the_library_is_owed_again(session, monkeypatch, tmp_path) -> None:
+    """The last card must not link a set that includes a file which is gone."""
+    _allow_roots(monkeypatch, tmp_path)
+    _fake_process(monkeypatch)
+    made = product_creatives.create_draft(
+        session, "ws-1",
+        product_id="product-1", kind="carousel", recipe="bed_flat_lay", card_count=2,
+    )
+    first = product_creatives.submit_media(
+        session, "ws-1", made["id"], media_base64=_png(5), filename="card-1.png",
+    )
+    gone = session.get(MediaAsset, first["asset_id"])
+    assert gone is not None
+    session.delete(gone)
+    session.commit()
+
+    second = product_creatives.submit_media(
+        session, "ws-1", made["id"], media_base64=_png(6), filename="card-2.png",
+    )
+
+    assert second["status"] == "pending"
+    assert second["linked"] is False
+    assert second["owed"] == 1
+    assert second["ingested_asset_ids"] == [second["asset_id"]]
+    assert session.scalars(select(ProductCreativeLink)).all() == []
+
+
+def test_a_submit_that_lands_during_ingest_is_not_overwritten(
+    session, monkeypatch, tmp_path,
+) -> None:
     """The session keeps its first read. Without a fresh one the draft took two files."""
     _allow_roots(monkeypatch, tmp_path)
     _fake_process(monkeypatch)

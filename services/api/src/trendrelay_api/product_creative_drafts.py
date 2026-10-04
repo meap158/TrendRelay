@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.config import get_settings
@@ -824,6 +824,46 @@ def _ingest(
     return str(asset_id)
 
 
+def _existing_assets(session: Session, workspace_id: str, asset_ids: list[str]) -> set[str]:
+    from trendrelay_api.media_models import MediaAsset
+
+    if not asset_ids:
+        return set()
+    return set(session.scalars(
+        select(MediaAsset.id).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id.in_(asset_ids),
+        )
+    ).all())
+
+
+def forget_asset(session: Session, workspace_id: str, asset_id: str) -> None:
+    """Drop what a deleted Library asset leaves behind in creative drafts.
+
+    The link table declares ON DELETE CASCADE, but SQLite here does not
+    enforce foreign keys, so the delete has to say it. A pending carousel
+    also stops counting a card that is gone, so it owes that card again.
+    Subject ids stay: a stored draft shows a removed subject as missing.
+    """
+    session.execute(
+        delete(ProductCreativeLink).where(
+            ProductCreativeLink.workspace_id == workspace_id,
+            ProductCreativeLink.asset_id == asset_id,
+        )
+    )
+    pending = session.scalars(
+        select(ProductCreativeDraft).where(
+            ProductCreativeDraft.workspace_id == workspace_id,
+            ProductCreativeDraft.status == "pending",
+        )
+    ).all()
+    for draft in pending:
+        staged = [str(item) for item in (draft.staged_asset_ids or [])]
+        if asset_id in staged:
+            draft.staged_asset_ids = [item for item in staged if item != asset_id]
+            draft.updated_at = utc_now()
+
+
 def _write_links(session: Session, draft: ProductCreativeDraft, asset_ids: list[str]) -> None:
     """Tie every ingested asset to every product in the shot. One association each."""
     now = utc_now()
@@ -904,7 +944,12 @@ def submit_media(
     staged = [str(item) for item in (draft.staged_asset_ids or [])]
     if asset_id not in staged:
         staged.append(asset_id)
-        draft.staged_asset_ids = staged
+    # A card deleted from the Library since it was staged is not part of the
+    # set any more. Count only what is still there, so the draft owes it again
+    # rather than linking a file that does not exist.
+    present = _existing_assets(session, workspace_id, staged)
+    staged = [item for item in staged if item in present]
+    draft.staged_asset_ids = staged
     draft.updated_at = utc_now()
     if len(staged) < draft.card_count:
         view = _view(session, draft)
