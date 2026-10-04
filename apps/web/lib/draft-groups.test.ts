@@ -128,3 +128,34 @@ test("partition names Single and Together, and a missing count is Single", () =>
   assert.deepEqual(partitionDrafts(null), { single: [], together: [] });
   assert.deepEqual(partitionDrafts([]), { single: [], together: [] });
 });
+
+test("a smaller draft whose products are all listed is named inside the band that lists them", () => {
+  const shown = [
+    row("sugar", [{ id: "t3", product_count: 3 }, { id: "t8", product_count: 8 }]),
+    row("angel", [{ id: "t3", product_count: 3 }, { id: "t8", product_count: 8 }]),
+    row("belle", [{ id: "t8", product_count: 8 }]),
+  ];
+  const [band] = groupShownDrafts(shown).sections;
+  assert.equal(band?.kind, "together");
+  if (band?.kind !== "together") return;
+  assert.equal(band.listedAbove, 0);
+  assert.deepEqual(band.also.map((item) => ({ id: item.draft.id, shown: item.shown })), [
+    { id: "t3", shown: 2 },
+  ]);
+});
+
+test("a draft that shares some products keeps its band and counts the ones listed above", () => {
+  const shown = [
+    row("a", [{ id: "big", product_count: 3 }, { id: "small", product_count: 2 }]),
+    row("b", [{ id: "big", product_count: 3 }]),
+    row("c", [{ id: "big", product_count: 3 }]),
+    row("d", [{ id: "small", product_count: 2 }]),
+  ];
+  const sections = groupShownDrafts(shown).sections;
+  assert.deepEqual(sections.map((section) => (section.kind === "together"
+    ? { id: section.draft.id, ids: section.products.map((item) => item.id), above: section.listedAbove }
+    : null)), [
+    { id: "big", ids: ["a", "b", "c"], above: 0 },
+    { id: "small", ids: ["d"], above: 1 },
+  ]);
+});

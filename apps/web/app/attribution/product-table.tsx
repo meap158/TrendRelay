@@ -353,6 +353,11 @@ export function ProductTable({
       products: section.products,
     }));
   }, [shown]);
+  // Any narrowing - the text search or any of the filters - so a filtered
+  // list says what it is showing out of the whole catalogue.
+  const narrowedView = Boolean(query.trim() || filterCampaign || filterFile || filterFrom
+    || filterTo || filterCreator || filterSubId.trim()
+    || listingFilter !== "all" || creativeFilter !== "all");
   const creativeCounts = useMemo(() => ({
     all: narrowed.length,
     pending: narrowed.filter((product) => hasPendingCreative(product)).length,
@@ -441,18 +446,14 @@ export function ProductTable({
   }
 
   return (
-    <Card
-      eyebrow={t("attribution.productsEyebrow")}
-      title={t("attribution.productCount", {
-        // Reflect any narrowing - the text search or any of the filters - so a
-        // filtered-down list reports what it is showing, not the whole catalogue.
-        count: (query.trim() || filterCampaign || filterFile || filterFrom || filterTo
-          || filterCreator || filterSubId.trim()
-          || listingFilter !== "all" || creativeFilter !== "all")
-          ? shown.length
-          : products.length,
-      })}
-    >
+    <Card className="product-card">
+      {/* The page header already names the catalogue and its size, so the
+          card's own title row only repeated it. The heading stays for screen
+          readers; the count a filter narrows to is on the selection bar,
+          beside the filters that narrowed it. */}
+      <h2 className="sr-only">
+        {t("attribution.productsEyebrow")} · {t("attribution.productCount", { count: shown.length })}
+      </h2>
       {/* Search and selection are one stable toolbar. Selecting a row changes
           state inside this slot instead of inserting another row and pushing
           the whole table down. */}
@@ -627,6 +628,11 @@ export function ProductTable({
         )}
         <div className="product-bulk" data-active={picked.size > 0 || undefined}>
           <div className="product-bulk-selection">
+            {narrowedView && (
+              <span className="product-bulk-shown" aria-live="polite">
+                {t("attribution.showingOf", { shown: shown.length, total: products.length })}
+              </span>
+            )}
             <span className="product-bulk-count" aria-live="polite">
               <strong>{picked.size}</strong>
               <span>/ {SELECTION_LIMIT} {t("attribution.selected")}</span>
@@ -812,6 +818,12 @@ export function ProductTable({
                           {t("attribution.generate.featuresProducts", {
                             count: draft.product_count ?? section.products.length,
                           })}
+                          {heading.listedAbove > 0 && (
+                            <>
+                              {" · "}
+                              {t("attribution.generate.listedAbove", { count: heading.listedAbove })}
+                            </>
+                          )}
                         </span>
                         <span className="product-creative-state" data-state={pending ? "pending" : "done"}>
                           {pending
@@ -832,6 +844,58 @@ export function ProductTable({
                       </span>
                     );
                   })()}
+                  {section.heading.kind === "together" && section.heading.also.map((nested) => {
+                    // A smaller shot of products already listed in this band.
+                    const draft = {
+                      ...nested.draft,
+                      status: nested.draft.status ?? "pending",
+                      owed: nested.draft.owed ?? 0,
+                      card_count: nested.draft.card_count ?? 1,
+                    };
+                    const pending = isPendingDraft(draft);
+                    const lead = section.products.find((item) => (item.creative_drafts ?? [])
+                      .some((entry) => entry.id === draft.id)) ?? section.products[0];
+                    return (
+                      <span key={draft.id} className="product-draft-group-label product-draft-group-also">
+                        <CreativeMedia
+                          assets={draftAssets(lead, draft.id)}
+                          owed={pending ? draft.owed : 0}
+                          kind={draft.kind}
+                          size="sm"
+                        />
+                        <span className="product-draft-group-name">
+                          {t("attribution.generate.alsoTogether")}
+                        </span>
+                        <span>
+                          {creativeKind(t, draft.kind)}
+                          {" · "}
+                          {creativeRecipe(t, draft.recipe)}
+                          {" · "}
+                          {t("attribution.generate.featuresProducts", {
+                            count: draft.product_count ?? nested.shown,
+                          })}
+                          {" · "}
+                          {t("attribution.generate.allListedHere", { count: nested.shown })}
+                        </span>
+                        <span className="product-creative-state" data-state={pending ? "pending" : "done"}>
+                          {pending
+                            ? `${t("attribution.generate.statusPending")} · ${t("attribution.generate.owed", { count: draft.owed })}`
+                            : t("attribution.generate.statusSucceeded")}
+                        </span>
+                        {!pending && <OpenInLibrary assets={draftAssets(lead, draft.id)} />}
+                        {pending && canQueue && (
+                          <ResumeButton
+                            draft={draft}
+                            providers={[]}
+                            onResume={() => {
+                              setGenerateFor(null);
+                              setReviewDraft({ product: lead, draftId: draft.id });
+                            }}
+                          />
+                        )}
+                      </span>
+                    );
+                  })}
                 </th>
               </tr>
             )}
@@ -908,6 +972,13 @@ export function ProductTable({
                           {listingBusy?.has(product.id) && (
                             <span className="product-listing-loading"> · reading listing…</span>
                           )}
+                          {(() => {
+                            const shots = (product.creative_drafts ?? [])
+                              .filter((draft) => (draft.product_count ?? 0) > 1).length;
+                            return shots > 1
+                              ? <span className="product-together-count"> · {t("attribution.generate.inTogetherShots", { count: shots })}</span>
+                              : null;
+                          })()}
                         </small>
                       </span>
                     </button>
@@ -1020,8 +1091,14 @@ export function ProductTable({
                             ))}
                           </ul>
                         ) : <p className="product-no-data">{t("attribution.noOffers")}</p>}
+                        {/* Made here, for this product - kept in its own panel so it is
+                            never read as part of the shop's own listing below. */}
+                        <section className="product-generated" aria-labelledby={`${product.id}-generated`}>
                         <div className="product-detail-head">
-                          <h4>{t("attribution.generate.creatives")}</h4>
+                          <h4 id={`${product.id}-generated`}>
+                            <ActionIcon name="generate" size={12} /> {t("attribution.generate.creatives")}
+                          </h4>
+                          <small>{t("attribution.generate.generatedHelp")}</small>
                           {canQueue && (
                             <Button
                               variant="primary"
@@ -1040,6 +1117,7 @@ export function ProductTable({
                             setReviewDraft({ product, draftId });
                           }}
                         />
+                        </section>
                         {/* What the product's own page said, laid out the way
                             the page lays it out: gallery beside the buying
                             facts, details and description underneath. The
@@ -1049,15 +1127,16 @@ export function ProductTable({
                           const full = fullListings[listingCacheKey(product)];
                           if (full) {
                             return (
-                              <div className="product-listing">
+                              <section className="product-listing product-source">
                                 <div className="product-detail-head">
                                   <h4>What the listing says</h4>
+                                  <small>{t("attribution.generate.listingSource")}</small>
                                   {product.listing_fetched_at && (
                                     <small>read {new Date(product.listing_fetched_at).toLocaleString()}</small>
                                   )}
                                 </div>
                                 <ListingPanel product={product} listing={full} />
-                              </div>
+                              </section>
                             );
                           }
                           return (

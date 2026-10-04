@@ -311,52 +311,66 @@ function CreativeCard({
   const assets = draftAssets(product, draft.id);
   const pending = isPendingDraft(draft);
   const together = (draft.product_count ?? 0) > 1;
+  const settingsId = `creative-settings-${product.id}-${draft.id}`;
   return (
-    <li className="product-creative-card" data-pending={pending || undefined}>
+    <li className="product-creative-card" data-pending={pending || undefined} data-open={settingsOpen || undefined}>
       <CreativeMedia assets={assets} owed={pending ? draft.owed : 0} kind={draft.kind} />
       <div className="product-creative-body">
         <p className="product-creative-title">
           <strong>{creativeKind(t, draft.kind)} · {creativeRecipe(t, draft.recipe)}</strong>
-          {together && (
-            <span className="product-creative-badge">
-              {t("attribution.generate.featuresProducts", { count: draft.product_count ?? 0 })}
-            </span>
-          )}
+          {/* Single or Together on the card itself, so both kinds share one
+              grid instead of each taking a row of its own. */}
+          <span className="product-creative-badge" data-group={together ? "together" : "single"}>
+            {together
+              ? `${t("attribution.generate.draftGroupTogether")} · ${t("attribution.generate.featuresProducts", { count: draft.product_count ?? 0 })}`
+              : t("attribution.generate.draftGroupSingle")}
+          </span>
         </p>
         <p className="product-creative-meta">
           <span className="product-creative-state" data-state={pending ? "pending" : "done"}>
-            {pending ? t("attribution.generate.statusPending") : t("attribution.generate.statusSucceeded")}
+            {pending
+              ? `${t("attribution.generate.statusPending")} · ${t("attribution.generate.owed", { count: draft.owed })}`
+              : t("attribution.generate.statusSucceeded")}
           </span>
-          {pending && <span>{t("attribution.generate.owed", { count: draft.owed })}</span>}
           {pending && draft.kind === "video" && <GenerationState draftId={draft.id} />}
         </p>
         <div className="product-creative-actions">
           {pending && (
             <ResumeButton draft={draft} providers={providers} onResume={() => onReview(draft.id)} />
           )}
-          <Button variant="quiet" size="sm" onClick={() => onReview(draft.id)}>
+          <button type="button" className="product-creative-link" onClick={() => onReview(draft.id)}>
             {t("attribution.generate.viewDraft")}
-          </Button>
+          </button>
           <OpenInLibrary assets={assets} />
+          <button
+            type="button"
+            className="product-creative-link"
+            aria-expanded={settingsOpen}
+            aria-controls={settingsId}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            {t("attribution.generate.promptSettings")} {settingsOpen ? "▴" : "▾"}
+          </button>
         </div>
-        <details
-          className="product-creative-settings"
-          onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
-        >
-          <summary>{t("attribution.generate.promptSettings")}</summary>
-          {/* Read only when asked for: an open table can hold many drafts. */}
-          {settingsOpen && <CreativeDraftSummary draftId={draft.id} status={draft.status} owed={draft.owed} />}
-        </details>
       </div>
+      {/* Read only when asked for: an open table can hold many drafts. The
+          card takes the whole row while it is open, so the prompt is not
+          read through a column a third of the width. */}
+      {settingsOpen && (
+        <div id={settingsId} className="product-creative-settings">
+          <CreativeDraftSummary draftId={draft.id} status={draft.status} owed={draft.owed} />
+        </div>
+      )}
     </li>
   );
 }
 
 /**
- * Every creative on one product, under Single and Together.
+ * Every creative on one product, in one grid: Single first, then Together.
  *
- * A linked file whose draft is not in the list (an older link) still shows,
- * under its own heading, so nothing that is linked disappears.
+ * Each card names its own kind, so the two do not each take a heading and a
+ * row. A linked file whose draft is not in the list (an older link) still
+ * shows, after the cards, so nothing that is linked disappears.
  */
 export function ProductCreatives({
   product,
@@ -377,37 +391,25 @@ export function ProductCreatives({
   }
   return (
     <div className="product-creatives">
-      {(["single", "together"] as const).map((kind) => {
-        const rows = groups[kind];
-        if (rows.length === 0) return null;
-        const labelId = `${product.id}-${kind}-drafts`;
-        return (
-          <section key={kind} className="product-creative-group" aria-labelledby={labelId}>
-            <h5 id={labelId} className="product-creative-group-label">
-              {t(kind === "single"
-                ? "attribution.generate.draftGroupSingle"
-                : "attribution.generate.draftGroupTogether")}
-            </h5>
-            <ul>
-              {rows.map((draft) => (
-                <CreativeCard
-                  key={draft.id}
-                  product={product}
-                  draft={draft}
-                  providers={providers}
-                  onReview={onReview}
-                />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+      {drafts.length > 0 && (
+        <ul className="product-creative-grid">
+          {[...groups.single, ...groups.together].map((draft) => (
+            <CreativeCard
+              key={draft.id}
+              product={product}
+              draft={draft}
+              providers={providers}
+              onReview={onReview}
+            />
+          ))}
+        </ul>
+      )}
       {loose.length > 0 && (
-        <section className="product-creative-group">
-          <h5 className="product-creative-group-label">{t("attribution.generate.otherFiles")}</h5>
-          <CreativeMedia assets={loose} owed={0} kind="image" />
+        <p className="product-creative-loose">
+          <span className="product-creative-group-label">{t("attribution.generate.otherFiles")}</span>
+          <CreativeMedia assets={loose} owed={0} kind="image" size="sm" />
           <OpenInLibrary assets={loose} />
-        </section>
+        </p>
       )}
     </div>
   );
