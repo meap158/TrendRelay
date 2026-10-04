@@ -767,34 +767,11 @@
 }
 .generate-offer-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
 .generate-use > small { color: var(--muted); font-size: 11px; font-weight: 400; }
-.product-creatives { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
-.product-creatives a { color: var(--link); }
-.product-creative-draft {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  max-inline-size: 100%;
-  min-block-size: 32px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: inherit;
-  background: var(--panel);
-  font: inherit;
-  font-size: 12px;
-  text-align: start;
-  cursor: pointer;
-}
-.product-creative-draft:hover { border-color: var(--line-strong); }
-.product-creative-draft:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
-.product-creative-draft > span:first-child { min-width: 0; }
-.product-creative-view { flex: none; color: var(--link); font-size: 11px; }
-.product-creatives > li { display: grid; gap: 6px; justify-items: start; }
-/* Single and Together are named. Weight and size match the section label
-   above this list. Both groups share one color; the words are the difference. */
-.product-creative-group { margin-block-start: 6px; }
+/* Each creative is one card: its files, what it is, where it stands, and
+   how to finish it. Cards wrap side by side so a product with a Single
+   image and a Together shot shows both without a long column. */
+.product-creatives { display: grid; gap: 10px; margin: 0 0 12px; font-size: 12px; }
+.product-creative-group { display: grid; gap: 6px; }
 .product-creative-group-label {
   margin: 0;
   color: var(--muted);
@@ -802,16 +779,78 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
-  text-transform: none;
+  text-transform: uppercase;
 }
-.product-creative-group ul {
+.product-creative-group > ul {
   display: grid;
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.product-creative-group li { display: grid; gap: 6px; justify-items: start; }
+.product-creative-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.product-creative-card[data-pending] { border-style: dashed; }
+.product-creative-body { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.product-creative-title,
+.product-creative-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; }
+.product-creative-title strong { font-weight: 600; }
+.product-creative-meta { color: var(--muted); font-size: 11px; }
+.product-creative-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--link-bg);
+  color: var(--link);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.product-creative-state { font-weight: 600; white-space: nowrap; }
+.product-creative-state[data-state="done"] { color: var(--green); }
+.product-creative-state[data-state="pending"] { color: var(--warn); }
+.product-creative-state[data-state="running"] { color: var(--link); font-weight: 400; }
+.product-creative-state[data-state="stopped"] {
+  max-inline-size: 28rem;
+  overflow: hidden;
+  color: var(--bad);
+  font-weight: 400;
+  text-overflow: ellipsis;
+}
+.product-creative-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.product-creative-settings > summary {
+  inline-size: fit-content;
+  color: var(--link);
+  font-size: 11px;
+  cursor: pointer;
+}
+.product-creative-settings[open] > summary { margin-block-end: 6px; }
+/* Files as thumbnails. A dashed tile stands for each file still owed. */
+.product-creative-media { display: flex; flex-wrap: wrap; flex: none; gap: 4px; }
+.product-creative-thumb { display: block; border-radius: var(--radius-sm); }
+.product-creative-thumb:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.product-creative-thumb .picker-thumb,
+.product-creative-owed { inline-size: 56px; block-size: 56px; }
+.product-creative-media[data-size="sm"] .picker-thumb,
+.product-creative-media[data-size="sm"] .product-creative-owed { inline-size: 28px; block-size: 28px; }
+.product-creative-owed {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 /* A Together draft is one creative, so its products sit under one band.
    The band is not a row you can select. The label stays in the product
    column and within the screen while the wide table scrolls sideways. */
@@ -820,12 +859,18 @@
   background: var(--panel-raised);
   font-weight: 400;
 }
+.product-group-together > tr > td:first-child { box-shadow: inset 3px 0 0 var(--link); }
+.product-group-together > .product-draft-group > th { box-shadow: inset 3px 0 0 var(--link); }
+.product-draft-group-name { color: var(--text); font-size: 11px; text-transform: uppercase; }
 .product-draft-group-label {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
   position: sticky;
   inset-inline-start: 34px;
   z-index: 1;
-  max-inline-size: min(40rem, calc(100vw - 96px));
+  max-inline-size: min(72rem, calc(100vw - 96px));
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 10px;
@@ -868,9 +913,8 @@
   /* The base draft rule comes later than the shared phone query, so the
      phone size has to be restated here. The table is wider than the screen;
      the summary stays within the screen. */
-  .product-creative-draft,
+  .product-creative-card,
   .product-creative-config { max-inline-size: calc(100vw - 40px); }
-  .product-creative-draft { min-block-size: 44px; }
   .generate-scope .product-listing-filter { inline-size: 100%; }
   .generate-scope .product-listing-filter button {
     flex: 1;

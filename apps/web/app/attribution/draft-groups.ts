@@ -14,6 +14,10 @@ export type GroupDraft = {
   kind: string;
   recipe: string;
   product_count?: number;
+  /** Carried through so a group heading can say where its creative stands. */
+  status?: string;
+  owed?: number;
+  card_count?: number;
 };
 
 export type GroupProduct = {
