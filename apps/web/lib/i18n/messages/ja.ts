@@ -1053,6 +1053,8 @@ export const ja: Messages = {
     filterByCreator: "クリエイターで絞り込む",
     searchCreators: "クリエイターを検索…",
     noCreatorMatches: "該当するクリエイターはありません",
+    searchImports: "インポートを検索…",
+    noImportMatches: "一致するインポートはありません",
     filterBySubId: "サブIDで絞り込む",
     subIdPlaceholder: "支払レポートのサブID",
     allCampaigns: "すべてのキャンペーン",

@@ -306,7 +306,6 @@ export function ProductTable({
       .sort((a, b) => (Number.isNaN(b.latest) ? -1 : b.latest) - (Number.isNaN(a.latest) ? -1 : a.latest)
         || a.name.localeCompare(b.name));
   }, [products]);
-  const fileNames = useMemo(() => fileImports.map((item) => item.name), [fileImports]);
   /**
    * The creators actually present in these rows, counted.
    *
@@ -585,7 +584,7 @@ export function ProductTable({
             </div>
           )}
         </div>
-        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates
+        {(campaigns.length > 0 || fileImports.length > 0 || hasImportDates
           || creatorNames.length > 0 || creativeFilter !== "all") && (
           <div className="product-filters">
             {campaigns.length > 0 && (
@@ -601,27 +600,31 @@ export function ProductTable({
                 ))}
               </Select>
             )}
-            {fileNames.length > 0 && (
-              <Select
-                className="product-filter"
-                value={filterFile}
-                aria-label={t("attribution.filterByFile")}
-                onChange={(event) => setFilterFile(event.target.value)}
-              >
-                <option value="">{t("attribution.allImports")}</option>
-                {fileImports.map((item) => (
-                  <option key={item.name} value={item.name}>
-                    {[
-                      item.name,
+            {/* The same searchable list as creators: the file name is the
+                row, and when it arrived and how many products it brought sit
+                beneath it, newest first. */}
+            {fileImports.length > 0 && (
+              <span className="product-filter-import">
+                <SearchSelect
+                  value={filterFile}
+                  options={fileImports.map((item) => ({
+                    value: item.name,
+                    label: item.name,
+                    description: [
                       Number.isNaN(item.latest)
                         ? null
                         : relativeTime(new Date(item.latest), { locale })
                           ?? new Date(item.latest).toLocaleDateString(locale, { month: "short", day: "numeric" }),
                       t("attribution.productCount", { count: item.count }),
-                    ].filter(Boolean).join(" · ")}
-                  </option>
-                ))}
-              </Select>
+                    ].filter(Boolean).join(" · "),
+                  }))}
+                  onChange={setFilterFile}
+                  placeholder={t("attribution.allImports")}
+                  searchPlaceholder={t("attribution.searchImports")}
+                  emptyLabel={t("attribution.noImportMatches")}
+                  ariaLabel={t("attribution.filterByFile")}
+                />
+              </span>
             )}
             {/* A searchable select, not a dropdown: this workspace has 336
                 creators, and a list that long is a scroll rather than a

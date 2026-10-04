@@ -1065,6 +1065,8 @@ export const ru: Messages = {
     filterByCreator: "Фильтр по автору",
     searchCreators: "Поиск авторов…",
     noCreatorMatches: "Нет подходящих авторов",
+    searchImports: "Искать импорты…",
+    noImportMatches: "Импорты не найдены",
     filterBySubId: "Фильтр по sub ID",
     subIdPlaceholder: "Sub ID из отчёта о выплатах",
     allCampaigns: "Все кампании",

@@ -1040,6 +1040,8 @@ export const zh: Messages = {
     filterByCreator: "按创作者筛选",
     searchCreators: "搜索创作者…",
     noCreatorMatches: "没有匹配的创作者",
+    searchImports: "搜索导入…",
+    noImportMatches: "没有匹配的导入",
     filterBySubId: "按 Sub ID 筛选",
     subIdPlaceholder: "结算报告中的 Sub ID",
     allCampaigns: "全部推广活动",

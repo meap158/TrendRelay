@@ -488,6 +488,8 @@
 .product-filters { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 8px; }
 .product-filter { max-inline-size: 220px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
 .product-filter-dates { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+/* Export names are long; the trigger keeps the select's width and clips. */
+.product-filter-import { display: inline-block; min-inline-size: 0; max-inline-size: 220px; }
 .product-filter-dates .product-filter { inline-size: auto; font-size: 11px; }
 /* What an import is for, asked where the batch arrives. */
 .shopee-import-campaigns { display: grid; gap: 6px; margin: 12px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }

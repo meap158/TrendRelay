@@ -1057,6 +1057,8 @@ export const en = {
     filterByCreator: "Filter by creator",
     searchCreators: "Search creators…",
     noCreatorMatches: "No creators match",
+    searchImports: "Search imports…",
+    noImportMatches: "No imports match",
     filterBySubId: "Filter by sub ID",
     subIdPlaceholder: "Sub ID from a payout report",
     allCampaigns: "All campaigns",

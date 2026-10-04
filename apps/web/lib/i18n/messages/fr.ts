@@ -1065,6 +1065,8 @@ export const fr: Messages = {
     filterByCreator: "Filtrer par créateur",
     searchCreators: "Rechercher des créateurs…",
     noCreatorMatches: "Aucun créateur correspondant",
+    searchImports: "Rechercher des imports…",
+    noImportMatches: "Aucun import ne correspond",
     filterBySubId: "Filtrer par sub ID",
     subIdPlaceholder: "Sub ID d'un rapport de paiement",
     allCampaigns: "Toutes les campagnes",

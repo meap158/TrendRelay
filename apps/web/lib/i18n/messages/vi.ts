@@ -1053,6 +1053,8 @@ export const vi: Messages = {
     filterByCreator: "Lọc theo nhà sáng tạo",
     searchCreators: "Tìm nhà sáng tạo…",
     noCreatorMatches: "Không có nhà sáng tạo phù hợp",
+    searchImports: "Tìm lần nhập…",
+    noImportMatches: "Không có lần nhập phù hợp",
     filterBySubId: "Lọc theo sub ID",
     subIdPlaceholder: "Sub ID từ báo cáo hoa hồng",
     allCampaigns: "Tất cả chiến dịch",

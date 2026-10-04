@@ -1055,6 +1055,8 @@ export const ar: Messages = {
     filterByCreator: "تصفية حسب المبدع",
     searchCreators: "ابحث عن المبدعين…",
     noCreatorMatches: "لا يوجد مبدعون مطابقون",
+    searchImports: "ابحث في الاستيرادات…",
+    noImportMatches: "لا توجد استيرادات مطابقة",
     filterBySubId: "تصفية حسب sub ID",
     subIdPlaceholder: "Sub ID من تقرير الأرباح",
     allCampaigns: "كل الحملات",
