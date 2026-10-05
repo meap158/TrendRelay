@@ -24,6 +24,7 @@ import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { Select } from "../ui/select";
 import { useLocale, useT } from "../i18n-provider";
 import { relativeTime } from "../../lib/relative-time";
+import { useRelativeClock } from "../ui/relative-time";
 import { useWorkspace } from "../workspace-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
@@ -193,6 +194,9 @@ export function ProductTable({
 }) {
   const t = useT();
   const { locale } = useLocale();
+  // Re-renders with every other "how long ago" on the page, so an import's
+  // age keeps up while the page stays open.
+  useRelativeClock();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   /** The group shot whose chip is hovered; its rows are lit. */
   const [focusGroup, setFocusGroup] = useState<number | null>(null);

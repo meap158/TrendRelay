@@ -69,6 +69,16 @@ const getSnapshot = () => tick;
 const NOT_YET = -1;
 const getServerSnapshot = () => NOT_YET;
 
+/**
+ * The shared clock, for a "how long ago" written into text rather than shown
+ * by `RelativeTime` - an option's description, say. Reading it re-renders the
+ * caller on the same half-minute tick as every label on the page, from the
+ * same one timer. `NOT_YET` until hydrated, like the labels.
+ */
+export function useRelativeClock(): number {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
 export function RelativeTime({
   at,
   className,
