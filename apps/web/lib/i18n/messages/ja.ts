@@ -1158,6 +1158,7 @@ export const ja: Messages = {
       stockUnknown: "商品ページに在庫はありませんでした。",
       reviewTitle: "クリエイティブの下書き",
       reviewDescription: "{name} の保存済み設定です。メディアを生成すると新しい下書きが始まります。",
+      reviewDescriptionGroup: "{count, plural, other {# 件の商品}}。保存済みの設定です。メディアを生成すると新しい下書きになります。",
       viewDraft: "表示",
       promptStored: "この下書きに保存されたプロンプトです。",
       subjectMissing: "このライブラリの画像はもうありません。",

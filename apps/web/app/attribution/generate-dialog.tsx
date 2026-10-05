@@ -162,6 +162,8 @@ type DraftView = {
  * one draft of all of them, and the finished file links to every product.
  * What will be sent starts collapsed: the prompt the API returns, then any
  * pictures and listing fields. When more than one product is in the ask,
+  /** A group shot's number, the same one the table shows. */
+  group_number?: number | null;
  * those stay under the product they belong to. A file is submitted
  * for that one draft, or while a single product is open. A video draft that
  * still owes a file can also be sent to a ready video provider.
@@ -820,11 +822,17 @@ export function GenerateDialog({
     <Dialog
       className="generate-dialog"
       open={open && products.length > 0}
-      title={reviewing ? t("attribution.generate.reviewTitle") : t("attribution.generate.title")}
+      title={reviewing
+        ? reviewGroup
+          ? `${t("attribution.generate.reviewTitle")} · ${reviewGroup}`
+          : t("attribution.generate.reviewTitle")
+        : t("attribution.generate.title")}
       description={reviewing
-        ? products[0]
-          ? t("attribution.generate.reviewDescription", { name: products[0].name })
-          : undefined
+        ? reviewGroup
+          ? t("attribution.generate.reviewDescriptionGroup", { count: draft?.product_count ?? 0 })
+          : products[0]
+            ? t("attribution.generate.reviewDescription", { name: products[0].name })
+            : undefined
         : together
           ? t("attribution.generate.descriptionTogether", { count: products.length })
           : many
@@ -847,6 +855,13 @@ export function GenerateDialog({
               disabled={!prompt || busy !== "" || togetherUncovered || (queueNeedsLibrary && subjects.length === 0)}
               onClick={() => void queue()}
             >{busy === "queue"
+  // A group shot under review is named the way the table names it.
+  const reviewGroup = reviewing && (draft?.product_count ?? 0) > 1
+    ? draft?.group_number
+      ? t("attribution.generate.groupLabel", { number: draft.group_number })
+      : t("attribution.generate.draftGroupTogether")
+    : "";
+
               ? t("attribution.generate.queuing")
               : many && !together
                 ? t("attribution.generate.queueMany")

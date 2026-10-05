@@ -1158,6 +1158,7 @@ export const vi: Messages = {
       stockUnknown: "Trang sản phẩm không có tồn kho.",
       reviewTitle: "Bản nháp creative",
       reviewDescription: "Cấu hình đã lưu cho {name}. Tạo media sẽ mở một bản nháp mới.",
+      reviewDescriptionGroup: "{count, plural, other {# sản phẩm}}. Cấu hình đã lưu; Tạo media sẽ bắt đầu bản nháp mới.",
       viewDraft: "Xem",
       promptStored: "Đây là câu lệnh đã lưu trên bản nháp này.",
       subjectMissing: "Ảnh Thư viện này không còn.",

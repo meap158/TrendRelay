@@ -1145,6 +1145,7 @@ export const zh: Messages = {
       stockUnknown: "商品页上没有库存。",
       reviewTitle: "创意草稿",
       reviewDescription: "{name} 的已保存配置。生成媒体会开始一份新草稿。",
+      reviewDescriptionGroup: "{count, plural, other {# 个商品}}。已保存的配置；生成媒体会新建草稿。",
       viewDraft: "查看",
       promptStored: "这是保存在这份草稿上的提示词。",
       subjectMissing: "这张资料库图片已经不在了。",

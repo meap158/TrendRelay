@@ -1170,6 +1170,7 @@ export const fr: Messages = {
       stockUnknown: "La fiche ne contenait pas de stock.",
       reviewTitle: "Brouillon de visuel",
       reviewDescription: "Configuration enregistrée pour {name}. Générer un média ouvre un nouveau brouillon.",
+      reviewDescriptionGroup: "{count, plural, one {# produit} other {# produits}}. Configuration enregistrée ; Générer un média crée un nouveau brouillon.",
       viewDraft: "Voir",
       promptStored: "Voici l'invite enregistrée sur ce brouillon.",
       subjectMissing: "Cette image de la Bibliothèque n'est plus disponible.",

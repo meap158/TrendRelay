@@ -1162,6 +1162,7 @@ export const en = {
       stockUnknown: "Stock was not on the listing.",
       reviewTitle: "Creative draft",
       reviewDescription: "Saved configuration for {name}. Generate media starts a new draft.",
+      reviewDescriptionGroup: "{count, plural, one {# product} other {# products}}. Saved configuration; Generate media starts a new draft.",
       viewDraft: "View",
       promptStored: "This is the prompt stored on this draft.",
       subjectMissing: "This Library image is no longer available.",

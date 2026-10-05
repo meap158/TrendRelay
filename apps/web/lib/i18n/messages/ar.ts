@@ -1160,6 +1160,7 @@ export const ar: Messages = {
       stockUnknown: "لم تتضمن صفحة المنتج مخزونًا.",
       reviewTitle: "مسودة المادة",
       reviewDescription: "الإعداد المحفوظ لـ {name}. إنشاء وسيط يبدأ مسودة جديدة.",
+      reviewDescriptionGroup: "{count, plural, zero {لا منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجًا} other {# منتج}}. إعدادات محفوظة؛ إنشاء الوسائط يبدأ مسودة جديدة.",
       viewDraft: "عرض",
       promptStored: "هذا هو النص المحفوظ في هذه المسودة.",
       subjectMissing: "صورة المكتبة هذه لم تعد متاحة.",

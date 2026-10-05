@@ -1171,6 +1171,7 @@ export const ru: Messages = {
       stockUnknown: "На карточке не было остатка.",
       reviewTitle: "Черновик креатива",
       reviewDescription: "Сохранённая конфигурация для {name}. Создание медиа начинает новый черновик.",
+      reviewDescriptionGroup: "{count, plural, one {# товар} few {# товара} many {# товаров} other {# товара}}. Сохранённые настройки; «Создать медиа» начинает новый черновик.",
       viewDraft: "Открыть",
       promptStored: "Это текст, сохранённый в этом черновике.",
       subjectMissing: "Этого изображения библиотеки больше нет.",
