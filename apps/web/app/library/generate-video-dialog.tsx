@@ -54,13 +54,23 @@ export function GenerateVideoDialog({
   /** A success only navigates away if this dialog started that generation. */
   const armed = useRef(false);
   const finished = useRef(onFinished);
-  finished.current = onFinished;
-
+  // Kept current after each render; a ref is not written while rendering.
   useEffect(() => {
+    finished.current = onFinished;
+  }, [onFinished]);
+
+  // Another image starts a fresh ask. Adjusted while rendering, so the last
+  // image's prompt and outcome are never shown under the new one.
+  const [askedFor, setAskedFor] = useState(assetId);
+  if (askedFor !== assetId) {
+    setAskedFor(assetId);
     setPrompt("");
     setNotice("");
     setError("");
     setGeneration(null);
+  }
+  // The refs belong to effects and handlers, so they are reset there.
+  useEffect(() => {
     reported.current = "";
     armed.current = false;
   }, [assetId]);

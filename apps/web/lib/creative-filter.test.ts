@@ -7,7 +7,10 @@ import {
   matchesCreativeFilter,
 } from "../app/attribution/creative-filter.ts";
 
-const pending = { creative_drafts: [{ status: "pending", owed: 1 }] };
+/** Both fields the predicates read, so every fixture fits each of them. */
+type Row = { creative_drafts?: { status: string; owed: number }[]; creative_assets?: unknown[] };
+
+const pending: Row = { creative_drafts: [{ status: "pending", owed: 1 }] };
 const filed = {
   creative_drafts: [{ status: "succeeded", owed: 0 }],
   creative_assets: [{ asset_id: "asset-1" }],

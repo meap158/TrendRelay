@@ -213,7 +213,8 @@ export function GenerateDialog({
   const [draft, setDraft] = useState<DraftView | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState("");
+  // A review opens loading its draft; nothing else is in flight at first.
+  const [busy, setBusy] = useState(draftId ? "load" : "");
   const [file, setFile] = useState<File | null>(null);
   const [fileEpoch, setFileEpoch] = useState(0);
   /** Providers whose check has passed. The list comes from the registry. */
@@ -261,11 +262,15 @@ export function GenerateDialog({
   const fieldsKey = LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)).join(",");
   const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}|${together ? "together" : "each"}`;
 
-  useEffect(() => {
-    if (draft) return;
+  // A different ask clears the prompt and members previewed for the last one.
+  // Adjusted while rendering rather than in an effect, so the stale prompt is
+  // never painted and no second render follows.
+  const [previewedShape, setPreviewedShape] = useState(shape);
+  if (!draft && previewedShape !== shape) {
+    setPreviewedShape(shape);
     setPrompt("");
     setMembers([]);
-  }, [shape, draft]);
+  }
 
   function imageOn(productId: string, url: string) {
     if (!selectedFields.has("gallery")) return true;
@@ -396,8 +401,6 @@ export function GenerateDialog({
   useEffect(() => {
     if (!open || !reviewing || !draftId || !workspaceId) return;
     let cancelled = false;
-    setBusy("load");
-    setError("");
     void (async () => {
       try {
         const response = await apiFetch(
@@ -425,15 +428,11 @@ export function GenerateDialog({
       cancelled = true;
     };
     // applyStored reads the setters from this render. The draft id is the load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reviewing, draftId, workspaceId, apiFetch, t]);
 
   useEffect(() => {
-    if (!open || reviewing || products.length === 0 || !workspaceId || draft) return;
-    if (!backgroundReady) {
-      setPrompt("");
-      return;
-    }
+    // Not ready is part of the shape, so the prompt was already cleared.
+    if (!open || reviewing || products.length === 0 || !workspaceId || draft || !backgroundReady) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -505,10 +504,9 @@ export function GenerateDialog({
   );
 
   useEffect(() => {
-    if (!workspaceId || !videoOpen || !draft) {
-      setProviders([]);
-      return;
-    }
+    // Providers are only drawn while an open video draft owes a file, so a
+    // list left from before needs no clearing.
+    if (!workspaceId || !videoOpen || !draft) return;
     let cancelled = false;
     void apiFetch(`/api/workspaces/${workspaceId}/attribution/video-providers`)
       .then(async (response) => {
@@ -1220,6 +1218,7 @@ export function GenerateDialog({
                           if (locked) {
                             return (
                               <li key={url}>
+                                {/* eslint-disable-next-line @next/next/no-img-element -- listing CDN */}
                                 <img src={picturePreview(url)} alt="" />
                               </li>
                             );
@@ -1236,6 +1235,7 @@ export function GenerateDialog({
                                   })}
                                   onChange={() => togglePicture(member.product_id, url)}
                                 />
+                                {/* eslint-disable-next-line @next/next/no-img-element -- listing CDN */}
                                 <img src={picturePreview(url)} alt="" />
                               </label>
                             </li>

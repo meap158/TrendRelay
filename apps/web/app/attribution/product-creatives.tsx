@@ -508,20 +508,16 @@ export function CreativeDraftSummary({
   const { apiFetch } = useAuth();
   const { workspaceId } = useWorkspace();
   const key = draftConfigKey(draftId, status, owed);
-  const [config, setConfig] = useState<DraftConfig | null>(() => draftConfigCache.get(key) ?? null);
-  const [failed, setFailed] = useState(false);
+  // Results are tagged with the key they answer, so a changed key reads as
+  // loading straight away - no effect has to clear the last answer first.
+  const [fetched, setFetched] = useState<{ key: string; config: DraftConfig } | null>(null);
+  const [failedKey, setFailedKey] = useState("");
+  const config = draftConfigCache.get(key) ?? (fetched?.key === key ? fetched.config : null);
+  const failed = failedKey === key;
 
   useEffect(() => {
-    const cached = draftConfigCache.get(key);
-    if (cached) {
-      setConfig(cached);
-      setFailed(false);
-      return;
-    }
-    if (!workspaceId) return;
+    if (draftConfigCache.has(key) || !workspaceId) return;
     let cancelled = false;
-    setConfig(null);
-    setFailed(false);
     void (async () => {
       try {
         const response = await apiFetch(
@@ -529,18 +525,18 @@ export function CreativeDraftSummary({
         );
         if (cancelled) return;
         if (!response.ok) {
-          setFailed(true);
+          setFailedKey(key);
           return;
         }
         const payload = await response.json() as { draft?: DraftConfig };
         if (!payload.draft?.prompt) {
-          setFailed(true);
+          setFailedKey(key);
           return;
         }
         draftConfigCache.set(key, payload.draft);
-        setConfig(payload.draft);
+        setFetched({ key, config: payload.draft });
       } catch {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) setFailedKey(key);
       }
     })();
     return () => {
