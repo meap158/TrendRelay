@@ -545,6 +545,9 @@
 /* The prompt is the last thing in the scroller, and Close / Queue drafts
    sat in the same white with only the panel gap between them. The action
    row is its own bar, and the line runs the full width of the dialog. */
+/* Discard sits apart from the actions that keep the draft, at the start. */
+.generate-dialog .generate-discard { display: inline-flex; align-items: center; gap: 8px; margin-inline-end: auto; }
+.generate-dialog .generate-discard small { color: var(--muted); font-size: 11px; max-inline-size: 18rem; }
 .generate-dialog .ui-dialog-foot {
   margin-inline: -18px;
   margin-block-end: -18px;

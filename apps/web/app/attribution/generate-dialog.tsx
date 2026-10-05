@@ -764,6 +764,35 @@ export function GenerateDialog({
     };
   }, [apiFetch, draft, generation, t, workspaceId]);
 
+  // Two presses, in place: the first says what discarding means, the second
+  // does it. No browser confirm over a dialog that is already modal.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const canDiscard = reviewing && draft !== null && draft.status === "pending";
+
+  async function discard() {
+    if (!draft || !workspaceId) return;
+    setBusy("discard");
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draft.id}/discard`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        setError(await errorDetail(response, t("attribution.generate.requestFailed")));
+        setConfirmDiscard(false);
+        return;
+      }
+      onChangedRef.current?.();
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+      setConfirmDiscard(false);
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function submitFile() {
     if (!draft || !file || !workspaceId) return;
     const limitMb = draft.kind === "video" ? FILE_LIMIT_MB.video : FILE_LIMIT_MB.image;
@@ -897,6 +926,19 @@ export function GenerateDialog({
       suspendDismiss={pickerOpen}
       footer={(
         <>
+          {canDiscard && (
+            <span className="generate-discard">
+              {confirmDiscard && <small>{t("attribution.generate.discardHelp")}</small>}
+              <Button
+                variant={confirmDiscard ? "danger" : "quiet"}
+                busy={busy === "discard"}
+                disabled={busy !== "" || generation !== ""}
+                onClick={() => (confirmDiscard ? void discard() : setConfirmDiscard(true))}
+              >{confirmDiscard
+                ? t("attribution.generate.discardConfirm")
+                : t("attribution.generate.discardDraft")}</Button>
+            </span>
+          )}
           <Button variant="quiet" onClick={onClose}>{t("attribution.generate.close")}</Button>
           {!draft && !reviewing && (
             <Button
