@@ -37,6 +37,12 @@ An adversarial review of Generate media landed as atomic commits after
   and offers Open Group N. It warns, it does not block.
 - Creatives open in the shared lightbox; only Open in Library navigates.
   Generated media and the shop listing are separate panels.
+- A pending draft can be discarded (migration `20261005_0089`): status
+  `discarded`, kept with `discarded_at`/`discarded_by`, out of every read
+  but the by-id one. Never delete drafts - group numbers count them all.
+  The two columns are `deferred`, because the API reloads before the dev
+  runner migrates; keep it that way.
+- The Group filter and the band chips filter to one group shot.
 
 ## Attribution product media (2026-10-04)
 
