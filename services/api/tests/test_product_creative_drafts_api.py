@@ -929,3 +929,79 @@ def test_unchecked_listing_pictures_stay_out_of_the_draft() -> None:
     assert preview.status_code == 200, preview.text
     assert preview.json()["draft"]["products"][0]["product_images"] == []
     assert preview.json()["draft"]["prompt"] == omitted.json()["draft"]["prompt"]
+
+
+def test_a_discarded_draft_leaves_the_queue_and_keeps_its_record(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    allow_roots(monkeypatch, tmp_path)
+    fake_process(monkeypatch)
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id, image=True)
+    base = f"/api/workspaces/{workspace_id}/attribution/creative-drafts"
+    mistake = request("POST", base, json=draft_body(product_id)).json()["draft"]["id"]
+    kept = request("POST", base, json=draft_body(product_id)).json()["draft"]["id"]
+
+    gone = request("POST", f"{base}/{mistake}/discard")
+    assert gone.status_code == 200, gone.text
+    assert gone.json()["draft"]["status"] == "discarded"
+    assert gone.json()["draft"]["discarded"] is True
+    assert gone.json()["draft"]["owed"] == 0
+
+    # Twice is harmless.
+    assert request("POST", f"{base}/{mistake}/discard").status_code == 200
+
+    # Out of the queue and the product read; still readable by id.
+    queue = request("GET", base).json()
+    assert [item["id"] for item in queue["drafts"]] == [kept]
+    products = request(
+        "GET", f"/api/workspaces/{workspace_id}/attribution/products",
+    ).json()["products"]
+    row = next(item for item in products if item["id"] == product_id)
+    assert [item["id"] for item in row["creative_drafts"]] == [kept]
+    assert request("GET", f"{base}/{mistake}").json()["draft"]["status"] == "discarded"
+
+    # It takes no file.
+    refused = request(
+        "POST", f"{base}/{mistake}/media",
+        json={"media_base64": png(5), "filename": "late.png"},
+    )
+    assert refused.status_code == 422
+    assert "discarded" in refused.json()["detail"]
+
+    # A finished draft is removed in the Library, not discarded here.
+    filled = request(
+        "POST", f"{base}/{kept}/media",
+        json={"media_base64": png(6), "filename": "done.png"},
+    )
+    assert filled.status_code == 200, filled.text
+    finished = request("POST", f"{base}/{kept}/discard")
+    assert finished.status_code == 422
+    assert "Library" in finished.json()["detail"]
+
+
+def test_discarding_a_group_shot_does_not_renumber_the_others() -> None:
+    workspace_id = make_workspace()
+    first = add_product(workspace_id, image=True, name="Angel")
+    second = add_product(workspace_id, image=True, name="Bambi")
+    base = f"/api/workspaces/{workspace_id}/attribution/creative-drafts"
+    together = {"together": True, "product_ids": [first, second]}
+    one = request("POST", base, json=draft_body(first, **together)).json()["draft"]["id"]
+    two = request("POST", base, json=draft_body(first, **together)).json()["draft"]["id"]
+
+    assert request("POST", f"{base}/{one}/discard").status_code == 200
+
+    assert request("GET", f"{base}/{two}").json()["draft"]["group_number"] == 2
+
+
+def test_the_discard_columns_are_never_read_by_default() -> None:
+    """A running API reloads before the dev runner migrates. Reads that named
+    these columns returned 500 on every draft query until the next restart."""
+    from sqlalchemy import inspect as inspect_model
+
+    from trendrelay_api.product_creative_models import ProductCreativeDraft
+
+    columns = inspect_model(ProductCreativeDraft).column_attrs
+    assert columns["discarded_at"].deferred
+    assert columns["discarded_by"].deferred
+

@@ -974,6 +974,8 @@ def enqueue(
     view = get_draft(session, workspace_id, draft_id)
     if view["kind"] != "video":
         raise ValueError("Video generation is for a video draft.")
+    if view.get("discarded"):
+        raise ValueError("This draft was discarded. Queue a new one to make this creative.")
     if not _still_owed(view):
         raise ValueError("This draft does not still need a file.")
     # A provider is sent one image. A shot of several products would come

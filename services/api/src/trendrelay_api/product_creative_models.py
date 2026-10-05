@@ -37,7 +37,7 @@ class ProductCreativeDraft(Base):
             name="valid_product_creative_kind",
         ),
         CheckConstraint(
-            "status IN ('pending','succeeded')",
+            "status IN ('pending','succeeded','discarded')",
             name="valid_product_creative_status",
         ),
         CheckConstraint(
@@ -82,7 +82,13 @@ class ProductCreativeDraft(Base):
     #: at that moment, so a later listing refresh does not rewrite the ask.
     listing_fields: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     card_count: Mapped[int] = mapped_column(Integer)
+    #: pending, succeeded, or discarded. Discarded is kept rather than
+    #: deleted, so the audit trail and every group number stay as they were.
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    #: Deferred, so reads never select them: a running API keeps working on a
+    #: database the dev runner has not migrated yet. Only a discard writes them.
+    discarded_at: Mapped[datetime | None] = mapped_column(nullable=True, deferred=True)
+    discarded_by: Mapped[str | None] = mapped_column(String(64), nullable=True, deferred=True)
     #: Library asset ids already ingested for this draft, in order. They are
     #: not the product link: that is written once, when the count is met.
     staged_asset_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)

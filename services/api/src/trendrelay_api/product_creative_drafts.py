@@ -488,7 +488,7 @@ def _prepare(
 
 
 def _owed(draft: ProductCreativeDraft) -> int:
-    if draft.status == "succeeded":
+    if draft.status != "pending":
         return 0
     staged = list(draft.staged_asset_ids or [])
     return max(int(draft.card_count) - len(staged), 0)
@@ -601,6 +601,7 @@ def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
         "ingested_asset_ids": staged,
         "owed": _owed(draft),
         "linked": draft.status == "succeeded",
+        "discarded": draft.status == "discarded",
     }
 
 
@@ -726,9 +727,13 @@ def list_drafts(
     limit: int = DEFAULT_PAGE,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """This workspace's drafts, newest first. Pending is the working queue."""
-    if status not in (None, "pending", "succeeded"):
-        raise ValueError("Status must be pending or succeeded.")
+    """This workspace's drafts, newest first. Pending is the working queue.
+
+    No status means every live draft. A discarded draft is listed only when
+    asked for by name: it is not work, and it is not a result.
+    """
+    if status not in (None, "pending", "succeeded", "discarded"):
+        raise ValueError("Status must be pending, succeeded, or discarded.")
     if kind is not None and kind not in _KINDS:
         raise ValueError("Kind must be image, carousel, or video.")
     limit = min(max(int(limit), 1), MAX_PAGE)
@@ -736,6 +741,8 @@ def list_drafts(
     conditions = [ProductCreativeDraft.workspace_id == workspace_id]
     if status:
         conditions.append(ProductCreativeDraft.status == status)
+    else:
+        conditions.append(ProductCreativeDraft.status != "discarded")
     if kind:
         conditions.append(ProductCreativeDraft.kind == kind)
     if product_id:
@@ -939,6 +946,8 @@ def submit_media(
     unlinked until the set is complete.
     """
     draft = _draft(session, workspace_id, draft_id)
+    if draft.status == "discarded":
+        raise ValueError("This draft was discarded. Queue a new one to make this creative.")
     if draft.status != "pending":
         raise ValueError("This draft is already filled.")
     if _owed(draft) <= 0:
@@ -1020,6 +1029,46 @@ def submit_media(
     return view
 
 
+def discard_draft(
+    session: Session,
+    workspace_id: str,
+    actor_user_id: str,
+    draft_id: str,
+) -> dict[str, Any]:
+    """Take a draft out of the queue without deleting it.
+
+    For a draft queued by mistake - a twin, the wrong recipe. The record
+    stays, marked discarded with who and when, so the audit trail holds and
+    no group shot is renumbered. A finished draft is not discarded: its file
+    is in the Library and is removed there. A draft with a video generation
+    in flight is refused, because that clip is already being paid for.
+    Discarding twice is a no-op. Files a partly filled carousel already
+    ingested stay in the Library, unlinked.
+    """
+    from trendrelay_api.integrations.video_generation import _inflight
+
+    draft = _draft(session, workspace_id, draft_id)
+    if draft.status == "discarded":
+        return _view(session, draft)
+    if draft.status == "succeeded":
+        raise ValueError(
+            "This draft is finished and its file is in the Library. Remove the file there instead."
+        )
+    if _inflight(session, workspace_id, draft_id) is not None:
+        raise ValueError(
+            "A video is being generated for this draft. Wait for it to finish, "
+            "or cancel it from the jobs list, before discarding."
+        )
+    now = utc_now()
+    draft.status = "discarded"
+    draft.discarded_at = now
+    draft.discarded_by = actor_user_id
+    draft.updated_at = now
+    view = _view(session, draft)
+    session.commit()
+    return view
+
+
 def creative_assets_by_product(
     session: Session, workspace_id: str
 ) -> dict[str, list[dict[str, Any]]]:
@@ -1050,7 +1099,10 @@ def creative_drafts_by_product(
     """
     rows = session.scalars(
         select(ProductCreativeDraft)
-        .where(ProductCreativeDraft.workspace_id == workspace_id)
+        .where(
+            ProductCreativeDraft.workspace_id == workspace_id,
+            ProductCreativeDraft.status != "discarded",
+        )
         .order_by(ProductCreativeDraft.updated_at.desc())
     ).all()
     membership: dict[str, list[str]] = {}

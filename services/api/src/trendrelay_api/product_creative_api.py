@@ -18,6 +18,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.product_creative_drafts import (
     create_draft,
+    discard_draft,
     get_draft,
     list_drafts,
     preview,
@@ -194,6 +195,26 @@ def submit_creative_media(
         {"asset_id": view.get("asset_id"), "status": view.get("status")},
     )
     return {"draft": view, "asset_id": view.get("asset_id"), "linked": view.get("linked")}
+
+
+@router.post("/creative-drafts/{draft_id}/discard")
+def discard_creative_draft(
+    workspace_id: str,
+    draft_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Take a draft queued by mistake out of the queue. Kept, not deleted."""
+    require_role(membership(session, workspace_id, user.id), _EDITORS)
+    ensure_profile(session, user)
+    view = _call(lambda: discard_draft(session, workspace_id, user.id, draft_id))
+    audit(
+        session, request, workspace_id, user.id,
+        "attribution.creative_draft_discarded", "product_creative_draft", draft_id,
+        {"status": view.get("status"), "product_count": view.get("product_count")},
+    )
+    return {"draft": view}
 
 
 @router.get("/video-providers")
