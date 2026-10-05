@@ -539,6 +539,31 @@ def _member_product_ids(session: Session, draft: ProductCreativeDraft) -> list[s
     return ids or [draft.product_id]
 
 
+def _group_numbers(session: Session, workspace_id: str) -> dict[str, int]:
+    """Each group shot's number in this workspace, oldest first.
+
+    A group shot is named by number so "Group 2" is the same shot on every
+    row, band, card, and draft read, however the table is filtered or sorted.
+    Drafts are never deleted, so a number does not move. One query for the
+    member counts and one for the order.
+    """
+    sizes = dict(session.execute(
+        select(ProductCreativeDraftProduct.draft_id, func.count(ProductCreativeDraftProduct.id))
+        .where(ProductCreativeDraftProduct.workspace_id == workspace_id)
+        .group_by(ProductCreativeDraftProduct.draft_id)
+    ).all())
+    ordered = session.execute(
+        select(ProductCreativeDraft.id)
+        .where(ProductCreativeDraft.workspace_id == workspace_id)
+        .order_by(ProductCreativeDraft.created_at, ProductCreativeDraft.id)
+    ).scalars().all()
+    numbers: dict[str, int] = {}
+    for draft_id in ordered:
+        if sizes.get(draft_id, 1) > 1:
+            numbers[draft_id] = len(numbers) + 1
+    return numbers
+
+
 def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
     product = session.get(Product, draft.product_id)
     staged = [str(item) for item in (draft.staged_asset_ids or [])]
@@ -568,6 +593,10 @@ def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
         "listing_fields": _stored_listing(draft),
         "together": len(members) > 1,
         "product_count": len(members),
+        "group_number": (
+            _group_numbers(session, draft.workspace_id).get(draft.id)
+            if len(members) > 1 else None
+        ),
         "products": members,
         "ingested_asset_ids": staged,
         "owed": _owed(draft),
@@ -1033,13 +1062,7 @@ def creative_drafts_by_product(
         bucket = membership.setdefault(member.draft_id, [])
         if member.product_id not in bucket:
             bucket.append(member.product_id)
-    # A group shot is named by number, oldest first, so "Group 2" is the same
-    # shot on every row, band, and card however the table is filtered or
-    # sorted. Drafts are never deleted, so a number does not move.
-    group_numbers: dict[str, int] = {}
-    for draft in sorted(rows, key=lambda item: (item.created_at, item.id)):
-        if len(membership.get(draft.id) or [draft.product_id]) > 1:
-            group_numbers[draft.id] = len(group_numbers) + 1
+    group_numbers = _group_numbers(session, workspace_id)
     found: dict[str, list[dict[str, Any]]] = {}
     for draft in rows:
         product_ids = membership.get(draft.id) or [draft.product_id]

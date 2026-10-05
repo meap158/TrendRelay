@@ -182,6 +182,9 @@ def test_group_shots_are_numbered_oldest_first_and_singles_are_not(session) -> N
     assert {item["id"]: item["group_number"] for item in rows["product-1"]["creative_drafts"]}[
         single["id"]
     ] is None
+    # The single-draft read names the same group.
+    assert product_creatives.get_draft(session, "ws-1", second["id"])["group_number"] == 2
+    assert product_creatives.get_draft(session, "ws-1", single["id"])["group_number"] is None
 
 
 def test_included_images_drop_a_listing_picture_the_operator_unchecked(session) -> None:
