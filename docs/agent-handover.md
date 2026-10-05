@@ -28,6 +28,15 @@ An adversarial review of Generate media landed as atomic commits after
 - Migration 0087's downgrade keeps the lead product's link per card.
 - Generate dialog styles are scoped by `.generate-dialog`, not the shared
   `.campaign-dialog-form` (stylesheet guard).
+- Group shots are "Group N": `group_number` comes from the API (creation
+  order, one helper for the list and the draft read). The band, the line
+  for a smaller group inside a band, every member row's chip, the card, and
+  the draft dialog's title all use it. Hovering a chip lights its rows; a
+  band's checkbox selects its group.
+- Generate warns before queuing a twin (same products, kind, and recipe)
+  and offers Open Group N. It warns, it does not block.
+- Creatives open in the shared lightbox; only Open in Library navigates.
+  Generated media and the shop listing are separate panels.
 
 ## Attribution product media (2026-10-04)
 
