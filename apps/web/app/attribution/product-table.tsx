@@ -213,6 +213,8 @@ export function ProductTable({
   const [filterTo, setFilterTo] = useState("");
   /** One creator, chosen from the ones actually present in these rows. */
   const [filterCreator, setFilterCreator] = useState("");
+  /** One group shot's draft id, or empty for every group. */
+  const [filterGroup, setFilterGroup] = useState("");
   /** A sub ID pasted from the network's payout report. */
   const [filterSubId, setFilterSubId] = useState("");
   /** Whether a product's listing has been read: this table's own kind axis. */
@@ -333,6 +335,34 @@ export function ProductTable({
     [products],
   );
 
+  const groupOptions = useMemo(() => {
+    const found = new Map<string, NonNullable<ProductRow["creative_drafts"]>[number]>();
+    for (const product of products) {
+      for (const draft of product.creative_drafts ?? []) {
+        if ((draft.product_count ?? 0) > 1 && draft.group_number && !found.has(draft.id)) {
+          found.set(draft.id, draft);
+        }
+      }
+    }
+    return [...found.values()]
+      .sort((a, b) => (a.group_number ?? 0) - (b.group_number ?? 0))
+      .map((draft) => ({
+        value: draft.id,
+        label: groupName(t, draft.group_number),
+        description: [
+          creativeKind(t, draft.kind),
+          creativeRecipe(t, draft.recipe),
+          t("attribution.productCount", { count: draft.product_count ?? 0 }),
+          draft.status !== "succeeded" || draft.owed > 0
+            ? t("attribution.generate.statusPending")
+            : t("attribution.generate.statusSucceeded"),
+        ].join(" · "),
+      }));
+  }, [products, t]);
+  // A group that is no longer there (discarded, or filtered out of the
+  // catalogue) falls back to every group rather than an empty table.
+  const activeGroup = groupOptions.some((option) => option.value === filterGroup) ? filterGroup : "";
+
   const narrowed = useMemo(() => {
     // Arriving from a notification is a scope, not a filter: these products
     // and no others, whatever the controls above say. Applied first so the
@@ -349,11 +379,14 @@ export function ProductTable({
       // listing has been read is this table's own axis, the way the Library
       // splits videos from images.
       .filter((product) => listingFilter === "all"
-        || (listingFilter === "with" ? Boolean(product.listing) : !product.listing));
+        || (listingFilter === "with" ? Boolean(product.listing) : !product.listing))
+      // The products one group shot features, wherever their bands fall.
+      .filter((product) => !activeGroup
+        || (product.creative_drafts ?? []).some((draft) => draft.id === activeGroup));
   }, [
     products, query, filterCampaign, filterFile, filterFrom, filterTo,
     filterCreator, filterSubId,
-    campaignsByOffer, listingFilter, scope,
+    campaignsByOffer, listingFilter, scope, activeGroup,
   ]);
   const shown = useMemo(
     () => sortProducts(
@@ -381,7 +414,7 @@ export function ProductTable({
   // list says what it is showing out of the whole catalogue.
   const narrowedView = Boolean(query.trim() || filterCampaign || filterFile || filterFrom
     || filterTo || filterCreator || filterSubId.trim()
-    || listingFilter !== "all" || creativeFilter !== "all");
+    || listingFilter !== "all" || creativeFilter !== "all" || activeGroup);
   const creativeCounts = useMemo(() => ({
     all: narrowed.length,
     pending: narrowed.filter((product) => hasPendingCreative(product)).length,
@@ -630,6 +663,20 @@ export function ProductTable({
                 />
               </span>
             )}
+            {/* Group shots by number, with what each one is beneath it. */}
+            {groupOptions.length > 0 && (
+              <span className="product-filter-import">
+                <SearchSelect
+                  value={activeGroup}
+                  options={groupOptions}
+                  onChange={setFilterGroup}
+                  placeholder={t("attribution.generate.allGroups")}
+                  searchPlaceholder={t("attribution.generate.searchGroups")}
+                  emptyLabel={t("attribution.generate.noGroupMatches")}
+                  ariaLabel={t("attribution.generate.filterByGroup")}
+                />
+              </span>
+            )}
             {/* A searchable select, not a dropdown: this workspace has 336
                 creators, and a list that long is a scroll rather than a
                 choice. Ordered by how many products each has, so the ones
@@ -684,7 +731,7 @@ export function ProductTable({
               </span>
             )}
             {(filterCampaign || filterFile || filterFrom || filterTo
-              || filterCreator || filterSubId || creativeFilter !== "all") && (
+              || filterCreator || filterSubId || creativeFilter !== "all" || activeGroup) && (
               <Button
                 variant="quiet"
                 size="sm"
@@ -696,6 +743,7 @@ export function ProductTable({
                   setFilterCreator("");
                   setFilterSubId("");
                   setCreativeFilter("all");
+                  setFilterGroup("");
                 }}
               >
                 {t("attribution.clearFilters")}
@@ -885,7 +933,12 @@ export function ProductTable({
                           kind={draft.kind}
                           size="sm"
                         />
-                        <GroupChip number={draft.group_number} onHover={setFocusGroup} />
+                        <GroupChip
+                          number={draft.group_number}
+                          onHover={setFocusGroup}
+                          selected={activeGroup === draft.id}
+                          onSelect={() => setFilterGroup((current) => (current === draft.id ? "" : draft.id))}
+                        />
                         <span>
                           {creativeKind(t, draft.kind)}
                           {" · "}
@@ -947,7 +1000,12 @@ export function ProductTable({
                           kind={draft.kind}
                           size="sm"
                         />
-                        <GroupChip number={draft.group_number} onHover={setFocusGroup} />
+                        <GroupChip
+                          number={draft.group_number}
+                          onHover={setFocusGroup}
+                          selected={activeGroup === draft.id}
+                          onSelect={() => setFilterGroup((current) => (current === draft.id ? "" : draft.id))}
+                        />
                         <span>
                           {creativeKind(t, draft.kind)}
                           {" · "}

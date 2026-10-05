@@ -938,6 +938,10 @@
   cursor: default;
 }
 .product-draft-group-label > .product-group-chip { margin-inline-start: 0; }
+button.product-group-chip { font: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
+button.product-group-chip:hover { border-color: var(--link); }
+button.product-group-chip:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+button.product-group-chip[aria-pressed="true"] { background: var(--link); border-color: var(--link); color: var(--on-ink); }
 .product-group-choose { display: inline-grid; flex: none; place-items: center; inline-size: 24px; }
 .product-table > tbody > tr[data-group-focus] > * { background: color-mix(in srgb, var(--link) 9%, var(--panel)); }
 .product-draft-group-label {

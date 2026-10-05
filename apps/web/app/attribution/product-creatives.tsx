@@ -75,22 +75,40 @@ function thumbnailOf(assetId: string): LibraryAsset {
 export function GroupChip({
   number,
   onHover,
+  onSelect,
+  selected = false,
 }: {
   number?: number | null;
   onHover?: (number: number | null) => void;
+  /** Where a chip is not inside another control, pressing it filters to its group. */
+  onSelect?: () => void;
+  selected?: boolean;
 }) {
   const t = useT();
-  return (
-    <span
-      className="product-group-chip"
-      onMouseEnter={number && onHover ? () => onHover(number) : undefined}
-      onMouseLeave={number && onHover ? () => onHover(null) : undefined}
-    >
-      {number
-        ? t("attribution.generate.groupLabel", { number })
-        : t("attribution.generate.draftGroupTogether")}
-    </span>
-  );
+  const label = number
+    ? t("attribution.generate.groupLabel", { number })
+    : t("attribution.generate.draftGroupTogether");
+  const hover = {
+    onMouseEnter: number && onHover ? () => onHover(number) : undefined,
+    onMouseLeave: number && onHover ? () => onHover(null) : undefined,
+    onFocus: number && onHover ? () => onHover(number) : undefined,
+    onBlur: number && onHover ? () => onHover(null) : undefined,
+  };
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        className="product-group-chip"
+        aria-pressed={selected}
+        title={selected
+          ? t("attribution.generate.showEveryGroup")
+          : t("attribution.generate.showOnlyGroup", { group: label })}
+        onClick={onSelect}
+        {...hover}
+      >{label}</button>
+    );
+  }
+  return <span className="product-group-chip" {...hover}>{label}</span>;
 }
 
 export function isPendingDraft(draft: Pick<CreativeDraftRow, "status" | "owed">): boolean {
