@@ -1246,6 +1246,12 @@ export function ProductTable({
           products={generateFor}
           onClose={() => setGenerateFor(null)}
           onChanged={onCreativesChanged}
+          onOpenDraft={(productId, draftId) => {
+            const product = generateFor.find((item) => item.id === productId);
+            if (!product) return;
+            setGenerateFor(null);
+            setReviewDraft({ product, draftId });
+          }}
         />
       )}
       {reviewDraft && (

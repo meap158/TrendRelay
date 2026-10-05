@@ -134,6 +134,16 @@ function TriCheckbox({
 }
 
 type Kind = "image" | "carousel" | "video";
+
+type ExistingDraft = {
+  id: string;
+  kind: string;
+  recipe: string;
+  status: string;
+  owed: number;
+  product_count?: number;
+  group_number?: number | null;
+};
 type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
 
 type DraftView = {
@@ -152,6 +162,8 @@ type DraftView = {
   listing_fields?: ListingSnapshot;
   together?: boolean;
   product_count?: number;
+  /** A group shot's number, the same one the table shows. */
+  group_number?: number | null;
   products?: DraftMember[];
 };
 
@@ -162,8 +174,6 @@ type DraftView = {
  * one draft of all of them, and the finished file links to every product.
  * What will be sent starts collapsed: the prompt the API returns, then any
  * pictures and listing fields. When more than one product is in the ask,
-  /** A group shot's number, the same one the table shows. */
-  group_number?: number | null;
  * those stay under the product they belong to. A file is submitted
  * for that one draft, or while a single product is open. A video draft that
  * still owes a file can also be sent to a ready video provider.
@@ -174,13 +184,21 @@ export function GenerateDialog({
   draftId = null,
   onClose,
   onChanged,
+  onOpenDraft,
 }: {
   open: boolean;
-  products: { id: string; name: string }[];
+  products: {
+    id: string;
+    name: string;
+    /** What each product already has, so a duplicate can be named before it is queued. */
+    creative_drafts?: ExistingDraft[] | null;
+  }[];
   /** An existing draft. The dialog then shows that draft's stored configuration. */
   draftId?: string | null;
   onClose: () => void;
   onChanged?: () => void;
+  /** Open an existing draft in place of queuing its twin. */
+  onOpenDraft?: (productId: string, draftId: string) => void;
 }) {
   const t = useT();
   const { apiFetch } = useAuth();
@@ -571,6 +589,33 @@ export function GenerateDialog({
         ? t("attribution.generate.blockedPictures", { names: uncoveredNames.join(", ") })
         : "";
 
+  // What is about to be queued may already exist. A group shot of exactly
+  // these products, or the same recipe already pending on some of them, is
+  // named here with the way to it - queuing a twin is the mistake, and a
+  // second draft of the same thing is never what the operator went looking
+  // for. Said, not blocked: a deliberate second take stays possible.
+  const sameGroup = !locked && together
+    ? (products[0]?.creative_drafts ?? []).find((existing) => (
+      (existing.product_count ?? 0) === products.length
+      && existing.kind === kind
+      && existing.recipe === recipe
+      && products.every((item) => (item.creative_drafts ?? []).some((other) => other.id === existing.id))
+    )) ?? null
+    : null;
+  const sameGroupPending = sameGroup !== null
+    && (sameGroup.status !== "succeeded" || sameGroup.owed > 0);
+  const sameGroupName = sameGroup?.group_number
+    ? t("attribution.generate.groupLabel", { number: sameGroup.group_number })
+    : t("attribution.generate.draftGroupTogether");
+  const singlesPending = !locked && !together
+    ? products.filter((item) => (item.creative_drafts ?? []).some((existing) => (
+      (existing.product_count ?? 1) <= 1
+      && existing.kind === kind
+      && existing.recipe === recipe
+      && (existing.status !== "succeeded" || existing.owed > 0)
+    ))).length
+    : 0;
+
   async function queue() {
     if (products.length === 0 || !workspaceId || !prompt) return;
     if (together ? products.length > SUBJECT_LIMIT || togetherUncovered : subjects.length === 0) return;
@@ -804,6 +849,13 @@ export function GenerateDialog({
     );
   }
 
+  // A group shot under review is named the way the table names it.
+  const reviewGroup = reviewing && (draft?.product_count ?? 0) > 1
+    ? draft?.group_number
+      ? t("attribution.generate.groupLabel", { number: draft.group_number })
+      : t("attribution.generate.draftGroupTogether")
+    : "";
+
   const libraryLabels = reviewing
     ? storedSubjects.map((asset) => ({
       id: asset.asset_id,
@@ -855,13 +907,6 @@ export function GenerateDialog({
               disabled={!prompt || busy !== "" || togetherUncovered || (queueNeedsLibrary && subjects.length === 0)}
               onClick={() => void queue()}
             >{busy === "queue"
-  // A group shot under review is named the way the table names it.
-  const reviewGroup = reviewing && (draft?.product_count ?? 0) > 1
-    ? draft?.group_number
-      ? t("attribution.generate.groupLabel", { number: draft.group_number })
-      : t("attribution.generate.draftGroupTogether")
-    : "";
-
               ? t("attribution.generate.queuing")
               : many && !together
                 ? t("attribution.generate.queueMany")
@@ -925,6 +970,27 @@ export function GenerateDialog({
               ? t("attribution.generate.scopeLimit")
               : t("attribution.generate.scopeHelp")}</p>
           </div>
+        )}
+        {sameGroup && (
+          <div className="generate-duplicate" role="status">
+            <p>
+              {t(sameGroupPending
+                ? "attribution.generate.duplicateGroupPending"
+                : "attribution.generate.duplicateGroupDone", { group: sameGroupName })}
+            </p>
+            {onOpenDraft && products[0] && (
+              <Button
+                variant={sameGroupPending ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => onOpenDraft(products[0].id, sameGroup.id)}
+              >{t("attribution.generate.openGroup", { group: sameGroupName })}</Button>
+            )}
+          </div>
+        )}
+        {singlesPending > 0 && (
+          <p className="generate-duplicate" role="status">
+            {t("attribution.generate.duplicateSingles", { count: singlesPending, total: products.length })}
+          </p>
         )}
         <label>
           {t("attribution.generate.kind")}

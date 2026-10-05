@@ -506,6 +506,22 @@
   gap: 8px;
 }
 .generate-dialog .campaign-dialog-form .generate-providers .generate-provider-note { flex-basis: 100%; }
+/* An identical draft already exists: said before Queue, with the way to it. */
+.generate-dialog .campaign-dialog-form .generate-duplicate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 400;
+}
+.generate-dialog .campaign-dialog-form .generate-duplicate > p { flex: 1 1 16rem; margin: 0; }
 .generate-dialog .campaign-dialog-form .generate-provider-note,
 .generate-dialog .campaign-dialog-form .generate-blocker {
   margin: 0;
