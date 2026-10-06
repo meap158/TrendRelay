@@ -1903,8 +1903,14 @@ function LibraryContent() {
       const what = body.files === 1
         ? body.filename
         : `${Number(body.files).toLocaleString()} files as ${body.filename}`;
-      setMessage(`Downloading ${what} (${displaySize(body.bytes)})`
-        + (body.missing ? ` · ${body.missing} not on disk, left out.` : "."));
+      // A toast that leaves on its own, not the selection note: once the link
+      // is followed the browser (or a download manager) owns the download and
+      // this page never learns when it ends, so a standing "Downloading…"
+      // stayed long after the file had arrived. Missing files are a problem
+      // worth keeping on screen, so they stay until dismissed.
+      const started = `Download started: ${what} (${displaySize(body.bytes)})`;
+      if (body.missing) fail(`${started}. ${body.missing} not on disk, left out.`);
+      else succeed(`${started}.`);
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "The download could not start.");
     } finally {
