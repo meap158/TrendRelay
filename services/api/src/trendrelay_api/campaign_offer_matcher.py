@@ -509,8 +509,14 @@ def score_offers(
     platforms: set[str],
     performance: dict[str, dict[str, float]] | None = None,
     limit: int = 12,
+    keep: Iterable[str] = (),
 ) -> list[OfferMatch]:
     """Rank offers against whatever evidence was gathered about the content.
+
+    `keep` names offers that must come back whatever their rank - a post's
+    pins. They survive both cuts below: the one-offer-per-product rule (a pin
+    names an offer, not a product) and the `limit`, after which they follow
+    the ranked list in score order.
 
     Lifted out of `match_offers` so a post written by hand in Publish can be
     matched by the same arithmetic a campaign uses. Nothing here knows about
@@ -603,16 +609,28 @@ def score_offers(
 
     # One offer per product. A product imported from two networks should not
     # consume two recommendation slots; the better-scoring commercial offer wins.
+    kept = set(keep)
     best_by_product: dict[str, OfferMatch] = {}
     for match in matches:
         existing = best_by_product.get(match.product_id)
-        if existing is None or (match.score, match.offer_id) > (existing.score, existing.offer_id):
+        if existing is not None and existing.offer_id in kept:
+            continue
+        if (
+            existing is None
+            or match.offer_id in kept
+            or (match.score, match.offer_id) > (existing.score, existing.offer_id)
+        ):
             best_by_product[match.product_id] = match
-    return sorted(
+    ranked = sorted(
         best_by_product.values(),
         key=lambda match: (match.score, match.confidence == "high", match.product_name.casefold()),
         reverse=True,
-    )[:limit]
+    )
+    # A pin outside the top of the ranking is still a pin. Cut at the limit
+    # first, it was dropped without a word: a campaign with more tagged
+    # products than the limit posted with fewer products than were pinned.
+    top = ranked[:limit]
+    return top + [match for match in ranked[limit:] if match.offer_id in kept]
 
 
 def match_offers(
@@ -669,6 +687,7 @@ def match_offers(
         platforms=platforms,
         performance=_offer_performance(session, campaign.id),
         limit=limit,
+        keep=(item.offer_ids or []) if item else (),
     )
     auto_eligible = [match for match in ranked if match.confidence != "low"]
 

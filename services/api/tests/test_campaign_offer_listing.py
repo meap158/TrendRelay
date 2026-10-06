@@ -221,3 +221,31 @@ def test_a_listing_that_is_on_topic_does_win() -> None:
     )
     assert scored[0].product_id == "prod-rich"
     assert scored[0].score > scored[1].score
+
+
+def test_a_pinned_offer_survives_the_ranking_limit_and_a_better_sibling() -> None:
+    """A pin is the operator naming an offer, so the ranking cannot drop it.
+
+    Cut at the limit first, a pin that ranked past it vanished from the post
+    without a word - a campaign with more tagged products than the limit
+    published fewer products than were pinned. And the one-offer-per-product
+    rule must keep the pinned offer, not whichever sibling scored higher.
+    """
+    rows = [
+        (offer(f"o{index}"), product(f"p{index}", f"Silk pyjama set {index}"))
+        for index in range(5)
+    ]
+    weak = (offer("weak"), product("weak", "Garden hose"))
+    sibling = types.SimpleNamespace(**{**vars(offer("sibling")), "commission_bps": 3000})
+    rows += [weak, (sibling, product("p0", "Silk pyjama set 0"))]
+
+    context = {"caption": (3.0, tokens("silk pyjama set"))}
+    plain = score_offers(rows, context, platforms={"facebook"}, limit=3)
+    assert "offer-weak" not in [match.offer_id for match in plain]
+
+    pinned = score_offers(
+        rows, context, platforms={"facebook"}, limit=3, keep=["offer-weak", "offer-o0"],
+    )
+    ids = [match.offer_id for match in pinned]
+    assert ids[-1] == "offer-weak"
+    assert "offer-o0" in ids and "offer-sibling" not in ids
