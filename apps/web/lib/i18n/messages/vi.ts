@@ -438,6 +438,8 @@ export const vi: Messages = {
     addToAnotherCampaign: "Thêm vào chiến dịch khác",
     alreadyInCampaigns: "Đã có trong",
     attributionProducts: "Sản phẩm phân bổ",
+    showMoreProducts: "Xem thêm {count}",
+    showFewerProducts: "Thu gọn",
     queuedTimes: "({count}×)",
     fileActions: "Tệp",
     openingFolder: "Đang mở",

@@ -455,10 +455,23 @@ p.library-in-campaigns { display: flex; align-items: center; gap: 6px; margin: 0
    twice the height of the line holding it. */
 .library-in-campaigns a { border: 0; border-radius: 0; padding: 0; color: var(--link); background: none; font-weight: 600; }
 .library-in-campaigns a:hover { text-decoration: underline; }
-/* Product titles contain commas, so a together file lists one name per line. */
-div.library-attribution-links { display: grid; align-items: start; gap: 4px; }
-.library-attribution-links ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.library-attribution-links a { overflow-wrap: anywhere; }
+/* Tagged products: one bordered list of rows, picture then a two-line title,
+   rather than a run of full-length marketplace titles set as links. The rows
+   are written as `.library-actions a.` to win over the bordered-button look
+   line 51 gives every link in this panel. */
+.library-tagged-products { display: grid; gap: 6px; }
+.library-tagged-products-head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.library-tagged-products-count { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--panel-raised); box-shadow: inset 0 0 0 1px var(--line); font-size: 10px; line-height: 16px; text-align: center; }
+.library-tagged-products ul { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.library-tagged-products li + li { border-top: 1px solid var(--line); }
+.library-actions a.library-tagged-product { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 0; border-radius: 0; color: var(--text); background: var(--panel); font-size: 12px; line-height: 1.35; }
+.library-actions a.library-tagged-product:hover { background: var(--panel-raised); color: var(--text); }
+.library-actions a.library-tagged-product:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+.library-tagged-product svg { flex: none; color: var(--muted); }
+.library-tagged-product:hover svg { color: var(--link); }
+.library-tagged-product-name { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.library-tagged-products-more { justify-self: start; padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.library-tagged-products-more:hover { text-decoration: underline; }
 /* Pushed to the end of its row so a mis-aimed click lands on nothing. */
 .library-action-danger { display: inline-flex; margin-inline-start: auto; }
 /* Scoped to the row rather than to `.library-actions >`, which is where these

@@ -430,6 +430,8 @@ export const zh: Messages = {
     addToAnotherCampaign: "加入其他活动",
     alreadyInCampaigns: "已在：",
     attributionProducts: "归因商品",
+    showMoreProducts: "再显示 {count} 个",
+    showFewerProducts: "收起",
     queuedTimes: "({count}次)",
     fileActions: "文件",
     openingFolder: "正在打开",

@@ -1140,7 +1140,7 @@ def attribution_products_by_asset(
     if not asset_ids:
         return {}
     rows = session.execute(
-        select(ProductCreativeLink, Product.name)
+        select(ProductCreativeLink, Product.name, Product.image_url)
         .join(Product, Product.id == ProductCreativeLink.product_id)
         .where(
             ProductCreativeLink.workspace_id == workspace_id,
@@ -1149,10 +1149,11 @@ def attribution_products_by_asset(
         .order_by(Product.name)
     ).all()
     found: dict[str, list[dict[str, Any]]] = {}
-    for link, name in rows:
+    for link, name, image_url in rows:
         found.setdefault(link.asset_id, []).append({
             "product_id": link.product_id,
             "name": name,
+            "image_url": image_url,
             "draft_id": link.draft_id,
         })
     return found

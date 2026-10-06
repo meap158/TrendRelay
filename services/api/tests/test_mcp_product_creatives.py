@@ -271,7 +271,8 @@ def test_submit_links_the_library_asset_both_ways(session, monkeypatch, tmp_path
     assert asset is not None
     view = _asset_view(session, asset)
     assert view["attribution_products"] == [{
-        "product_id": "product-1", "name": "Angel set", "draft_id": image["id"],
+        "product_id": "product-1", "name": "Angel set",
+        "image_url": "https://shop.example/angel.jpg", "draft_id": image["id"],
     }]
 
 

@@ -436,6 +436,8 @@ export const ja: Messages = {
     addToAnotherCampaign: "別のキャンペーンに追加",
     alreadyInCampaigns: "すでに参加中:",
     attributionProducts: "アトリビューションの商品",
+    showMoreProducts: "さらに {count} 件を表示",
+    showFewerProducts: "表示を減らす",
     queuedTimes: "({count}回)",
     fileActions: "ファイル",
     openingFolder: "開いています",

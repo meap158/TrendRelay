@@ -441,6 +441,8 @@ export const ru: Messages = {
     addToAnotherCampaign: "Добавить в другую кампанию",
     alreadyInCampaigns: "Уже в:",
     attributionProducts: "Товары атрибуции",
+    showMoreProducts: "Показать ещё {count}",
+    showFewerProducts: "Свернуть",
     queuedTimes: "({count}×)",
     fileActions: "Файл",
     openingFolder: "Открываем",

@@ -443,6 +443,8 @@ export const fr: Messages = {
     addToAnotherCampaign: "Ajouter à une autre campagne",
     alreadyInCampaigns: "Déjà dans",
     attributionProducts: "Produits d'attribution",
+    showMoreProducts: "Afficher {count} de plus",
+    showFewerProducts: "Afficher moins",
     queuedTimes: "({count}×)",
     fileActions: "Fichier",
     openingFolder: "Ouverture",

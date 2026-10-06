@@ -442,6 +442,8 @@ export const en = {
     addToAnotherCampaign: "Add to another campaign",
     alreadyInCampaigns: "Already in",
     attributionProducts: "Attribution products",
+    showMoreProducts: "Show {count} more",
+    showFewerProducts: "Show fewer",
     queuedTimes: "({count}×)",
     fileActions: "File",
     openingFolder: "Opening",

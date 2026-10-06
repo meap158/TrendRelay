@@ -314,6 +314,7 @@ def test_submitting_an_image_and_a_video_links_both_ways(monkeypatch, tmp_path: 
         assert asset["attribution_products"] == [{
             "product_id": product_id,
             "name": "Angel set",
+            "image_url": "https://shop.example/angel.jpg",
             "draft_id": image_id if asset_id == image_asset else video_id,
         }]
 

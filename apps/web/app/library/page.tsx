@@ -16,6 +16,7 @@ import { useWorkspace } from "../workspace-provider";
 import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import type { ReadableTranscript } from "./transcript-reader";
+import { TaggedProducts, type TaggedProduct } from "./tagged-products";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, ButtonPair, buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
@@ -631,7 +632,7 @@ type Asset = {
    */
   campaigns?: { id: string; name: string; queued: number }[];
   /** Attribution products this asset was generated for. */
-  attribution_products?: { product_id: string; name: string; draft_id: string }[];
+  attribution_products?: TaggedProduct[];
 };
 type CampaignPickerSelection = {
   /** Every selected id, including rows outside the 100 assets painted in the grid. */
@@ -2847,18 +2848,7 @@ function LibraryContent() {
                       </p>
                     )}
                     {!!selected.attribution_products?.length && (
-                      <div className="library-in-campaigns library-attribution-links">
-                        <span>{t("library.attributionProducts")}</span>
-                        <ul>
-                          {selected.attribution_products.map((product) => (
-                            <li key={product.product_id}>
-                              <Link href={`/attribution?products=${encodeURIComponent(product.product_id)}`}>
-                                {product.name}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      <TaggedProducts key={selected.id} products={selected.attribution_products} />
                     )}
                   </section>
 

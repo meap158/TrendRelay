@@ -436,6 +436,8 @@ export const ar: Messages = {
     addToAnotherCampaign: "إضافة إلى حملة أخرى",
     alreadyInCampaigns: "موجود بالفعل في",
     attributionProducts: "منتجات الإسناد",
+    showMoreProducts: "عرض {count} أخرى",
+    showFewerProducts: "عرض أقل",
     queuedTimes: "({count}×)",
     fileActions: "الملف",
     openingFolder: "جارٍ الفتح",
