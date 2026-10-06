@@ -2458,16 +2458,6 @@ function LibraryContent() {
                         campaignPickerSelection(selection, assets),
                       )}
                     ><ActionIcon name="campaign" />Add to campaign</Button>
-                    {/* Reading, not changing, so not behind canImport. */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      busy={busy === "download"}
-                      title={selection.size === 1
-                        ? "Download the selected file"
-                        : "Download the selected files as one .zip"}
-                      onClick={() => void downloadSelection()}
-                    ><ActionIcon name="download" />Download</Button>
                     {selectedVisuals.length >= AUTOCUT_MIN_IMAGES && (
                       <Button
                         variant="secondary"
@@ -2499,22 +2489,42 @@ function LibraryContent() {
                       disabled={!canImport || selectionList.length === 0}
                       onSelect={(id) => setSelectionAction(id as LibrarySelectionActionId)}
                     />
-                    {visibleBulkActions.map((action) => (
-                      <Button
-                        key={action.id}
-                        variant={action.id === "delete" ? "danger" : "secondary"}
-                        size="sm"
-                        busy={busy === `bulk-${action.id}`}
-                        disabled={!canImport || !action.available}
-                        title={action.available ? action.description : action.reason ?? undefined}
-                        onClick={() => void runBulkAction(action)}
-                      >
-                        {bulkActionIcon(action.id) && (
-                          <ActionIcon name={bulkActionIcon(action.id)!} />
-                        )}
-                        {action.label}
-                      </Button>
-                    ))}
+                    {/* Download and Delete as a pair of icons at the end of the
+                        row: both are file operations everyone recognises by
+                        their glyph, and the row has more tools than width.
+                        Reading, not changing, so Download is not behind
+                        canImport. */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      iconOnly
+                      busy={busy === "download"}
+                      aria-label={selection.size === 1 ? "Download" : "Download as .zip"}
+                      title={selection.size === 1
+                        ? "Download the selected file"
+                        : "Download the selected files as one .zip"}
+                      onClick={() => void downloadSelection()}
+                    ><ActionIcon name="download" /></Button>
+                    {visibleBulkActions.map((action) => {
+                      const icon = bulkActionIcon(action.id);
+                      const iconOnly = action.id === "delete" && !!icon;
+                      return (
+                        <Button
+                          key={action.id}
+                          variant={action.id === "delete" ? "danger" : "secondary"}
+                          size="sm"
+                          iconOnly={iconOnly}
+                          aria-label={iconOnly ? action.label : undefined}
+                          busy={busy === `bulk-${action.id}`}
+                          disabled={!canImport || !action.available}
+                          title={action.available ? action.description : action.reason ?? undefined}
+                          onClick={() => void runBulkAction(action)}
+                        >
+                          {icon && <ActionIcon name={icon} />}
+                          {!iconOnly && action.label}
+                        </Button>
+                      );
+                    })}
                   </span>
                   {selection.size > Math.min(...visibleBulkActions.map((a) => a.max_batch), Infinity) && (
                     <Badge tone="neutral">{t("library.runsInBatches")}</Badge>
