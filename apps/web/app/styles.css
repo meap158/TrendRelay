@@ -1648,7 +1648,15 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-pipeline-time::after { position: absolute; inset-block: 0; inset-inline-end: 8px; inline-size: 1px; content: ""; background: var(--line); }
 .campaign-pipeline-time time { color: var(--text); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .campaign-pipeline-time i { position: absolute; z-index: 1; inset-block-start: 17px; inset-inline-end: 4px; inline-size: 9px; block-size: 9px; border: 2px solid var(--panel); border-radius: 50%; background: var(--link); }
-.campaign-pipeline-thumb { display: grid; place-items: center; padding: 12px 8px; border-inline-end: 1px solid var(--line); background: var(--panel-raised); }
+/* The box a still must fit: the 76px column less its padding, by the row's
+   height. Lengths rather than percentages, because the still sits inside a
+   zoom button and frame that take their width from it - a `max-width: 100%`
+   there measured against itself, so nothing stopped a landscape still and a
+   3:2 group shot spread twice the column's width across the title. */
+/* Top, not middle: a row opened to "see exactly what will post" is several
+   hundred pixels tall, and a centred still drifted down beside the preview's
+   own pictures, reading as one more of them. */
+.campaign-pipeline-thumb { --thumb-box-w: 60px; --thumb-box-h: 78px; display: grid; place-items: start center; min-inline-size: 0; padding: 12px 8px; border-inline-end: 1px solid var(--line); background: var(--panel-raised); }
 /* The clip's own shape, not a landscape box it gets cropped into.
  *
  * These are 720x1280 vertical videos and this was a fixed 92x72 landscape slot
@@ -1659,7 +1667,11 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
  * `contain` rather than `cover` as the backstop: the box already matches the
  * media, so nothing is letterboxed in the normal case, and an unusually wide
  * clip that hits the width cap stays honest rather than being cut. */
-.campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: auto; block-size: 78px; aspect-ratio: var(--thumb-ratio, 92 / 72); max-inline-size: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
+.campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: auto; block-size: var(--thumb-box-h); aspect-ratio: var(--thumb-ratio, 92 / 72); max-inline-size: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
+/* Fitted, not stood to the row: as wide as the height allows, never wider than
+   the box, the shape kept by the ratio. A 9:16 clip stays 44x78 and a 3:2
+   group shot becomes 60x40 instead of 117x78. */
+.campaign-pipeline-thumb .picker-thumb { block-size: auto; inline-size: min(var(--thumb-box-w), calc(var(--thumb-box-h) * var(--thumb-ratio, 92 / 72))); }
 .campaign-pipeline-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: contain; }
 /* No media to measure, so it keeps the old landscape placeholder shape. */
 .campaign-pipeline-thumb-empty { inline-size: 52px; aspect-ratio: 9 / 16; }
@@ -1668,7 +1680,7 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
    the queue's, because the frame above already stands to the row. */
 .campaign-pipeline-thumb .autopilot-queue-zoom { display: grid; place-items: center; max-inline-size: 100%; }
 .campaign-pipeline-thumb .autopilot-queue-zoom .picker-thumb { cursor: zoom-in; }
-.campaign-pipeline-thumb .autopilot-queue-zoom-still { block-size: 78px; max-inline-size: 100%; }
+.campaign-pipeline-thumb .autopilot-queue-zoom-still { block-size: auto; max-block-size: var(--thumb-box-h); max-inline-size: var(--thumb-box-w); }
 .campaign-pipeline-thumb .picker-thumb b { font-size: 13px; }
 .campaign-pipeline-thumb .picker-thumb i { display: none; }
 .campaign-pipeline article { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; padding: 12px 14px; }
