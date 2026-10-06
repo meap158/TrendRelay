@@ -8,6 +8,7 @@ import { FormEvent, Suspense, memo, useCallback, useEffect, useMemo, useRef, use
 
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
+import { apiBaseUrl } from "../../lib/api";
 import { mediaTypeFor, opaquePreviewUrl } from "../../lib/media-preview";
 import { Lightbox } from "../ui/lightbox";
 import { useAuth } from "../auth-provider";
@@ -740,7 +741,8 @@ function downloadedOn(when: string | null | undefined): { short: string; exact: 
 
 function displaySize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 ** 3) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
 function displayDuration(milliseconds?: number | null): string {
@@ -1870,6 +1872,46 @@ function LibraryContent() {
     }
   }
 
+  /**
+   * The selection as one .zip, or a single pick as itself.
+   *
+   * The API checks the selection and answers with a short-lived link, and the
+   * browser follows it - so the file arrives through the browser's own
+   * download, with its progress and its "Save as", instead of being read into
+   * this tab's memory first. A selection of every match can be gigabytes.
+   */
+  async function downloadSelection() {
+    const ids = Array.from(selection);
+    if (!ids.length || !workspaceId) return;
+    setBusy("download");
+    fail("");
+    setMessage("");
+    try {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/archives`, {
+        method: "POST",
+        body: JSON.stringify({ asset_ids: ids }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail ?? "The download could not start.");
+      const anchor = document.createElement("a");
+      anchor.href = `${apiBaseUrl()}${body.url}`;
+      anchor.download = body.filename;
+      anchor.rel = "noopener";
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      const what = body.files === 1
+        ? body.filename
+        : `${Number(body.files).toLocaleString()} files as ${body.filename}`;
+      setMessage(`Downloading ${what} (${displaySize(body.bytes)})`
+        + (body.missing ? ` · ${body.missing} not on disk, left out.` : "."));
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The download could not start.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   function renderAsset(asset: Asset) {
     const mediaActivity = thumbnailMediaActivity(
       t,
@@ -2416,6 +2458,16 @@ function LibraryContent() {
                         campaignPickerSelection(selection, assets),
                       )}
                     ><ActionIcon name="campaign" />Add to campaign</Button>
+                    {/* Reading, not changing, so not behind canImport. */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      busy={busy === "download"}
+                      title={selection.size === 1
+                        ? "Download the selected file"
+                        : "Download the selected files as one .zip"}
+                      onClick={() => void downloadSelection()}
+                    ><ActionIcon name="download" />Download</Button>
                     {selectedVisuals.length >= AUTOCUT_MIN_IMAGES && (
                       <Button
                         variant="secondary"

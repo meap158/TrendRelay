@@ -26,7 +26,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.orm import Session
@@ -3725,6 +3725,122 @@ class BulkRequest(BaseModel):
     action: str = Field(min_length=1, max_length=60)
     asset_ids: list[str] = Field(min_length=1, max_length=200)
     confirm_external_action: bool = False
+
+
+class ArchiveRequest(BaseModel):
+    #: As many as "Select all matching" can pick. The archive streams, so the
+    #: bound is on the request body, not on the bytes behind it.
+    asset_ids: list[str] = Field(min_length=1, max_length=20_000)
+
+
+@router.post("/archives", status_code=201)
+def prepare_archive(
+    workspace_id: str,
+    body: ArchiveRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Check a selection and issue a short-lived link that downloads it.
+
+    One file comes back as itself, not wrapped in an archive of one - the way
+    a file drive treats a single pick. See `media_archive` for why this is a
+    link rather than the bytes.
+    """
+    from trendrelay_api import media_archive
+
+    membership(session, workspace_id, user.id)
+    wanted = list(dict.fromkeys(body.asset_ids))
+    found: dict[str, MediaAsset] = {}
+    for start in range(0, len(wanted), 500):
+        for item in session.scalars(
+            select(MediaAsset).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.id.in_(wanted[start:start + 500]),
+            )
+        ):
+            found[item.id] = item
+    # In the order they were picked, which is the order the grid showed them.
+    present: list[tuple[MediaAsset, Path]] = []
+    for asset_id in wanted:
+        item = found.get(asset_id)
+        if item is None:
+            continue
+        path = Path(item.original_path)
+        if path.is_file():
+            present.append((item, path))
+    missing = len(wanted) - len(present)
+    if not present:
+        raise HTTPException(
+            status_code=404,
+            detail="None of the selected files are on disk any more.",
+        )
+    names = media_archive.unique_names([
+        media_archive.entry_name(item.title, item.original_path) for item, _ in present
+    ])
+    entries = [
+        media_archive.ArchiveEntry(path=path, name=name)
+        for (_, path), name in zip(present, names, strict=True)
+    ]
+    if len(entries) == 1:
+        filename = entries[0].name
+        media_type = present[0][0].mime_type or "application/octet-stream"
+    else:
+        filename = media_archive.archive_filename(
+            len(entries), utc_now().date().isoformat()
+        )
+        media_type = "application/zip"
+    token = media_archive.issue(workspace_id, entries, filename, media_type)
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media_library.archive",
+        "media_asset",
+        ",".join(wanted[:10]),
+        {"files": len(entries), "missing": missing},
+    )
+    return {
+        "url": f"/api/workspaces/{workspace_id}/media/library/archives/{token}",
+        "filename": filename,
+        "files": len(entries),
+        "missing": missing,
+        "bytes": sum(path.stat().st_size for _, path in present),
+    }
+
+
+@router.get("/archives/{token}")
+def download_archive(workspace_id: str, token: str):
+    """The download an issued link stands for.
+
+    Unauthenticated by design: the browser fetches this itself, without the
+    bearer header, and the unguessable token issued to a member is the
+    permission. It names its workspace and expires in minutes.
+    """
+    from trendrelay_api import media_archive
+
+    ticket = media_archive.redeem(workspace_id, token)
+    if ticket is None:
+        raise HTTPException(
+            status_code=404,
+            detail="This download link has expired. Start the download again.",
+        )
+    headers = {
+        "Content-Disposition": media_archive.content_disposition(ticket.filename),
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if ticket.media_type != "application/zip":
+        entry = ticket.entries[0]
+        if not entry.path.is_file():
+            raise HTTPException(status_code=404, detail="That file is no longer on disk.")
+        return FileResponse(entry.path, media_type=ticket.media_type, headers=headers)
+    return StreamingResponse(
+        media_archive.stream_zip(ticket.entries),
+        media_type="application/zip",
+        headers=headers,
+    )
 
 
 @router.get("/bulk-actions")

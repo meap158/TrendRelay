@@ -1611,3 +1611,124 @@ def test_try_ocr_reading_prefers_reviewed_over_machine() -> None:
         assert found.status == "reviewed"
         assert found.text == "Reviewed text"
 
+
+def _stored_assets(workspace_id: str, files: list[tuple[str, Path]]) -> list[str]:
+    ids = []
+    with TestingSession.begin() as session:
+        for index, (title, path) in enumerate(files):
+            asset = MediaAsset(
+                id=f"asset-zip-{index}",
+                workspace_id=workspace_id,
+                title=title,
+                media_kind="image",
+                source_type="test",
+                original_path=str(path),
+                original_sha256=f"sha-zip-{index}",
+                mime_type="image/png",
+                size_bytes=path.stat().st_size if path.exists() else 0,
+                created_by="library-owner",
+            )
+            session.add(asset)
+            ids.append(asset.id)
+    return ids
+
+
+def test_a_selection_downloads_as_one_zip(tmp_path: Path) -> None:
+    """Picked files come back in one archive, named so they extract cleanly.
+
+    Repeated titles are numbered rather than overwriting each other, titles
+    in other scripts keep their spelling, pictures are stored rather than
+    deflated a second time, and a file gone from disk is reported and left
+    out rather than failing the rest.
+    """
+    import io
+    import zipfile
+
+    workspace_id = create_workspace()
+    one = tmp_path / "a.png"
+    two = tmp_path / "b.png"
+    notes = tmp_path / "c.srt"
+    one.write_bytes(b"first picture")
+    two.write_bytes(b"second picture")
+    notes.write_text("1\n00:00:00,000 --> 00:00:01,000\nxin chào\n" * 50, encoding="utf-8")
+    ids = _stored_assets(workspace_id, [
+        ("Look.png", one),
+        ("look", two),
+        ("Bộ đồ ngủ: phụ đề", notes),
+        ("Gone", tmp_path / "missing.png"),
+    ])
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    prepared = asyncio.run(request("POST", f"{base}/archives", json={"asset_ids": ids}))
+    assert prepared.status_code == 201, prepared.text
+    body = prepared.json()
+    assert body["files"] == 3
+    assert body["missing"] == 1
+    assert body["filename"].endswith(".zip")
+
+    # Fetched without credentials, as the browser fetches it.
+    app.dependency_overrides.pop(current_user, None)
+    download = asyncio.run(request("GET", body["url"]))
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/zip"
+    assert "attachment" in download.headers["content-disposition"]
+
+    archive = zipfile.ZipFile(io.BytesIO(download.content))
+    assert archive.testzip() is None
+    assert archive.namelist() == ["Look.png", "look (2).png", "Bộ đồ ngủ_ phụ đề.srt"]
+    assert archive.read("Look.png") == b"first picture"
+    assert archive.getinfo("Look.png").compress_type == zipfile.ZIP_STORED
+    assert archive.getinfo("Bộ đồ ngủ_ phụ đề.srt").compress_type == zipfile.ZIP_DEFLATED
+
+    # Fetched a second time inside its lifetime, as a download manager does.
+    again = asyncio.run(request("GET", body["url"]))
+    assert again.status_code == 200
+
+
+def test_one_picked_file_downloads_as_itself(tmp_path: Path) -> None:
+    workspace_id = create_workspace()
+    picture = tmp_path / "only.png"
+    picture.write_bytes(b"just one")
+    ids = _stored_assets(workspace_id, [("Only one", picture)])
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    body = asyncio.run(request("POST", f"{base}/archives", json={"asset_ids": ids})).json()
+    assert body["filename"] == "Only one.png"
+    download = asyncio.run(request("GET", body["url"]))
+    assert download.status_code == 200
+    assert download.content == b"just one"
+    assert download.headers["content-type"].startswith("image/png")
+
+
+def test_a_download_link_is_bound_to_its_workspace(tmp_path: Path) -> None:
+    workspace_id = create_workspace()
+    picture = tmp_path / "only.png"
+    picture.write_bytes(b"just one")
+    ids = _stored_assets(workspace_id, [("Only one", picture)])
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    url = asyncio.run(request("POST", f"{base}/archives", json={"asset_ids": ids})).json()["url"]
+
+    elsewhere = url.replace(workspace_id, "another-workspace")
+    assert asyncio.run(request("GET", elsewhere)).status_code == 404
+    assert asyncio.run(request("GET", f"{base}/archives/not-a-ticket")).status_code == 404
+    # Another workspace's assets are not in reach of this one's selection.
+    other = asyncio.run(request("POST", "/api/workspaces", json={"name": "Other", "slug": "other"}))
+    other_base = f"/api/workspaces/{other.json()['workspace']['id']}/media/library"
+    refused = asyncio.run(request("POST", f"{other_base}/archives", json={"asset_ids": ids}))
+    assert refused.status_code == 404
+
+
+def test_archive_names_extract_on_every_system() -> None:
+    from trendrelay_api import media_archive
+
+    assert media_archive.entry_name("con", "/x/a.mp4") == "_con.mp4"
+    assert media_archive.entry_name('a/b\\c:"d"?.', "/x/a.PNG") == "a_b_c_d_.png"
+    assert media_archive.entry_name("   ", "/x/clip.mp4") == "clip.mp4"
+    assert len(media_archive.entry_name("x" * 400, "/x/a.png")) == media_archive.MAX_STEM + 4
+    assert media_archive.unique_names(["a.png", "A.png", "a.png", "b"]) == [
+        "a.png", "A (2).png", "a (3).png", "b",
+    ]
+    assert media_archive.content_disposition("Bộ.zip") == (
+        "attachment; filename=\"B_.zip\"; filename*=UTF-8''B%E1%BB%99.zip"
+    )
+
