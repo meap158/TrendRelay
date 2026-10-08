@@ -113,18 +113,44 @@ def graduation_block(session: Session, campaign_id: str) -> str | None:
     executions themselves: enough provider-confirmed posts to have been
     watched, and nothing sitting unresolved that could be a duplicate waiting
     to happen.
+
+    What is said is only what is missing. Both halves used to be recited
+    whichever one was short, so a campaign with 273 confirmed posts and five
+    ambiguous deliveries was refused with "273 of 10 provider-confirmed posts
+    so far" - a sentence that reads as a shortfall, about the half it had
+    already met, next to the half it had not. The one that is holding the
+    campaign back is also the one with something to do about it, so it is said
+    on its own and with the doing in it.
     """
     progress = graduation_progress(session, campaign_id)
     published = progress["published"]
     unresolved = progress["unresolved"]
-    if not progress["ready"]:
-        return (
+    if progress["ready"]:
+        return None
+    if published < GRADUATION_PUBLISHED_POSTS:
+        short = (
             f"Autonomous authority is earned: {published} of "
-            f"{GRADUATION_PUBLISHED_POSTS} provider-confirmed posts so far, and "
-            f"{unresolved} uncertain delivery(ies) unresolved. Run by exception "
-            "until the record supports it."
+            f"{GRADUATION_PUBLISHED_POSTS} provider-confirmed posts so far."
         )
-    return None
+        if unresolved:
+            short += (
+                f" {_unresolved_phrase(unresolved)} to settle as well - check the"
+                " account on the campaign's timeline and use Back into rotation."
+            )
+        return f"{short} Run by exception until the record supports it."
+    return (
+        f"Autonomous authority is earned, and this campaign has earned the "
+        f"posting record: {published} provider-confirmed posts. "
+        f"{_unresolved_phrase(unresolved).capitalize()} still unresolved - each "
+        "one holds its slot and its post, because it may have gone out. Check "
+        "the account on the campaign's timeline and use Back into rotation on "
+        "each; autonomous is available as soon as none are left."
+    )
+
+
+def _unresolved_phrase(count: int) -> str:
+    """"1 uncertain delivery" or "5 uncertain deliveries"."""
+    return f"{count} uncertain deliver{'y' if count == 1 else 'ies'}"
 
 
 def _card_language(value: str | None) -> str | None:

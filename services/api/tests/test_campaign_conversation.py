@@ -227,6 +227,52 @@ def test_autonomy_is_earned_not_clicked(session) -> None:
     ))
     session.commit()
     blocked = campaign_autopilot_api.graduation_block(session, "camp")
-    assert "1 uncertain delivery(ies) unresolved" in blocked, (
+    assert "1 uncertain delivery" in blocked, (
         "an unresolved delivery blocks graduation however many posts confirmed"
     )
+
+
+def test_the_refusal_names_what_is_missing_and_not_what_is_met(session) -> None:
+    """"273 of 10 provider-confirmed posts so far" is what this said.
+
+    Both halves were recited whichever one was short, so the campaign that had
+    long since earned its posting record was refused with a sentence about the
+    posting record - reading as a shortfall, in front of the five ambiguous
+    deliveries that were the actual reason. The half that is holding the
+    campaign back is also the half with something to do about it.
+    """
+    for index in range(12):
+        session.add(PublicationExecution(
+            id=f"done{index}", workspace_id="ws", campaign_id="camp",
+            state="published", media_path="clip.mp4",
+        ))
+    for index in range(5):
+        session.add(PublicationExecution(
+            id=f"maybe{index}", workspace_id="ws", campaign_id="camp",
+            state="uncertain", media_path="clip.mp4",
+        ))
+    session.commit()
+
+    blocked = campaign_autopilot_api.graduation_block(session, "camp")
+
+    assert "12 of 10" not in blocked, "the met half is not recited as a shortfall"
+    assert "5 uncertain deliveries" in blocked
+    assert "Back into rotation" in blocked, "named as the control that clears them"
+
+
+def test_a_campaign_short_on_both_counts_hears_about_both(session) -> None:
+    for index in range(2):
+        session.add(PublicationExecution(
+            id=f"done{index}", workspace_id="ws", campaign_id="camp",
+            state="published", media_path="clip.mp4",
+        ))
+    session.add(PublicationExecution(
+        id="maybe", workspace_id="ws", campaign_id="camp",
+        state="uncertain", media_path="clip.mp4",
+    ))
+    session.commit()
+
+    blocked = campaign_autopilot_api.graduation_block(session, "camp")
+
+    assert "2 of 10 provider-confirmed posts" in blocked
+    assert "1 uncertain delivery to settle as well" in blocked

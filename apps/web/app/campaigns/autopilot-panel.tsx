@@ -1784,6 +1784,50 @@ function namedFormat(configured: string | null | undefined, item: QueueItem): st
  * Deliberately not a summary of what happened - the run note says that. This
  * says what will happen, which is the half a schedule cannot show.
  */
+/**
+ * What stands between this campaign and posting without a person.
+ *
+ * Said in one place because it was said in three, and all three recited both
+ * halves of the rule whichever half was short: a campaign with 273 confirmed
+ * posts and five ambiguous deliveries read "Autonomous unlocks at 10
+ * provider-confirmed posts - 273 so far", with the number that was actually
+ * holding it back in a clause at the end. The chip beside it said "273/10".
+ *
+ * So the half that is met is not mentioned, and the half that is not comes
+ * with what to do about it - uncertain deliveries are cleared by looking at
+ * the account and putting each post back, which is the one thing the operator
+ * could not have guessed from a count.
+ */
+function graduationNote(
+  graduation: { published: number; required: number; unresolved: number; ready: boolean },
+): string {
+  const { published, required, unresolved, ready } = graduation;
+  const deliveries = `${unresolved} uncertain deliver${unresolved === 1 ? "y" : "ies"}`;
+  if (ready) {
+    return "This campaign has earned Autonomous: switch it in settings and only"
+      + " weakly matched products will wait.";
+  }
+  if (published < required) {
+    return `Autonomous unlocks at ${required} provider-confirmed posts - ${published} so far`
+      + (unresolved ? `, with ${deliveries} to put back as well.` : ".");
+  }
+  return `The posting record is there - ${published} provider-confirmed posts - but`
+    + ` ${deliveries} ${unresolved === 1 ? "is" : "are"} unresolved. Each one holds its`
+    + " slot and its post because it may have gone out: check the account on the"
+    + " timeline, then use Back into rotation.";
+}
+
+/** The same thing in the few words a chip has room for. */
+function graduationChip(
+  graduation: { published: number; required: number; unresolved: number; ready: boolean },
+): string {
+  if (graduation.ready) return "Autonomous ready";
+  if (graduation.published < graduation.required) {
+    return `${graduation.published}/${graduation.required} to Autonomous`;
+  }
+  return `${graduation.unresolved} to resolve for Autonomous`;
+}
+
 function PostingStrategy({
   autopilot,
   destinations,
@@ -1943,13 +1987,7 @@ function PostingStrategy({
             counted was to try something the page had already discouraged. */}
         {autopilot.authority !== "autonomous" && autopilot.graduation && (
           <small className="campaign-graduation">
-            {autopilot.graduation.ready
-              ? "This campaign has earned Autonomous: switch it in settings and only weakly matched products will wait."
-              : `Autonomous unlocks at ${autopilot.graduation.required} provider-confirmed posts `
-                + `- ${autopilot.graduation.published} so far`
-                + (autopilot.graduation.unresolved
-                  ? `, with ${autopilot.graduation.unresolved} uncertain deliver${autopilot.graduation.unresolved === 1 ? "y" : "ies"} to resolve first.`
-                  : ".")}
+            {graduationNote(autopilot.graduation)}
           </small>
         )}
       </li>
@@ -4741,17 +4779,9 @@ export function AutopilotPanel({
                     tooltip rather than a `title`, which the browser draws about
                     a second after the pointer stops. */}
                 {autopilot.graduation && autopilot.authority !== "autonomous" && (
-                  <Tooltip content={autopilot.graduation.ready
-                    ? "This campaign has earned Autonomous - switch to it here and only weakly matched products will wait."
-                    : `Autonomous unlocks at ${autopilot.graduation.required} provider-confirmed posts - ${autopilot.graduation.published} so far`
-                      + (autopilot.graduation.unresolved
-                        ? `, with ${autopilot.graduation.unresolved} uncertain deliver${autopilot.graduation.unresolved === 1 ? "y" : "ies"} to resolve first.`
-                        : ".")}
-                  >
+                  <Tooltip content={graduationNote(autopilot.graduation)}>
                     <em className="autopilot-authority-hint" tabIndex={0} role="note">
-                      {autopilot.graduation.ready
-                        ? "Autonomous ready"
-                        : `${autopilot.graduation.published}/${autopilot.graduation.required} to Autonomous`}
+                      {graduationChip(autopilot.graduation)}
                     </em>
                   </Tooltip>
                 )}
