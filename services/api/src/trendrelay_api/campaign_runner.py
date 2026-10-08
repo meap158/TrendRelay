@@ -43,6 +43,37 @@ from trendrelay_api.media_library import attribution_for
 from trendrelay_api.models import DurableJob
 from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
 
+#: Error text from before the request was ever written.
+#:
+#: A TLS handshake is what happens before a single byte of the post is sent, so
+#: a handshake that times out, is refused, or fails to verify a certificate
+#: proves the engine was never told anything. The post does not exist, and
+#: nothing about it is uncertain.
+#:
+#: This is read ahead of `UNCERTAIN_MARKERS` because that list has to be broad
+#: - it catches every "timed out" there is, and a handshake timeout says "timed
+#: out" in the middle of saying the opposite of what that list means. Five of
+#: one campaign's deliveries settled as uncertain on the strength of it: each
+#: one held its slot and its queue item for good, each one counted against the
+#: campaign's own breaker, and together they shut the door on autonomous
+#: authority that 273 confirmed posts had otherwise earned.
+#:
+#: Narrow on purpose. A connection reset or a closed socket mid-exchange stays
+#: uncertain, because by then the request may have been read: what is listed
+#: here is only what happens before there is a request to read.
+UNSENT_MARKERS = (
+    "handshake operation timed out",
+    "ssl handshake",
+    "handshake failure",
+    "certificate verify failed",
+    "name or service not known",
+    "getaddrinfo failed",
+    "temporary failure in name resolution",
+    "connection refused",
+    "no route to host",
+    "network is unreachable",
+)
+
 #: Error text that means the request may have reached the provider before the
 #: answer was lost. These must settle as `uncertain`, never as a clean failure:
 #: the post may exist, and a retry is how a timeout becomes a duplicate.
@@ -160,6 +191,11 @@ EXHAUSTED_TO_PAUSE = 2
 
 def _classify_failure(error: str) -> str:
     text = (error or "").casefold()
+    # Before anything that reads as doubt, because some of these say "timed
+    # out" while proving there was nothing to be in doubt about - see
+    # `UNSENT_MARKERS`.
+    if any(marker in text for marker in UNSENT_MARKERS):
+        return "provider"
     if any(marker in text for marker in UNCERTAIN_MARKERS):
         return "uncertain"
     # Before auth, because a quota refusal often carries a 403 with it and
@@ -207,7 +243,7 @@ def redelivery_reason(
     if failure_class == "rate_limited":
         return "the engine was full"
     if failure_class == "provider" and any(
-        marker in text for marker in UNREACHED_MARKERS
+        marker in text for marker in (*UNREACHED_MARKERS, *UNSENT_MARKERS)
     ):
         return "the engine could not be reached"
     return None

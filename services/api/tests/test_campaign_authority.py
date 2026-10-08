@@ -9,6 +9,7 @@ rule holds at every level: a low-confidence product never posts unattended.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -416,6 +417,48 @@ def test_a_quota_refusal_is_not_read_as_a_broken_account() -> None:
     assert _classify_failure("quota exceeded") == "rate_limited"
     # And a real refusal still reads as one.
     assert _classify_failure("401 unauthorized") == "auth"
+
+
+def test_a_handshake_that_timed_out_sent_nothing_to_be_uncertain_about() -> None:
+    """The failure that shut a campaign out of autonomy it had earned.
+
+    A TLS handshake happens before a byte of the post is written, so a
+    handshake that times out proves the engine was never told anything - but it
+    says "timed out", and that is what the uncertain list looks for. Five of
+    one campaign's deliveries settled as uncertain on the strength of it, each
+    holding its slot and its post for good.
+    """
+    from trendrelay_api.campaign_runner import _classify_failure, redelivery_reason
+
+    unsent = (
+        "woopsocial: Could not reach api.woopsocial.com: "
+        "<urlopen error _ssl.c:1059: The handshake operation timed out>"
+    )
+    assert _classify_failure(unsent) == "provider"
+    # And the post goes again, because nothing of it was ever sent.
+    execution = SimpleNamespace(delivery_attempts=0)
+    assert redelivery_reason(execution, "provider", unsent)
+
+
+def test_a_connection_lost_mid_exchange_is_still_uncertain() -> None:
+    """The line this draws, from the other side.
+
+    By the time a socket resets or closes without answering, the request may
+    have been read - and the cost of being wrong about that is a duplicate on
+    somebody's account. Only what happens before there is a request to read is
+    safe to call unsent.
+    """
+    from trendrelay_api.campaign_runner import _classify_failure
+
+    assert _classify_failure(
+        "woopsocial: Could not reach api.woopsocial.com: Remote end closed "
+        "connection without response"
+    ) == "uncertain"
+    assert _classify_failure(
+        "woopsocial: Could not reach api.woopsocial.com: the read operation timed out"
+    ) == "uncertain"
+    # A gateway that gave up waiting has certainly spoken to the engine.
+    assert _classify_failure("woopsocial: api.woopsocial.com: HTTP 524") == "uncertain"
 
 
 def test_a_settings_change_reaches_the_posts_already_waiting(
