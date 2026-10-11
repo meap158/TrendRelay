@@ -21,3 +21,8 @@ test("long campaign forms keep dropdowns inside the modal scroll viewport", () =
     /\.ui-dialog:has\(\[data-contain-select-popovers\]\):has\(\.search-select-popover\) \.ui-dialog-body[^{]*\{[^}]*overflow-y:\s*auto/s,
   );
 });
+
+test("attribution generate dialog keeps dropdowns inside the modal scroll viewport", () => {
+  const generateDialog = readFileSync(join(APP, "attribution", "generate-dialog.tsx"), "utf8");
+  assert.match(generateDialog, /data-contain-select-popovers="true"/);
+});

@@ -71,8 +71,11 @@ These requests are landed. Do not rebuild them.
 - A creative filter sits beside the listing filter: All, Pending draft, In
   Library. Pending means status is not succeeded or owed is greater than 0.
   In Library means `creative_assets` is not empty. A product can match both.
-  Counts follow the other filters. The predicate stays out of
-  `productMatches`.
+  All and In Library count products. Pending draft counts files still owed,
+  once per draft: a group image of eight products is 1, a carousel is the
+  cards it still owes. Counts follow the other filters. The predicate stays
+  out of `productMatches`. Discard sits on the group band and the creative
+  card as well as in the review dialog, and it is the same discard.
 - Listing fields are title, price, description, gallery, and variations.
   Title, description, and listing pictures start on. Price and variations
   start off. Turning a chip on or off is remembered for this workspace,

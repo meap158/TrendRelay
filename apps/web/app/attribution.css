@@ -379,6 +379,16 @@
 .product-disclosure { flex: none; display: grid; place-items: center; inline-size: 18px; block-size: 18px; color: var(--muted); line-height: 1; transition: transform 140ms ease, color 140ms ease; }
 .product-toggle:hover .product-disclosure { color: var(--link); }
 .product-disclosure[data-open] { transform: rotate(90deg); color: var(--link); }
+/* The checkbox follows the whole row's centre, including group chips below
+   the title. Anchor the disclosure to that same centre. */
+.product-identity-cell { position: relative; }
+.product-identity-content { display: grid; align-content: center; gap: 5px; }
+.product-identity-content > .product-group-chips:empty { display: none; }
+.product-identity-cell .product-toggle { padding-inline-start: 66px; min-block-size: 32px; }
+.product-identity-cell .product-thumb { position: absolute; inset-inline-start: 36px; top: 50%; transform: translateY(-50%); }
+.product-identity-cell .product-named { align-self: center; }
+.product-identity-cell .product-disclosure { position: absolute; inset-inline-start: 10px; top: 50%; transform: translateY(-50%); }
+.product-identity-cell .product-disclosure[data-open] { transform: translateY(-50%) rotate(90deg); }
 .product-no-results { padding-block: 36px !important; color: var(--muted); text-align: center !important; }
 .product-row-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
 
@@ -903,6 +913,12 @@
   text-overflow: ellipsis;
 }
 .product-creative-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-block-start: 2px; }
+/* The band is a dense line of small type. The confirm sentence stays quiet
+   and does not inherit that line's weight or tracking. */
+.product-draft-discard { display: inline-flex; flex: none; align-items: center; gap: 6px; }
+.product-draft-discard .ui-button { letter-spacing: normal; text-transform: none; }
+.product-draft-discard small { color: var(--muted); font-size: 10px; font-weight: 400; letter-spacing: normal; max-inline-size: 16rem; white-space: normal; }
+.product-draft-discard small[role="alert"] { color: var(--bad); }
 .product-creative-link {
   padding: 0;
   border: 0;
@@ -946,7 +962,10 @@
    The band is not a row you can select. The label stays in the product
    column and within the screen while the wide table scrolls sideways. */
 .product-draft-group > th {
-  padding: 7px 10px;
+  /* Block padding only. The inline padding has to stay the one the checkbox
+     column uses, or this band's tick drifts off that column on a phone,
+     where the shared cell padding tightens. */
+  padding-block: 7px;
   background: var(--panel-raised);
   font-weight: 400;
 }
@@ -954,6 +973,42 @@
 .product-group-together > .product-draft-group > th { box-shadow: inset 3px 0 0 var(--link); }
 .product-draft-group-name { color: var(--text); font-size: 11px; text-transform: uppercase; }
 .product-draft-group-also { margin-block-start: 4px; padding-block-start: 4px; border-block-start: 1px dashed var(--line); }
+.product-group-view { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.product-group-view > span, .product-group-view > small { color: var(--muted); font-size: 12px; }
+.product-group-view > small { margin-left: auto; }
+.product-related-groups { margin-top: 8px; }
+.product-related-groups > summary { cursor: pointer; color: var(--link); font-size: 12px; font-weight: 500; padding-block: 4px; }
+.product-group-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.product-identity-content > .product-group-chips:not(:empty) { display: flex; margin-inline-start: 66px; }
+.product-groups-more { border: 0; background: none; padding: 2px 4px; color: var(--link); font: inherit; font-size: 11px; cursor: pointer; }
+.product-groups-more:hover { text-decoration: underline; }
+.product-creative-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.campaign-review-offers { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.campaign-review-offers > li { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; }
+.campaign-review-offer { display: flex; align-items: flex-start; gap: 12px; }
+.campaign-review-picture { flex: none; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.campaign-review-picture img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
+.campaign-review-picture:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.campaign-review-offer > div { min-width: 0; flex: 1; display: grid; gap: 6px; }
+.campaign-review-offer small { color: var(--muted); font-size: 12px; }
+.campaign-review-listing { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.shared-product-picker-filters { flex: none; gap: 8px; }
+.shared-product-picker-filters > .search-select { min-width: 140px; max-width: 220px; }
+.campaign-product-picker-dialog { width: min(1280px, calc(100vw - 48px)); }
+.campaign-offer-picker .product-picker-scroll { max-height: min(52vh, 520px); }
+.campaign-offer-picker-table { width: 100%; }
+.campaign-offer-picker-table th[scope="row"] { min-width: 260px; max-width: 380px; }
+.campaign-offer-picker-table .product-picker-named strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; font-weight: 500; line-height: 1.4; }
+.campaign-picker-product-button { display: flex; gap: 10px; align-items: center; width: 100%; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.campaign-picker-product-button:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+.campaign-picker-origin { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.campaign-picker-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.campaign-picker-badges small { color: var(--muted); }
+.campaign-picker-detail-links { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 12px; }
+.campaign-offer-picker .campaign-review-listing { margin-top: 0; border-top: 0; padding: 8px; }
+.campaign-picker-offer-options { display: grid; gap: 8px; padding: 12px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.campaign-picker-offer-options > small { color: var(--muted); }
+.campaign-picker-offer-options > label { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; }
 /* A group shot's name. The same chip on its band, its rows, and its card;
    hovering one lights that group's rows. The words carry the meaning, so
    nothing here depends on telling colours apart. */
@@ -976,7 +1031,12 @@ button.product-group-chip { font: inherit; font-size: 10px; font-weight: 650; cu
 button.product-group-chip:hover { border-color: var(--link); }
 button.product-group-chip:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 button.product-group-chip[aria-pressed="true"] { background: var(--link); border-color: var(--link); color: var(--on-ink); }
-.product-group-choose { display: inline-grid; flex: none; place-items: center; inline-size: 24px; }
+/* The header and every product tick are the 18px box on the cell's content
+   edge. A 24px slot centered this one inside it, so the group's tick sat 3px
+   to the right of the column it belongs to. Shrink to the control, and do
+   not inherit the column's auto margin, which would center it again. */
+.product-group-choose { display: inline-flex; flex: none; align-items: center; }
+.product-table .product-group-choose .ui-selection-checkbox { margin-inline: 0; }
 .product-table > tbody > tr[data-group-focus] > * { background: color-mix(in srgb, var(--link) 9%, var(--panel)); }
 .product-draft-group-label {
   display: flex;
@@ -1048,3 +1108,28 @@ button.product-group-chip[aria-pressed="true"] { background: var(--link); border
     min-block-size: 44px;
   }
 }
+
+/* A group shot still waiting for its file: amber, the pending tone the
+   creative cards already use, so it is never read as a finished shot. */
+.product-group-chip[data-pending] { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn); }
+button.product-group-chip[data-pending][aria-pressed="true"] { background: var(--warn); border-color: var(--warn); color: var(--on-ink); }
+.product-group-view-toggle { display: inline-flex; gap: 4px; }
+
+/* The pending drafts themselves, above the products they feature. */
+.pending-drafts { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--warn-line); border-radius: var(--radius); background: var(--warn-bg); }
+.pending-drafts > header h3 { margin: 0; color: var(--text); font-size: 14px; }
+.pending-drafts > header p, .pending-drafts-empty { margin: 4px 0 0; color: var(--muted); font-size: 12px; max-inline-size: 70ch; }
+.pending-drafts > ul { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.pending-draft { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.pending-draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; }
+.pending-draft-head > .product-group-chip { margin-inline-start: 0; }
+.pending-draft-single { padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; font-weight: 650; }
+.pending-draft-what { color: var(--text); font-size: 12px; }
+.pending-draft-owed { margin-inline-start: auto; color: var(--warn); font-size: 12px; font-weight: 600; }
+.pending-draft-products { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pending-draft-products > li { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.pending-draft-products img, .pending-draft-products li > span { flex: none; inline-size: 28px; block-size: 28px; border-radius: var(--radius-sm); object-fit: cover; background: var(--panel-raised); display: grid; place-items: center; color: var(--muted); font-size: 11px; }
+.pending-draft-products small { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.pending-draft-products > li.pending-draft-more { color: var(--muted); font-size: 11px; }
+.pending-draft-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pending-draft-actions .product-draft-discard { margin-inline-start: auto; }

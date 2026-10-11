@@ -7,6 +7,7 @@ import { useT } from "../i18n-provider";
 import { useWorkspace } from "../workspace-provider";
 import { AssetThumbnail, type LibraryAsset, MediaPicker } from "../publish/composer";
 import { Button } from "../ui/button";
+import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
 import { money } from "./format";
@@ -981,9 +982,10 @@ export function GenerateDialog({
                 busy={busy === "discard"}
                 disabled={busy !== "" || generation !== ""}
                 onClick={() => (confirmDiscard ? void discard() : setConfirmDiscard(true))}
-              >{confirmDiscard
+              ><ActionIcon name="delete" />{confirmDiscard
                 ? t("attribution.generate.discardConfirm")
                 : t("attribution.generate.discardDraft")}</Button>
+              {confirmDiscard && <Button variant="quiet" size="sm" disabled={Boolean(busy)} onClick={() => setConfirmDiscard(false)}>Cancel</Button>}
             </span>
           )}
           <Button variant="quiet" onClick={onClose}>{t("attribution.generate.close")}</Button>
@@ -1020,7 +1022,7 @@ export function GenerateDialog({
         </>
       )}
     >
-      <div className="campaign-dialog-form">
+      <div className="campaign-dialog-form" data-contain-select-popovers="true">
         {reviewing && !draft ? (
           <p role="status">{error || t("attribution.generate.loadingDraft")}</p>
         ) : (

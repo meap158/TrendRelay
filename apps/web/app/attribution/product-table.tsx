@@ -33,13 +33,16 @@ import {
   hasLibraryCreative,
   hasPendingCreative,
   matchesCreativeFilter,
+  pendingDrafts,
   type CreativeFilter,
 } from "./creative-filter";
+import { PendingDrafts } from "./pending-drafts";
 import { groupShownDrafts } from "./draft-groups";
 import {
   creativeKind,
   creativeRecipe,
   CreativeMedia,
+  DiscardDraftButton,
   draftAssets,
   GroupChip,
   isPendingDraft,
@@ -215,6 +218,7 @@ export function ProductTable({
   const [filterCreator, setFilterCreator] = useState("");
   /** One group shot's draft id, or empty for every group. */
   const [filterGroup, setFilterGroup] = useState("");
+  const [groupedView, setGroupedView] = useState(false);
   /** A sub ID pasted from the network's payout report. */
   const [filterSubId, setFilterSubId] = useState("");
   /** Whether a product's listing has been read: this table's own kind axis. */
@@ -400,6 +404,7 @@ export function ProductTable({
    * screen the sorted list is left as it is.
    */
   const tableBodies = useMemo(() => {
+    if (!groupedView || activeGroup) return [{ key: "all", heading: null, products: shown }];
     const layout = groupShownDrafts(shown);
     if (!layout.grouped) {
       return [{ key: "all", heading: null, products: shown }];
@@ -409,7 +414,7 @@ export function ProductTable({
       heading: section.kind === "plain" ? null : section,
       products: section.products,
     }));
-  }, [shown]);
+  }, [shown, groupedView, activeGroup]);
   // Any narrowing - the text search or any of the filters - so a filtered
   // list says what it is showing out of the whole catalogue.
   const narrowedView = Boolean(query.trim() || filterCampaign || filterFile || filterFrom
@@ -417,7 +422,10 @@ export function ProductTable({
     || listingFilter !== "all" || creativeFilter !== "all" || activeGroup);
   const creativeCounts = useMemo(() => ({
     all: narrowed.length,
-    pending: narrowed.filter((product) => hasPendingCreative(product)).length,
+    // Drafts, once each: the button is named for drafts, and a count of files
+    // beside six product rows read as a contradiction. What each draft still
+    // owes is said on its card in the pending panel.
+    pending: pendingDrafts(narrowed).length,
     library: narrowed.filter((product) => hasLibraryCreative(product)).length,
   }), [narrowed]);
   const showCreativeFilter = useMemo(
@@ -863,7 +871,33 @@ export function ProductTable({
           </Button>
         </div>
       </div>
+      {/* The drafts themselves, above the products they feature: what is
+          pending, what it still owes, and the way to take it back. */}
+      {creativeFilter === "pending" && (
+        <PendingDrafts
+          products={narrowed}
+          canDiscard={Boolean(canQueue)}
+          activeGroup={activeGroup}
+          onReview={(product, draftId) => {
+            setGenerateFor(null);
+            setReviewDraft({ product, draftId });
+          }}
+          onShowProducts={(draftId) => setFilterGroup((current) => (current === draftId ? "" : draftId))}
+          onDiscarded={onCreativesChanged}
+        />
+      )}
       <div className="product-table-scroll">
+        {groupOptions.length > 0 && <div className="product-group-view">
+          <span>{t("attribution.groupView.count", { count: groupOptions.length })}</span>
+          <span className="product-group-view-toggle" role="group" aria-label={t("attribution.groupView.label")}>
+            <Button variant={groupedView ? "quiet" : "secondary"} size="sm" aria-pressed={!groupedView} onClick={() => setGroupedView(false)}>{t("attribution.groupView.list")}</Button>
+            <Button variant={groupedView ? "secondary" : "quiet"} size="sm" aria-pressed={groupedView} onClick={() => setGroupedView(true)}>{t("attribution.groupView.byGroup")}</Button>
+          </span>
+          <small>{activeGroup ? t("attribution.groupView.focused") : t("attribution.groupView.hint")}</small>
+          {activeGroup && (
+            <Button variant="quiet" size="sm" onClick={() => setFilterGroup("")}>{t("attribution.generate.showEveryGroup")}</Button>
+          )}
+        </div>}
         <table className="product-table">
           <thead>
             <tr>
@@ -977,10 +1011,18 @@ export function ProductTable({
                             }}
                           />
                         )}
+                        {canQueue && draft.status === "pending" && (
+                          <DiscardDraftButton
+                            draftId={draft.id}
+                            onDiscarded={onCreativesChanged}
+                          />
+                        )}
                       </span>
                     );
                   })()}
-                  {section.heading.kind === "together" && section.heading.also.map((nested) => {
+                  {section.heading.kind === "together" && section.heading.also.length > 0 && <details className="product-related-groups">
+                    <summary>{section.heading.also.length} other groups with these products</summary>
+                    {section.heading.also.map((nested) => {
                     // A smaller shot of products already listed in this band.
                     const draft = {
                       ...nested.draft,
@@ -1033,9 +1075,15 @@ export function ProductTable({
                             }}
                           />
                         )}
+                        {canQueue && draft.status === "pending" && (
+                          <DiscardDraftButton
+                            draftId={draft.id}
+                            onDiscarded={onCreativesChanged}
+                          />
+                        )}
                       </span>
                     );
-                  })}
+                  })}</details>}
                 </th>
               </tr>
             )}
@@ -1062,7 +1110,8 @@ export function ProductTable({
                       onChange={() => choose(product.id)}
                     />
                   </td>
-                  <th scope="row">
+                  <th scope="row" className="product-identity-cell">
+                    <div className="product-identity-content">
                     <button
                       type="button"
                       className="product-toggle"
@@ -1113,14 +1162,12 @@ export function ProductTable({
                           {listingBusy?.has(product.id) && (
                             <span className="product-listing-loading"> · reading listing…</span>
                           )}
-                          {/* Every group shot this product is in, by the same
-                              name its band and card use. */}
-                          {groupsOf(product).map((number) => (
-                            <GroupChip key={number} number={number} onHover={setFocusGroup} />
-                          ))}
                         </small>
                       </span>
                     </button>
+                    {/* Group filters are sibling controls, outside the disclosure button. */}
+                    <ProductGroupChips product={product} activeGroup={activeGroup} onHover={setFocusGroup} onSelect={setFilterGroup} />
+                    </div>
                   </th>
                   {onTagOffers && (() => {
                     // A product can carry several offers; the tag lives on the
@@ -1251,6 +1298,8 @@ export function ProductTable({
                         </div>
                         <ProductCreatives
                           product={product}
+                          canDiscard={canQueue}
+                          onDiscarded={onCreativesChanged}
                           onReview={(draftId) => {
                             setGenerateFor(null);
                             setReviewDraft({ product, draftId });
@@ -1330,12 +1379,50 @@ export function ProductTable({
   );
 }
 
-/** The group shots a product is in, by number, lowest first. */
+/**
+ * The group shots a product is in: the one being filtered to first, then any
+ * still pending, then the rest newest first.
+ *
+ * Lowest number first put the oldest two shots on every row and folded the
+ * one that mattered - the pending shot, the newest - into "+9 groups".
+ */
+function ProductGroupChips({ product, activeGroup, onHover, onSelect }: {
+  product: ProductRow;
+  activeGroup: string;
+  onHover: (number: number | null) => void;
+  onSelect: (id: string) => void;
+}) {
+  const t = useT();
+  const [all, setAll] = useState(false);
+  const shots = groupShotsOf(product, activeGroup);
+  return <span className="product-group-chips">
+    {(all ? shots : shots.slice(0, 2)).map((shot) => <GroupChip key={shot.id} number={shot.number} onHover={onHover}
+      pending={shot.pending}
+      selected={shot.id === activeGroup}
+      onSelect={() => onSelect(shot.id === activeGroup ? "" : shot.id)} />)}
+    {shots.length > 2 && <button type="button" className="product-groups-more" aria-expanded={all}
+      onClick={() => setAll((current) => !current)}>{all
+        ? t("attribution.groupView.fewer")
+        : t("attribution.groupView.more", { count: shots.length - 2 })}</button>}
+  </span>;
+}
+
+function groupShotsOf(product: ProductRow, activeGroup = ""): { id: string; number: number; pending: boolean }[] {
+  const seen = new Set<number>();
+  const shots: { id: string; number: number; pending: boolean }[] = [];
+  for (const draft of product.creative_drafts ?? []) {
+    const number = (draft.product_count ?? 0) > 1 ? draft.group_number ?? null : null;
+    if (number === null || seen.has(number) || draft.status === "discarded") continue;
+    seen.add(number);
+    shots.push({ id: draft.id, number, pending: isPendingDraft(draft) });
+  }
+  return shots.sort((a, b) => Number(b.id === activeGroup) - Number(a.id === activeGroup)
+    || Number(b.pending) - Number(a.pending)
+    || b.number - a.number);
+}
+
 function groupsOf(product: ProductRow): number[] {
-  return [...new Set((product.creative_drafts ?? [])
-    .map((draft) => ((draft.product_count ?? 0) > 1 ? draft.group_number ?? null : null))
-    .filter((number): number is number => number !== null))]
-    .sort((a, b) => a - b);
+  return groupShotsOf(product).map((shot) => shot.number);
 }
 
 /** "Group 2", or plain Together for a shot without a number. */

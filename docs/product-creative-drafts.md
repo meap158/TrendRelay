@@ -131,9 +131,12 @@ review.
 
 The product table filters to those drafts once any product has one. Beside the
 listing filter: All, Pending draft (a draft is not succeeded, or still owes a
-file), and In Library (a creative is linked). A product can be in both. The
-count on a button is how many rows that button will show with the other
-filters already on. The Publish offer picker does not grow this control.
+file), and In Library (a creative is linked). A product can be in both. All
+and In Library count the rows that button will show. Pending draft counts the
+files those drafts still owe, once per draft, so a group image is one however
+many products it features and a carousel counts the cards left. The other
+filters are already applied. A pending draft can be discarded from its group
+band and from its card. The Publish offer picker does not grow this control.
 
 ## Tests
 

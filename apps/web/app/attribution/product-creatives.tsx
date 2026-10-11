@@ -21,6 +21,7 @@ import { useT } from "../i18n-provider";
 import { useWorkspace } from "../workspace-provider";
 import { AssetThumbnail, type LibraryAsset } from "../publish/composer";
 import { Button } from "../ui/button";
+import { ActionIcon } from "../ui/action-icons";
 import { Lightbox, useLightboxSet } from "../ui/lightbox";
 import { opaquePreviewUrl } from "../../lib/media-preview";
 import { partitionDrafts } from "./draft-groups";
@@ -39,7 +40,7 @@ export type CreativeDraftRow = {
   group_number?: number | null;
 };
 
-export type CreativeAssetRow = { asset_id: string; draft_id: string; position: number };
+export type CreativeAssetRow = { asset_id: string; draft_id: string | null; position: number; media_kind?: string };
 
 export type CreativeProduct = {
   id: string;
@@ -77,17 +78,21 @@ export function GroupChip({
   onHover,
   onSelect,
   selected = false,
+  pending = false,
 }: {
   number?: number | null;
   onHover?: (number: number | null) => void;
   /** Where a chip is not inside another control, pressing it filters to its group. */
   onSelect?: () => void;
   selected?: boolean;
+  /** Still waiting for its file - marked, so it is not read as a finished shot. */
+  pending?: boolean;
 }) {
   const t = useT();
-  const label = number
+  const name = number
     ? t("attribution.generate.groupLabel", { number })
     : t("attribution.generate.draftGroupTogether");
+  const label = pending ? t("attribution.groupView.pendingChip", { group: name }) : name;
   const hover = {
     onMouseEnter: number && onHover ? () => onHover(number) : undefined,
     onMouseLeave: number && onHover ? () => onHover(null) : undefined,
@@ -99,16 +104,17 @@ export function GroupChip({
       <button
         type="button"
         className="product-group-chip"
+        data-pending={pending || undefined}
         aria-pressed={selected}
         title={selected
           ? t("attribution.generate.showEveryGroup")
-          : t("attribution.generate.showOnlyGroup", { group: label })}
+          : t("attribution.generate.showOnlyGroup", { group: name })}
         onClick={onSelect}
         {...hover}
       >{label}</button>
     );
   }
-  return <span className="product-group-chip" {...hover}>{label}</span>;
+  return <span className="product-group-chip" data-pending={pending || undefined} {...hover}>{label}</span>;
 }
 
 export function isPendingDraft(draft: Pick<CreativeDraftRow, "status" | "owed">): boolean {
@@ -236,7 +242,7 @@ export function CreativeMedia({
   const { apiFetch } = useAuth();
   const { workspaceId } = useWorkspace();
   const { openAt, open, close, previous, next } = useLightboxSet(assets.length);
-  const video = kind === "video";
+  const video = (openAt === null ? kind : assets[openAt]?.media_kind ?? kind) === "video";
   const source = useCreativeSource(openAt === null ? null : assets[openAt]?.asset_id ?? null, video);
   if (!workspaceId) return null;
   return (
@@ -343,16 +349,92 @@ export function ResumeButton({
   );
 }
 
+async function refusalDetail(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json() as { detail?: unknown };
+    if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+  } catch {
+    // A non-JSON refusal still needs a sentence.
+  }
+  return fallback;
+}
+
+/**
+ * Take a pending draft out of the queue.
+ *
+ * Two presses, the same way the review dialog does it: the first names what
+ * happens, the second discards. A finished draft is not offered this. Its
+ * file is removed in the Library.
+ */
+export function DiscardDraftButton({
+  draftId,
+  onDiscarded,
+}: {
+  draftId: string;
+  onDiscarded?: () => void;
+}) {
+  const t = useT();
+  const { apiFetch } = useAuth();
+  const { workspaceId } = useWorkspace();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function discard() {
+    if (!workspaceId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draftId}/discard`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        setError(await refusalDetail(response, t("attribution.generate.requestFailed")));
+        setConfirm(false);
+        return;
+      }
+      onDiscarded?.();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("attribution.generate.requestFailed"));
+      setConfirm(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="product-draft-discard">
+      {confirm && <small>{t("attribution.generate.discardHelp")}</small>}
+      {error && <small role="alert">{error}</small>}
+      <Button
+        variant={confirm ? "danger" : "quiet"}
+        size="sm"
+        busy={busy}
+        disabled={!workspaceId || busy}
+        onClick={() => (confirm ? void discard() : setConfirm(true))}
+      ><ActionIcon name="delete" />{confirm
+        ? t("attribution.generate.discardConfirm")
+        : t("attribution.generate.discardDraft")}</Button>
+      {confirm && <Button variant="quiet" size="sm" disabled={busy} onClick={() => setConfirm(false)}>Cancel</Button>}
+    </span>
+  );
+}
+
 function CreativeCard({
   product,
   draft,
   providers,
   onReview,
+  canDiscard,
+  onDiscarded,
 }: {
   product: CreativeProduct;
   draft: CreativeDraftRow;
   providers: Provider[];
   onReview: (draftId: string) => void;
+  canDiscard: boolean;
+  onDiscarded?: () => void;
 }) {
   const t = useT();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -387,6 +469,9 @@ function CreativeCard({
         <div className="product-creative-actions">
           {pending && (
             <ResumeButton draft={draft} providers={providers} onResume={() => onReview(draft.id)} />
+          )}
+          {canDiscard && draft.status === "pending" && (
+            <DiscardDraftButton draftId={draft.id} onDiscarded={onDiscarded} />
           )}
           <button type="button" className="product-creative-link" onClick={() => onReview(draft.id)}>
             {t("attribution.generate.viewDraft")}
@@ -425,39 +510,57 @@ function CreativeCard({
 export function ProductCreatives({
   product,
   onReview,
+  canDiscard = false,
+  onDiscarded,
 }: {
   product: CreativeProduct;
   onReview: (draftId: string) => void;
+  /** An editor may take a pending draft out of the queue. */
+  canDiscard?: boolean;
+  onDiscarded?: () => void;
 }) {
   const t = useT();
   const drafts = product.creative_drafts ?? [];
+  const [showAll, setShowAll] = useState(false);
+  const [pendingOnly, setPendingOnly] = useState(false);
   const groups = partitionDrafts(drafts);
+  const ordered = [...groups.single, ...groups.together].filter((draft) => !pendingOnly || isPendingDraft(draft));
+  const visibleDrafts = showAll ? ordered : ordered.slice(0, 6);
   const wantsProviders = drafts.some((draft) => draft.kind === "video" && isPendingDraft(draft));
   const providers = useVideoProviders(wantsProviders);
   const known = new Set(drafts.map((draft) => draft.id));
-  const loose = (product.creative_assets ?? []).filter((item) => !known.has(item.draft_id));
+  const loose = (product.creative_assets ?? []).filter((item) => !item.draft_id || !known.has(item.draft_id));
   if (drafts.length === 0 && loose.length === 0) {
     return <p className="product-no-data">{t("attribution.generate.noneLinked")}</p>;
   }
   return (
     <div className="product-creatives">
+      {drafts.length > 0 && <div className="product-creative-controls">
+        <Button variant={pendingOnly ? "quiet" : "secondary"} size="sm" aria-pressed={!pendingOnly} onClick={() => setPendingOnly(false)}>All creatives ({drafts.length})</Button>
+        <Button variant={pendingOnly ? "secondary" : "quiet"} size="sm" aria-pressed={pendingOnly} onClick={() => setPendingOnly(true)}>Pending drafts ({drafts.filter(isPendingDraft).length})</Button>
+      </div>}
+      {pendingOnly && ordered.length === 0 && <p className="product-no-data">No pending drafts.</p>}
       {drafts.length > 0 && (
         <ul className="product-creative-grid">
-          {[...groups.single, ...groups.together].map((draft) => (
+          {visibleDrafts.map((draft) => (
             <CreativeCard
               key={draft.id}
               product={product}
               draft={draft}
               providers={providers}
               onReview={onReview}
+              canDiscard={canDiscard}
+              onDiscarded={onDiscarded}
             />
           ))}
         </ul>
       )}
-      {loose.length > 0 && (
+      {ordered.length > 6 && <button type="button" className="product-groups-more" aria-expanded={showAll}
+        onClick={() => setShowAll((current) => !current)}>{showAll ? "Show fewer creatives" : `Show all ${ordered.length} creatives`}</button>}
+      {!pendingOnly && loose.length > 0 && (
         <p className="product-creative-loose">
           <span className="product-creative-group-label">{t("attribution.generate.otherFiles")}</span>
-          <CreativeMedia assets={loose} owed={0} kind="image" size="sm" />
+          <CreativeMedia assets={loose.filter((item) => item.media_kind !== "audio")} owed={0} kind="image" size="sm" />
           <OpenInLibrary assets={loose} />
         </p>
       )}
