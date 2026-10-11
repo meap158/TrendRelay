@@ -196,6 +196,88 @@ def test_a_day_with_nothing_open_says_so(session) -> None:
         pin_item_to_slot(session, auto, item, day=DAY, now=NOW)
 
 
+def test_a_skipped_account_is_never_chosen_for_the_post(session) -> None:
+    """Two accounts sharing a time: the one the post skips is not a choice,
+    even though it is the fresher account and the earlier slot."""
+    auto = pilot(session)
+    destination(session, "d1")
+    destination(session, "d2", platform="youtube")
+    slot(session, 10)
+    slot(session, 18)
+    item = queue_item(
+        session, "post",
+        skipped_destination_ids=["d2"],
+        last_posted_by_destination={"d1": "2026-08-01T10:00:00+00:00"},
+    )
+
+    chosen = pin_item_to_slot(session, auto, item, day=DAY, now=NOW)
+    assert chosen["destination_id"] == "d1"
+
+    release_pin(item, now=NOW)
+    explicit = pin_item_to_slot(session, auto, item, day=DAY, at=at(18), now=NOW)
+    assert explicit["destination_id"] == "d1"
+
+
+def test_naming_a_skipped_account_is_refused(session) -> None:
+    auto = pilot(session)
+    destination(session, "d1")
+    destination(session, "d2", platform="youtube")
+    slot(session, 10)
+    item = queue_item(session, "post", skipped_destination_ids=["d2"])
+
+    with pytest.raises(ValueError, match="set to skip that account"):
+        pin_item_to_slot(
+            session, auto, item, day=DAY, at=at(10), destination_id="d2", now=NOW,
+        )
+
+
+def test_a_day_whose_only_account_is_skipped_says_so(session) -> None:
+    auto = pilot(session)
+    destination(session, "d1")
+    destination(session, "d2", platform="youtube")
+    slot(session, 10)
+    item = queue_item(session, "post", skipped_destination_ids=["d1"])
+    session.get(CampaignDestination, "d2").enabled = False
+    session.commit()
+
+    with pytest.raises(ValueError, match="set to skip"):
+        pin_item_to_slot(session, auto, item, day=DAY, now=NOW)
+
+
+def test_the_day_reads_a_skipped_account_as_skipped_for_that_post(session) -> None:
+    auto = pilot(session)
+    destination(session, "d1")
+    destination(session, "d2", platform="youtube")
+    slot(session, 10)
+    item = queue_item(session, "post", skipped_destination_ids=["d2"])
+
+    mine = {
+        entry["destination_id"]: entry["status"]
+        for entry in day_slots(session, auto, day=DAY, now=NOW, exclude_item_id=item.id)
+    }
+    everyone = {
+        entry["destination_id"]: entry["status"]
+        for entry in day_slots(session, auto, day=DAY, now=NOW)
+    }
+
+    assert mine == {"d1": "free", "d2": "skipped"}
+    assert everyone == {"d1": "free", "d2": "free"}, "a skip is that post's alone"
+
+
+def test_a_day_auto_pick_can_be_narrowed_to_one_account(session) -> None:
+    auto = pilot(session)
+    destination(session, "d1")
+    destination(session, "d2", platform="youtube")
+    slot(session, 10)
+    item = queue_item(session, "post")
+
+    chosen = pin_item_to_slot(
+        session, auto, item, day=DAY, destination_id="d2", now=NOW,
+    )
+
+    assert chosen["destination_id"] == "d2"
+
+
 def test_a_released_pin_returns_the_post_to_the_rotation(session) -> None:
     auto = pilot(session)
     destination(session, "d1")

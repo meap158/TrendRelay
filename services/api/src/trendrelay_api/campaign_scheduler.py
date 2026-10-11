@@ -40,6 +40,7 @@ from trendrelay_api.campaign_autopilot import (
     compose_for_post,
     rank_destinations,
 )
+from trendrelay_api.campaign_bursts import burst_moments, bursts_for, cap_on
 from trendrelay_api.campaign_offer_matcher import (
     last_promoted,
     resolve_matches,
@@ -376,6 +377,11 @@ def _eligible_items(
     """
     rested: list[CampaignQueueItem] = []
     for item in items:
+        # Kept off this account by somebody's decision. Ahead of the stamps,
+        # because no interval and no repeat setting brings it here: the page
+        # already has it, or should never have it, whatever the rotation owes.
+        if item.skips_destination(destination_id):
+            continue
         stamp = (item.last_posted_by_destination or {}).get(destination_id)
         if not stamp:
             rested.append(item)
@@ -562,10 +568,14 @@ def next_open_slot(
         override_preset_id=destination.posting_preset_id,
         campaign_preset_id=autopilot.posting_preset_id,
     )
-    moments = due_slots(
+    moments = sorted(set(due_slots(
         list(resolved), now=now, until=now + horizon,
         timezone=workspace.timezone if workspace else "UTC",
-    )
+    )) | burst_moments(
+        bursts_for(session, autopilot.campaign_id), destination.id,
+        ZoneInfo(workspace.timezone if workspace else "UTC"),
+        since=now - GRACE, until=now + horizon,
+    ))
     # Everything this account already owns, so the approved post lands beside
     # the plan rather than on top of a post already frozen for that minute.
     # Including the ones already handed to the engine. A scheduled post is
@@ -697,6 +707,14 @@ def plan_campaign(
         moments_by_destination[destination.id] = set(due_slots(
             list(resolved), now=now, until=now + horizon, timezone=timezone
         ))
+    # A burst day adds its own times on its one date - on top of each
+    # account's rhythm, never instead of it - and replaces that date's cap.
+    bursts = bursts_for(session, autopilot.campaign_id)
+    zone = ZoneInfo(timezone)
+    for destination in destinations:
+        moments_by_destination[destination.id] |= burst_moments(
+            bursts, destination.id, zone, since=now - GRACE, until=now + horizon,
+        )
     upcoming = sorted({
         moment for moments in moments_by_destination.values() for moment in moments
     })
@@ -1013,7 +1031,7 @@ def plan_campaign(
                 + pending_per_day.get(day_key, 0)
                 + already_planned
                 + elsewhere
-                >= autopilot.daily_cap_per_account
+                >= cap_on(autopilot, bursts, destination.id, moment, zone)
             ):
                 slot_notes.append(
                     f"{destination.label} is at its daily cap."
@@ -1754,8 +1772,13 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
             )
         ).all()
         account_ids = {item.id for item in destinations if item.enabled}
+        # An account a post is kept off is not a posting it still owes.
         remaining = sum(
-            len(account_ids - set((item.last_posted_by_destination or {}).keys()))
+            len(
+                account_ids
+                - set((item.last_posted_by_destination or {}).keys())
+                - set(item.skipped_destination_ids or [])
+            )
             for item in written
         )
 

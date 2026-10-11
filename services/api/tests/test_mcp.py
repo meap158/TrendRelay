@@ -114,7 +114,7 @@ def test_every_operation_is_classified_on_purpose() -> None:
 
 def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
     assert policy.allowed_operations() == [
-        "add_creation_draft_media", "create_campaign_post",
+        "add_creation_draft_media", "clear_burst_day", "create_campaign_post",
         "create_creation_draft", "create_posting_preset",
         "create_product_creative_draft",
         "get_asset_thumbnails", "get_campaign_config",
@@ -128,9 +128,9 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "list_posts_needing_copy", "list_product_creative_drafts",
         "list_products", "list_published_posts",
         "list_sops", "pin_post_slot", "render_creation_draft",
-        "set_campaign_posting_times", "set_page_posting_times",
+        "set_burst_day", "set_campaign_posting_times", "set_page_posting_times",
         "set_post_media", "set_post_media_target", "set_post_products",
-        "set_workspace_posting_times",
+        "set_post_skipped_destinations", "set_workspace_posting_times",
         "submit_product_creative_media",
         "update_creation_draft", "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure",
@@ -3206,6 +3206,102 @@ def test_the_lock_shows_in_the_posts_context(session) -> None:
 
     assert found["locked_slot"] is not None
     assert found["locked_slot"].startswith(tomorrow)
+
+
+def test_a_burst_day_is_set_shown_and_cleared_over_mcp(session) -> None:
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+
+    made = schedules.set_burst_day(session, "ws", "camp", tomorrow, ["15:00"], 4)
+    assert made["burst_day"]["times"] == ["15:00"]
+    assert "No other date changes" in made["note"]
+    shown = schedules.get_campaign_posting_times(session, "ws", "camp")
+    assert [item["day"] for item in shown["burst_days"]] == [tomorrow]
+    day = schedules.get_day_slots(session, "ws", "camp", tomorrow)
+    assert day["free"] == 2, "the burst's 15:00 beside the usual noon"
+
+    writes.pin_post_slot(session, "ws", "q1", day=tomorrow, time="15:00")
+    cleared = schedules.clear_burst_day(session, "ws", "camp", tomorrow)
+    assert cleared["released_item_ids"] == ["q1"]
+    assert session.get(CampaignQueueItem, "q1").pinned_slot is None
+    assert schedules.get_day_slots(session, "ws", "camp", tomorrow)["free"] == 1
+
+
+def test_a_burst_day_refuses_an_impossible_cap_over_mcp(session) -> None:
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+
+    with pytest.raises(ValueError, match="between 1 and 24"):
+        schedules.set_burst_day(session, "ws", "camp", tomorrow, ["15:00"], 40)
+
+
+# --- keeping a post off one of its campaign's accounts -------------------------
+
+
+def _second_account(session) -> None:
+    session.add(CampaignDestination(
+        id="d2", workspace_id="ws", campaign_id="camp", integration_id="acct-2",
+        platform="facebook", provider="zernio-7", label="Homewear", enabled=True,
+    ))
+    session.commit()
+
+
+def test_a_post_can_be_kept_off_one_account_and_says_so(session) -> None:
+    _second_account(session)
+
+    view = writes.set_post_skipped_destinations(session, "ws", "q1", ["d2"])
+
+    assert view["skipped_destination_ids"] == ["d2"]
+    assert "Kept off 1 account" in view["note"]
+    found = {
+        item["id"]: item for item in context.get_post_context(session, "ws", "q1")["destinations"]
+    }
+    assert found["d2"]["skipped_for_this_post"] is True
+    assert "skipped for this post" in found["d2"]["posts_to"]
+    assert found["d1"]["skipped_for_this_post"] is False
+
+    cleared = writes.set_post_skipped_destinations(session, "ws", "q1", [])
+    assert cleared["skipped_destination_ids"] == []
+    assert "every account again" in cleared["note"]
+
+
+def test_skipping_an_unknown_or_every_account_is_refused(session) -> None:
+    _second_account(session)
+
+    with pytest.raises(ValueError, match="not on this campaign"):
+        writes.set_post_skipped_destinations(session, "ws", "q1", ["nope"])
+    with pytest.raises(ValueError, match="Pause or retire"):
+        writes.set_post_skipped_destinations(session, "ws", "q1", ["d1", "d2"])
+    assert session.get(CampaignQueueItem, "q1").skipped_destination_ids == []
+
+
+def test_skipping_the_account_a_post_is_locked_to_releases_the_lock(session) -> None:
+    _second_account(session)
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+    writes.pin_post_slot(session, "ws", "q1", day=tomorrow, time="12:00", destination_id="d2")
+
+    view = writes.set_post_skipped_destinations(session, "ws", "q1", ["d2"])
+
+    assert view["pinned_slot"] is None
+    assert "has been released" in view["note"]
+
+
+def test_a_pin_can_name_the_account_and_never_a_skipped_one(session) -> None:
+    _second_account(session)
+    tomorrow = _tomorrow_with_a_noon_slot(session)
+
+    view = writes.pin_post_slot(
+        session, "ws", "q1", day=tomorrow, time="12:00", destination_id="d2",
+    )
+    assert view["locked"]["destination_id"] == "d2"
+
+    writes.pin_post_slot(session, "ws", "q1", release=True)
+    writes.set_post_skipped_destinations(session, "ws", "q1", ["d2"])
+    with pytest.raises(ValueError, match="set to skip that account"):
+        writes.pin_post_slot(
+            session, "ws", "q1", day=tomorrow, time="12:00", destination_id="d2",
+        )
+    day = schedules.get_day_slots(session, "ws", "camp", tomorrow, item_id="q1")
+    standing = {slot["destination_id"]: slot["status"] for slot in day["slots"]}
+    assert standing == {"d1": "free", "d2": "skipped"}
 
 
 # --- which clip earned it, and every figure at once -----------------------------

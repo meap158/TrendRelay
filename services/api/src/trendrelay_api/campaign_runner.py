@@ -1834,6 +1834,17 @@ def publish_queue_item_now(
             })
             continue
 
+        # Kept off this account on purpose. `force` does not reach past it:
+        # force overrides the repeat rules, which are about timing, and this is
+        # a decision about where the post may go at all.
+        if item.skips_destination(destination.id):
+            skipped.append({
+                "destination_id": destination.id,
+                "label": dest_label,
+                "reason": "This post is set to skip this account.",
+            })
+            continue
+
         # Check format compatibility
         if item.image_paths:
             fits, why = carousel_fits_destination(

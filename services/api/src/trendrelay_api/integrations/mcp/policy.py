@@ -119,6 +119,19 @@ EXPOSURE: dict[str, Access] = {
     # happens, for one post rather than for the campaign. It approves nothing
     # and sends nothing - a draft it locks still waits for a person.
     "pin_post_slot": Access.WORKSPACE_WRITE,
+    # Keeping a post off some of its campaign's accounts decides *where*
+    # already-approved work goes, the same order of setting as when. Narrowing
+    # can only hold a post back; clearing restores the reach the operator
+    # approved it with. It cannot add an account, and skipping every account -
+    # which would be a pause - is refused in the write.
+    "set_post_skipped_destinations": Access.WORKSPACE_WRITE,
+    # A burst day is posting times and a daily cap for one date - the two
+    # settings the note above already argues for, narrowed to a single day.
+    # Every post it lets out sooner was already written and approved; with
+    # repeats off it moves how soon, never how many. Clearing restores the
+    # usual rhythm and releases any pin that relied on it.
+    "set_burst_day": Access.WORKSPACE_WRITE,
+    "clear_burst_day": Access.WORKSPACE_WRITE,
     # The catalog and its stored listing snapshots are workspace context. The
     # full record is a separate read so listing a large catalog stays bounded;
     # attribution is read-only evidence already visible on the Attribution tab.

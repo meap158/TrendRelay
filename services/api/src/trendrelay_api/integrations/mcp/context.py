@@ -778,6 +778,12 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
             post_type=configured,
         ))
         view["posts_to"] = _destination_summary(view)
+        # Kept off this account by a per-post decision: listed so an assistant
+        # can see it, and so it does not write for, or pin onto, a page this
+        # post will never reach.
+        view["skipped_for_this_post"] = item.skips_destination(str(view["id"]))
+        if view["skipped_for_this_post"]:
+            view["posts_to"] = f"{view['posts_to']} · skipped for this post"
     # The disclosure this post actually carries - its own override, or the
     # campaign's - resolved once so a caption is not written without it.
     autopilot = session.scalar(

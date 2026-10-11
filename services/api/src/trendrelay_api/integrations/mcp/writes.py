@@ -437,8 +437,13 @@ def pin_post_slot(
     day: str | None = None,
     time: str | None = None,
     release: bool = False,
+    destination_id: str | None = None,
 ) -> dict[str, Any]:
     """Lock a post to one of the campaign's posting slots, or release it.
+
+    `destination_id` names the account as well as the time, for a campaign
+    whose accounts share posting times - without it the slot picker chooses
+    among them. Never an account the post is set to skip.
 
     A scheduling write, not an approval: it decides when an already-written
     post goes out, never whether. With only a day the most fitting free slot
@@ -509,7 +514,10 @@ def pin_post_slot(
             int(found.group(1)), int(found.group(2)), tzinfo=zone,
         )
 
-    chosen = pin_item_to_slot(session, autopilot, item, day=target_day, at=at)
+    chosen = pin_item_to_slot(
+        session, autopilot, item, day=target_day, at=at,
+        destination_id=destination_id or None,
+    )
     session.commit()
     view = _queue_view(item, with_context=True)
     others = [
@@ -521,6 +529,7 @@ def pin_post_slot(
     view["locked"] = {
         "at": chosen["at"].isoformat(),
         "destination": chosen["destination_label"],
+        "destination_id": chosen["destination_id"],
         "platform": chosen["platform"],
     }
     view["note"] = (
@@ -530,6 +539,74 @@ def pin_post_slot(
         + (
             " Still a draft; the operator promotes it into the rotation in the app."
             if item.state == "draft"
+            else ""
+        )
+    )
+    return view
+
+
+def set_post_skipped_destinations(
+    session: Session,
+    workspace_id: str,
+    item_id: str,
+    skip_destination_ids: list[str],
+) -> dict[str, Any]:
+    """Name the campaign accounts one post must never be sent to.
+
+    The whole list, replacing what was there; an empty list lets the post
+    reach every account again. Through the interface's own edit helper, so the
+    same validation holds: only this campaign's accounts, and never all of
+    them - a post kept off everything is a paused post, and pausing is the
+    operator's. A lock on an account now skipped is released, since it could
+    never be honoured, and the note says so.
+
+    It changes where an already-approved post may go, never whether it goes:
+    it cannot approve, cannot reach an account the campaign does not feed, and
+    narrowing is the only direction that is new - clearing it restores the
+    reach the operator approved the post with.
+    """
+    from fastapi import HTTPException
+
+    from trendrelay_api.campaign_autopilot_api import (
+        QueueItemUpdate,
+        _queue_view,
+        apply_queue_item_edits,
+    )
+
+    item = session.scalar(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise LookupError(f"No queue item {item_id!r} in this workspace.")
+    if item.state == "retired":
+        raise ValueError("This post is retired; it is not sent anywhere.")
+    pin_before = (item.pinned_slot, item.pinned_destination_id)
+    try:
+        apply_queue_item_edits(
+            session, workspace_id, item.campaign_id, item,
+            QueueItemUpdate(skipped_destination_ids=list(skip_destination_ids)),
+        )
+    except HTTPException as error:
+        session.rollback()
+        raise ValueError(str(error.detail)) from error
+    session.commit()
+    view = _queue_view(item, with_context=True)
+    released = pin_before[1] is not None and item.pinned_destination_id is None
+    skipped = list(item.skipped_destination_ids or [])
+    view["note"] = (
+        (
+            f"Kept off {len(skipped)} account(s); the scheduler, pinning and "
+            "Publish now all pass over them for this post."
+            if skipped
+            else "Skips cleared; this post may reach every account again."
+        )
+        + (
+            " Its lock was on a skipped account and has been released - pin it "
+            "again on an account it still reaches."
+            if released
             else ""
         )
     )

@@ -27,6 +27,7 @@ from trendrelay_api.autopilot_models import (
     CampaignDestination,
     CampaignQueueItem,
 )
+from trendrelay_api.campaign_bursts import burst_moments, bursts_for
 from trendrelay_api.campaign_scheduler import GRACE, _as_utc
 from trendrelay_api.models import Workspace
 from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
@@ -105,6 +106,14 @@ def day_slots(
         else:
             pinned_any.setdefault(when, item.id)
 
+    # The post being placed, when one is named: an account it is kept off reads
+    # as "skipped" for it rather than as free, so a caller asking where this
+    # post can go is not offered somewhere it can never be sent.
+    placing = (
+        session.get(CampaignQueueItem, exclude_item_id) if exclude_item_id else None
+    )
+
+    bursts = bursts_for(session, autopilot.campaign_id)
     found: list[dict[str, Any]] = []
     for destination in destinations:
         resolved, _schedule = posting_slots.resolved_slots(
@@ -114,16 +123,18 @@ def day_slots(
             override_preset_id=destination.posting_preset_id,
             campaign_preset_id=autopilot.posting_preset_id,
         )
-        seen: set[datetime] = set()
-        for slot in resolved:
-            if slot.weekday not in (-1, day.weekday()):
-                continue
-            moment = datetime(
+        moments: set[datetime] = {
+            datetime(
                 day.year, day.month, day.day, slot.hour, slot.minute, tzinfo=zone
             ).astimezone(UTC)
-            if moment in seen:
-                continue
-            seen.add(moment)
+            for slot in resolved
+            if slot.weekday in (-1, day.weekday())
+        }
+        # A burst day's extra times are slots like any other on that date.
+        moments |= burst_moments(
+            bursts, destination.id, zone, since=day_start, until=day_end,
+        )
+        for moment in sorted(moments):
             claimed_by = (
                 pinned_exact.get((destination.id, moment)) or pinned_any.get(moment)
             )
@@ -133,6 +144,8 @@ def day_slots(
                 status = "taken"
             elif claimed_by:
                 status = "pinned"
+            elif placing is not None and placing.skips_destination(destination.id):
+                status = "skipped"
             else:
                 status = "free"
             found.append({
@@ -175,6 +188,24 @@ def pin_item_to_slot(
             "No posting time falls on that day for this campaign's accounts. "
             "Pick another day, or add posting times first."
         )
+    if destination_id and all(entry["destination_id"] != destination_id for entry in slots):
+        raise ValueError(
+            "That account is not one of this campaign's enabled accounts with a "
+            "posting time that day. Read the day's slots for the account ids."
+        )
+    if destination_id and item.skips_destination(destination_id):
+        raise ValueError(
+            "This post is set to skip that account, so it cannot be locked "
+            "there. Choose another account, or change the post's accounts first."
+        )
+    # An account this post is kept off is no slot for it at all - not a
+    # rival's claim to report, simply not one of its choices.
+    slots = [entry for entry in slots if not item.skips_destination(entry["destination_id"])]
+    if not slots:
+        raise ValueError(
+            "Every posting slot that day belongs to an account this post is set "
+            "to skip. Pick another day, or change the post's accounts first."
+        )
     if at is not None:
         target = (_as_utc(at) or at).replace(second=0, microsecond=0)
         matching = [entry for entry in slots if entry["at"] == target]
@@ -196,6 +227,7 @@ def pin_item_to_slot(
                 "past": "its time has already passed",
                 "taken": "a post is already committed there",
                 "pinned": "another post is locked to it",
+                "skipped": "this post is set to skip that account",
             }
             reasons = ", ".join(
                 sorted({why.get(entry["status"], entry["status"]) for entry in matching})
@@ -206,11 +238,13 @@ def pin_item_to_slot(
         open_slots = [
             entry for entry in slots
             if entry["status"] == "free" and entry["at"] >= moment_now - GRACE
+            and (not destination_id or entry["destination_id"] == destination_id)
         ]
         if not open_slots:
+            where = " on that account" if destination_id else ""
             raise ValueError(
-                f"Every posting slot on {day.isoformat()} is already spoken for "
-                "or has passed. Pick another day."
+                f"Every posting slot{where} on {day.isoformat()} is already "
+                "spoken for or has passed. Pick another day."
             )
         # Fresh audience first, then the earliest hour.
         chosen = sorted(

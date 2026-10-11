@@ -1100,9 +1100,24 @@ def duplicate_campaign(
         )
     ).all())
     for entry in queue:
+        # A post's per-account settings name destinations by id, and the copy
+        # has new ones: carried across unmapped, a skipped account would skip
+        # nothing in the copy and a format override would apply nowhere.
+        per_account = {
+            "skipped_destination_ids": [
+                destination_ids[old]
+                for old in (entry.skipped_destination_ids or [])
+                if old in destination_ids
+            ],
+            "post_type_overrides": {
+                destination_ids[old]: kind
+                for old, kind in (entry.post_type_overrides or {}).items()
+                if old in destination_ids
+            },
+        }
         session.add(_copied(
             entry, CampaignQueueItem, workspace_id, copy.id, user.id,
-            _COPY_RESETS["queue"],
+            {**_COPY_RESETS["queue"], **per_account},
         ))
 
     for link in session.scalars(

@@ -1060,6 +1060,56 @@ def test_rest_is_per_destination_not_per_item(session) -> None:
     assert all(post.destination_id != "d1" for post in posts) or posts == []
 
 
+def test_a_skipped_account_never_receives_the_post(session) -> None:
+    """The rotation owes a post to every account - except the ones it skips.
+    Whichever account the cadence ranks first, the post lands on the one it
+    still reaches rather than the slot going empty or going to the skipped one."""
+    for skipped, reached in (("d1", "d2"), ("d2", "d1")):
+        for row in session.query(CampaignQueueItem).all():
+            session.delete(row)
+        session.commit()
+        if not session.get(CampaignDestination, "d1"):
+            destination(session, "d1", "youtube")
+            destination(session, "d2", "twitter")
+            slot(session, 12)
+            pilot = autopilot(session, daily_cap_per_account=5)
+        queue_item(session, "clip", skipped_destination_ids=[skipped])
+
+        posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+        assert [(post.queue_item_id, post.destination_id) for post in posts] == [
+            ("clip", reached)
+        ]
+
+
+def test_a_skip_holds_even_when_repeats_and_rest_would_allow_it(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "clip", skipped_destination_ids=["d1"])
+
+    posts, _ = plan_campaign(
+        session, autopilot(session, repeat_posts=True), now=NOW, link_for=None,
+    )
+
+    assert posts == []
+
+
+def test_a_pin_on_a_skipped_account_is_not_sent_there(session) -> None:
+    """Defence in depth: the edit releases such a pin, but a row written some
+    other way must still not reach the account it skips."""
+    destination(session, "d1", "youtube")
+    slot(session, 10)
+    queue_item(
+        session, "clip", skipped_destination_ids=["d1"],
+        pinned_slot=datetime(2026, 8, 10, 10, 0, tzinfo=UTC),
+        pinned_destination_id="d1",
+    )
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert all(post.queue_item_id != "clip" for post in posts)
+
+
 def test_the_reason_records_why_that_destination_was_chosen(session) -> None:
     destination(session, "d1", "youtube")
     slot(session, 12)

@@ -201,6 +201,9 @@ def build_server(workspace_id: str) -> FastMCP:
         instructions=sops.server_instructions(INSTRUCTIONS),
         host="127.0.0.1",
         port=mcp_port,
+        # Base64 intake supports 25 MiB images; JSON encoding adds about one
+        # third. Keep the HTTP boundary above that supported payload size.
+        max_request_body_size=36 * 1024 * 1024,
         # Stateful Streamable HTTP, the mode a standard MCP client and the tunnel
         # expect: the session is negotiated on initialize and carried by header.
         # Stateless mode terminates the handshake a normal client makes.
@@ -1191,7 +1194,11 @@ def build_server(workspace_id: str) -> FastMCP:
             "the rotation. A scheduling write, not an approval: a draft still "
             "waits for the operator to promote it. Each lock reserves its "
             "slot against the next call, so locking a batch of posts one by "
-            "one - each to its own day - spreads them without a collision."
+            "one - each to its own day - spreads them without a collision. "
+            "When several accounts share a posting time, pass destination_id "
+            "(from get_day_slots) to name the account as well; without it the "
+            "account is chosen for you. An account the post is set to skip "
+            "is never chosen and refused when named."
         ),
     )
     def pin_post_slot(
@@ -1199,11 +1206,77 @@ def build_server(workspace_id: str) -> FastMCP:
         day: str | None = None,
         time: str | None = None,
         release: bool = False,
+        destination_id: str | None = None,
     ) -> dict[str, Any]:
         return _call(
             "pin_post_slot",
             lambda s: writes.pin_post_slot(
-                s, workspace_id, item_id, day=day, time=time, release=release
+                s, workspace_id, item_id, day=day, time=time, release=release,
+                destination_id=destination_id,
+            ),
+        )
+
+    @server.tool(
+        name="set_burst_day",
+        description=(
+            "Give one date extra posting times and its own posts-per-account "
+            "cap, without changing any other date. Times are HH:MM in the "
+            "workspace timezone and are added beside each account's own "
+            "posting times, so existing pins keep their slots. Pass "
+            "destination_ids to limit it to some accounts (default: all). The "
+            "whole day is stated each call - calling again replaces it. Then "
+            "read get_day_slots for that day and pin posts onto the new slots. "
+            "It changes when approved posts go out, never whether."
+        ),
+    )
+    def set_burst_day(
+        campaign_id: str,
+        day: str,
+        times: list[str],
+        daily_cap: int,
+        destination_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return _call(
+            "set_burst_day",
+            lambda s: schedules.set_burst_day(
+                s, workspace_id, campaign_id, day, times, daily_cap, destination_ids,
+            ),
+        )
+
+    @server.tool(
+        name="clear_burst_day",
+        description=(
+            "Return one date to the usual posting times and cap. Posts pinned "
+            "to that day's extra times are released to the rotation and named "
+            "in the result, so they can be pinned again."
+        ),
+    )
+    def clear_burst_day(campaign_id: str, day: str) -> dict[str, Any]:
+        return _call(
+            "clear_burst_day",
+            lambda s: schedules.clear_burst_day(s, workspace_id, campaign_id, day),
+        )
+
+    @server.tool(
+        name="set_post_skipped_destinations",
+        description=(
+            "Keep one campaign post off some of its campaign's accounts - for "
+            "a clip a page already carried, or a post that does not suit one "
+            "audience. Pass the whole list of destination ids to skip (from "
+            "get_post_context destinations); an empty list lets the post reach "
+            "every account again. The scheduler, pinning and Publish now all "
+            "honour it. Refused for an account not on the campaign and for "
+            "skipping every account (pausing is the operator's). A lock on a "
+            "newly skipped account is released and the note says so."
+        ),
+    )
+    def set_post_skipped_destinations(
+        item_id: str, skip_destination_ids: list[str]
+    ) -> dict[str, Any]:
+        return _call(
+            "set_post_skipped_destinations",
+            lambda s: writes.set_post_skipped_destinations(
+                s, workspace_id, item_id, skip_destination_ids
             ),
         )
 
@@ -1495,7 +1568,8 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     ),
     "Posting schedule": (
         "list_posting_times", "get_campaign_posting_times",
-        "get_day_slots", "pin_post_slot",
+        "get_day_slots", "pin_post_slot", "set_post_skipped_destinations",
+        "set_burst_day", "clear_burst_day",
         "create_posting_preset", "set_campaign_posting_times",
         "set_page_posting_times", "set_workspace_posting_times",
     ),

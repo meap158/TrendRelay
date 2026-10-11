@@ -250,6 +250,47 @@ def test_the_original_is_untouched() -> None:
     assert autopilot.enabled is True
 
 
+def test_a_posts_per_account_settings_follow_the_copys_own_accounts() -> None:
+    """A skip or a format override names a destination by id, and the copy's
+    destinations are new rows. Unmapped, the copy's post would skip nothing and
+    override nothing - the setting would look kept and do nothing."""
+    space = workspace()
+    original = campaign(space)
+    with TestingSession() as session:
+        kept = CampaignDestination(
+            id="dest-shop", workspace_id=space, campaign_id=original,
+            provider="zernio", integration_id="shop", platform="facebook",
+            label="Shop", enabled=True,
+        )
+        skipped = CampaignDestination(
+            id="dest-home", workspace_id=space, campaign_id=original,
+            provider="zernio", integration_id="home", platform="facebook",
+            label="Home", enabled=True,
+        )
+        session.add_all([kept, skipped])
+        session.add(CampaignQueueItem(
+            workspace_id=space, campaign_id=original, video_path="/clips/one.mp4",
+            title="One", body="Body", state="approved", created_by="campaign-owner",
+            skipped_destination_ids=["dest-home"],
+            post_type_overrides={"dest-shop": "reel"},
+        ))
+        session.commit()
+
+    copy = duplicate(space, original)
+
+    with TestingSession() as session:
+        by_label = {
+            item.label: item.id for item in session.scalars(
+                select(CampaignDestination).where(CampaignDestination.campaign_id == copy["id"])
+            ).all()
+        }
+        item = session.scalar(
+            select(CampaignQueueItem).where(CampaignQueueItem.campaign_id == copy["id"])
+        )
+    assert item.skipped_destination_ids == [by_label["Home"]]
+    assert item.post_type_overrides == {by_label["Shop"]: "reel"}
+
+
 def test_the_copy_can_be_named() -> None:
     space = workspace()
     original = campaign(space)

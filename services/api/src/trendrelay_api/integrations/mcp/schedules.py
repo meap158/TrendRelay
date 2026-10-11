@@ -105,12 +105,98 @@ def get_campaign_posting_times(
             ),
         })
 
+    from trendrelay_api.campaign_bursts import bursts_for, view
+
     workspace = _workspace(session, workspace_id)
     return {
         "campaign_id": campaign_id,
         "timezone": workspace.timezone,
         "campaign_preset_id": campaign_preset_id,
+        "daily_cap_per_account": autopilot.daily_cap_per_account if autopilot else None,
         "accounts": accounts,
+        # Dates with their own extra times and cap. Each one affects that date
+        # only; nothing above changes because of it.
+        "burst_days": [view(burst) for burst in bursts_for(session, campaign_id)],
+    }
+
+
+def _autopilot_for(session: Session, workspace_id: str, campaign_id: str) -> CampaignAutopilot:
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = session.scalar(select(CampaignAutopilot).where(
+        CampaignAutopilot.campaign_id == campaign_id
+    ))
+    if not autopilot:
+        raise ValueError(
+            "This campaign has no autopilot configured yet, so it has nothing "
+            "to schedule. Set it up in the app first."
+        )
+    return autopilot
+
+
+def set_burst_day(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    day: str,
+    times: list[str],
+    daily_cap: int,
+    destination_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Give one date extra posting times and its own cap, and nothing else.
+
+    The same order of setting as posting times and the daily cap, which this
+    is - for one date. It adds times beside the accounts' own (so no existing
+    pin loses its slot) and replaces that date's cap; the whole day is stated
+    each call, so a second call replaces the first. Every post it lets go out
+    sooner was already written and approved; with repeats off it changes how
+    soon, not how many in total.
+    """
+    from trendrelay_api.auth import LOCAL_ADMIN_ID
+    from trendrelay_api.campaign_bursts import set_burst_day as store
+    from trendrelay_api.campaign_bursts import view
+    from trendrelay_api.campaign_slots import workspace_zone
+
+    autopilot = _autopilot_for(session, workspace_id, campaign_id)
+    burst = store(
+        session, autopilot,
+        day=day, times=times, daily_cap=daily_cap, destination_ids=destination_ids,
+        actor_user_id=LOCAL_ADMIN_ID, zone=workspace_zone(session, workspace_id),
+    )
+    session.commit()
+    return {
+        "burst_day": view(burst),
+        "note": (
+            f"{burst.day}: {len(burst.times)} extra time(s) and a cap of "
+            f"{burst.daily_cap} per account"
+            + (" on the named accounts" if burst.destination_ids else " on every account")
+            + ". No other date changes. Read get_day_slots for that day to see "
+            "and pin the new slots."
+        ),
+    }
+
+
+def clear_burst_day(
+    session: Session, workspace_id: str, campaign_id: str, day: str
+) -> dict[str, Any]:
+    """Remove one date's burst; posts pinned to its extra times are released."""
+    from trendrelay_api.campaign_bursts import clear_burst_day as remove
+
+    autopilot = _autopilot_for(session, workspace_id, campaign_id)
+    existed, released = remove(session, autopilot, day)
+    session.commit()
+    if not existed:
+        return {"cleared": False, "released_item_ids": [], "note": f"No burst on {day}."}
+    return {
+        "cleared": True,
+        "released_item_ids": released,
+        "note": (
+            f"{day} is back to the usual times and cap."
+            + (
+                f" {len(released)} post(s) pinned to its extra times were released "
+                "to the rotation; pin them again if they should keep a time."
+                if released else ""
+            )
+        ),
     }
 
 

@@ -257,6 +257,51 @@ class CampaignAutopilot(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
+class CampaignBurstDay(Base):
+    """One date on which a campaign posts more (or less) than its usual rhythm.
+
+    Posting times recur by weekday, and the per-account cap holds every day, so
+    "post twice as much this Saturday" had no shape of its own: it could only
+    be built by changing the recurring settings and remembering to change them
+    back. A burst day names the date, the extra times and that day's cap, and
+    affects nothing on any other date - deleting the row is the whole undo.
+
+    `day` is the workspace's local date and `times` are its wall-clock times,
+    like every other posting time. An empty `destination_ids` applies to every
+    account the campaign feeds.
+    """
+
+    __tablename__ = "campaign_burst_days"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "day", name="unique_campaign_burst_day"),
+        CheckConstraint("daily_cap BETWEEN 1 AND 24", name="valid_burst_day_cap"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("burst")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    campaign_id: Mapped[str] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    #: YYYY-MM-DD in the workspace timezone.
+    day: Mapped[str] = mapped_column(String(10))
+    #: Extra HH:MM times that day, on top of the accounts' own posting times.
+    times: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: That day's posts-per-account ceiling, in place of the campaign's.
+    daily_cap: Mapped[int] = mapped_column(Integer)
+    destination_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+    def covers(self, destination_id: str) -> bool:
+        """Whether this burst applies to one account."""
+        return not self.destination_ids or destination_id in self.destination_ids
+
+
 class CampaignDestination(Base):
     """One connected account this campaign feeds, and its own tracking link."""
 
@@ -397,6 +442,12 @@ class CampaignQueueItem(Base):
     #: rather than pretending one format can describe every delivery. Missing
     #: keys inherit the destination's campaign default.
     post_type_overrides: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    #: Destination ids this post must never be sent to. The rotation otherwise
+    #: owes every approved post to every account its campaign feeds, which is
+    #: wrong for a clip one page already carried before the campaign existed.
+    #: Empty - the ordinary case - keeps that rule. Honoured by the scheduler,
+    #: by pinning and by Publish now alike; see `skips_destination`.
+    skipped_destination_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     title: Mapped[str | None] = mapped_column(String(200))
     #: Copy a person wrote. Autopilot never generates it.
     body: Mapped[str] = mapped_column(String(4000))
@@ -511,6 +562,16 @@ class CampaignQueueItem(Base):
         if self.media_target is not None:
             return self.media_count >= self.media_target
         return self.media_count > 0
+
+    def skips_destination(self, destination_id: str | None) -> bool:
+        """Whether this post is kept off one account.
+
+        The single place the question is answered, so the scheduler, the slot
+        picker and Publish now cannot disagree about where a post may go.
+        """
+        return bool(destination_id) and destination_id in (
+            self.skipped_destination_ids or []
+        )
 
 
 class CampaignOffer(Base):

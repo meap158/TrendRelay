@@ -17,6 +17,8 @@ write operation looks convenient.
 | Find a post already created (recover a post's id, attach media later) | `campaigns.fill-needs-media` | `list_campaign_posts` |
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
 | Lock posts to concrete slots, or spread a batch of drafts across days | (no SOP yet) | `get_day_slots` |
+| Keep a post off one of the campaign's pages | (no SOP yet) | `get_post_context` |
+| Post more (or less) on one date only | (no SOP yet) | `get_campaign_posting_times` |
 | Research products, listings, images, or attribution | (no SOP yet) | `list_products` |
 | Fill a pending Attribution product creative (image, carousel, or video) | `attribution.fill-product-creatives` | `list_product_creative_drafts` |
 
@@ -81,6 +83,23 @@ locked or past - and `pin_post_slot` claims a named slot or, given only a day,
 the most fitting free one. Locks work on drafts, each lock reserves its slot
 against the next call, and so a batch of drafts spreads across the coming days
 one pin at a time without a collision. A lock schedules; it never approves.
+Where a campaign's pages share posting times, pass `destination_id` to
+`pin_post_slot` to name the page as well as the time.
+
+Every approved post otherwise goes to every page its campaign feeds, once
+each. To keep one post off a page - a clip that page already carried, say -
+read the page ids from `get_post_context` and call
+`set_post_skipped_destinations` with the whole list to skip. The scheduler,
+pinning and Publish now all honour it; an empty list lifts it. Skipping every
+page is refused, because that is a pause and pausing is the operator's.
+
+For a heavier day, `set_burst_day` gives one date extra times and its own
+per-account cap; no other date changes. Its times are added beside each page's
+own, so existing pins keep their slots. Read `get_day_slots` for that day and
+pin posts onto the new times, and say beforehand what will go out and where.
+`clear_burst_day` puts the date back and releases any post pinned to its extra
+times. Posting times and the cap are the scheduler's: a burst takes effect at
+the worker's next planning pass.
 
 For product-aware writing or media generation, start with `list_products` (or
 `list_campaign_products` when the campaign is already known). Catalog rows are

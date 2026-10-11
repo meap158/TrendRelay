@@ -406,6 +406,9 @@ class QueueItemUpdate(BaseModel):
     disclosure: str | None = Field(default=None, max_length=300)
     bio_hint: str | None = Field(default=None, max_length=120)
     post_type_overrides: dict[str, str] | None = Field(default=None, max_length=50)
+    #: The campaign's accounts this post must never be sent to. The whole list,
+    #: not a change to it: send [] to let the post reach every account again.
+    skipped_destination_ids: list[str] | None = Field(default=None, max_length=50)
     #: Working notes that are never posted - the angle being tried, the shot
     #: still missing, what a later phase needs to know. Bounded generously but
     #: bounded: this is a note somebody or something reads, not a place to
@@ -681,6 +684,9 @@ def _queue_view(
         "image_paths": list(item.image_paths or []),
         "text_only": item.text_only,
         "post_type_overrides": dict(item.post_type_overrides or {}),
+        # The accounts this post is kept off. Empty is the ordinary case: it
+        # goes to every account the campaign feeds.
+        "skipped_destination_ids": list(item.skipped_destination_ids or []),
         # So the interface can mark a package that still needs writing rather
         # than showing the placeholder as though somebody meant it.
         "needs_copy": item.body == PLACEHOLDER_BODY,
@@ -856,6 +862,45 @@ def _validated_post_type_overrides(
                 )
         validated[destination_id] = kind.id
     return validated
+
+
+def _validated_skipped_destinations(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    requested: list[str],
+) -> list[str]:
+    """The accounts a post is kept off, checked against this campaign's own.
+
+    Unknown ids are refused rather than kept, for the reason format overrides
+    refuse them: a misspelled id looks saved while keeping the post off
+    nothing. Skipping every account is refused too - a post sent nowhere is a
+    paused post, and pausing is a state the queue already names and shows,
+    where an all-skipped post would sit approved and silently never go out.
+    """
+    wanted = list(dict.fromkeys(item.strip() for item in requested if item.strip()))
+    if not wanted:
+        return []
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.workspace_id == workspace_id,
+        CampaignDestination.campaign_id == campaign_id,
+    )).all()
+    known = {destination.id for destination in destinations}
+    unknown = [destination_id for destination_id in wanted if destination_id not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Destination {unknown[0]!r} is not on this campaign.",
+        )
+    if known <= set(wanted):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "That would keep the post off every account in this campaign. "
+                "Pause or retire it instead."
+            ),
+        )
+    return wanted
 
 
 def offer_link_url(session: Session, offer_id: str | None) -> str | None:
@@ -1973,6 +2018,17 @@ def apply_queue_item_edits(
             session, workspace_id, campaign_id, body.post_type_overrides or {},
             has_images=bool(item.image_paths),
         )
+    if "skipped_destination_ids" in body.model_fields_set:
+        item.skipped_destination_ids = _validated_skipped_destinations(
+            session, workspace_id, campaign_id, body.skipped_destination_ids or [],
+        )
+        # A lock on an account the post is now kept off could never be
+        # honoured: the scheduler would hold the slot for a post it will not
+        # send there. Released, so the post rejoins the rotation instead of
+        # waiting on a moment that cannot come.
+        if item.skips_destination(item.pinned_destination_id):
+            item.pinned_slot = None
+            item.pinned_destination_id = None
     if body.offer_ids is not None:
         _require_offer_ids(
             session, workspace_id, body.offer_ids,

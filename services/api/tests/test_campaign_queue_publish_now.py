@@ -277,6 +277,30 @@ def test_an_inflight_immediate_publish_cannot_be_duplicated(
             )
 
 
+def test_publish_now_never_reaches_an_account_the_post_skips_even_forced(
+    workspace_with_campaign: dict[str, Any]
+) -> None:
+    """Force overrides the repeat rules, which are about timing. A skip is about
+    where the post may go at all, and holds."""
+    ws_id = workspace_with_campaign["workspace_id"]
+    camp_id = workspace_with_campaign["campaign_id"]
+    item_id = workspace_with_campaign["item_id"]
+    dest_id = workspace_with_campaign["destination_id"]
+
+    with SessionFactory() as session:
+        item = session.get(CampaignQueueItem, item_id)
+        assert item is not None
+        item.skipped_destination_ids = [dest_id]
+        session.commit()
+
+        with pytest.raises(ValueError, match="set to skip this account"):
+            publish_queue_item_now(
+                session, ws_id, camp_id, item_id, force=True,
+                now=datetime(2026, 8, 30, 10, 0, 0, tzinfo=UTC),
+            )
+        assert session.scalars(select(PublicationExecution)).all() == []
+
+
 def test_batch_publish_queue_items(workspace_with_campaign: dict[str, Any]) -> None:
     ws_id = workspace_with_campaign["workspace_id"]
     camp_id = workspace_with_campaign["campaign_id"]
