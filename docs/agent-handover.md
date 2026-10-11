@@ -7,6 +7,133 @@ state of the running system, and what is genuinely unfinished.
 
 Read the "Live system" section first. Some of it is posting to real accounts.
 
+## Characters for Generate media (2026-10-12)
+
+The operator asked for characters in Attribution's Generate media: a
+switch in "What generation uses", right under Subject images, a built-in
+cast with previews (Asian characters first), the pictures kept in the
+Library, and a way to make more. Each character is a **portrait** plus a
+**character consistency sheet** drawn from that portrait, following the
+operator's character-sheet brief.
+
+Where things live:
+
+- `services/api/src/trendrelay_api/character_catalogue.py` is the only place
+  the cast and both prompts are written. The build script and the in-app
+  generator both read it.
+- The built-in pictures ship at
+  `services/api/src/trendrelay_api/character_defaults/<slug>/{portrait,sheet}.jpg`.
+  Listing a workspace's characters (`GET /api/workspaces/{id}/characters`,
+  for editors) copies any missing built-in one into the Library with
+  `source_type="character"`. There is no data migration; migration 0096 only
+  creates `characters` and adds `product_creative_drafts.character_id`.
+- A draft with a character gets the character line appended to its stored
+  prompt, never woven in, so the recipe wording stays byte for byte the same.
+  On xAI video the portrait and sheet follow the subject in
+  `reference_images`. Veo is sent only the one image, so it gets the
+  character through the prompt alone. The `hikaru_*` recipes refuse a
+  character because they bring their own model. **The worker needs a restart**
+  before video jobs send the character pictures.
+- New characters in the app (`POST .../characters`, with
+  `confirm_external_action`) are drawn on a thread in the API with xAI's
+  Imagine image API (`grok-imagine-image-2.0`). That needs the xAI key, its
+  switch and a passing Check in Tools; on 2026-10-12 none of those were set.
+  Starting from a Library picture skips the portrait, because that picture
+  is the identity.
+
+### How the built-in cast was drawn
+
+The app had no image key, so the cast was drawn with the **Grok Build CLI**
+(`grok`, signed in to the operator's grok.com account). Its `image_gen` and
+`image_edit` tools do the drawing, and `scripts/build_default_characters.py`
+drives them. A character whose two files exist is skipped, so to redraw one,
+delete its folder and run:
+
+    python scripts/build_default_characters.py            # every missing one
+    python scripts/build_default_characters.py marcus     # just one
+
+Any agent with an image tool can redraw by hand instead. Use the two prompts
+below, filling in `{appearance}` and `{outfit}` from `DEFAULT_CHARACTERS`:
+
+1. Portrait: image generation, 2:3.
+2. Sheet: an image edit of that portrait, which keeps its 2:3 shape.
+
+Save both as JPEG to the paths above.
+
+Portrait prompt:
+
+> Ultra-photorealistic head-and-shoulders studio portrait of an invented
+> person: {appearance}. They wear {outfit}, seen only at the collar and
+> shoulders. Framed from mid-chest up, with the camera straight on at eye
+> level and the face large in the upper half of the frame. They face the
+> camera squarely with a neutral, relaxed expression and both eyes open.
+> Neutral light-grey seamless studio background, soft even studio lighting,
+> natural skin texture with visible pores and slight asymmetry, individual
+> hair strands, sharp focus, 85mm portrait lens with no wide-angle
+> distortion, true-to-life color. A real person photographed in a studio,
+> not a render, with no heavy makeup, no beauty filter and no text.
+
+Sheet prompt (the operator's brief, kept in its order, with the 24 panels
+grouped into rows and written as positive description; the image models
+dropped panels from a flat list and followed "do this" better than a long
+negative prompt):
+
+> Create a professional, ultra-photorealistic CHARACTER CONSISTENCY SHEET
+> using the reference image as the ONLY source for the character's identity.
+> Reproduce the EXACT SAME PERSON throughout the sheet: the same face,
+> facial structure and proportions, eye shape and iris color, eyebrows,
+> nose, lips, cheeks, jawline, chin, skin tone and natural skin texture,
+> age, hairline, exact hair color, length, texture and hairstyle, and body
+> proportions. Keep them exactly as they are, without redesigning,
+> beautifying or reinterpreting them.
+>
+> Layout: one clean reference board on a neutral light-grey studio
+> background, with thin borders between panels and a small minimal label
+> under each view. Top row: a large front face close-up, then
+> head-and-shoulders views FRONT, 3/4 LEFT, 3/4 RIGHT, LEFT PROFILE, RIGHT
+> PROFILE and BACK. Middle row: four full-body views FRONT, 3/4, SIDE and
+> BACK, wearing {outfit}. Bottom row: expressions NEUTRAL, NATURAL SMILE,
+> SOFT SMILE, LOOKING LEFT and LOOKING RIGHT, then detail close-ups EYES,
+> EYEBROWS, NOSE, LIPS, HAIR and ACCESSORIES, and a small swatch strip for
+> the skin tone and outfit colors. The panel labels are the only text: no
+> title, name or caption.
+>
+> Where a view is not visible in the reference, reconstruct it faithfully
+> from what is visible, adding no new distinguishing features.
+>
+> Presentation: a premium film-production character bible, clean editorial
+> layout, soft realistic studio lighting, consistent camera perspective,
+> sharp facial detail, natural skin pores, individual hair strands,
+> realistic fabric and accessories, accurate anatomy. Ultra-photorealistic
+> real human appearance with natural shadows and realistic eyes; real skin
+> rather than a CGI, waxy or doll-like finish, and their own face rather
+> than a beauty-filter face. Every panel shows the same person with one
+> consistent identity.
+
+The cast is 12 characters, 9 of them Asian:
+
+- Asian: Aiko (Japanese F), Min-ji (Korean F), Wei (Chinese M), Ploy (Thai
+  F), Minh (Vietnamese M), Bea (Filipina F), Putri (Indonesian F, hijab),
+  Arjun (Indian M) and Haruto (Japanese M, mid-forties).
+- Others: Sofía (Latina F), Marcus (Black M) and Emma (white F, late
+  thirties).
+
+Lessons from the runs:
+
+- Without the explicit framing, a "portrait" came back full-body from a high
+  wide angle, which makes a poor identity reference.
+- A seam can appear where the model stitched an image together. Check every
+  portrait before keeping it. Marcus was redrawn for this, and the strip
+  still left at the bottom of his new portrait was cropped off by hand.
+- A sheet's panel labels are sometimes wrong, for example "BACK" under a
+  profile. The panels themselves hold the identity well. If exact labels
+  ever matter, build the board in code from separately drawn panels rather
+  than asking one image for it.
+- An unasked-for title ("CHARACTER REFERENCE: ELENA V.") once appeared,
+  which is why the prompt now says the labels are the only text.
+- The CLI sometimes writes into a folder named after the target. The script
+  accepts that.
+
 ## Generate media review and hardening (2026-10-04)
 
 An adversarial review of Generate media landed as atomic commits after
