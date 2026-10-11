@@ -48,7 +48,7 @@ class DraftBody(BaseModel):
         "bed_flat_lay", "mannequin_transition", "mirror_selfie",
         "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
         "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
-        "ceiling_fan_transition",
+        "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk",
     ]
     variant: Literal["female", "male"] | None = None
     background_enabled: bool = False

@@ -369,6 +369,43 @@ SLEEPWEAR_LOOKBOOK_ON_TOGETHER = (
     + _LOOKBOOK_POSES.rstrip()
 )
 
+#: The sleepwear brand's own video: a set on hangers on a rail, a hand that
+#: lifts the top away to show the bottoms, then the fabric in close-up.
+_RAIL_SCENE_OFF = (
+    "A vertical handheld phone video of a clothing rail made of dark wood "
+    "against a plain white wall, beside a tall vase of dried pampas grass, in "
+    "bright soft daylight."
+)
+_RAIL_SCENE_ON = (
+    "A vertical handheld phone video of a dark wooden clothing rail in the "
+    "scene from the attached background image, matching its lighting and "
+    "setting."
+)
+_RAIL_SINGLE = (
+    " The exact sleepwear set from the attached product image hangs on the "
+    "rail, each piece on its own cream wooden or clear acrylic hanger, the "
+    "top in front of the bottoms. The video opens on the whole set. A hand "
+    "lifts the top's hanger forward and turns it so the straps, neckline, "
+    "and hem show, then moves it aside to reveal the bottoms. The camera "
+    "moves close as the hand gathers and gently squeezes the fabric to show "
+    "its sheen, its lace, or its knit, then pulls back to the whole set. No "
+    "face appears, and there is no text on screen. " + _KEEP
+)
+_RAIL_TOGETHER = (
+    " Every garment from the attached product images hangs on the rail, side "
+    "by side on cream wooden or clear acrylic hangers, so every attached "
+    "product appears in this one video. The video opens on the full rail. A "
+    "hand slides along it, lifting each hanger forward in turn so its "
+    "straps, neckline, and hem show, and the camera moves close as the hand "
+    "gathers each fabric to show its sheen, its lace, or its knit. It ends "
+    "on the full rail. No face appears, and there is no text on screen. "
+    + _KEEP_EACH
+)
+HANGER_RAIL_OFF = _RAIL_SCENE_OFF + _RAIL_SINGLE
+HANGER_RAIL_ON = _RAIL_SCENE_ON + _RAIL_SINGLE
+HANGER_RAIL_OFF_TOGETHER = _RAIL_SCENE_OFF + _RAIL_TOGETHER
+HANGER_RAIL_ON_TOGETHER = _RAIL_SCENE_ON + _RAIL_TOGETHER
+
 #: The garment held up to the lens by its shoulders, in a dim room under a
 #: paper lantern: front, a closer look, the back, the front again.
 _HELD_UP_SCENE_OFF = (
@@ -461,6 +498,49 @@ HIKARU_ON_TOGETHER = (
     + _HIKARU_EACH + _HIKARU_SCENE_ON + _HIKARU_CAMERA.rstrip()
 )
 
+#: Hikaru on video: the walk toward a camera that backs away, then the stop
+#: and the smile. The profile rides along word for word, as in the photos.
+_HIKARU_WALK_SCENE_OFF = (
+    "She walks along a Tokyo street at night, past glowing shop signs and "
+    "neon, the wet pavement reflecting the lights, a handbag in one hand."
+)
+_HIKARU_WALK_SCENE_ON = (
+    "She walks through the scene from the attached background image, "
+    "matching its lighting and setting, a handbag in one hand."
+)
+_HIKARU_WALK_MOTION = (
+    " The camera moves backward ahead of her in one smooth tracking shot as "
+    "she walks toward it, glancing around and touching her hair. She slows, "
+    "stops in a medium close-up, and smiles into the camera. Photorealistic, "
+    "with a shallow depth of field and true-to-life color, in a vertical "
+    "9:16 frame. Her face, hair, and build stay the same throughout. "
+)
+HIKARU_WALK_OFF = (
+    "A vertical video of Hikaru. " + HIKARU_PROFILE + " She wears the exact "
+    "clothing from the attached product image. " + _HIKARU_WALK_SCENE_OFF
+    + _HIKARU_WALK_MOTION + _KEEP
+)
+HIKARU_WALK_ON = (
+    "A vertical video of Hikaru. " + HIKARU_PROFILE + " She wears the exact "
+    "clothing from the attached product image. " + _HIKARU_WALK_SCENE_ON
+    + _HIKARU_WALK_MOTION + _KEEP
+)
+#: One person cannot wear every product at once: each one is its own walk,
+#: cut together in order.
+_HIKARU_WALK_EACH = (
+    " The video features every attached product: it cuts between short walks "
+    "in order, and in each walk she wears one product from the attached "
+    "product images, never two attached products at once. " + _KEEP_EACH + " "
+)
+HIKARU_WALK_OFF_TOGETHER = (
+    "A vertical video of Hikaru. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
+    + _HIKARU_WALK_SCENE_OFF + _HIKARU_WALK_MOTION.rstrip()
+)
+HIKARU_WALK_ON_TOGETHER = (
+    "A vertical video of Hikaru. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
+    + _HIKARU_WALK_SCENE_ON + _HIKARU_WALK_MOTION.rstrip()
+)
+
 #: An overhead outfit change. The camera looks straight down past a turning
 #: ceiling fan; each blade that crosses the lens hides a cut, and the outfit
 #: underneath has changed when it clears. The pose barely moves.
@@ -468,8 +548,9 @@ _FAN_SCENE_OFF = (
     "A vertical video shot from directly overhead, as if from a camera fixed "
     "to the ceiling beside a slowly turning ceiling fan. A young woman lies "
     "on her back on a faded vintage patterned rug in a cosy living room, with "
-    "the edge of a cream sofa at one side and warm afternoon sunlight "
-    "falling across the floor in slatted stripes."
+    "the edge of a cream sofa at one side, a TV remote on the rug beside "
+    "her, and warm afternoon sunlight falling across the floor in slatted "
+    "stripes."
 )
 _FAN_SCENE_ON = (
     "A vertical video shot from directly overhead, as if from a camera fixed "
@@ -560,6 +641,17 @@ RECIPES: dict[str, dict[str, Any]] = {
         "background": "optional",
         "variants": (),
     },
+    "hanger_rail_reveal": {
+        "kinds": ("video",),
+        "background": "optional",
+        "variants": (),
+    },
+    "hikaru_walk": {
+        "kinds": ("video",),
+        "background": "optional",
+        "variants": (),
+        "character": "hikaru",
+    },
 }
 
 _PROMPTS: dict[tuple[str, bool, str | None], str] = {
@@ -583,6 +675,10 @@ _PROMPTS: dict[tuple[str, bool, str | None], str] = {
     ("hikaru_lookbook", True, None): HIKARU_ON,
     ("ceiling_fan_transition", False, None): CEILING_FAN_OFF,
     ("ceiling_fan_transition", True, None): CEILING_FAN_ON,
+    ("hanger_rail_reveal", False, None): HANGER_RAIL_OFF,
+    ("hanger_rail_reveal", True, None): HANGER_RAIL_ON,
+    ("hikaru_walk", False, None): HIKARU_WALK_OFF,
+    ("hikaru_walk", True, None): HIKARU_WALK_ON,
 }
 
 _TOGETHER: dict[tuple[str, bool, str | None], str] = {
@@ -606,6 +702,10 @@ _TOGETHER: dict[tuple[str, bool, str | None], str] = {
     ("hikaru_lookbook", True, None): HIKARU_ON_TOGETHER,
     ("ceiling_fan_transition", False, None): CEILING_FAN_OFF_TOGETHER,
     ("ceiling_fan_transition", True, None): CEILING_FAN_ON_TOGETHER,
+    ("hanger_rail_reveal", False, None): HANGER_RAIL_OFF_TOGETHER,
+    ("hanger_rail_reveal", True, None): HANGER_RAIL_ON_TOGETHER,
+    ("hikaru_walk", False, None): HIKARU_WALK_OFF_TOGETHER,
+    ("hikaru_walk", True, None): HIKARU_WALK_ON_TOGETHER,
 }
 
 

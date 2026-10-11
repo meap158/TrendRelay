@@ -99,6 +99,8 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `held_up_garment` | video | Optional. Off is the dim room under a paper lantern. On uses the attached background. |
 | `hikaru_lookbook` | image or carousel | Optional. The stored prompt carries Hikaru's full character profile. Keep her face, hair, and build the same on every card. |
 | `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. Each blade pass hides a cut. |
+| `hanger_rail_reveal` | video | Optional. Off is the dark wooden rail against a white wall. A hand lifts the top away to show the bottoms, then the fabric in close-up. |
+| `hikaru_walk` | video | Optional. Off is a Tokyo street at night. The stored prompt carries Hikaru's full character profile. |
 
 When `subject_assets` is non-empty, those Library image ids are the subject,
 in that order, at most 8. Read them with `get_asset_thumbnails`. When

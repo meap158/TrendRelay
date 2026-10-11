@@ -155,7 +155,9 @@ type Recipe =
   | "sleepwear_lookbook"
   | "held_up_garment"
   | "hikaru_lookbook"
-  | "ceiling_fan_transition";
+  | "ceiling_fan_transition"
+  | "hanger_rail_reveal"
+  | "hikaru_walk";
 
 /** The recipes each kind offers, the first being its default. Mirrors the API. */
 const RECIPES_BY_KIND: Record<Kind, readonly Recipe[]> = {
@@ -167,6 +169,8 @@ const RECIPES_BY_KIND: Record<Kind, readonly Recipe[]> = {
     "mannequin_walkaround",
     "flat_lay_reveal",
     "held_up_garment",
+    "hanger_rail_reveal",
+    "hikaru_walk",
     "ceiling_fan_transition",
   ],
 };

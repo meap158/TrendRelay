@@ -222,8 +222,8 @@ background. `mannequin_transition` is a video and may take one. `mirror_selfie`
 is a video that requires `variant` `female` or `male` and an https background;
 it has no wording without one. `styled_flat_lay` and `hikaru_lookbook` are an
 image or a carousel, `sleepwear_lookbook` is a carousel, and
-`mannequin_walkaround`, `flat_lay_reveal`, `held_up_garment`, and
-`ceiling_fan_transition` are videos; each may take an optional background. The
+`mannequin_walkaround`, `flat_lay_reveal`, `held_up_garment`,
+`hanger_rail_reveal`, `hikaru_walk`, and `ceiling_fan_transition` are videos; each may take an optional background. The
 recipe table in `attribution.fill-product-creatives` says what each one shows.
 A carousel's `card_count` is 2 to 10 and cannot
 be lowered. Confirm stores the prompt and does not ingest media.

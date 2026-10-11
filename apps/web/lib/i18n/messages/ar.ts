@@ -1114,6 +1114,8 @@ export const ar: Messages = {
       recipeHeldUp: "قطعة مرفوعة باليد",
       recipeHikaru: "كتالوج Hikaru",
       recipeCeilingFan: "تبديل الإطلالة مع مروحة السقف",
+      recipeHangerRail: "عرض الطقم على العلّاقة",
+      recipeHikaruWalk: "جولة Hikaru",
       variant: "من في المرآة",
       variantFemale: "امرأة",
       variantMale: "رجل",

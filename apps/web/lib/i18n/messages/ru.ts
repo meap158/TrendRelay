@@ -1125,6 +1125,8 @@ export const ru: Messages = {
       recipeHeldUp: "Вещь в руках",
       recipeHikaru: "Лукбук Hikaru",
       recipeCeilingFan: "Смена образа под вентилятором",
+      recipeHangerRail: "Комплект на вешалках",
+      recipeHikaruWalk: "Прогулка Hikaru",
       variant: "Кто в зеркале",
       variantFemale: "Женщина",
       variantMale: "Мужчина",

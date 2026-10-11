@@ -279,6 +279,8 @@ def test_the_read_back_recipes_queue_for_their_own_kinds_only() -> None:
         ("video", "held_up_garment", {}),
         ("carousel", "hikaru_lookbook", {"card_count": 2}),
         ("video", "ceiling_fan_transition", {}),
+        ("video", "hanger_rail_reveal", {}),
+        ("video", "hikaru_walk", {}),
     ):
         created = request(
             "POST", path, json=draft_body(product_id, kind=kind, recipe=recipe, **extra),

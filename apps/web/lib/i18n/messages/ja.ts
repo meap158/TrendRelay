@@ -1112,6 +1112,8 @@ export const ja: Messages = {
       recipeHeldUp: "服を手に持って見せる",
       recipeHikaru: "Hikaruのルックブック",
       recipeCeilingFan: "シーリングファンでお着替え",
+      recipeHangerRail: "ハンガーラックで見せる",
+      recipeHikaruWalk: "Hikaruのウォーク",
       variant: "鏡に映る人",
       variantFemale: "女性",
       variantMale: "男性",

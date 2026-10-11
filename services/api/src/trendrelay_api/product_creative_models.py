@@ -44,7 +44,7 @@ class ProductCreativeDraft(Base):
             "recipe IN ('bed_flat_lay','mannequin_transition','mirror_selfie',"
             "'mannequin_walkaround','styled_flat_lay','flat_lay_reveal',"
             "'sleepwear_lookbook','held_up_garment','hikaru_lookbook',"
-            "'ceiling_fan_transition')",
+            "'ceiling_fan_transition','hanger_rail_reveal','hikaru_walk')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(

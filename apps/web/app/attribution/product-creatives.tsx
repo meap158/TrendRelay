@@ -483,6 +483,8 @@ const RECIPE_LABELS: Record<string, string> = {
   held_up_garment: "attribution.generate.recipeHeldUp",
   hikaru_lookbook: "attribution.generate.recipeHikaru",
   ceiling_fan_transition: "attribution.generate.recipeCeilingFan",
+  hanger_rail_reveal: "attribution.generate.recipeHangerRail",
+  hikaru_walk: "attribution.generate.recipeHikaruWalk",
 };
 
 export function creativeRecipe(t: (path: string) => string, recipe: string): string {

@@ -89,7 +89,7 @@ def test_together_is_a_sibling_and_leaves_the_single_product_scripts_alone() -> 
 _READ_BACK = (
     "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
     "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
-    "ceiling_fan_transition",
+    "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk",
 )
 
 
@@ -119,7 +119,7 @@ def test_the_read_back_recipes_offer_the_kinds_their_wording_can_hold() -> None:
     assert RECIPES["styled_flat_lay"]["kinds"] == ("image", "carousel")
     assert RECIPES["hikaru_lookbook"]["kinds"] == ("image", "carousel")
     for recipe in ("mannequin_walkaround", "flat_lay_reveal", "held_up_garment",
-                   "ceiling_fan_transition"):
+                   "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk"):
         assert RECIPES[recipe]["kinds"] == ("video",)
         assert "video" in resolve_prompt(recipe, background=False)
 
@@ -133,6 +133,12 @@ def test_every_hikaru_wording_carries_her_whole_profile() -> None:
             assert "Her face, hair, and build stay the same in every card." in prompt
     group = resolve_prompt("hikaru_lookbook", background=False, together=True)
     assert "never wears two attached products at once" in group
+    for background in (False, True):
+        for together in (False, True):
+            walk = resolve_prompt("hikaru_walk", background=background, together=together)
+            assert HIKARU_PROFILE in walk
+    walks = resolve_prompt("hikaru_walk", background=False, together=True)
+    assert "never two attached products at once" in walks
 
 
 def test_only_the_model_cards_of_the_lookbook_follow_the_background() -> None:

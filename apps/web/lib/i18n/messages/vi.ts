@@ -1112,6 +1112,8 @@ export const vi: Messages = {
       recipeHeldUp: "Cầm sản phẩm lên khoe",
       recipeHikaru: "Lookbook Hikaru",
       recipeCeilingFan: "Thay đồ qua cánh quạt trần",
+      recipeHangerRail: "Khoe bộ đồ trên giá treo",
+      recipeHikaruWalk: "Hikaru dạo phố",
       variant: "Ai trong gương",
       variantFemale: "Nữ",
       variantMale: "Nam",

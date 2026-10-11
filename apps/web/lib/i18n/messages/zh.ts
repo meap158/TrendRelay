@@ -1099,6 +1099,8 @@ export const zh: Messages = {
       recipeHeldUp: "手持展示衣服",
       recipeHikaru: "Hikaru 画册",
       recipeCeilingFan: "吊扇换装",
+      recipeHangerRail: "衣架展示",
+      recipeHikaruWalk: "Hikaru 漫步",
       variant: "镜中的人",
       variantFemale: "女性",
       variantMale: "男性",

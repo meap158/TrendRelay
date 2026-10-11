@@ -1116,6 +1116,8 @@ export const en = {
       recipeHeldUp: "Garment held up",
       recipeHikaru: "Hikaru lookbook",
       recipeCeilingFan: "Ceiling fan outfit change",
+      recipeHangerRail: "Hanger rail reveal",
+      recipeHikaruWalk: "Hikaru walk",
       variant: "Who is in the mirror",
       variantFemale: "Woman",
       variantMale: "Man",

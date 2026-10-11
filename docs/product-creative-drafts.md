@@ -38,7 +38,10 @@ write a product link.
   carried word for word in every Hikaru prompt so the same face comes back.
   Editing it changes later drafts, never one already stored. Migration
   `20261011_0094` widens the recipe check. The dialog's `RECIPES_BY_KIND`
-  mirrors `RECIPES` and must change with it.
+  mirrors `RECIPES` and must change with it. The sleepwear brand and the
+  Hikaru page also post video, so `hanger_rail_reveal` (a set on a rail,
+  lifted apart, then the fabric) and `hikaru_walk` (the same profile, walking
+  toward the camera) followed in `20261011_0095`.
 - **`product_creative_models.py`** — `ProductCreativeDraft` (the stored prompt,
   kind, card count, staged asset ids, `subject_asset_ids`, `listing_fields`,
   status `pending` or `succeeded`), `ProductCreativeDraftProduct` (one row per

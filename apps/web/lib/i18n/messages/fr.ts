@@ -1124,6 +1124,8 @@ export const fr: Messages = {
       recipeHeldUp: "Vêtement tenu face caméra",
       recipeHikaru: "Lookbook Hikaru",
       recipeCeilingFan: "Changement de tenue au ventilateur",
+      recipeHangerRail: "Ensemble dévoilé sur le portant",
+      recipeHikaruWalk: "Promenade de Hikaru",
       variant: "Qui est dans le miroir",
       variantFemale: "Femme",
       variantMale: "Homme",
