@@ -41,7 +41,10 @@ class ProductCreativeDraft(Base):
             name="valid_product_creative_status",
         ),
         CheckConstraint(
-            "recipe IN ('bed_flat_lay','mannequin_transition','mirror_selfie')",
+            "recipe IN ('bed_flat_lay','mannequin_transition','mirror_selfie',"
+            "'mannequin_walkaround','styled_flat_lay','flat_lay_reveal',"
+            "'sleepwear_lookbook','held_up_garment','hikaru_lookbook',"
+            "'ceiling_fan_transition')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(

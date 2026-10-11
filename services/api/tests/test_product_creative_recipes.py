@@ -9,10 +9,13 @@ import pytest
 from trendrelay_api.product_creative_recipes import (
     BED_FLAT_LAY_OFF,
     BED_FLAT_LAY_ON,
+    CHARACTERS,
+    HIKARU_PROFILE,
     MANNEQUIN_OFF,
     MANNEQUIN_ON,
     MIRROR_FEMALE,
     MIRROR_MALE,
+    RECIPES,
     resolve_prompt,
 )
 
@@ -81,3 +84,70 @@ def test_together_is_a_sibling_and_leaves_the_single_product_scripts_alone() -> 
     assert "instantly changes" not in hallway and "instantly changes" not in room
     assert "completely obscure" in female and "completely obscure" in male
     assert female != male
+
+
+_READ_BACK = (
+    "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
+    "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
+    "ceiling_fan_transition",
+)
+
+
+@pytest.mark.parametrize("recipe", _READ_BACK)
+def test_every_read_back_recipe_has_four_wordings_that_keep_the_product(recipe: str) -> None:
+    off = resolve_prompt(recipe, background=False)
+    on = resolve_prompt(recipe, background=True)
+    off_group = resolve_prompt(recipe, background=False, together=True)
+    on_group = resolve_prompt(recipe, background=True, together=True)
+    assert len({off, on, off_group, on_group}) == 4
+    for prompt in (off, on, off_group, on_group):
+        assert len(prompt) <= 4000
+        assert "  " not in prompt
+    for prompt in (off, on):
+        assert "attached product image" in prompt
+        assert "exact" in prompt
+    for prompt in (off_group, on_group):
+        assert "every attached product" in prompt
+    assert "attached background image" in on and "attached background image" in on_group
+    assert "attached background image" not in off and "attached background image" not in off_group
+    with pytest.raises(ValueError, match="variant"):
+        resolve_prompt(recipe, background=False, variant="female")
+
+
+def test_the_read_back_recipes_offer_the_kinds_their_wording_can_hold() -> None:
+    assert RECIPES["sleepwear_lookbook"]["kinds"] == ("carousel",)
+    assert RECIPES["styled_flat_lay"]["kinds"] == ("image", "carousel")
+    assert RECIPES["hikaru_lookbook"]["kinds"] == ("image", "carousel")
+    for recipe in ("mannequin_walkaround", "flat_lay_reveal", "held_up_garment",
+                   "ceiling_fan_transition"):
+        assert RECIPES[recipe]["kinds"] == ("video",)
+        assert "video" in resolve_prompt(recipe, background=False)
+
+
+def test_every_hikaru_wording_carries_her_whole_profile() -> None:
+    assert CHARACTERS["hikaru"] == HIKARU_PROFILE
+    for background in (False, True):
+        for together in (False, True):
+            prompt = resolve_prompt("hikaru_lookbook", background=background, together=together)
+            assert HIKARU_PROFILE in prompt
+            assert "Her face, hair, and build stay the same in every card." in prompt
+    group = resolve_prompt("hikaru_lookbook", background=False, together=True)
+    assert "never wears two attached products at once" in group
+
+
+def test_only_the_model_cards_of_the_lookbook_follow_the_background() -> None:
+    off = resolve_prompt("sleepwear_lookbook", background=False)
+    on = resolve_prompt("sleepwear_lookbook", background=True)
+    for prompt in (off, on):
+        assert "Card 1:" in prompt and "Card 2:" in prompt and "Every later card:" in prompt
+        assert "dark wooden clothing rail against a plain white wall" in prompt
+    assert "hotel suite" in off and "hotel suite" not in on
+
+
+def test_the_ceiling_fan_blade_hides_each_change() -> None:
+    single = resolve_prompt("ceiling_fan_transition", background=False)
+    group = resolve_prompt("ceiling_fan_transition", background=False, together=True)
+    for prompt in (single, group):
+        assert "directly overhead" in prompt
+        assert "blade" in prompt and "hides every cut" in prompt
+    assert "next garment from the attached product images, in order" in group

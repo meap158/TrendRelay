@@ -35,6 +35,7 @@ from trendrelay_api.product_creative_recipes import (
     BED_FLAT_LAY_ON,
     MANNEQUIN_OFF,
     MANNEQUIN_ON,
+    resolve_prompt,
 )
 
 engine = create_engine(
@@ -264,6 +265,35 @@ def test_a_background_without_a_host_and_a_choice_without_urls_are_refused() -> 
         json=draft_body(product_id, included_images=[{"product_id": product_id}]),
     )
     assert no_urls.status_code == 422
+
+
+def test_the_read_back_recipes_queue_for_their_own_kinds_only() -> None:
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id, image=True)
+    path = f"/api/workspaces/{workspace_id}/attribution/creative-drafts"
+    for kind, recipe, extra in (
+        ("video", "mannequin_walkaround", {}),
+        ("image", "styled_flat_lay", {}),
+        ("video", "flat_lay_reveal", {}),
+        ("carousel", "sleepwear_lookbook", {"card_count": 3}),
+        ("video", "held_up_garment", {}),
+        ("carousel", "hikaru_lookbook", {"card_count": 2}),
+        ("video", "ceiling_fan_transition", {}),
+    ):
+        created = request(
+            "POST", path, json=draft_body(product_id, kind=kind, recipe=recipe, **extra),
+        )
+        assert created.status_code == 201, created.text
+        draft = created.json()["draft"]
+        assert draft["recipe"] == recipe
+        assert draft["prompt"] == resolve_prompt(recipe, background=False)
+
+    refused = request(
+        "POST", path,
+        json=draft_body(product_id, kind="image", recipe="sleepwear_lookbook"),
+    )
+    assert refused.status_code == 422, refused.text
+    assert "not a image recipe" in refused.json()["detail"]
 
 
 def test_submitting_an_image_and_a_video_links_both_ways(monkeypatch, tmp_path: Path) -> None:

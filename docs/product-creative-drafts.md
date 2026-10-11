@@ -27,7 +27,18 @@ write a product link.
   background optional), `mirror_selfie` (video, background required, variant
   `female` or `male`). There is no mirror wording without a background. The bed
   prompt names a bed only when background is off. The mannequin prompt includes
-  the narrow beige hallway only when background is off.
+  the narrow beige hallway only when background is off. Seven more recipes were
+  read back from published shop and creator posts (added 2026-10-11), each
+  with an optional background and a Together wording: `mannequin_walkaround`
+  (video), `styled_flat_lay` (image or carousel), `flat_lay_reveal` (video),
+  `sleepwear_lookbook` (carousel only: hanger, fabric, then the model),
+  `held_up_garment` (video), `hikaru_lookbook` (image or carousel), and
+  `ceiling_fan_transition` (video). `hikaru_lookbook` is the one recipe with a
+  recurring person: `HIKARU_PROFILE` in `CHARACTERS` is her character sheet,
+  carried word for word in every Hikaru prompt so the same face comes back.
+  Editing it changes later drafts, never one already stored. Migration
+  `20261011_0094` widens the recipe check. The dialog's `RECIPES_BY_KIND`
+  mirrors `RECIPES` and must change with it.
 - **`product_creative_models.py`** — `ProductCreativeDraft` (the stored prompt,
   kind, card count, staged asset ids, `subject_asset_ids`, `listing_fields`,
   status `pending` or `succeeded`), `ProductCreativeDraftProduct` (one row per
@@ -78,8 +89,9 @@ left out of the choice, and an older draft, keep the whole gallery. The
 stored gallery snapshot stays the whole listing. That one draft can take its
 file in the dialog. Each-product
 bulk still needs a separate file per product, so that dialog does not take a
-file. Optional background is a checkbox only for the bed and mannequin
-recipes. Mirror shows a required background URL and a woman/man choice, and no
+file. Optional background is a checkbox for every recipe except mirror.
+The recipe list follows the kind: image, carousel, and video each offer
+their own. Mirror shows a required background URL and a woman/man choice, and no
 off switch. Success means the asset is in the Library and both sides of the
 link show it.
 

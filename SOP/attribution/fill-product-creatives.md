@@ -92,6 +92,13 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `bed_flat_lay` | image or carousel | Optional. Off names the bed. On uses the attached background and the stored prompt does not say bed. |
 | `mannequin_transition` | video | Optional. Off is the narrow beige hallway. On opens on the attached background and drops the hallway. |
 | `mirror_selfie` | video | Required, with `variant` `female` or `male`. A mirror draft cannot be queued without a background image. |
+| `mannequin_walkaround` | video | Optional. Off is the white boutique corner with the black pedestal. On uses the attached background. |
+| `styled_flat_lay` | image or carousel | Optional. Off is the round cream ottoman. On uses the attached background. |
+| `flat_lay_reveal` | video | Optional. The same styled flat lay as a handheld rise from the fabric to the whole outfit. |
+| `sleepwear_lookbook` | carousel | Optional. Card 1 is the hanger, card 2 the fabric, later cards the model. Only the model's room follows the background. |
+| `held_up_garment` | video | Optional. Off is the dim room under a paper lantern. On uses the attached background. |
+| `hikaru_lookbook` | image or carousel | Optional. The stored prompt carries Hikaru's full character profile. Keep her face, hair, and build the same on every card. |
+| `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. Each blade pass hides a cut. |
 
 When `subject_assets` is non-empty, those Library image ids are the subject,
 in that order, at most 8. Read them with `get_asset_thumbnails`. When

@@ -44,7 +44,12 @@ class ImageChoice(BaseModel):
 class DraftBody(BaseModel):
     product_id: str = Field(min_length=1, max_length=64)
     kind: Literal["image", "carousel", "video"]
-    recipe: Literal["bed_flat_lay", "mannequin_transition", "mirror_selfie"]
+    recipe: Literal[
+        "bed_flat_lay", "mannequin_transition", "mirror_selfie",
+        "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
+        "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
+        "ceiling_fan_transition",
+    ]
     variant: Literal["female", "male"] | None = None
     background_enabled: bool = False
     background_reference: str | None = Field(default=None, max_length=2000)
