@@ -3382,3 +3382,53 @@ def test_the_timeline_names_the_execution_behind_a_delivered_row(workspace) -> N
     assert row["execution_id"] == "exec-row"
     assert row["execution_state"] == "uncertain"
     assert row["queue_item_state"] == "approved"
+
+
+@pytest.mark.parametrize("same_post", [False, True])
+def test_old_uncertain_deliveries_stay_reviewable(workspace, same_post) -> None:
+    from trendrelay_api.models import DurableJob
+
+    campaign_id = campaign(workspace)
+    _queued(workspace, campaign_id, "q-old")
+    old = datetime.now(UTC) - timedelta(days=30)
+    _held(
+        workspace, campaign_id, "exec-old", state="uncertain",
+        failure_class="uncertain", queue_item_id="q-old",
+        destination_id="dest-1", job_id="job-old", created_at=old,
+    )
+    with TestingSession.begin() as session:
+        session.add(DurableJob(
+            id="job-old", workspace_key=workspace, kind="social_publish",
+            status="failed", created_at=old, max_attempts=1,
+            last_error="The read operation timed out",
+            payload={"request": {
+                "campaign_id": campaign_id, "queue_item_id": "q-old",
+                "destination_id": "dest-1", "date": old.isoformat(),
+                "caption": "Unresolved post", "targets": [{"platform": "youtube"}],
+            }},
+        ))
+    for index in range(101):
+        _held(
+            workspace, campaign_id, f"exec-new-{index}", state="published",
+            job_id=f"job-new-{index}", created_at=old + timedelta(days=1, seconds=index),
+        )
+        with TestingSession.begin() as session:
+            session.add(DurableJob(
+                id=f"job-new-{index}", workspace_key=workspace, kind="social_publish",
+                status="succeeded", created_at=old + timedelta(days=1, seconds=index),
+                max_attempts=1, payload={"request": {
+                    "campaign_id": campaign_id, "destination_id": "dest-1",
+                    "date": old.isoformat(),
+                    "caption": "Unresolved post" if same_post else f"New post {index}",
+                    "targets": [{"platform": "youtube"}],
+                }},
+            ))
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview",
+    )
+    assert response.status_code == 200, response.text
+    rows = response.json()["deployed"]
+    [unresolved] = [row for row in rows if row["execution_state"] == "uncertain"]
+    assert unresolved["execution_id"] == "exec-old"
+    assert unresolved["status"] == "failed"
+    assert unresolved["queue_item_state"] == "approved"

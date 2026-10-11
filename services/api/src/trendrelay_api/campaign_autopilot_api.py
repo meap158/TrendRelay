@@ -3136,6 +3136,17 @@ def preview_autopilot(
         ).all()
         if execution.job_id
     }
+    # Uncertain deliveries retain their slot until a person resolves them.
+    # They must remain reviewable even after a hundred newer deliveries.
+    for execution in session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state == "uncertain",
+            PublicationExecution.job_id.is_not(None),
+        )
+    ).all():
+        if execution.job_id:
+            execution_by_job[execution.job_id] = execution
     job_ids = list(execution_by_job)
     jobs = session.scalars(
         select(DurableJob)
@@ -3179,7 +3190,9 @@ def preview_autopilot(
             request_payload.get("date"),
             request_payload.get("caption", ""),
         )
-        if post_key in seen_posts:
+        execution = execution_by_job.get(job.id)
+        unresolved = execution is not None and execution.state == "uncertain"
+        if post_key in seen_posts and not unresolved:
             continue
         seen_posts.add(post_key)
         target = next(iter(request_payload.get("targets") or []), {})
