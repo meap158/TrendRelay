@@ -679,14 +679,17 @@ def generate_xai(
     sleep: Sleep = time.sleep,
     now: Clock = time.monotonic,
     progress: Progress | None = None,
+    references: tuple[tuple[bytes, str], ...] = (),
 ) -> bytes:
     """Reference-to-video. The still is the garment, not a locked first frame.
 
     The stored prompt describes a scene that uses the product image. Pinning
     that still as frame zero would open on the catalog photo. One reference
-    image keeps the garment and lets the prompt play. The account keeps zero
-    data retention, so the file is written to a presigned address in the
-    existing bucket and read back from there.
+    image keeps the garment and lets the prompt play; a character's portrait
+    and sheet, when the draft features one, follow it as further references
+    so the same person wears it. The account keeps zero data retention, so
+    the file is written to a presigned address in the existing bucket and
+    read back from there.
     """
     from trendrelay_api.integrations.media_hosting import get_object, presign_put
 
@@ -700,14 +703,17 @@ def generate_xai(
     request_id = progress.resume
     if not request_id:
         upload_url = sign(object_key, expires_seconds=3600)
-        data_uri = f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}"
+        reference_images = [
+            {"url": f"data:{kind};base64,{base64.b64encode(data).decode('ascii')}"}
+            for data, kind in ((image, mime), *references)
+        ]
         payload = {
             "model": provider.model,
             "prompt": prompt,
             "duration": provider.duration_seconds,
             "aspect_ratio": "9:16",
             "resolution": "720p",
-            "reference_images": [{"url": data_uri}],
+            "reference_images": reference_images,
             "output": {"upload_url": upload_url},
         }
         progress.posting()
@@ -758,11 +764,16 @@ def generate_gemini(
     sleep: Sleep = time.sleep,
     now: Clock = time.monotonic,
     progress: Progress | None = None,
+    references: tuple[tuple[bytes, str], ...] = (),
 ) -> bytes:
-    """Image-conditioned video. Gemini returns an address; there is no bucket."""
+    """Image-conditioned video. Gemini returns an address; there is no bucket.
+
+    Veo is conditioned on the one image. A character's pictures are not
+    sent here; the character still reaches it through the stored prompt.
+    """
     # Gemini returns the file itself, so the bucket key the shared adapter
     # passes is unused here.
-    del object_key
+    del object_key, references
     key = _key(provider)
     progress = progress or Progress()
     headers = {
@@ -1193,14 +1204,42 @@ def _run_adapter(
     object_key: str,
     transport: Transport | None,
     progress: Progress,
+    references: tuple[tuple[bytes, str], ...] = (),
 ) -> bytes:
     adapter = ADAPTERS.get(provider.id)
     if adapter is None:
         raise VideoError("unavailable", f"{provider.label} has no adapter.")
+    if not references:
+        # The call every draft without a character has always made.
+        return adapter(
+            provider, prompt, image, mime, object_key,
+            transport=transport, progress=progress,
+        )
     return adapter(
         provider, prompt, image, mime, object_key,
-        transport=transport, progress=progress,
+        transport=transport, progress=progress, references=references,
     )
+
+
+def _character_references(
+    session: Session, workspace_id: str, view: dict[str, Any],
+) -> tuple[tuple[bytes, str], ...]:
+    """The featured character's portrait and sheet, whichever still exist.
+
+    A picture removed from the Library since is skipped rather than failing
+    the job: the prompt still describes the character.
+    """
+    character = view.get("character") or {}
+    found: list[tuple[bytes, str]] = []
+    for key in ("portrait_asset_id", "sheet_asset_id"):
+        asset_id = character.get(key)
+        if not asset_id:
+            continue
+        try:
+            found.append(_subject_bytes(session, workspace_id, str(asset_id)))
+        except VideoError:
+            continue
+    return tuple(found)
 
 
 def run_job(
@@ -1304,8 +1343,11 @@ def run_job(
                 )
             image, mime = _subject_bytes(session, workspace_id, payload["subject_asset_id"])
             prompt = str(view["prompt"])
+            references = _character_references(session, workspace_id, view)
         object_key = f"product-clips/{draft_id}/{job_id}.mp4"
-        data = _run_adapter(provider, prompt, image, mime, object_key, transport, progress)
+        data = _run_adapter(
+            provider, prompt, image, mime, object_key, transport, progress, references,
+        )
         with session_factory() as session:
             view = get_draft(session, workspace_id, draft_id)
         if not _still_owed(view):

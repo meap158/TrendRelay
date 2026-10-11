@@ -26,6 +26,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from trendrelay_api import character_models  # noqa: F401 - registers the table a draft points at
 from trendrelay_api.models import Base, new_id, utc_now
 
 
@@ -84,6 +85,12 @@ class ProductCreativeDraft(Base):
     #: a create that omits the field still do. The values are the product's
     #: at that moment, so a later listing refresh does not rewrite the ask.
     listing_fields: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    #: The character this draft features, when the operator switched one on.
+    #: Its portrait and sheet go to the provider beside the subject, and its
+    #: description is already part of the stored prompt.
+    character_id: Mapped[str | None] = mapped_column(
+        ForeignKey("characters.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     card_count: Mapped[int] = mapped_column(Integer)
     #: pending, succeeded, or discarded. Discarded is kept rather than
     #: deleted, so the audit trail and every group number stay as they were.

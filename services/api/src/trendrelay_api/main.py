@@ -18,6 +18,7 @@ from trendrelay_api.campaign_autopilot_api import router as campaign_autopilot_r
 from trendrelay_api.campaign_management_api import router as campaign_management_router
 from trendrelay_api.campaigns_api import router as campaigns_router
 from trendrelay_api.catalog_api import router as catalog_router
+from trendrelay_api.characters_api import router as characters_router
 from trendrelay_api.config import get_settings
 from trendrelay_api.device_pairing import router as device_pairing_router
 from trendrelay_api.foundation import router as foundation_router
@@ -101,6 +102,7 @@ app = FastAPI(
 app.include_router(foundation_router)
 app.include_router(attribution_router)
 app.include_router(product_creative_router)
+app.include_router(characters_router)
 app.include_router(autocut_router)
 app.include_router(storytelling_router)
 app.include_router(creation_drafts_router)

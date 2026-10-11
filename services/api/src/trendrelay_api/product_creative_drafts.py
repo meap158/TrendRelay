@@ -399,8 +399,11 @@ def _prepare(
     together: bool = False,
     product_ids: list[str] | None = None,
     included_images: list[dict[str, Any]] | None = None,
+    character_id: str | None = None,
 ) -> dict[str, Any]:
     """Validate an ask and resolve the prompt. Does not write."""
+    from trendrelay_api.characters import for_draft
+
     if kind not in _KINDS:
         raise ValueError("Kind must be image, carousel, or video.")
     spec = RECIPES.get(recipe)
@@ -447,12 +450,22 @@ def _prepare(
             raise ValueError("This product has no image to generate from.")
     enabled, reference = _background(recipe, background_enabled, background_reference)
     group = len(products) > 1
+    character = for_draft(session, workspace_id, character_id)
+    if character is not None and spec.get("character"):
+        raise ValueError(
+            "This recipe already features its own model. Switch the character off "
+            "or choose another recipe."
+        )
     prompt = resolve_prompt(
         recipe,
         background=enabled,
         variant=variant if spec["variants"] else None,
         together=group,
     )
+    if character is not None:
+        # Appended, never woven in: the recipe's own wording stays byte for
+        # byte what it is without a character.
+        prompt = f"{prompt}\n\n{character.pop('prompt_line')}"
     keys = _listing_keys(listing_fields)
     snapshots = [_listing_snapshot(session, product, keys) for product in products]
     return {
@@ -466,6 +479,7 @@ def _prepare(
         "card_count": _card_count(kind, card_count),
         "product_images": kept[0],
         "subject_assets": subjects,
+        "character": character,
         "listing_fields": snapshots[0],
         "together": group,
         "product_count": len(products),
@@ -565,6 +579,8 @@ def _group_numbers(session: Session, workspace_id: str) -> dict[str, int]:
 
 
 def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
+    from trendrelay_api.characters import stored_for_draft
+
     product = session.get(Product, draft.product_id)
     staged = [str(item) for item in (draft.staged_asset_ids or [])]
     members = _member_views(session, draft)
@@ -590,6 +606,7 @@ def _view(session: Session, draft: ProductCreativeDraft) -> dict[str, Any]:
         "status": draft.status,
         "product_images": images,
         "subject_assets": _stored_subjects(session, draft),
+        "character": stored_for_draft(session, draft.character_id),
         "listing_fields": _stored_listing(draft),
         "together": len(members) > 1,
         "product_count": len(members),
@@ -621,6 +638,7 @@ def preview(
     together: bool = False,
     product_ids: list[str] | None = None,
     included_images: list[dict[str, Any]] | None = None,
+    character_id: str | None = None,
 ) -> dict[str, Any]:
     """The prompt that would be stored, without storing it."""
     prepared = _prepare(
@@ -630,7 +648,7 @@ def preview(
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
         require_subject=False, together=together, product_ids=product_ids,
-        included_images=included_images,
+        included_images=included_images, character_id=character_id,
     )
     prepared.pop("included_by_product", None)
     prepared["status"] = "preview"
@@ -657,6 +675,7 @@ def create_draft(
     together: bool = False,
     product_ids: list[str] | None = None,
     included_images: list[dict[str, Any]] | None = None,
+    character_id: str | None = None,
 ) -> dict[str, Any]:
     """Store a pending draft. Does not ingest media and does not link anything."""
     prepared = _prepare(
@@ -666,7 +685,7 @@ def create_draft(
         background_reference=background_reference, card_count=card_count,
         subject_asset_ids=subject_asset_ids, listing_fields=listing_fields,
         together=together, product_ids=product_ids,
-        included_images=included_images,
+        included_images=included_images, character_id=character_id,
     )
     now = utc_now()
     draft = ProductCreativeDraft(
@@ -682,6 +701,7 @@ def create_draft(
         card_count=prepared["card_count"],
         subject_asset_ids=[item["asset_id"] for item in prepared["subject_assets"]],
         listing_fields=prepared["listing_fields"],
+        character_id=(prepared["character"] or {}).get("id"),
         status="pending",
         staged_asset_ids=[],
         created_by=actor_user_id,

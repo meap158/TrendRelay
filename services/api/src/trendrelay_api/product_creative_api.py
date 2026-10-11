@@ -142,6 +142,9 @@ class DraftBody(BaseModel):
     #: Listing pictures to keep, per product. Omit it and every picture stays.
     #: A product left out of the list keeps its whole gallery.
     included_images: list[ImageChoice] | None = Field(default=None, max_length=8)
+    #: A ready character to feature. Its portrait and sheet go to the
+    #: provider beside the subject, and its description joins the prompt.
+    character_id: str | None = Field(default=None, max_length=64)
 
 
 class MediaBody(BaseModel):
@@ -189,7 +192,7 @@ def preview_creative_draft(
         subject_asset_ids=body.subject_asset_ids,
         listing_fields=body.listing_fields,
         together=body.together, product_ids=body.product_ids,
-        included_images=_choices(body),
+        included_images=_choices(body), character_id=body.character_id,
     ))}
 
 
@@ -212,7 +215,7 @@ def create_creative_draft(
         subject_asset_ids=body.subject_asset_ids,
         listing_fields=body.listing_fields,
         together=body.together, product_ids=body.product_ids,
-        included_images=_choices(body),
+        included_images=_choices(body), character_id=body.character_id,
     ))
     audit(
         session, request, workspace_id, user.id,
@@ -221,6 +224,7 @@ def create_creative_draft(
             "product_id": view["product_id"],
             "kind": view["kind"],
             "product_count": view.get("product_count", 1),
+            "character_id": (view.get("character") or {}).get("id"),
         },
     )
     return {"draft": view}

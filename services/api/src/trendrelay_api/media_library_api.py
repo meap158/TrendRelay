@@ -1052,6 +1052,9 @@ class AssetFilter(BaseModel):
     #: filling a campaign but auditing one - which of these files is what
     #: campaign X posts. Same membership question, same source of truth.
     in_campaign: str | None = None
+    #: How the asset arrived, by its recorded `source_type`. The Library's
+    #: Characters tab is `character`: portraits and sheets of the cast.
+    source_type: str | None = None
 
 
 #: Filter values that are not the id of an effect.
@@ -1189,6 +1192,8 @@ def asset_conditions(
             )
     if omit != "media_kind" and filters.media_kind:
         values.append(MediaAsset.media_kind == filters.media_kind)
+    if omit != "source_type" and filters.source_type:
+        values.append(MediaAsset.source_type == filters.source_type)
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
     if omit != "collected_within_days" and filters.collected_within_days:
@@ -1289,6 +1294,7 @@ def list_asset_ids(
     sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
+    source_type: Annotated[str | None, Query(max_length=40)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -1304,6 +1310,7 @@ def list_asset_ids(
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
+        source_type=source_type,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -1348,6 +1355,7 @@ def list_assets(
     sha256: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
+    source_type: Annotated[str | None, Query(max_length=40)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     # Without this a caller could read the first hundred matches and no more,
@@ -1366,6 +1374,7 @@ def list_assets(
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
+        source_type=source_type,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:
