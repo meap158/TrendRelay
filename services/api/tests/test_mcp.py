@@ -3239,7 +3239,7 @@ def test_a_burst_day_refuses_an_impossible_cap_over_mcp(session) -> None:
 def _second_account(session) -> None:
     session.add(CampaignDestination(
         id="d2", workspace_id="ws", campaign_id="camp", integration_id="acct-2",
-        platform="facebook", provider="zernio-7", label="Homewear", enabled=True,
+        platform="facebook", provider="zernio", label="Homewear", enabled=True,
     ))
     session.commit()
 
