@@ -17,6 +17,7 @@ import {
   writeListingFields,
   type ListingFieldKey,
 } from "./listing-fields";
+import { creativeRecipe } from "./product-creatives";
 
 /** The same ceiling the API stores and a thumbnail read can fetch at once. */
 const SUBJECT_LIMIT = 8;
@@ -144,7 +145,31 @@ type ExistingDraft = {
   product_count?: number;
   group_number?: number | null;
 };
-type Recipe = "bed_flat_lay" | "mannequin_transition" | "mirror_selfie";
+type Recipe =
+  | "bed_flat_lay"
+  | "mannequin_transition"
+  | "mirror_selfie"
+  | "mannequin_walkaround"
+  | "styled_flat_lay"
+  | "flat_lay_reveal"
+  | "sleepwear_lookbook"
+  | "held_up_garment"
+  | "hikaru_lookbook"
+  | "ceiling_fan_transition";
+
+/** The recipes each kind offers, the first being its default. Mirrors the API. */
+const RECIPES_BY_KIND: Record<Kind, readonly Recipe[]> = {
+  image: ["bed_flat_lay", "styled_flat_lay", "hikaru_lookbook"],
+  carousel: ["bed_flat_lay", "styled_flat_lay", "sleepwear_lookbook", "hikaru_lookbook"],
+  video: [
+    "mannequin_transition",
+    "mirror_selfie",
+    "mannequin_walkaround",
+    "flat_lay_reveal",
+    "held_up_garment",
+    "ceiling_fan_transition",
+  ],
+};
 
 type DraftView = {
   id: string;
@@ -373,7 +398,7 @@ export function GenerateDialog({
   function applyStored(stored: DraftView) {
     const nextKind = stored.kind ?? "image";
     setKind(nextKind);
-    setRecipe(stored.recipe ?? (nextKind === "video" ? "mannequin_transition" : "bed_flat_lay"));
+    setRecipe(stored.recipe ?? RECIPES_BY_KIND[nextKind][0]);
     setVariant(stored.variant === "male" ? "male" : "female");
     setBackgroundEnabled(Boolean(stored.background_enabled));
     setBackgroundReference(stored.background_reference ?? "");
@@ -490,7 +515,7 @@ export function GenerateDialog({
 
   function chooseKind(next: Kind) {
     setKind(next);
-    setRecipe(next === "video" ? "mannequin_transition" : "bed_flat_lay");
+    setRecipe(RECIPES_BY_KIND[next][0]);
     setBackgroundEnabled(false);
     setBackgroundReference("");
     setError("");
@@ -1050,20 +1075,15 @@ export function GenerateDialog({
           <Select
             aria-label={t("attribution.generate.recipe")}
             value={recipe}
-            disabled={locked || kind !== "video"}
+            disabled={locked || RECIPES_BY_KIND[kind].length < 2}
             onChange={(event) => {
               setRecipe(event.target.value as Recipe);
               setError("");
             }}
           >
-            {kind === "video" ? (
-              <>
-                <option value="mannequin_transition">{t("attribution.generate.recipeMannequin")}</option>
-                <option value="mirror_selfie">{t("attribution.generate.recipeMirror")}</option>
-              </>
-            ) : (
-              <option value="bed_flat_lay">{t("attribution.generate.recipeBed")}</option>
-            )}
+            {RECIPES_BY_KIND[kind].map((option) => (
+              <option key={option} value={option}>{creativeRecipe(t, option)}</option>
+            ))}
           </Select>
         </label>
         {mirror && (

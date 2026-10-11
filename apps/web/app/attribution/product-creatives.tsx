@@ -471,10 +471,22 @@ export function creativeKind(t: (path: string) => string, kind: string): string 
   return t("attribution.generate.kindImage");
 }
 
+/** The label of every recipe the API can store. */
+const RECIPE_LABELS: Record<string, string> = {
+  bed_flat_lay: "attribution.generate.recipeBed",
+  mannequin_transition: "attribution.generate.recipeMannequin",
+  mirror_selfie: "attribution.generate.recipeMirror",
+  mannequin_walkaround: "attribution.generate.recipeWalkaround",
+  styled_flat_lay: "attribution.generate.recipeStyledFlatLay",
+  flat_lay_reveal: "attribution.generate.recipeFlatLayReveal",
+  sleepwear_lookbook: "attribution.generate.recipeSleepwearLookbook",
+  held_up_garment: "attribution.generate.recipeHeldUp",
+  hikaru_lookbook: "attribution.generate.recipeHikaru",
+  ceiling_fan_transition: "attribution.generate.recipeCeilingFan",
+};
+
 export function creativeRecipe(t: (path: string) => string, recipe: string): string {
-  if (recipe === "mannequin_transition") return t("attribution.generate.recipeMannequin");
-  if (recipe === "mirror_selfie") return t("attribution.generate.recipeMirror");
-  return t("attribution.generate.recipeBed");
+  return t(RECIPE_LABELS[recipe] ?? RECIPE_LABELS.bed_flat_lay);
 }
 
 /** The product list carries only id, kind, recipe, status, and owed. */
