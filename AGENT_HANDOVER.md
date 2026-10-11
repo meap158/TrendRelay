@@ -1,6 +1,111 @@
 # Agent Handover
 
-Last updated: 2026-10-03
+## Campaign product manager (2026-10-10)
+
+Campaign sidebar now has one Manage products entry instead of Review/Add.
+The shared OfferPicker uses ProductPickerFilters, groups products for campaign
+management, and exposes each distinct affiliate offer in expandable rows.
+Campaign-status filtering supports all, in-campaign and not-added offers;
+individual add/remove and filtered bulk add/remove update immediately with
+busy guards. Viewer access is read-only. Catalogue errors have Retry.
+The former separate review modal and its paging/selection state were removed.
+The sidebar also groups products and distinguishes product and offer counts.
+The post Review products layout/state problem in the latest screenshot is
+recorded in docs/tasks.md for follow-up; it is not claimed resolved here.
+
+## Campaign product review (2026-10-10)
+
+Implemented locally, uncommitted in the mixed worktree. Removed from tasks.
+Campaign review now reuses `apps/web/app/ui/product-picker-filters.tsx` for
+filter parity. `apps/web/lib/campaign-product-groups.ts` groups rows by product
+ID while retaining distinct affiliate offers under View offers. Changing a
+product choice replaces only that product's pinned links; existing multiple
+pins survive until edited. Four grouping/selection tests pass, along with
+web type checking. No browser visual verification was available.
+`apps/web/app/campaigns/product-review.tsx` searches the entire campaign offer
+pool in post Review products / Edit products. Selection survives filters,
+the post cap is visible, and unavailable offers can be unticked. Shared
+offer filtering and Attribution ListingPanel provide product metadata and
+stored listing details with shared lightbox navigation. Current associations
+are marked Attached to this media in Library; historical import provenance
+is marked Carried from Library at import. Listing reads are on demand and
+do not fetch shop pages. Existing save and affiliate-link behavior is preserved.
+
+## Library product attachments (2026-10-09)
+
+Campaign imports now carry Library-linked affiliate offers into CampaignOffer
+and pin those offer IDs on the imported post. Single imports and bulk imports
+share the server-side tag helper; carousel imports include later image assets
+resolved from original/rendered paths in the workspace. Campaign cap/usability
+validation runs before matching; a refused import rolls back tags and posts.
+`offer_match.library_offer_ids` snapshots origin and survives match refreshes.
+Campaign queue rows label that origin Attached in Library with retained-link
+count. Subsequent Library edits do not rewrite existing campaign posts.
+
+Attribution defaults to a flat Products view; Groups is opt-in. Overlapping
+groups in a band fold under a disclosure. Product rows show two group chips
+then +N groups; chips focus that group. Product creative grids show six cards
+then Show all. Library's picker marks products already linked to every selected
+asset as Already attached and excludes them from bulk selection.
+
+Attached product rows in Library also offer Remove. DELETE
+`/attribution/media-products/{asset_id}/{product_id}` removes only the
+association (including a generated-media association), preserves the media,
+product and generation history, and updates both sides' linked-file reads.
+Only workspace editors can remove; repeated removal is idempotent.
+
+The reusable product-grain picker is `apps/web/app/ui/product-picker.tsx`.
+Library's component only loads the catalogue/campaign tags and saves links.
+Reuse the UI picker for selecting product IDs; Publish's OfferPicker selects
+offer IDs for affiliate URLs. Both reuse Attribution filtering and sorting.
+The product picker includes campaign, creator, import file/date, sub ID,
+listing, creative and group filters, multi-selection across filters, bulk
+selection capped at 100, thumbnails, sortable columns and load-error retry.
+
+Library now offers Add products beside Add to campaign in Hand off and on
+the selection bar. `apps/web/app/library/product-picker.tsx` searches
+Attribution products and attaches the selection through POST
+`/api/workspaces/{workspace_id}/attribution/media-products`. It adds links,
+preserves generation links, and creates no generation draft. Both Library
+and Attribution read the same ProductCreativeLink records. Migration
+`20261009_0091` makes draft_id nullable and is applied locally. The endpoint
+validates every asset and product against the workspace before writing.
+
+Last updated: 2026-10-04
+
+## Attribution product media — current
+
+The operator's requests, what landed, and what is still open are in
+`docs/agent-handover.md` under "Attribution product media (2026-10-04)".
+Read that before changing Generate, creative drafts, or the MCP fill tools.
+The longer record is `docs/product-creative-drafts.md`. The fill procedure is
+`SOP/attribution/fill-product-creatives.md`.
+
+The code requests are landed: Generate media, Library subject images, the
+Pending draft / In Library filter, listing fields under the prompt, Together,
+picture choice, What will be sent, Single and Together grouping, and the
+Library upload with a two-way link. Do not redo them. Do not regenerate the
+gym-gloves file (`asset_a79cc7b0e2d84790b3ef75c32100db84`) or the filed
+eight-product bed image (`asset_493101c126e0411aa869e455fa273045`).
+
+Still open, and not a code task: two pending together bed drafts still owe a
+file. `pcreative_931bab3dbfcd4ec4b3880edff77213e6` features eight Mây Meo
+Sleepwear products. `pcreative_df7edc3ffc5c412b93d56de5fb8f3faa` features
+three of them (Sugar Doll, Angel, Bambi). The table shows the eight under
+the larger draft. Filling one means an outside image and
+`submit_product_creative_media`. Do not queue another draft to do it.
+
+The six-pieces template is not in the Generate dropdown yet. Task
+`c2639491-550b-4259-ad6a-8109cf30e9e9` adds it once at 09:30 Asia/Bangkok on
+2026-10-05. Do not add it before then. Do not unpause
+`0b70fbb0-5b4d-4d5c-aa19-c87f60bfa46c`,
+`0a7f1609-23dc-4765-bb3f-f2e13c2bc1bb`, or
+`8d6f5846-371e-4120-91e2-4deeeb30f85c`, and do not run them now.
+
+This checkout has an uncommitted video-provider path (a ready provider in
+Tools can fill a video draft; the same providers also file a Library video
+with no product link). Leave that work in place. Do not commit this tree
+while it is mixed with that path.
 
 ## Fix: Attribution Shopee product listings fetch failed with verification challenge, 2026-10-03
 
