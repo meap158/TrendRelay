@@ -1,10 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export type ChoiceOption<T extends string> = {
   value: T;
   label: string;
   description?: string;
   disabled?: boolean;
+  /** A picture of what the option produces. Decorative: the label and
+   *  description carry the meaning, so it is hidden from assistive tech. */
+  media?: ReactNode;
 };
 
 /**
@@ -13,6 +18,8 @@ export type ChoiceOption<T extends string> = {
  * The whole label is clickable, arrow keys keep working, and descriptions are
  * tied to their inputs. Pages supply words; this component owns interaction
  * and layout so another workflow does not invent a lookalike control.
+ * `layout="cards"` stacks a preview above each label, for choices that are
+ * easier to recognise than to read.
  */
 export function ChoiceGroup<T extends string>({
   name,
@@ -20,34 +27,42 @@ export function ChoiceGroup<T extends string>({
   value,
   options,
   onChange,
+  layout = "list",
+  disabled = false,
 }: {
   name: string;
   legend: string;
   value: T;
   options: ChoiceOption<T>[];
   onChange: (value: T) => void;
+  layout?: "list" | "cards";
+  disabled?: boolean;
 }) {
   return (
-    <fieldset className="ui-choice-group">
+    <fieldset className="ui-choice-group" data-layout={layout} disabled={disabled}>
       <legend>{legend}</legend>
       <div className="ui-choice-options">
         {options.map((option) => {
           const descriptionId = option.description
             ? `${name}-${option.value}-description`
             : undefined;
+          const off = disabled || option.disabled;
           return (
             <label
               key={option.value}
               className="ui-choice-option"
               data-selected={value === option.value || undefined}
-              data-disabled={option.disabled || undefined}
+              data-disabled={off || undefined}
             >
+              {option.media && (
+                <span className="ui-choice-media" aria-hidden="true">{option.media}</span>
+              )}
               <input
                 type="radio"
                 name={name}
                 value={option.value}
                 checked={value === option.value}
-                disabled={option.disabled}
+                disabled={off}
                 aria-describedby={descriptionId}
                 onChange={() => onChange(option.value)}
               />

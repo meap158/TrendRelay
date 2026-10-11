@@ -594,6 +594,11 @@
   font-weight: 400;
   line-height: 1.45;
 }
+/* Recipes are chosen by picture: each card previews the finished file, and
+   the note under them says what the green in every preview stands for. */
+.generate-dialog .campaign-dialog-form .generate-recipes { display: grid; gap: 6px; min-inline-size: 0; }
+.generate-dialog .campaign-dialog-form .generate-recipes > small { color: var(--muted); font-size: 11px; }
+
 /* What this ask attaches, named, so a long listing is not mistaken for the
    subject. Selected listing values follow the prompt, so they do not push it
    down. */

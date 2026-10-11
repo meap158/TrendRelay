@@ -18,6 +18,8 @@ import {
   type ListingFieldKey,
 } from "./listing-fields";
 import { creativeRecipe } from "./product-creatives";
+import { RecipePreview } from "./recipe-previews";
+import { ChoiceGroup } from "../ui/choice-group";
 
 /** The same ceiling the API stores and a thumbnail read can fetch at once. */
 const SUBJECT_LIMIT = 8;
@@ -173,6 +175,22 @@ const RECIPES_BY_KIND: Record<Kind, readonly Recipe[]> = {
     "hikaru_walk",
     "ceiling_fan_transition",
   ],
+};
+
+/** One line under each recipe card: what the finished file shows. */
+const RECIPE_HELP: Record<Recipe, string> = {
+  bed_flat_lay: "attribution.generate.recipeBedHelp",
+  mannequin_transition: "attribution.generate.recipeMannequinHelp",
+  mirror_selfie: "attribution.generate.recipeMirrorHelp",
+  mannequin_walkaround: "attribution.generate.recipeWalkaroundHelp",
+  styled_flat_lay: "attribution.generate.recipeStyledFlatLayHelp",
+  flat_lay_reveal: "attribution.generate.recipeFlatLayRevealHelp",
+  sleepwear_lookbook: "attribution.generate.recipeSleepwearLookbookHelp",
+  held_up_garment: "attribution.generate.recipeHeldUpHelp",
+  hikaru_lookbook: "attribution.generate.recipeHikaruHelp",
+  hikaru_walk: "attribution.generate.recipeHikaruWalkHelp",
+  ceiling_fan_transition: "attribution.generate.recipeCeilingFanHelp",
+  hanger_rail_reveal: "attribution.generate.recipeHangerRailHelp",
 };
 
 type DraftView = {
@@ -1074,22 +1092,26 @@ export function GenerateDialog({
             <option value="video">{t("attribution.generate.kindVideo")}</option>
           </Select>
         </label>
-        <label>
-          {t("attribution.generate.recipe")}
-          <Select
-            aria-label={t("attribution.generate.recipe")}
+        <div className="generate-recipes">
+          <ChoiceGroup
+            name="generate-recipe"
+            legend={t("attribution.generate.recipe")}
+            layout="cards"
             value={recipe}
-            disabled={locked || RECIPES_BY_KIND[kind].length < 2}
-            onChange={(event) => {
-              setRecipe(event.target.value as Recipe);
+            disabled={locked}
+            options={(locked ? [recipe] : RECIPES_BY_KIND[kind]).map((option) => ({
+              value: option,
+              label: creativeRecipe(t, option),
+              description: t(RECIPE_HELP[option]),
+              media: <RecipePreview recipe={option} />,
+            }))}
+            onChange={(next) => {
+              setRecipe(next);
               setError("");
             }}
-          >
-            {RECIPES_BY_KIND[kind].map((option) => (
-              <option key={option} value={option}>{creativeRecipe(t, option)}</option>
-            ))}
-          </Select>
-        </label>
+          />
+          <small>{t("attribution.generate.recipePreviewKey")}</small>
+        </div>
         {mirror && (
           <label>
             {t("attribution.generate.variant")}

@@ -431,6 +431,15 @@ a.ui-button { text-decoration: none; }
 .ui-choice-option strong { font-size: 12px; font-weight: 600; }
 .ui-choice-option small { color: var(--muted); font-size: 10px; font-weight: 400; line-height: 1.35; }
 .ui-choice-option:has(input:focus-visible) { outline: 2px solid var(--link); outline-offset: 2px; }
+/* Cards: the preview sits on top, the radio and words below it. A read-only
+   group keeps its chosen card legible; only the others recede. */
+.ui-choice-group[data-layout="cards"] .ui-choice-options { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+.ui-choice-group[data-layout="cards"] .ui-choice-option { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; gap: 6px 7px; padding: 6px 6px 8px; color: var(--text); font-weight: 400; }
+.ui-choice-group[data-layout="cards"] .ui-choice-option[data-selected] { box-shadow: 0 0 0 1px var(--green); }
+.ui-choice-group[data-layout="cards"] .ui-choice-option[data-selected][data-disabled] { color: inherit; opacity: 1; }
+.ui-choice-media { display: block; grid-column: 1 / -1; overflow: hidden; border-radius: var(--radius-sm); background: var(--bg); color: var(--muted); aspect-ratio: 3 / 2; }
+.ui-choice-media > svg { display: block; inline-size: 100%; block-size: 100%; }
+.ui-choice-option[data-selected] .ui-choice-media { color: var(--text); }
 
 /* --- lightbox -------------------------------------------------------------- */
 /* Darker than the dialog's wash and covering everything, because here the
