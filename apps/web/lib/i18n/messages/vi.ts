@@ -1121,7 +1121,7 @@ export const vi: Messages = {
       recipeStyledFlatLayHelp: "Phối trọn bộ quanh sản phẩm trên ghế đôn tròn, chụp từ trên xuống.",
       recipeFlatLayRevealHelp: "Bộ phối trải phẳng, quay từ cận chất vải ra toàn bộ trang phục.",
       recipeSleepwearLookbookHelp: "Các thẻ: trên móc, cận chất vải, rồi người mẫu trong phòng khách sạn.",
-      recipeHeldUpHelp: "Sản phẩm được cầm lên trước máy quay, rồi xoay để thấy mặt sau.",
+      recipeHeldUpHelp: "Sản phẩm được cầm lên trước máy quay, xoay mặt sau, rồi cận cổ áo, cổ tay và gấu áo.",
       recipeHikaruHelp: "Hikaru, người mẫu ảo cố định, mặc sản phẩm trên phố.",
       recipeHikaruWalkHelp: "Hikaru mặc sản phẩm bước về phía máy quay rồi dừng lại mỉm cười.",
       recipeCeilingFanHelp: "Quay từ trên xuống; mỗi lần cánh quạt trần lướt qua là đổi trang phục.",

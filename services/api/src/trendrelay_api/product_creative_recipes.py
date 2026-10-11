@@ -407,7 +407,8 @@ HANGER_RAIL_OFF_TOGETHER = _RAIL_SCENE_OFF + _RAIL_TOGETHER
 HANGER_RAIL_ON_TOGETHER = _RAIL_SCENE_ON + _RAIL_TOGETHER
 
 #: The garment held up to the lens by its shoulders against walnut panelling,
-#: the holder's face out of frame: front, a closer look, the back, the front.
+#: the holder's face out of frame: front, back, then hard-cut close-ups of
+#: the collar, a sleeve, the cuff, and the hem, as the source post runs.
 _HELD_UP_SCENE_OFF = (
     "A vertical handheld phone video in a warm room with dark vertical "
     "walnut wood panelling on the walls, a black mannequin stand and a small "
@@ -422,20 +423,22 @@ _HELD_UP_SCENE_ON = (
 _HELD_UP_SINGLE = (
     " A person in a plain black T-shirt, face out of frame, holds the exact "
     "garment from the attached product image up by its shoulders at chest "
-    "height, facing the camera and filling the frame. The hands give "
-    "it a small shake so the fabric settles, bring it closer to show the "
-    "collar, the zipper or buttons, and the stitching, then turn it around to "
-    "show the back, and turn it to the front again. The fabric shows its real "
-    "weight and texture. No face appears, and there is no text on screen. "
-    + _KEEP
+    "height, facing the camera and filling the frame, and gives it a small "
+    "shake so the fabric settles. In about fifteen seconds of hard cuts: the "
+    "garment is turned around to show the back; the camera moves close on "
+    "the collar and its zipper or buttons; one sleeve is held out to show "
+    "its pocket or seams; a hand pulls the cuff to show its snap, button, or "
+    "elastic; and the hem is turned up to show its fastening. The fabric "
+    "shows its real weight and texture. No face appears, and there is no "
+    "text on screen. " + _KEEP
 )
 _HELD_UP_TOGETHER = (
     " A person in a plain black T-shirt, face out of frame, holds up each "
     "garment from the attached product images in turn, by its shoulders at "
     "chest height, facing the camera and filling the frame. Each "
-    "garment gets a small shake, a closer look at its collar and fastenings, "
-    "a turn to show the back, and a turn to the front, before the next one "
-    "takes its place, so every attached product appears once. No face appears, "
+    "garment gets a small shake, a turn to show the back, and hard-cut "
+    "close-ups of its collar, a sleeve or cuff, and its hem, before the next "
+    "one takes its place, so every attached product appears once. No face appears, "
     "and there is no text on screen. " + _KEEP_EACH
 )
 HELD_UP_OFF = _HELD_UP_SCENE_OFF + _HELD_UP_SINGLE

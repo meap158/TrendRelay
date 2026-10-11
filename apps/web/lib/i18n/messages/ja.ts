@@ -1121,7 +1121,7 @@ export const ja: Messages = {
       recipeStyledFlatLayHelp: "丸いスツールの上に、商品を軸にしたコーデを俯瞰で。",
       recipeFlatLayRevealHelp: "スタイリングしたフラットレイを、生地のアップから全体へ引いて撮影。",
       recipeSleepwearLookbookHelp: "カード構成：ハンガー、生地のアップ、ホテルの部屋のモデル。",
-      recipeHeldUpHelp: "商品をカメラに向けて掲げ、裏返して背面も見せる。",
+      recipeHeldUpHelp: "商品をカメラに向けて掲げ、背面を見せてから襟・袖口・裾をアップで。",
       recipeHikaruHelp: "専属バーチャルモデルのHikaruが商品を着て街角に。",
       recipeHikaruWalkHelp: "商品を着たHikaruがカメラに向かって歩き、笑顔で止まる。",
       recipeCeilingFanHelp: "真上から撮影。シーリングファンの羽が横切るたびに服が変わる。",

@@ -1125,7 +1125,7 @@ export const en = {
       recipeStyledFlatLayHelp: "A full outfit built around your product on a round ottoman, seen from above.",
       recipeFlatLayRevealHelp: "The styled flat lay, filmed from the fabric out to the whole outfit.",
       recipeSleepwearLookbookHelp: "Cards: on the hanger, the fabric up close, then a model in a hotel suite.",
-      recipeHeldUpHelp: "Your product held up to the camera, then turned to show the back.",
+      recipeHeldUpHelp: "Your product held up to the camera, its back, then quick close-ups of collar, cuff, and hem.",
       recipeHikaruHelp: "Hikaru, the recurring virtual model, wearing your product on the street.",
       recipeHikaruWalkHelp: "Hikaru walks toward the camera in your product and stops on a smile.",
       recipeCeilingFanHelp: "Shot from above; each pass of a ceiling-fan blade changes the outfit.",

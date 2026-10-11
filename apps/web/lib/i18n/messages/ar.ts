@@ -1123,7 +1123,7 @@ export const ar: Messages = {
       recipeStyledFlatLayHelp: "إطلالة كاملة حول منتجك على مقعد دائري، من الأعلى.",
       recipeFlatLayRevealHelp: "الإطلالة المفرودة، من لقطة القماش إلى الإطلالة كاملة.",
       recipeSleepwearLookbookHelp: "بطاقات: على العلّاقة، ثم القماش عن قرب، ثم عارضة في جناح فندقي.",
-      recipeHeldUpHelp: "منتجك مرفوع أمام الكاميرا، ثم يُقلب لإظهار الظهر.",
+      recipeHeldUpHelp: "منتجك مرفوع أمام الكاميرا، ثم الظهر، ثم لقطات قريبة للياقة والكم والحافة.",
       recipeHikaruHelp: "Hikaru، العارضة الافتراضية الدائمة، ترتدي منتجك في الشارع.",
       recipeHikaruWalkHelp: "Hikaru تمشي نحو الكاميرا بمنتجك وتتوقف بابتسامة.",
       recipeCeilingFanHelp: "تصوير من الأعلى؛ كل مرور لريشة مروحة السقف يغيّر الإطلالة.",

@@ -1108,7 +1108,7 @@ export const zh: Messages = {
       recipeStyledFlatLayHelp: "以商品为中心的整套搭配，铺在圆凳上俯拍。",
       recipeFlatLayRevealHelp: "整套平铺穿搭，从面料特写拉远到全貌。",
       recipeSleepwearLookbookHelp: "分图：衣架展示、面料特写、酒店房间里的模特。",
-      recipeHeldUpHelp: "手持商品对着镜头，再翻转展示背面。",
+      recipeHeldUpHelp: "手持商品对着镜头，展示背面，再快速特写领口、袖口和下摆。",
       recipeHikaruHelp: "固定虚拟模特 Hikaru 穿着商品在街头。",
       recipeHikaruWalkHelp: "Hikaru 穿着商品走向镜头，停下微笑。",
       recipeCeilingFanHelp: "俯拍；吊扇叶片每扫过一次就换一套衣服。",

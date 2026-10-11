@@ -1133,7 +1133,7 @@ export const fr: Messages = {
       recipeStyledFlatLayHelp: "Une tenue complète autour de votre produit sur un pouf rond, vue du dessus.",
       recipeFlatLayRevealHelp: "La tenue à plat, filmée du tissu jusqu'à la tenue entière.",
       recipeSleepwearLookbookHelp: "Cartes : sur le cintre, le tissu en gros plan, puis un modèle en suite d'hôtel.",
-      recipeHeldUpHelp: "Votre produit tenu face à la caméra, puis retourné pour montrer le dos.",
+      recipeHeldUpHelp: "Votre produit tenu face à la caméra, le dos, puis gros plans du col, du poignet et de l'ourlet.",
       recipeHikaruHelp: "Hikaru, le modèle virtuel récurrent, porte votre produit dans la rue.",
       recipeHikaruWalkHelp: "Hikaru marche vers la caméra avec votre produit et s'arrête en souriant.",
       recipeCeilingFanHelp: "Vue du dessus ; chaque passage d'une pale de ventilateur change la tenue.",
