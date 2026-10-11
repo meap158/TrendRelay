@@ -48,6 +48,7 @@ import {
   type LibrarySelectionTarget,
 } from "../../lib/library-selection-actions";
 import { campaignPickerSelection } from "../../lib/campaign-import";
+import { CHARACTER_SOURCE } from "../../lib/characters";
 
 // The editors are heavy and only render inside their dialogs, so their code is
 // loaded when one opens rather than in the Library page's first bundle. ssr:false
@@ -1338,6 +1339,7 @@ function LibraryContent() {
   const mediaKind = filters.mediaKind ?? "";
   const patchFilters = (next: Partial<AssetFilterValues>) =>
     setFilters((current) => ({ ...current, ...next }));
+  const charactersView = filters.source === CHARACTER_SOURCE;
   const [sortOrder, setSortOrder] = usePersistedState(
     "trendrelay.library.sort", "newest", isSortOrder,
   );
@@ -1442,6 +1444,19 @@ function LibraryContent() {
   };
   const [creationDrafts, setCreationDrafts] = useState<CreationDraftRow[]>([]);
   const [draftsView, setDraftsView] = useState(false);
+  // Listing the characters is what copies the built-in cast into a
+  // workspace's Library, so the tab asks for them before it filters.
+  async function openCharacters() {
+    setDraftsView(false);
+    if (workspaceId) {
+      try {
+        await apiFetch(`/api/workspaces/${workspaceId}/characters`);
+      } catch {
+        // The tab still shows whatever character pictures are already here.
+      }
+    }
+    patchFilters({ mediaKind: "image", source: CHARACTER_SOURCE });
+  }
   const [resumeDraft, setResumeDraft] = useState<{ kind: string; id: string } | null>(null);
   const refreshCreationDrafts = useCallback(() => {
     if (!workspaceId) return;
@@ -2355,10 +2370,11 @@ function LibraryContent() {
 
           <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
-              <button type="button" className={!mediaKind && !draftsView ? "selected" : ""} aria-pressed={!mediaKind && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "" }); }}>{t("common.all")} <span>{mediaTotal}</span></button>
-              <button type="button" className={mediaKind === "video" && !draftsView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video" }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
-              <button type="button" className={mediaKind === "image" && !draftsView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image" }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
-              <button type="button" className={mediaKind === "audio" && !draftsView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio" }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
+              <button type="button" className={!mediaKind && !draftsView && !charactersView ? "selected" : ""} aria-pressed={!mediaKind && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "" }); }}>{t("common.all")} <span>{mediaTotal}</span></button>
+              <button type="button" className={mediaKind === "video" && !draftsView && !charactersView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video", source: "" }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
+              <button type="button" className={mediaKind === "image" && !draftsView && !charactersView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image", source: "" }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
+              <button type="button" className={mediaKind === "audio" && !draftsView && !charactersView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio", source: "" }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
+              <button type="button" className={charactersView && !draftsView ? "selected" : ""} aria-pressed={charactersView && !draftsView} onClick={() => void openCharacters()}>{t("attribution.characters.libraryTab")}</button>
               {unfinishedDrafts.length > 0 && (
                 <button type="button" className={draftsView ? "selected" : ""} aria-pressed={draftsView} onClick={() => setDraftsView(true)}>Drafts <span>{unfinishedDrafts.length}</span></button>
               )}

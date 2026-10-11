@@ -21,6 +21,8 @@ import {
 import { creativeRecipe } from "./product-creatives";
 import { RecipePreview } from "./recipe-previews";
 import { ChoiceGroup } from "../ui/choice-group";
+import { CharacterUse } from "./character-picker";
+import { characterField, recipeTakesCharacter, type DraftCharacter } from "../../lib/characters";
 
 /** The same ceiling the API stores and a thumbnail read can fetch at once. */
 const SUBJECT_LIMIT = 8;
@@ -207,6 +209,8 @@ type DraftView = {
   background_enabled?: boolean;
   background_reference?: string | null;
   subject_assets?: StoredSubject[];
+  /** The character this draft features, or null. */
+  character?: DraftCharacter | null;
   listing_fields?: ListingSnapshot;
   together?: boolean;
   product_count?: number;
@@ -274,6 +278,11 @@ export function GenerateDialog({
   const [subjects, setSubjects] = useState<LibraryAsset[]>([]);
   const [storedSubjects, setStoredSubjects] = useState<StoredSubject[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** Feature a character: on, and which one. Off sends nothing. */
+  const [characterOn, setCharacterOn] = useState(false);
+  const [characterId, setCharacterId] = useState("");
+  /** A character dialog is open over this one. */
+  const [characterOverlay, setCharacterOverlay] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<ListingFieldKey>>(() => {
     // A review shows that draft. A new ask starts from the remembered chips.
     if (draftId) return new Set();
@@ -308,7 +317,8 @@ export function GenerateDialog({
   const groupShot = together || (draft?.product_count ?? 0) > 1;
   const leadId = products[0]?.id ?? "";
   const fieldsKey = LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)).join(",");
-  const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}|${together ? "together" : "each"}`;
+  const characterSent = characterOn && recipeTakesCharacter(recipe) ? characterId : "";
+  const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}|${together ? "together" : "each"}|${characterSent}`;
 
   // A different ask clears the prompt and members previewed for the last one.
   // Adjusted while rendering rather than in an effect, so the stale prompt is
@@ -353,6 +363,7 @@ export function GenerateDialog({
         ? { subject_asset_ids: subjects.map((asset) => asset.id) }
         : {}),
       listing_fields: LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)),
+      ...characterField(Boolean(characterSent), characterSent),
       ...(withSelection ? pictureSelection(together ? undefined : productId) : {}),
       ...(together
         ? { together: true, product_ids: products.map((item) => item.id) }
@@ -533,7 +544,7 @@ export function GenerateDialog({
   }, [
     open, reviewing, leadId, products, workspaceId, draft, kind, recipe, variant,
     backgroundEnabled, backgroundReference, cardCount, backgroundReady, fieldsKey,
-    together, apiFetch, t,
+    together, characterSent, apiFetch, t,
   ]);
 
   function chooseKind(next: Kind) {
@@ -627,13 +638,16 @@ export function GenerateDialog({
   const togetherUncovered = uncoveredNames.length > 0;
   // Why Queue is off, said beside it. The picture list that would explain it
   // is hidden while Listing pictures is off.
+  const characterUnchosen = characterOn && recipeTakesCharacter(recipe) && !characterId;
   const queueBlocker = draft || reviewing || !prompt
     ? ""
     : queueNeedsLibrary && subjects.length === 0
       ? t("attribution.generate.blockedPick")
       : togetherUncovered
         ? t("attribution.generate.blockedPictures", { names: uncoveredNames.join(", ") })
-        : "";
+        : characterUnchosen
+          ? t("attribution.characters.blockedPick")
+          : "";
 
   // What is about to be queued may already exist. A group shot of exactly
   // these products, or the same recipe already pending on some of them, is
@@ -968,10 +982,10 @@ export function GenerateDialog({
               ? t("attribution.generate.description", { name: products[0].name })
               : undefined}
       onClose={() => {
-        if (pickerOpen) return;
+        if (pickerOpen || characterOverlay) return;
         onClose();
       }}
-      suspendDismiss={pickerOpen}
+      suspendDismiss={pickerOpen || characterOverlay}
       footer={(
         <>
           {canDiscard && (
@@ -993,7 +1007,7 @@ export function GenerateDialog({
             <Button
               variant="primary"
               busy={busy === "queue"}
-              disabled={!prompt || busy !== "" || togetherUncovered || (queueNeedsLibrary && subjects.length === 0)}
+              disabled={!prompt || busy !== "" || togetherUncovered || characterUnchosen || (queueNeedsLibrary && subjects.length === 0)}
               onClick={() => void queue()}
             >{busy === "queue"
               ? t("attribution.generate.queuing")
@@ -1200,6 +1214,24 @@ export function GenerateDialog({
               </small>
             )}
           </div>
+          {workspaceId && (
+            <CharacterUse
+              workspaceId={workspaceId}
+              apiFetch={apiFetch}
+              locked={locked}
+              recipe={recipe}
+              enabled={characterOn}
+              characterId={characterId}
+              stored={locked ? (draft?.character ?? null) : undefined}
+              onEnabledChange={(on) => {
+                setCharacterOn(on);
+                if (!on) setCharacterId("");
+                setError("");
+              }}
+              onCharacterChange={setCharacterId}
+              onOverlayChange={setCharacterOverlay}
+            />
+          )}
           <div className="generate-use">
             <strong>{t("attribution.generate.backgroundHeading")}</strong>
             {!mirror && (

@@ -5,6 +5,7 @@ import "./opportunities.css";
 import "./media-library.css";
 import "./discover.css";
 import "./attribution.css";
+import "./characters.css";
 import "./storytelling.css";
 import "./sticky-headers.css";
 import "./ui/ui.css";

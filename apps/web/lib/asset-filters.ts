@@ -44,6 +44,11 @@ export type AssetFilterValues = {
    * seeing what a campaign posts, rather than what it still lacks.
    */
   inCampaign?: string;
+  /**
+   * How the asset arrived, by its recorded source type. The Library's
+   * Characters tab sets `character`: the cast's portraits and sheets.
+   */
+  source?: string;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -82,6 +87,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   }
   if (values.notInCampaign) params.set("not_in_campaign", values.notInCampaign);
   if (values.inCampaign) params.set("in_campaign", values.inCampaign);
+  if (values.source) params.set("source_type", values.source);
   return params;
 }
 
@@ -91,7 +97,7 @@ export function activeFilterCount(
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
-    "downloadedWithinDays", "notInCampaign", "inCampaign",
+    "downloadedWithinDays", "notInCampaign", "inCampaign", "source",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];
