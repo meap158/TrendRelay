@@ -96,7 +96,7 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `styled_flat_lay` | image or carousel | Optional. Off is the round cream ottoman. On uses the attached background. |
 | `flat_lay_reveal` | video | Optional. The same styled flat lay as a handheld rise from the fabric to the whole outfit. |
 | `sleepwear_lookbook` | carousel | Optional. Card 1 is the hanger, card 2 the fabric, later cards the model. Only the model's room follows the background. |
-| `held_up_garment` | video | Optional. Off is the dim room under a paper lantern. On uses the attached background. |
+| `held_up_garment` | video | Optional. Off is a warm room with walnut panelling, the holder's face out of frame. On uses the attached background. |
 | `hikaru_lookbook` | image or carousel | Optional. The stored prompt carries Hikaru's full character profile. Keep her face, hair, and build the same on every card. |
 | `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. Each blade pass hides a cut. |
 | `hanger_rail_reveal` | video | Optional. Off is the dark wooden rail against a white wall. A hand lifts the top away to show the bottoms, then the fabric in close-up. |

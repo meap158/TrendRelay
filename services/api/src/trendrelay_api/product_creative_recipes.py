@@ -406,21 +406,23 @@ HANGER_RAIL_ON = _RAIL_SCENE_ON + _RAIL_SINGLE
 HANGER_RAIL_OFF_TOGETHER = _RAIL_SCENE_OFF + _RAIL_TOGETHER
 HANGER_RAIL_ON_TOGETHER = _RAIL_SCENE_ON + _RAIL_TOGETHER
 
-#: The garment held up to the lens by its shoulders, in a dim room under a
-#: paper lantern: front, a closer look, the back, the front again.
+#: The garment held up to the lens by its shoulders against walnut panelling,
+#: the holder's face out of frame: front, a closer look, the back, the front.
 _HELD_UP_SCENE_OFF = (
-    "A vertical handheld phone video in a dim, moody room with dark wood "
-    "furniture and a glowing round paper lantern hanging above, shelves and "
-    "small objects softly out of focus behind. Warm lamp light from above, "
-    "with natural shadows."
+    "A vertical handheld phone video in a warm room with dark vertical "
+    "walnut wood panelling on the walls, a black mannequin stand and a small "
+    "bookshelf of magazines softly out of focus behind, and a wooden floor. "
+    "Warm indoor light, with natural shadows. Steady background music, no "
+    "voice-over."
 )
 _HELD_UP_SCENE_ON = (
     "A vertical handheld phone video in the scene from the attached "
     "background image, matching its lighting and setting."
 )
 _HELD_UP_SINGLE = (
-    " Two hands hold the exact garment from the attached product image up by "
-    "its shoulders, facing the camera and filling the frame. The hands give "
+    " A person in a plain black T-shirt, face out of frame, holds the exact "
+    "garment from the attached product image up by its shoulders at chest "
+    "height, facing the camera and filling the frame. The hands give "
     "it a small shake so the fabric settles, bring it closer to show the "
     "collar, the zipper or buttons, and the stitching, then turn it around to "
     "show the back, and turn it to the front again. The fabric shows its real "
@@ -428,8 +430,9 @@ _HELD_UP_SINGLE = (
     + _KEEP
 )
 _HELD_UP_TOGETHER = (
-    " Two hands hold up each garment from the attached product images in "
-    "turn, by its shoulders, facing the camera and filling the frame. Each "
+    " A person in a plain black T-shirt, face out of frame, holds up each "
+    "garment from the attached product images in turn, by its shoulders at "
+    "chest height, facing the camera and filling the frame. Each "
     "garment gets a small shake, a closer look at its collar and fastenings, "
     "a turn to show the back, and a turn to the front, before the next one "
     "takes its place, so every attached product appears once. No face appears, "
