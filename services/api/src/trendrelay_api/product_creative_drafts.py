@@ -1073,17 +1073,21 @@ def creative_assets_by_product(
     session: Session, workspace_id: str
 ) -> dict[str, list[dict[str, Any]]]:
     """The filled creatives of each product, for the Attribution product read."""
-    rows = session.scalars(
-        select(ProductCreativeLink)
+    from trendrelay_api.media_models import MediaAsset
+
+    rows = session.execute(
+        select(ProductCreativeLink, MediaAsset.media_kind)
+        .join(MediaAsset, MediaAsset.id == ProductCreativeLink.asset_id)
         .where(ProductCreativeLink.workspace_id == workspace_id)
         .order_by(ProductCreativeLink.position, ProductCreativeLink.created_at)
     ).all()
     found: dict[str, list[dict[str, Any]]] = {}
-    for link in rows:
+    for link, media_kind in rows:
         found.setdefault(link.product_id, []).append({
             "asset_id": link.asset_id,
             "draft_id": link.draft_id,
             "position": link.position,
+            **({"media_kind": media_kind} if link.draft_id is None else {}),
         })
     return found
 

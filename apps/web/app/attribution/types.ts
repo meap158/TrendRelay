@@ -79,7 +79,7 @@ export type ProductRow = {
   import_filename: string | null;
   imported_at: string | null;
   /** Library assets linked from a filled creative. Optional for older payloads. */
-  creative_assets?: { asset_id: string; draft_id: string; position: number }[];
+  creative_assets?: { asset_id: string; draft_id: string | null; position: number; media_kind?: string }[];
   /** Drafts queued for this product, including ones still pending. */
   creative_drafts?: {
     id: string;

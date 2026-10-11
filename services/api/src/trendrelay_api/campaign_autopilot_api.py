@@ -1410,6 +1410,26 @@ def create_queue_item(
     an assistant's arrive as drafts the operator promotes in the app.
     """
     _campaign(session, workspace_id, campaign_id)
+    library_offer_ids: list[str] = []
+    if body.asset_id:
+        asset = session.get(MediaAsset, body.asset_id)
+        if asset is None or asset.workspace_id != workspace_id:
+            raise HTTPException(status_code=404, detail="Library media not found in this workspace.")
+        from trendrelay_api.campaign_offer_tags import carry_library_products
+        # A carousel's remaining files also carry their own product links.
+        asset_ids = [body.asset_id]
+        if body.image_paths:
+            asset_ids.extend(session.scalars(select(MediaAsset.id).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.original_path.in_(body.image_paths),
+            )).all())
+            asset_ids.extend(session.scalars(select(MediaAssetVersion.asset_id).where(
+                MediaAssetVersion.workspace_id == workspace_id,
+                MediaAssetVersion.path.in_(body.image_paths),
+            )).all())
+        carried = carry_library_products(session, workspace_id, campaign_id, asset_ids, user_id=created_by)
+        library_offer_ids = carried["offer_ids"]
+        body = body.model_copy(update={"offer_ids": list(dict.fromkeys([*body.offer_ids, *carried["offer_ids"]]))})
     last = session.scalar(
         select(func.max(CampaignQueueItem.position)).where(
             CampaignQueueItem.campaign_id == campaign_id
@@ -1434,7 +1454,8 @@ def create_queue_item(
     _require_offer_ids(
         session, workspace_id, body.offer_ids,
         campaign_id=campaign_id,
-        autopilot=_existing_autopilot(session, campaign_id),
+        autopilot=(_autopilot(session, workspace_id, campaign_id, user_id=created_by)
+                   if library_offer_ids else _existing_autopilot(session, campaign_id)),
     )
     item = CampaignQueueItem(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
@@ -1455,7 +1476,7 @@ def create_queue_item(
         thread=[part.strip() for part in body.thread if part.strip()],
         topic=body.topic,
         context=(body.context or "").strip(),
-        offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
+        offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={"library_offer_ids": library_offer_ids},
         # Ready on arrival, for the operator's own additions. Approval lives
         # where it belongs - the authority dial and its exception inbox, where
         # a frozen execution is what gets approved rather than a form. 'draft'
@@ -1583,12 +1604,29 @@ def add_queue_assets(
         )
         items.append(item)
     session.add_all(items)
+    from trendrelay_api.campaign_offer_tags import carry_library_products
+    carried = carry_library_products(session, workspace_id, campaign_id, requested, user_id=user.id)
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+    from trendrelay_api.opportunity_models import ProductOffer
+    offers_by_asset: dict[str, list[str]] = {}
+    for asset_id, offer_id in session.execute(select(ProductCreativeLink.asset_id, ProductOffer.id)
+        .join(ProductOffer, ProductOffer.product_id == ProductCreativeLink.product_id)
+        .where(ProductCreativeLink.workspace_id == workspace_id,
+               ProductOffer.workspace_id == workspace_id,
+               ProductCreativeLink.asset_id.in_(requested)).distinct()).all():
+        offers_by_asset.setdefault(asset_id, []).append(offer_id)
+    for item in items:
+        item.offer_ids = offers_by_asset.get(item.asset_id or "", [])
+        item.offer_match = {"library_offer_ids": list(item.offer_ids)}
+        _require_offer_ids(session, workspace_id, item.offer_ids, campaign_id=campaign_id,
+                           autopilot=(_autopilot(session, workspace_id, campaign_id, user_id=user.id)
+                                      if item.offer_ids else _existing_autopilot(session, campaign_id)))
     # One flush assigns every id and position before matching starts. Matching
     # then carries rotation forward in memory instead of rereading the growing
     # queue once for every new row.
     session.flush()
     _refresh_item_matches(session, campaign_id, items)
-    return {"added": len(items)}
+    return {"added": len(items), "products_carried": carried["tagged"]}
 
 
 class QueuePublishRequest(BaseModel):
@@ -2060,6 +2098,7 @@ def _refresh_item_match(
         last_used=last_promoted(session, campaign_id),
     )
     item.offer_match = {
+        "library_offer_ids": (item.offer_match or {}).get("library_offer_ids", []),
         "matches": [match.view() for match in ranked[:8]],
         "strategy": strategy,
         "selected_offer_ids": list(item.offer_ids or []),
@@ -2107,6 +2146,7 @@ def _refresh_item_matches(
             last_used=last_used,
         )
         item.offer_match = {
+            "library_offer_ids": (item.offer_match or {}).get("library_offer_ids", []),
             "matches": [match.view() for match in ranked[:8]],
             "strategy": strategy,
             "selected_offer_ids": list(item.offer_ids or []),

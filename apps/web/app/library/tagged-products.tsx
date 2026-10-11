@@ -4,12 +4,13 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useT } from "../i18n-provider";
+import { Button } from "../ui/button";
 
 export type TaggedProduct = {
   product_id: string;
   name: string;
   image_url?: string | null;
-  draft_id: string;
+  draft_id: string | null;
 };
 
 /** How many rows show before the rest fold behind "Show more". */
@@ -25,9 +26,20 @@ const VISIBLE = 3;
  * fold away, so a group shot tagged with many products does not push the
  * File actions off the panel.
  */
-export function TaggedProducts({ products }: { products: TaggedProduct[] }) {
+export function TaggedProducts({ products, onRemove }: {
+  products: TaggedProduct[];
+  onRemove?: (productId: string) => Promise<void>;
+}) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function remove(productId: string) {
+    setRemoving(productId); setError(null);
+    try { await onRemove?.(productId); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove product."); }
+    finally { setRemoving(null); }
+  }
   const hidden = products.length - VISIBLE;
   const shown = expanded || hidden <= 1 ? products : products.slice(0, VISIBLE);
   return (
@@ -53,9 +65,14 @@ export function TaggedProducts({ products }: { products: TaggedProduct[] }) {
               <span className="library-tagged-product-name">{product.name}</span>
               <ChevronRight size={14} aria-hidden="true" />
             </Link>
+            {onRemove && <Button variant="quiet" size="sm" busy={removing === product.product_id}
+              disabled={removing !== null} aria-label={`Remove ${product.name} from this media`}
+              title="Remove this product attachment"
+              onClick={() => void remove(product.product_id)}>Remove</Button>}
           </li>
         ))}
       </ul>
+      {error && <p role="alert">{error}</p>}
       {hidden > 1 && (
         <button
           type="button"

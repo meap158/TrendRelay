@@ -222,6 +222,7 @@ export function CampaignPicker({
       onClose={busy ? () => undefined : close}
       footer={<Button variant="quiet" disabled={busy !== null} onClick={close}>Cancel</Button>}
     >
+      <p className="autopilot-note">Products attached in Library and their affiliate links carry into each post and the campaign’s products. Imports must fit the campaign’s product limit.</p>
       {/* Asked before the campaign, because it changes what is being filed
           rather than where it goes - and answered in the consequence rather
           than the jargon: "5 posts" and "1 carousel" are the two outcomes. */}

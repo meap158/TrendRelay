@@ -55,6 +55,7 @@ import { campaignPickerSelection } from "../../lib/campaign-import";
 const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
 const CampaignPicker = dynamic(() => import("./campaign-picker").then((m) => m.CampaignPicker), { ssr: false });
+const ProductPicker = dynamic(() => import("./product-picker").then((m) => m.ProductPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 // Memoised: both are handed stable props (a memoised assets array, useCallback
 // handlers), so the library's 2.5s poll re-render does not reconcile the whole
@@ -1418,6 +1419,7 @@ function LibraryContent() {
   const [videoProviders, setVideoProviders] = useState<{ id: string; label: string }[]>([]);
   /** What the campaign picker is about to add. Null closes it. */
   const [campaignPickerFor, setCampaignPickerFor] = useState<CampaignPickerSelection | null>(null);
+  const [productPickerFor, setProductPickerFor] = useState<string[] | null>(null);
   const [autoCutOpen, setAutoCutOpen] = useState(false);
   const [storytellingOpen, setStorytellingOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -2464,6 +2466,9 @@ function LibraryContent() {
                         campaignPickerSelection(selection, assets),
                       )}
                     ><ActionIcon name="campaign" />Add to campaign</Button>
+                    <Button variant="secondary" size="sm" disabled={!canImport || selection.size > 200}
+                      title={selection.size > 200 ? "Select up to 200 media items at a time." : "Attach Attribution products to the selected media"}
+                      onClick={() => setProductPickerFor([...selection])}><ActionIcon name="link" />Add products</Button>
                     {selectedVisuals.length >= AUTOCUT_MIN_IMAGES && (
                       <Button
                         variant="secondary"
@@ -2886,6 +2891,8 @@ function LibraryContent() {
                       ><ActionIcon name="campaign" />{selected.campaigns?.length
                         ? t("library.addToAnotherCampaign")
                         : t("library.addToCampaign")}</Button>
+                      <Button variant="secondary" disabled={!canImport}
+                        onClick={() => setProductPickerFor([selected.id])}><ActionIcon name="link" />Add products</Button>
                       {/* The asset, not just its path. Publish resolves it and
                           selects it exactly as its own library picker would -
                           a path alone filled the field and left the clip
@@ -2916,7 +2923,16 @@ function LibraryContent() {
                       </p>
                     )}
                     {!!selected.attribution_products?.length && (
-                      <TaggedProducts key={selected.id} products={selected.attribution_products} />
+                      <TaggedProducts key={selected.id} products={selected.attribution_products}
+                        onRemove={canImport ? async (productId) => {
+                          const response = await apiFetch(`/api/workspaces/${workspaceId}/attribution/media-products/${encodeURIComponent(selected.id)}/${encodeURIComponent(productId)}`, { method: "DELETE" });
+                          await json<{ removed: boolean }>(response);
+                          setAssets((current) => current.map((asset) => asset.id === selected.id
+                            ? { ...asset, attribution_products: asset.attribution_products?.filter((product) => product.product_id !== productId) }
+                            : asset));
+                          succeed("Product removed from this media.");
+                          void refresh();
+                        } : undefined} />
                     )}
                   </section>
 
@@ -3202,6 +3218,12 @@ function LibraryContent() {
             void refresh();
           }}
         />
+      )}
+      {workspaceId && productPickerFor && (
+        <ProductPicker key={productPickerFor.join(",")} workspaceId={workspaceId}
+          assetIds={productPickerFor} apiFetch={apiFetch}
+          onClose={() => setProductPickerFor(null)}
+          onAdded={(text) => { succeed(text); void refresh(); }} />
       )}
       {workspaceId && (
         <CampaignPicker

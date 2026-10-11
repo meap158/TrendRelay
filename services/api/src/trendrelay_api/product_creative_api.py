@@ -41,6 +41,83 @@ class ImageChoice(BaseModel):
     urls: list[str] = Field(max_length=60)
 
 
+class AttachProductsBody(BaseModel):
+    asset_ids: list[str] = Field(min_length=1, max_length=200)
+    product_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+@router.post("/media-products")
+def attach_media_products(
+    workspace_id: str, body: AttachProductsBody, request: Request,
+    user: AuthenticatedUser, session: DatabaseSession,
+) -> dict[str, Any]:
+    from sqlalchemy import select
+    from trendrelay_api.media_models import MediaAsset
+    from trendrelay_api.opportunity_models import Product
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+
+    require_role(membership(session, workspace_id, user.id), _EDITORS)
+    asset_ids = list(dict.fromkeys(body.asset_ids))
+    product_ids = list(dict.fromkeys(body.product_ids))
+    assets = session.scalars(select(MediaAsset).where(
+        MediaAsset.workspace_id == workspace_id, MediaAsset.id.in_(asset_ids),
+    )).all()
+    products = session.scalars(select(Product).where(
+        Product.workspace_id == workspace_id, Product.id.in_(product_ids),
+    )).all()
+    if len(assets) != len(asset_ids) or len(products) != len(product_ids):
+        raise HTTPException(status_code=404, detail="Media or product not found in this workspace.")
+    existing = {(link.asset_id, link.product_id) for link in session.scalars(
+        select(ProductCreativeLink).where(
+            ProductCreativeLink.workspace_id == workspace_id,
+            ProductCreativeLink.asset_id.in_(asset_ids),
+            ProductCreativeLink.product_id.in_(product_ids),
+        )
+    ).all()}
+    added = 0
+    for asset_id in asset_ids:
+        for product_id in product_ids:
+            if (asset_id, product_id) not in existing:
+                session.add(ProductCreativeLink(
+                    workspace_id=workspace_id, asset_id=asset_id,
+                    product_id=product_id, draft_id=None,
+                ))
+                added += 1
+    session.flush()
+    audit(session, request, workspace_id, user.id, "library.products_attached",
+          "media_asset", asset_ids[0],
+          detail={"asset_ids": asset_ids, "product_ids": product_ids, "added": added})
+    return {"added": added}
+
+
+@router.delete("/media-products/{asset_id}/{product_id}")
+def detach_media_product(
+    workspace_id: str, asset_id: str, product_id: str, request: Request,
+    user: AuthenticatedUser, session: DatabaseSession,
+) -> dict[str, Any]:
+    from sqlalchemy import select
+    from trendrelay_api.media_models import MediaAsset
+    from trendrelay_api.opportunity_models import Product
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+
+    require_role(membership(session, workspace_id, user.id), _EDITORS)
+    asset = session.get(MediaAsset, asset_id)
+    product = session.get(Product, product_id)
+    if not asset or asset.workspace_id != workspace_id or not product or product.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Media or product not found in this workspace.")
+    link = session.scalar(select(ProductCreativeLink).where(
+        ProductCreativeLink.workspace_id == workspace_id,
+        ProductCreativeLink.asset_id == asset_id,
+        ProductCreativeLink.product_id == product_id,
+    ))
+    removed = link is not None
+    if link is not None:
+        session.delete(link)
+    audit(session, request, workspace_id, user.id, "library.product_detached",
+          "media_asset", asset_id, detail={"product_id": product_id, "removed": removed})
+    return {"removed": removed}
+
+
 class DraftBody(BaseModel):
     product_id: str = Field(min_length=1, max_length=64)
     kind: Literal["image", "carousel", "video"]

@@ -31,6 +31,21 @@ def tagged_offer_ids(session: Session, campaign_id: str) -> list[str]:
     )
 
 
+def carry_library_products(session: Session, workspace_id: str, campaign_id: str,
+                           asset_ids: list[str], *, user_id: str) -> dict[str, Any]:
+    """Tag linked affiliate offers and return them for explicit post attachment."""
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+    offers = list(session.scalars(select(ProductOffer.id)
+        .join(ProductCreativeLink, ProductCreativeLink.product_id == ProductOffer.product_id)
+        .where(ProductCreativeLink.workspace_id == workspace_id,
+               ProductOffer.workspace_id == workspace_id,
+               ProductCreativeLink.asset_id.in_(asset_ids)).distinct()).all())
+    result = tag(session, workspace_id, campaign_id, offers, user_id=user_id)
+    result["offer_ids"] = offers
+    session.flush()
+    return result
+
+
 def campaigns_for_offers(
     session: Session, workspace_id: str, offer_ids: list[str]
 ) -> dict[str, list[str]]:

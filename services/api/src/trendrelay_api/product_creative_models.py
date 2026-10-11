@@ -173,8 +173,8 @@ class ProductCreativeLink(Base):
     asset_id: Mapped[str] = mapped_column(
         ForeignKey("media_assets.id", ondelete="CASCADE"), index=True
     )
-    draft_id: Mapped[str] = mapped_column(
-        ForeignKey("product_creative_drafts.id", ondelete="CASCADE"), index=True
+    draft_id: Mapped[str | None] = mapped_column(
+        ForeignKey("product_creative_drafts.id", ondelete="CASCADE"), index=True, nullable=True
     )
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=utc_now)

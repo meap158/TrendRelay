@@ -491,6 +491,96 @@ def add_library_image(
     return asset_id
 
 
+def test_library_products_attach_without_a_draft_and_are_idempotent() -> None:
+    workspace = make_workspace()
+    product = add_product(workspace, image=False)
+    asset = add_library_image(workspace, "manual-image")
+    base = f"/api/workspaces/{workspace}/attribution"
+    body = {"asset_ids": [asset, asset], "product_ids": [product, product]}
+    first = request("POST", f"{base}/media-products", json=body)
+    assert first.status_code == 200, first.text
+    assert first.json()["added"] == 1
+    assert request("POST", f"{base}/media-products", json=body).json()["added"] == 0
+    from trendrelay_api.product_creative_drafts import (
+        attribution_products_by_asset, creative_assets_by_product,
+    )
+    with TestingSession() as session:
+        assert creative_assets_by_product(session, workspace)[product][0]["asset_id"] == asset
+        link = attribution_products_by_asset(session, workspace, [asset])[asset][0]
+        assert link["product_id"] == product
+        assert link["draft_id"] is None
+
+
+def test_library_product_attachment_validates_the_whole_selection() -> None:
+    workspace = make_workspace()
+    foreign = make_workspace()
+    product = add_product(workspace, image=False)
+    foreign_product = add_product(foreign, image=False)
+    asset = add_library_image(workspace, "manual-image")
+    foreign_asset = add_library_image(foreign, "foreign-image")
+    url = f"/api/workspaces/{workspace}/attribution/media-products"
+    for body in (
+        {"asset_ids": [asset], "product_ids": [product, foreign_product]},
+        {"asset_ids": [asset, foreign_asset], "product_ids": [product]},
+    ):
+        assert request("POST", url, json=body).status_code == 404
+    with TestingSession() as session:
+        assert not session.scalars(select(ProductCreativeLink)).all()
+
+
+def test_analysts_cannot_attach_library_products() -> None:
+    from trendrelay_api.models import WorkspaceMember
+    workspace = make_workspace()
+    product = add_product(workspace, image=False)
+    asset = add_library_image(workspace, "manual-image")
+    with TestingSession.begin() as session:
+        member = session.scalar(select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace,
+            WorkspaceMember.user_id == "owner-user",
+        ))
+        member.role = "analyst"
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/attribution/media-products",
+        json={"asset_ids": [asset], "product_ids": [product]},
+    )
+    assert response.status_code == 403
+
+
+def test_remove_product_from_media_keeps_other_links_and_media() -> None:
+    workspace = make_workspace()
+    first = add_product(workspace, image=False, name="First")
+    second = add_product(workspace, image=False, name="Second")
+    asset = add_library_image(workspace, "attached")
+    other_asset = add_library_image(workspace, "also-attached")
+    base = f"/api/workspaces/{workspace}/attribution/media-products"
+    assert request("POST", base, json={
+        "asset_ids": [asset, other_asset], "product_ids": [first, second],
+    }).status_code == 200
+    url = f"{base}/{asset}/{first}"
+    assert request("DELETE", url).json() == {"removed": True}
+    assert request("DELETE", url).json() == {"removed": False}
+    from trendrelay_api.product_creative_drafts import creative_assets_by_product, attribution_products_by_asset
+    with TestingSession() as session:
+        assert session.get(MediaAsset, asset) is not None
+        assert [p["product_id"] for p in attribution_products_by_asset(session, workspace, [asset])[asset]] == [second]
+        assert [a["asset_id"] for a in creative_assets_by_product(session, workspace)[first]] == [other_asset]
+
+
+def test_removing_media_products_is_workspace_scoped_and_requires_editor() -> None:
+    workspace = make_workspace()
+    foreign = make_workspace()
+    product = add_product(foreign, image=False)
+    asset = add_library_image(foreign, "foreign")
+    assert request("DELETE", f"/api/workspaces/{workspace}/attribution/media-products/{asset}/{product}").status_code == 404
+    from trendrelay_api.models import WorkspaceMember
+    with TestingSession.begin() as session:
+        member = session.scalar(select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == foreign, WorkspaceMember.user_id == "owner-user",
+        ))
+        member.role = "analyst"
+    assert request("DELETE", f"/api/workspaces/{foreign}/attribution/media-products/{asset}/{product}").status_code == 403
+
+
 def test_library_images_are_the_subject_and_stay_the_subject() -> None:
     workspace_id = make_workspace()
     other = make_workspace()

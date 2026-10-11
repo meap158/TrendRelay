@@ -837,6 +837,7 @@ def test_a_queue_items_media_can_be_swapped_without_losing_the_post(workspace) -
     """
     campaign_id = campaign(workspace)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    _draft_asset(workspace, "asset-old", "Original", "", [])
     item = request("POST", f"{base}/queue", json={
         "video_path": r"S:\media\original.mp4",
         "asset_id": "asset-old",
@@ -950,6 +951,7 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
     # approving would consume the very item this test wants to see forecast.
     request("PUT", f"{base}/autopilot",
             json={"enabled": True, "confirm_external_action": True})
+    _draft_asset(workspace, "asset-preview", "Coffee demo", "", [])
     item = request("POST", f"{base}/queue", json={
         "asset_id": "asset-preview", "video_path": r"S:\media\coffee.mp4",
         "title": "Coffee demo", "body": "Make better espresso.",
@@ -1706,6 +1708,80 @@ def test_library_assets_are_added_as_an_ordered_server_side_batch(workspace) -> 
     assert items[1].video_path == ""
     assert items[1].image_paths == [r"S:\media\second.jpg"]
     assert all(item.body == PLACEHOLDER_BODY for item in items)
+
+
+@pytest.mark.parametrize("batch", [True, False])
+def test_library_import_carries_affiliate_links_and_their_origin(workspace, batch) -> None:
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+    from trendrelay_api.autopilot_models import CampaignOffer
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "linked-media", "Coffee", "", [])
+    with TestingSession.begin() as session:
+        session.add(ProductCreativeLink(workspace_id=workspace, product_id="prod-1",
+                                        asset_id="linked-media", draft_id=None))
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue"
+    response = request("POST", f"{base}/assets" if batch else base,
+        json={"asset_ids": ["linked-media"]} if batch else {
+            "asset_id": "linked-media", "video_path": r"S:\media\linked-media.mp4",
+        })
+    assert response.status_code == 201, response.text
+    with TestingSession() as session:
+        [item] = session.scalars(select(CampaignQueueItem).where(CampaignQueueItem.campaign_id == campaign_id)).all()
+        assert item.offer_ids == ["offer-1"]
+        assert item.offer_match["library_offer_ids"] == ["offer-1"]
+        assert item.offer_match["chosen_offer_ids"] == ["offer-1"]
+        assert len(session.scalars(select(CampaignOffer).where(CampaignOffer.campaign_id == campaign_id)).all()) == 1
+    # Another import keeps the campaign association unique.
+    assert request("POST", f"{base}/assets", json={"asset_ids": ["linked-media"]}).status_code == 201
+    with TestingSession() as session:
+        assert len(session.scalars(select(CampaignOffer).where(CampaignOffer.campaign_id == campaign_id)).all()) == 1
+
+
+@pytest.mark.parametrize("batch", [True, False])
+def test_library_links_over_the_campaign_cap_roll_back_the_import(workspace, batch) -> None:
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+    from trendrelay_api.autopilot_models import CampaignOffer
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "linked-media", "Coffee", "", [])
+    with TestingSession.begin() as session:
+        session.add(ProductOffer(
+            id="offer-extra", workspace_id=workspace, product_id="prod-1", fingerprint="extra",
+            network="amazon", merchant="Amazon", affiliate_url="https://example.test/extra",
+            currency="USD", availability="available", created_by="owner-user",
+        ))
+        session.add(ProductCreativeLink(workspace_id=workspace, product_id="prod-1",
+                                        asset_id="linked-media", draft_id=None))
+        session.scalar(select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == campaign_id,
+        )).max_products_per_post = 1
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue"
+    response = request("POST", f"{base}/assets" if batch else base,
+        json={"asset_ids": ["linked-media"]} if batch else {
+            "asset_id": "linked-media", "video_path": r"S:\media\linked-media.mp4",
+        })
+    assert response.status_code == 422, response.text
+    assert "at most 1" in response.json()["detail"]
+    with TestingSession() as session:
+        assert not session.scalars(select(CampaignQueueItem).where(CampaignQueueItem.campaign_id == campaign_id)).all()
+        assert not session.scalars(select(CampaignOffer).where(CampaignOffer.campaign_id == campaign_id)).all()
+
+
+def test_carousel_carries_products_from_a_later_image(workspace) -> None:
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "first", "First", "", [])
+    _draft_asset(workspace, "second", "Second", "", [])
+    with TestingSession.begin() as session:
+        for asset_id in ("first", "second"):
+            session.get(MediaAsset, asset_id).media_kind = "image"
+        session.add(ProductCreativeLink(workspace_id=workspace, product_id="prod-1",
+                                        asset_id="second", draft_id=None))
+    response = request("POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue", json={
+        "asset_id": "first", "image_paths": [r"S:\media\first.mp4", r"S:\media\second.mp4"],
+    })
+    assert response.status_code == 201, response.text
+    assert response.json()["item"]["offer_ids"] == ["offer-1"]
+    assert response.json()["item"]["offer_match"]["library_offer_ids"] == ["offer-1"]
 
 
 def test_library_asset_batch_is_atomic_when_an_asset_is_missing(workspace) -> None:
