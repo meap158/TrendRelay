@@ -136,6 +136,10 @@
 .product-detail:has(.product-listing) { grid-template-columns: 1fr; gap: 12px; }
 .listing-pdp { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 8px 16px; }
 .listing-gallery { display: grid; gap: 5px; align-content: start; min-width: 0; }
+.listing-hero-button, .listing-variation-picture { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: var(--radius-sm); }
+.listing-hero-button { inline-size: 100%; }
+.listing-hero-button img { display: block; }
+.listing-hero-button:focus-visible, .listing-variation-picture:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .listing-hero { inline-size: 100%; aspect-ratio: 1; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 /* One scrolling row, like the page's own strip: wrapped rows both doubled
    the panel's height and collided when they wrapped. */
@@ -486,6 +490,31 @@
 .product-tag-campaign { max-inline-size: 190px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 7px; color: var(--text); background: var(--panel); font: inherit; font-size: 11px; }
 /* Filters sit in their own full-width tier between search and bulk actions. */
 .product-filters { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.global-product-picker-dialog { width: min(1180px, calc(100vw - 32px)); }
+.campaign-picker-offer-choice { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.campaign-picker-membership { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.campaign-catalogue-picker-table .product-picker-named > span { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.campaign-catalogue-picker-table .product-picker-named > button { justify-self: start; margin-top: 4px; }
+.campaign-catalogue-picker-table .product-picker-product { align-items: flex-start; }
+.campaign-catalogue-picker-table .campaign-picker-offer-options { margin: 8px; }
+.global-product-picker-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.global-product-picker-filter { display: grid; gap: 4px; min-width: 0; color: var(--muted); font-size: 12px; }
+.global-product-picker-filter input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; }
+.global-product-picker-table { width: 100%; table-layout: auto; }
+.global-product-picker-table th:first-child, .global-product-picker-table td:first-child { width: 36px; text-align: center; }
+.global-product-picker-table td { vertical-align: middle; }
+.global-product-picker-table td:nth-child(2) { min-width: 280px; max-width: 460px; }
+.global-product-picker-table .product-picker-named strong { white-space: normal; font-size: 13px; font-weight: 500; line-height: 1.45; }
+.global-product-picker-table .product-picker-named small { font-size: 11px; }
+.global-product-picker-image { width: 48px; height: 48px; flex: none; object-fit: cover; border-radius: 6px; }
+.global-product-picker-table tr[data-selected] { background: var(--panel-raised); box-shadow: inset 2px 0 0 var(--link); }
+.global-product-picker-selection { margin-right: auto; color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  .global-product-picker-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .global-product-picker .product-picker-toolbar { flex-wrap: wrap; }
+  .global-product-picker-selection { flex-basis: 100%; }
+}
 .product-filter { max-inline-size: 220px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
 .product-filter-dates { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
 /* Export names are long; the trigger keeps the select's width and clips. */

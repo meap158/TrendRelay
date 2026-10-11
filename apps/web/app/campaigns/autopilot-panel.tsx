@@ -75,6 +75,7 @@ const CaptionEditor = dynamic(() => import("../library/caption-editor").then((m)
 const OfferPicker = dynamic(() => import("../publish/offer-picker").then((m) => m.OfferPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("../library/bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const BatchTranscribe = dynamic(() => import("../library/batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
+import { CampaignProductReview } from "./product-review";
 import { TimelineCarousel, TimelinePlayer } from "./timeline-player";
 import { CampaignAnalytics } from "./campaign-analytics";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
@@ -569,6 +570,7 @@ type QueueItem = {
     selected_offer_ids?: string[];
     /** What this post would actually carry, resolved by the matcher. */
     chosen_offer_ids?: string[];
+    library_offer_ids?: string[];
   };
   media_version?: MediaVersionInfo | null;
   asset_hashtags?: string[];
@@ -1316,10 +1318,8 @@ type TimelineFilter = "published" | "scheduled" | "planned" | "warnings" | null;
 const TAGGED_SHOWN = 6;
 
 /** The columns the tagged-product table can be ordered by. */
-type TaggedSortKey = "name" | "source" | "price" | "rate" | "availability" | "added";
 
 /** Rows per page in that dialog. */
-const TAGGED_PER_PAGE = 20;
 
 const QUEUE_BATCH = 8;
 
@@ -2402,23 +2402,8 @@ export function AutopilotPanel({
    * panel already holds, so it is fetched for the dialog and only then.
    */
   const [attributionProducts, setAttributionProducts] = useState<ProductRow[] | null>(null);
-  /**
-   * The whole tagged list, when somebody asks for it.
-   *
-   * The panel shows the first few. A campaign curated from an import can hold
-   * a hundred products, and a hundred rows between the heading and the next
-   * setting is a page nobody scrolls past - so the rest lives here, with the
-   * things a long list actually needs: a search, an order, and a way to remove
-   * more than one.
-   */
-  const [reviewingProducts, setReviewingProducts] = useState(false);
-  const [productQuery, setProductQuery] = useState("");
-  const [productSort, setProductSort] = useState<SortState<TaggedSortKey>>({
-    key: "added", direction: "desc",
-  });
-  const [productFilter, setProductFilter] = useState<"all" | "available" | "unavailable">("all");
-  const [productPage, setProductPage] = useState(0);
-  const [pickedProducts, setPickedProducts] = useState<Set<string>>(new Set());
+  const [catalogueError, setCatalogueError] = useState("");
+  const [catalogueAttempt, setCatalogueAttempt] = useState(0);
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [postingPresets, setPostingPresets] = useState<PostingPreset[]>([]);
@@ -2810,65 +2795,6 @@ export function AutopilotPanel({
   >([]);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
-  /**
-   * The tagged list as the dialog shows it: searched, filtered, ordered, paged.
-   *
-   * All of it in the browser, because all of it is already here - the campaign
-   * sends its products in one payload, and a hundred rows is nothing to sort.
-   * Asking the server would add a round trip per keystroke to answer a question
-   * the page can already answer.
-   */
-  const shownProducts = useMemo(() => {
-    const needle = productQuery.trim().toLowerCase();
-    const matching = tagged.filter((product) => {
-      if (productFilter === "available" && product.availability === "unavailable") {
-        return false;
-      }
-      if (productFilter === "unavailable" && product.availability !== "unavailable") {
-        return false;
-      }
-      if (!needle) return true;
-      return [
-        product.name, product.brand, product.category,
-        product.marketplace, product.network,
-      ].some((field) => (field ?? "").toLowerCase().includes(needle));
-    });
-    // Compared as one type per column, so a missing figure sorts as absent
-    // rather than as zero - an offer with no commission recorded is not an
-    // offer that pays nothing.
-    const value = (product: TaggedProduct): string | number => {
-      switch (productSort.key) {
-        case "name": return product.name.toLowerCase();
-        case "source": return (product.marketplace ?? product.network ?? "").toLowerCase();
-        case "rate": return product.commission_bps ?? -1;
-        case "price": return product.price_cents ?? -1;
-        case "availability": return product.availability ?? "";
-        default: return product.tagged_at ?? "";
-      }
-    };
-    const ordered = [...matching].sort((left, right) => {
-      const a = value(left);
-      const b = value(right);
-      const order = typeof a === "number" && typeof b === "number"
-        ? a - b
-        : String(a).localeCompare(String(b));
-      return productSort.direction === "asc" ? order : -order;
-    });
-    return ordered;
-  }, [tagged, productQuery, productFilter, productSort]);
-
-  function changeProductSort(column: TaggedSortKey) {
-    setProductSort((current) => nextSort(current, column));
-    setProductPage(0);
-  }
-
-  const productPages = Math.max(1, Math.ceil(shownProducts.length / TAGGED_PER_PAGE));
-  const productPageSafe = Math.min(productPage, productPages - 1);
-  const productSlice = shownProducts.slice(
-    productPageSafe * TAGGED_PER_PAGE, (productPageSafe + 1) * TAGGED_PER_PAGE,
-  );
-
-
   /** The same media the Publish composer plays, streamed from the same roots. */
   const previewMediaUrl = (path: string) =>
     `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
@@ -3446,6 +3372,11 @@ export function AutopilotPanel({
     () => new Set(tagged.map((product) => product.offer_id)),
     [tagged],
   );
+  const taggedProductGroups = useMemo(() => {
+    const groups = new Map<string, TaggedProduct[]>();
+    for (const offer of tagged) groups.set(offer.product_id, [...(groups.get(offer.product_id) ?? []), offer]);
+    return [...groups.values()];
+  }, [tagged]);
   const productsLoaded = attributionProducts !== null;
   useEffect(() => {
     if (!addingProducts || productsLoaded || !workspaceId) return;
@@ -3453,9 +3384,9 @@ export function AutopilotPanel({
     void apiFetch(`/api/workspaces/${workspaceId}/attribution/products`)
       .then((response) => json<{ products: ProductRow[] }>(response))
       .then((body) => { if (live) setAttributionProducts(body.products ?? []); })
-      .catch(() => { if (live) setAttributionProducts([]); });
+      .catch((cause) => { if (live) setCatalogueError(cause instanceof Error ? cause.message : "Could not load products."); });
     return () => { live = false; };
-  }, [addingProducts, productsLoaded, apiFetch, workspaceId]);
+  }, [addingProducts, productsLoaded, apiFetch, workspaceId, catalogueAttempt]);
 
   async function tagProducts(offerIds: string[]) {
     if (!offerIds.length) return;
@@ -3475,9 +3406,6 @@ export function AutopilotPanel({
   }
 
   async function untagProduct(offerId: string, name: string) {
-    if (!window.confirm(
-      `Stop this campaign promoting ${name}? Posts already sent keep their links.`
-    )) return;
     await run("tag-products", async () => {
       const body = await json<{ products: TaggedProduct[] }>(
         await apiFetch(`${base}/products/${offerId}`, { method: "DELETE" }),
@@ -3493,27 +3421,6 @@ export function AutopilotPanel({
    * Curating a hundred imported products down to the ones a campaign is
    * actually about was a hundred confirmations otherwise.
    */
-  async function untagPicked() {
-    const ids = [...pickedProducts];
-    if (!ids.length) return;
-    if (!window.confirm(
-      `Stop this campaign promoting ${ids.length} product${ids.length === 1 ? "" : "s"}? `
-      + "Posts already sent keep their links."
-    )) return;
-    await run("tag-products", async () => {
-      const body = await json<{ untagged: number; products: TaggedProduct[] }>(
-        await apiFetch(`${base}/products/remove`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ offer_ids: ids }),
-        }),
-      );
-      setTagged(body.products);
-      setPickedProducts(new Set());
-      return `${body.untagged} product${body.untagged === 1 ? "" : "s"} removed.`;
-    });
-  }
-
   async function loadDraftMatches() {
     setDraftProductMode("manual");
     if (draftMatches) return;
@@ -6236,6 +6143,10 @@ export function AutopilotPanel({
                     {canPublishReplies && item.thread.length > 0 && (
                       <em>+ {item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
                     )}
+                  {!!item.offer_match?.library_offer_ids?.length && <em className="soft"
+                    title="These affiliate links were attached to the media in Library before import. They were carried into this post and added to the campaign’s products. Use Edit products to change this post’s links.">
+                    Attached in Library · {item.offer_match.library_offer_ids.filter((id) => item.offer_ids.includes(id)).length} affiliate links retained
+                  </em>}
                   {/* What this post would carry, and when it would carry
                       nothing, why. Every match being low confidence rendered
                       an empty space: the filter dropped them all and the
@@ -6503,93 +6414,20 @@ export function AutopilotPanel({
           </>
         )}
         {productItem && recommendations?.item_id === productItem.id && (
-          /* A modal rather than a panel below the queue: the row that opened
-             it is often pages up, and a panel that arrives by scrolling read
-             as a button that did nothing. The same door the post editor uses. */
-          <Dialog
-            open
-            size="wide"
-            onClose={() => {
-              setProductItem(null); setRecommendations(null); setPinnedOffers(new Set());
-            }}
-            title={`Products for ${productItem.title ?? "this queued post"}`}
-            description={pinnedOffers.size
-              ? `Pinned: ${pinnedOffers.size} product${pinnedOffers.size === 1 ? "" : "s"}. Untick every box to hand this back to smart matching.`
-              : recommendations.chosen_offer_ids?.length
-                ? `Smart matching attaches ${recommendations.matches
-                    .filter((match) => recommendations.chosen_offer_ids?.includes(match.offer_id))
-                    .map((match) => match.product_name).join(", ")}. Tick a box to pin something else instead.`
-                : "Smart matching has nothing to attach here. Tick a box to pin one."}
-            headerAction={
-              <Button variant="primary" size="sm" busy={busy === "pin-products"}
-                onClick={() => void run("pin-products", async () => {
-                  await json(await apiFetch(`${base}/queue/${productItem.id}`, {
-                    method: "PATCH",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ offer_ids: [...pinnedOffers] }),
-                  }));
-                  setProductItem(null); setRecommendations(null);
-                  return pinnedOffers.size ? "Products pinned to this post." : "This post now uses smart product matching.";
-                })}>Save product choice</Button>
-            }
-          >
-            <ul className="campaign-product-matches selectable">
-              {recommendations.matches.map((match) => (
-                <li key={match.offer_id}>
-                  <label>
-                    <input type="checkbox" checked={pinnedOffers.has(match.offer_id)}
-                      onChange={() => setPinnedOffers((current) => {
-                        const next = new Set(current);
-                        if (next.has(match.offer_id)) next.delete(match.offer_id);
-                        else next.add(match.offer_id);
-                        return next;
-                      })} />
-                    <span className="campaign-match-score" data-confidence={match.confidence}>
-                      <strong>{match.score}</strong><small>% fit</small>
-                    </span>
-                    <span className="campaign-match-copy">
-                      <strong>{match.product_name}
-                        {commissionLabel(match) && (
-                          <b className="campaign-match-pay">{commissionLabel(match)}</b>
-                        )}
-                      </strong>
-                      <small>{match.reasons.join(" ")}</small>
-                      <span>{match.matched_terms.slice(0, 6).map((term) => <em key={term}>{term}</em>)}</span>
-                    </span>
-                    {/* Both marks in one cell, always present. As two grid
-                        children the second appeared on some rows and not
-                        others, so the confidence badge sat in a different
-                        column on every row and the list read as ragged.
-                        Anchored right, the "would post" mark grows leftward
-                        and confidence stays where the eye left it. */}
-                    <span className="campaign-match-marks">
-                      {/* Marked when nothing is pinned, because that is when
-                          the ranking is a forecast rather than a menu: these
-                          are the ones smart match would attach. A pin
-                          overrides every one of them, so the mark would lie. */}
-                      {!pinnedOffers.size
-                        && recommendations.chosen_offer_ids?.includes(match.offer_id) && (
-                        <Badge tone="good" className="campaign-match-chosen">would post</Badge>
-                      )}
-                      <Badge
-                        tone={match.confidence === "high" ? "good"
-                          : match.confidence === "medium" ? "warn" : "neutral"}
-                        title={t(`autopilot.matchConfidence.${match.confidence}`)}
-                      >
-                        {match.confidence}
-                      </Badge>
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <small className="campaign-product-actions-note">{pinnedOffers.size
-              ? `${pinnedOffers.size} pinned product${pinnedOffers.size === 1 ? "" : "s"}; these override smart matching for this post.`
-              : recommendations.chosen_offer_ids?.length
-                ? `Smart matching would attach the ${recommendations.chosen_offer_ids.length === 1
-                    ? "product" : `${recommendations.chosen_offer_ids.length} products`} marked above.`
-                : "Nothing here is confident enough to attach unattended. Pin a product, or leave this post organic."}</small>
-          </Dialog>
+          <CampaignProductReview key={productItem.id} workspaceId={workspaceId} base={base}
+            item={productItem} limit={autopilot.max_products_per_post} apiFetch={apiFetch}
+            selected={pinnedOffers} onSelected={setPinnedOffers}
+            matches={recommendations.matches} chosen={recommendations.chosen_offer_ids ?? []}
+            busy={busy === "pin-products"}
+            onClose={() => { setProductItem(null); setRecommendations(null); setPinnedOffers(new Set()); }}
+            onSave={() => void run("pin-products", async () => {
+              await json(await apiFetch(`${base}/queue/${productItem.id}`, {
+                method: "PATCH", headers: { "content-type": "application/json" },
+                body: JSON.stringify({ offer_ids: [...pinnedOffers] }),
+              }));
+              setProductItem(null); setRecommendations(null);
+              return pinnedOffers.size ? "Products pinned to this post." : "This post now uses smart product matching.";
+            })} />
         )}
         {editing && (
           <Dialog
@@ -7805,31 +7643,19 @@ export function AutopilotPanel({
                 <div>
                   <strong>Products this campaign may promote</strong>
                   <small>{tagged.length
-                    ? `Smart matching chooses from these ${tagged.length}. Nothing else is offered, here or on a post.`
+                    ? `Smart matching chooses from ${taggedProductGroups.length} products with ${tagged.length} affiliate offers.`
                     : "None yet. Until one is added, posts go out with no product attached."}</small>
                 </div>
-                {/* Both doors, together. Reviewing is only offered once there
-                    is more here than the panel shows - a dialog over six rows
-                    is a click that changes nothing. */}
-                {tagged.length > TAGGED_SHOWN && (
-                  <Button variant="quiet" size="sm"
-                    onClick={() => setReviewingProducts(true)}>
-                    Review all {tagged.length}
-                  </Button>
-                )}
-                {canEdit && (
-                  <Button variant={tagged.length ? "secondary" : "primary"} size="sm"
-                    busy={busy === "offers"}
-                    onClick={() => setAddingProducts(true)}>
-                    <ActionIcon name="add" />Add products
-                  </Button>
-                )}
+                <Button variant={tagged.length ? "secondary" : "primary"} size="sm"
+                  onClick={() => setAddingProducts(true)}>
+                  {canEdit ? "Manage products" : "View products"}
+                </Button>
               </div>
 
               {tagged.length > 0 && (
                 <ul className="campaign-tagged-products">
-                  {tagged.slice(0, TAGGED_SHOWN).map((product) => (
-                    <li key={product.offer_id}>
+                  {taggedProductGroups.slice(0, TAGGED_SHOWN).map((choices) => { const product = choices[0]; return (
+                    <li key={product.product_id}>
                       <span>
                         <strong>{product.name}</strong>
                         <small>{[
@@ -7847,214 +7673,52 @@ export function AutopilotPanel({
                       )}
                       {canEdit && (
                         <Button variant="quiet" size="sm" busy={busy === "tag-products"}
-                          onClick={() => void untagProduct(product.offer_id, product.name)}>
-                          Remove
+                          onClick={() => choices.length > 1 ? setAddingProducts(true) : void untagProduct(product.offer_id, product.name)}>
+                          {choices.length > 1 ? `${choices.length} offers` : "Remove"}
                         </Button>
                       )}
                     </li>
-                  ))}
+                  ); })}
                   {/* The rest, said in one line rather than drawn in ninety.
                       Inside the list, so it reads as the end of it rather than
                       as a control that belongs to the section. */}
-                  {tagged.length > TAGGED_SHOWN && (
+                  {taggedProductGroups.length > TAGGED_SHOWN && (
                     <li className="campaign-tagged-more">
-                      <span>{tagged.length - TAGGED_SHOWN} more</span>
+                      <span>{taggedProductGroups.length - TAGGED_SHOWN} more products</span>
                       <Button variant="quiet" size="sm"
-                        onClick={() => setReviewingProducts(true)}>Review all</Button>
+                        onClick={() => setAddingProducts(true)}>Manage products</Button>
                     </li>
                   )}
                 </ul>
               )}
 
-              {/* The whole list, where a long one can be worked with.
-                  A dialog rather than more rows: what the panel owes the
-                  reader is what this campaign is about, and ninety more rows
-                  answer that no better than six while pushing everything
-                  after them off the screen. */}
-              <Dialog
-                open={reviewingProducts}
-                title="Products this campaign may promote"
-                description={`${tagged.length} tagged. Smart matching chooses from these and nothing else.`}
-                size="wide"
-                onClose={() => {
-                  setReviewingProducts(false);
-                  setPickedProducts(new Set());
-                  setProductQuery("");
-                  setProductPage(0);
-                }}
-              >
-                <div className="campaign-product-review">
-                  {/* One row of controls, because they are one question asked
-                      four ways: which of these am I looking at. */}
-                  <div className="campaign-product-controls">
-                    <input
-                      type="search"
-                      value={productQuery}
-                      placeholder="Search name, brand, category"
-                      aria-label="Search tagged products"
-                      onChange={(event) => {
-                        setProductQuery(event.target.value);
-                        setProductPage(0);
-                      }}
-                    />
-                    <label>
-                      <span>Show</span>
-                      <Select value={productFilter}
-                        onChange={(event) => {
-                          setProductFilter(event.target.value as typeof productFilter);
-                          setProductPage(0);
-                        }}>
-                        <option value="all">All</option>
-                        <option value="available">Available</option>
-                        <option value="unavailable">Unavailable</option>
-                      </Select>
-                    </label>
-                  </div>
-                  {/* The count, the selection and the paginator on one line -
-                      each of them is a few words about the list rather than a
-                      section of its own. */}
-                  <div className="campaign-product-status">
-                    <small>
-                      {shownProducts.length === tagged.length
-                        ? `${tagged.length} products`
-                        : `${shownProducts.length} of ${tagged.length}`}
-                      {pickedProducts.size > 0 && ` · ${pickedProducts.size} selected`}
-                    </small>
-                    {canEdit && pickedProducts.size > 0 && (
-                      <Button variant="secondary" size="sm" busy={busy === "tag-products"}
-                        onClick={() => void untagPicked()}>
-                        Remove {pickedProducts.size}
-                      </Button>
-                    )}
-                    {productPages > 1 && (
-                      <span className="campaign-product-pager">
-                        <Button variant="quiet" size="sm" disabled={productPageSafe === 0}
-                          onClick={() => setProductPage(productPageSafe - 1)}>Back</Button>
-                        <small>{productPageSafe + 1} / {productPages}</small>
-                        <Button variant="quiet" size="sm"
-                          disabled={productPageSafe >= productPages - 1}
-                          onClick={() => setProductPage(productPageSafe + 1)}>Next</Button>
-                      </span>
-                    )}
-                  </div>
-                  {shownProducts.length === 0 ? (
-                    <p className="autopilot-empty">
-                      Nothing here matches that. Clear the search to see all
-                      {" "}{tagged.length}.
-                    </p>
-                  ) : (
-                    /* A table, because these are columns: a name, where it
-                       came from, what it costs, what it pays. Sorted from the
-                       headings themselves - an "order by" dropdown beside a
-                       grid of values is a second way to say what the headings
-                       already are. */
-                    <div className="campaign-tagged-scroll">
-                      <table className="product-table campaign-tagged-table">
-                        <thead>
-                          <tr>
-                            <th scope="col" className="product-choose">
-                              <SelectionCheckbox
-                                aria-label="Select everything shown"
-                                checked={productSlice.length > 0
-                                  && productSlice.every((row) => pickedProducts.has(row.offer_id))}
-                                indeterminate={
-                                  productSlice.some((row) => pickedProducts.has(row.offer_id))
-                                  && !productSlice.every((row) => pickedProducts.has(row.offer_id))}
-                                disabled={!productSlice.length}
-                                onChange={(event) => setPickedProducts((current) => {
-                                  const next = new Set(current);
-                                  for (const row of productSlice) {
-                                    if (event.target.checked) next.add(row.offer_id);
-                                    else next.delete(row.offer_id);
-                                  }
-                                  return next;
-                                })}
-                              />
-                            </th>
-                            <SortableHeader<TaggedSortKey> column="name" label="Product"
-                              sort={productSort} onSort={changeProductSort} />
-                            <SortableHeader<TaggedSortKey> column="source" label="Source"
-                              sort={productSort} onSort={changeProductSort} />
-                            <SortableHeader<TaggedSortKey> column="price" label="Price"
-                              sort={productSort} onSort={changeProductSort} className="numeric" />
-                            <SortableHeader<TaggedSortKey> column="rate" label="Rate"
-                              sort={productSort} onSort={changeProductSort} className="numeric" />
-                            <SortableHeader<TaggedSortKey> column="availability" label="Status"
-                              sort={productSort} onSort={changeProductSort} />
-                            <SortableHeader<TaggedSortKey> column="added" label="Added"
-                              sort={productSort} onSort={changeProductSort} />
-                            {canEdit && <th scope="col"><span className="sr-only">Remove</span></th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {productSlice.map((product) => (
-                            <tr key={product.offer_id}>
-                              <td className="product-choose">
-                                <SelectionCheckbox
-                                  aria-label={`Select ${product.name}`}
-                                  checked={pickedProducts.has(product.offer_id)}
-                                  onChange={(event) => setPickedProducts((current) => {
-                                    const next = new Set(current);
-                                    if (event.target.checked) next.add(product.offer_id);
-                                    else next.delete(product.offer_id);
-                                    return next;
-                                  })}
-                                />
-                              </td>
-                              <td className="campaign-tagged-name">
-                                <strong>{product.name}</strong>
-                                {[product.brand, product.category].filter(Boolean).length > 0 && (
-                                  <small>{[product.brand, product.category]
-                                    .filter(Boolean).join(" · ")}</small>
-                                )}
-                              </td>
-                              <td>{product.marketplace ?? product.network ?? "—"}</td>
-                              <td className="numeric">{product.price_cents !== null && product.price_cents !== undefined
-                                ? money(product.price_cents, product.currency ?? "USD")
-                                : "—"}</td>
-                              <td className="numeric">{commissionLabel(product) || "—"}</td>
-                              <td>
-                                {product.availability === "unavailable"
-                                  ? <Badge tone="warn">unavailable</Badge>
-                                  : <span className="campaign-tagged-fine">available</span>}
-                              </td>
-                              <td>{product.tagged_at
-                                ? new Date(product.tagged_at).toLocaleDateString()
-                                : "—"}</td>
-                              {canEdit && (
-                                <td>
-                                  <Button variant="quiet" size="sm" busy={busy === "tag-products"}
-                                    onClick={() => void untagProduct(product.offer_id, product.name)}>
-                                    Remove
-                                  </Button>
-                                </td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </Dialog>
-
-              {/* The same dialog Publish and Discover choose from, on the
-                  same terms - price, rate, network, import batch, sortable -
-                  rather than a name-only list walled at sixty rows. It stays
-                  open across adds: tagging is cumulative, and each added row
-                  wears its tick as the campaign takes it. */}
               <OfferPicker
                 open={addingProducts}
                 products={attributionProducts ?? []}
-                loading={!productsLoaded}
+                loading={!productsLoaded && !catalogueError}
+                error={catalogueError}
+                onRetry={() => { setCatalogueError(""); setCatalogueAttempt((n) => n + 1); }}
                 chosen=""
                 chosenIds={taggedOfferIds}
-                title="Add products"
-                description={"Imported offers from Attribution. Adding one here "
-                  + "is the same as tagging it to this campaign there."}
+                title={canEdit ? "Manage campaign products" : "Campaign products"}
+                description="Browse Attribution products and manage the affiliate offers this campaign may promote. Changes apply immediately; published posts keep their links."
+                busy={busy === "tag-products"}
+                readOnly={!canEdit}
+                onRemove={(offer) => { if (canEdit) void untagProduct(offer.offer_id, offer.name); }}
+                onRemoveAll={(rows) => {
+                  if (!canEdit) return;
+                  void run("tag-products", async () => {
+                    const body = await json<{ untagged: number; products: TaggedProduct[] }>(await apiFetch(`${base}/products/remove`, {
+                      method: "POST", headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ offer_ids: rows.map((row) => row.offer_id) }),
+                    }));
+                    setTagged(body.products);
+                    return `${body.untagged} offers removed.`;
+                  });
+                }}
                 chooseAllLabel="Add all"
                 onChoose={(offer) => {
-                  if (!taggedOfferIds.has(offer.offer_id)) {
+                  if (canEdit && !taggedOfferIds.has(offer.offer_id)) {
                     void tagProducts([offer.offer_id]);
                   }
                 }}

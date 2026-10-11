@@ -15,21 +15,24 @@
  * rules - the commission column especially, since the rate is usually the whole
  * reason one offer is picked over another.
  *
- * One row per offer rather than per product. A product with two offers is two
- * different links paying two different rates, and the post can only carry one.
+ * Single-post picking remains offer based. Campaign management groups offers
+ * by product and exposes each affiliate link in an expandable detail row.
  *
  * The whole row is the control. A column of "Choose" buttons repeated the same
  * verb down the page and made the picture and the name - the parts anybody
  * actually recognises a product by - compete with a button for attention.
  */
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ChevronsUpDown, Search } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { ProductPickerFilters } from "../ui/product-picker-filters";
 import { Select } from "../ui/select";
-import { SearchSelect } from "../ui/search-select";
+import { matchesCreativeFilter, type CreativeFilter } from "../attribution/creative-filter";
+import { campaignProductGroups } from "../../lib/campaign-product-groups";
+
 import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "../attribution/format";
@@ -37,6 +40,7 @@ import { sortRows } from "../attribution/sort";
 import {
   offerChoices,
   offerMatches,
+  productMatches,
   offerValue,
   type OfferChoice,
   type OfferSortKey as SortKey,
@@ -69,11 +73,17 @@ export function OfferPicker({
   campaigns = [],
   campaignsByOffer = {},
   loading = false,
+  error,
+  onRetry,
   title = "Choose a product",
   description = "Its own affiliate link goes in the post. Sorted by what each offer pays.",
   chooseAllLabel,
   onChoose,
   onChooseAll,
+  onRemove,
+  onRemoveAll,
+  busy = false,
+  readOnly = false,
   onClose,
 }: {
   open: boolean;
@@ -98,12 +108,18 @@ export function OfferPicker({
   campaignsByOffer?: Record<string, string[]>;
   /** The catalogue is still being read - say so instead of "no products". */
   loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
   title?: string;
   description?: string;
   /** Offered when a caller can take every shown row at once - "Add all N". */
   chooseAllLabel?: string;
   onChoose: (offer: OfferChoice) => void;
   onChooseAll?: (offers: OfferChoice[]) => void;
+  onRemove?: (offer: OfferChoice) => void;
+  onRemoveAll?: (offers: OfferChoice[]) => void;
+  busy?: boolean;
+  readOnly?: boolean;
   onClose: () => void;
 }) {
   const t = useT();
@@ -123,6 +139,13 @@ export function OfferPicker({
   const [filterTo, setFilterTo] = useState("");
   /** One creator, the same axis the Attribution table filters on. */
   const [filterCreator, setFilterCreator] = useState("");
+  const [creative, setCreative] = useState<CreativeFilter>("all");
+  const [listing, setListing] = useState("all");
+  const [group, setGroup] = useState("");
+  const [subId, setSubId] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [membership, setMembership] = useState("all");
+  const [availability, setAvailability] = useState("all");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({
     // Opens on the rate, descending: the best-paying offer is what somebody
     // scanning this list is nearly always looking for.
@@ -140,29 +163,9 @@ export function OfferPicker({
    * otherwise the name starts where the eye already is.
    */
   const showThumbnails = useMemo(() => all.some((row) => row.image_url), [all]);
-  /** Only the batches actually represented here, so no filter finds nothing. */
-  const fileNames = useMemo(
-    () => [...new Set(all.map((row) => row.import_filename).filter(Boolean))].sort() as string[],
-    [all],
-  );
-  const hasImportDates = useMemo(() => all.some((row) => row.imported_at), [all]);
-  /** The creators present in these offers, most-stocked first. Built from the
-      rows for the same reason the batches are: a filter that can only empty
-      the list is not worth offering. */
-  const creatorNames = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const row of all) {
-      for (const creator of row.creators) {
-        counts.set(creator, (counts.get(creator) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-  }, [all]);
-  const filtered = Boolean(
-    filterCampaign || filterFile || filterFrom || filterTo || filterCreator,
-  );
+  const filtered = Boolean(filterCampaign || filterFile || filterFrom || filterTo || filterCreator || subId || group || creative !== "all" || listing !== "all");
   const rows = useMemo(() => {
+    const subIdProducts = new Set(products.filter((product) => productMatches(product, { query: "", campaign: "", file: "", from: "", to: "", creator: "", subId })).map((product) => product.id));
     const matching = all.filter((row) => offerMatches(row, {
       query,
       campaign: filterCampaign,
@@ -170,16 +173,19 @@ export function OfferPicker({
       from: filterFrom,
       to: filterTo,
       creator: filterCreator,
-      // An offer carries no links, so it has no sub IDs of its own. The sub-ID
-      // filter is a product-grain question and lives on the Attribution table,
-      // where the links are.
-      subId: "",
-    }, campaignsByOffer));
+      // Match sub IDs through the source products, which own the links.
+      subId,
+    }, campaignsByOffer, subIdProducts) && (availability === "all" || (availability === "available" ? row.availability !== "unavailable" : row.availability === "unavailable")) && (membership === "all" || (membership === "attached" ? chosenIds?.has(row.offer_id) : !chosenIds?.has(row.offer_id))) && products.some((p) => p.id === row.product_id
+      && matchesCreativeFilter(p, creative)
+      && (!group || p.creative_drafts?.some((d) => d.id === group))
+      && (listing === "all" || (listing === "with" ? Boolean(p.listing) : !p.listing))));
     return sortRows(matching, sort.direction, (row) => offerValue(row, sort.key));
   }, [
     all, query, sort, filterCampaign, filterFile, filterFrom, filterTo, filterCreator,
-    campaignsByOffer,
+    campaignsByOffer, products, creative, listing, group, subId, membership, chosenIds, availability,
   ]);
+  const grouped = campaignProductGroups(rows, chosenIds ?? new Set([chosen]));
+  const displayed = chosenIds ? grouped.map((entry) => entry.offer) : rows;
 
   function reorder(key: SortKey) {
     setSort((current) => current.key === key
@@ -193,9 +199,10 @@ export function OfferPicker({
     <Dialog
       open={open}
       size="wide"
+      className="global-product-picker-dialog"
       title={title}
       description={description}
-      onClose={onClose}
+      onClose={() => { if (!busy) onClose(); }}
     >
       <div className="product-picker">
         <div className="product-picker-toolbar">
@@ -210,7 +217,7 @@ export function OfferPicker({
             />
           </span>
           <span className="product-picker-count">
-            {(query.trim() || filtered) && rows.length !== all.length
+            {chosenIds ? `${grouped.length} products / ${rows.length} offers` : (query.trim() || filtered) && rows.length !== all.length
               ? `${rows.length} of ${all.length}`
               : t("attribution.productCount", { count: rows.length })}
           </span>
@@ -218,105 +225,26 @@ export function OfferPicker({
               campaign rather than picking one link. Offered once the list is
               narrowed to something somebody meant, because "add every product
               in the catalogue" is nearly always a slip. */}
-          {onChooseAll && rows.length > 1 && (query.trim() || filtered) && (
+          {onChooseAll && !readOnly && rows.some((row) => !chosenIds?.has(row.offer_id)) && (query.trim() || filtered) && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => onChooseAll(rows)}
-            >{chooseAllLabel ?? "Choose all"} {rows.length}</Button>
+              disabled={busy}
+              onClick={() => onChooseAll(rows.filter((row) => !chosenIds?.has(row.offer_id)))}
+            >{chooseAllLabel ?? "Choose all"} {rows.filter((row) => !chosenIds?.has(row.offer_id)).length} offers</Button>
           )}
+          {onRemoveAll && !readOnly && membership === "attached" && rows.length > 0 && <Button variant="quiet" size="sm" disabled={busy} onClick={() => onRemoveAll(rows)}>Remove {rows.length} shown offers</Button>}
         </div>
 
-        {/* Reusing Attribution's own filter classes rather than restyling them
-            here: this is that toolbar, in a dialog, and two sets of rules for
-            one row of controls is how they drift apart. */}
-        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates
-          || creatorNames.length > 0) && (
-          <div className="product-filters">
-            {campaigns.length > 0 && (
-              <Select
-                className="product-filter"
-                value={filterCampaign}
-                aria-label={t("attribution.filterByCampaign")}
-                onChange={(event) => setFilterCampaign(event.target.value)}
-              >
-                <option value="">{t("attribution.allCampaigns")}</option>
-                {campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
-                ))}
-              </Select>
-            )}
-            {fileNames.length > 0 && (
-              <Select
-                className="product-filter"
-                value={filterFile}
-                aria-label={t("attribution.filterByFile")}
-                onChange={(event) => setFilterFile(event.target.value)}
-              >
-                <option value="">{t("attribution.allImports")}</option>
-                {fileNames.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </Select>
-            )}
-            {/* The same control the Attribution table carries, reading the
-                same shared rules - a catalogue this size is filtered by the
-                name on the box as often as by the product's own. */}
-            {creatorNames.length > 0 && (
-              <span className="product-filter-creator">
-                <SearchSelect
-                  value={filterCreator}
-                  options={creatorNames.map(([name, count]) => ({
-                    value: name,
-                    label: name,
-                    description: `${count} ${count === 1 ? "offer" : "offers"}`,
-                  }))}
-                  onChange={setFilterCreator}
-                  placeholder={t("attribution.allCreators")}
-                  searchPlaceholder={t("attribution.searchCreators")}
-                  emptyLabel={t("attribution.noCreatorMatches")}
-                  ariaLabel={t("attribution.filterByCreator")}
-                />
-              </span>
-            )}
-            {hasImportDates && (
-              <span className="product-filter-dates">
-                <input
-                  type="date"
-                  className="product-filter"
-                  value={filterFrom}
-                  max={filterTo || undefined}
-                  aria-label={t("attribution.importedAfter")}
-                  onChange={(event) => setFilterFrom(event.target.value)}
-                />
-                <span aria-hidden="true">–</span>
-                <input
-                  type="date"
-                  className="product-filter"
-                  value={filterTo}
-                  min={filterFrom || undefined}
-                  aria-label={t("attribution.importedBefore")}
-                  onChange={(event) => setFilterTo(event.target.value)}
-                />
-              </span>
-            )}
-            {filtered && (
-              <Button
-                variant="quiet"
-                size="sm"
-                onClick={() => {
-                  setFilterCampaign("");
-                  setFilterFile("");
-                  setFilterFrom("");
-                  setFilterTo("");
-                  setFilterCreator("");
-                }}
-              >{t("attribution.clearFilters")}</Button>
-            )}
-          </div>
-        )}
+        <ProductPickerFilters products={products} campaigns={campaigns}
+          filters={{ query, campaign: filterCampaign, file: filterFile, from: filterFrom, to: filterTo, creator: filterCreator, subId }}
+          onFilters={(f) => { setQuery(f.query); setFilterCampaign(f.campaign); setFilterFile(f.file); setFilterFrom(f.from); setFilterTo(f.to); setFilterCreator(f.creator); setSubId(f.subId); }}
+          creative={creative} onCreative={setCreative} listing={listing} onListing={setListing} group={group} onGroup={setGroup}
+          extra={onRemove && <><Select className="product-filter" aria-label="Campaign product status" value={membership} onChange={(event) => setMembership(event.target.value)}><option value="all">All campaign statuses</option><option value="attached">In this campaign</option><option value="unattached">Not in this campaign</option></Select><Select className="product-filter" aria-label="Offer availability" value={availability} onChange={(event) => setAvailability(event.target.value)}><option value="all">All availability</option><option value="available">Available</option><option value="unavailable">Unavailable</option></Select></>}
+          onReset={() => { setQuery(""); setFilterCampaign(""); setFilterFile(""); setFilterFrom(""); setFilterTo(""); setFilterCreator(""); setSubId(""); setCreative("all"); setListing("all"); setGroup(""); setMembership("all"); setAvailability("all"); }} />
 
-        {rows.length === 0 ? (
+        {error && <p role="alert">{error} {onRetry && <Button variant="quiet" size="sm" onClick={onRetry}>Retry</Button>}</p>}
+        {!error && rows.length === 0 ? (
           <p className="product-picker-empty">
             {loading
               ? "Reading the catalogue…"
@@ -326,7 +254,7 @@ export function OfferPicker({
           </p>
         ) : (
           <div className="product-picker-scroll">
-            <table className="product-table product-picker-table">
+            <table className="product-table product-picker-table campaign-catalogue-picker-table">
               <thead>
                 <tr>
                   {COLUMNS.map((column) => {
@@ -360,21 +288,22 @@ export function OfferPicker({
                       {t("attribution.campaignsColumn")}
                     </th>
                   )}
+                  {onRemove && <th scope="col">Campaign</th>}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {displayed.map((row) => {
                   const picked = row.offer_id === chosen
                     || Boolean(chosenIds?.has(row.offer_id));
+                  const choices = grouped.find((g) => g.offer.product_id === row.product_id)?.choices ?? [row];
                   return (
-                    <tr
-                      key={row.offer_id}
+                    <Fragment key={row.offer_id}><tr
                       // The row is the button. `aria-selected` rather than a
                       // checkbox column: exactly one of these ends up on the
                       // post, and a checkbox implies otherwise.
                       className="product-picker-row"
                       aria-selected={picked}
-                      onClick={() => onChoose(row)}
+                      onClick={() => { if (!busy && !readOnly && !onRemove) onChoose(row); }}
                     >
                       <th scope="row">
                         <span className="product-picker-product">
@@ -388,6 +317,7 @@ export function OfferPicker({
                           <span className="product-picker-named">
                             <span>{row.name}</span>
                             <small>{[row.brand, row.marketplace].filter(Boolean).join(" · ")}</small>
+                            {chosenIds && choices.length > 1 && <Button variant="quiet" size="sm" aria-expanded={expanded === row.product_id} onClick={(event) => { event.stopPropagation(); setExpanded(expanded === row.product_id ? null : row.product_id); }}>{expanded === row.product_id ? "Hide offers" : `${choices.length} affiliate offers`}</Button>}
                           </span>
                           {picked && <Check className="product-picker-tick" size={15} aria-label="Chosen" />}
                         </span>
@@ -421,7 +351,19 @@ export function OfferPicker({
                           })()}
                         </td>
                       )}
+                      {onRemove && <td onClick={(event) => event.stopPropagation()}>{picked ? <span className="campaign-picker-offer-choice"><span>In campaign</span>{!readOnly && <Button variant="quiet" size="sm" disabled={busy} onClick={() => onRemove(row)}>Remove</Button>}</span> : readOnly ? "Not added" : <Button variant="secondary" size="sm" disabled={busy} onClick={() => onChoose(row)}>Add</Button>}</td>}
                     </tr>
+                    {chosenIds && expanded === row.product_id && <tr className="product-detail-row"><td colSpan={6 + (campaigns.length ? 1 : 0) + (onRemove ? 1 : 0)}>
+                      <div className="campaign-picker-offer-options"><strong>Affiliate offers for {row.name}</strong>
+                        {choices.map((offer, index) => <div key={offer.offer_id} className="campaign-picker-offer-choice">
+                          <span>Link {index + 1} - {offer.network} - {commissionRate(offer) || "Rate unavailable"}{offer.commission_flat_cents === null ? "" : ` - ${money(offer.commission_flat_cents, offer.currency)} commission`}</span>
+                          <a href={offer.affiliate_url} target="_blank" rel="noreferrer">View affiliate link</a>
+                          <span>{chosenIds.has(offer.offer_id) ? "In campaign" : "Not added"}</span>
+                          {!readOnly && <Button variant="quiet" size="sm" disabled={busy || (!onRemove && chosenIds.has(offer.offer_id))} onClick={() => chosenIds.has(offer.offer_id) ? onRemove?.(offer) : onChoose(offer)}>{chosenIds.has(offer.offer_id) ? onRemove ? "Remove" : "Added" : "Add"}</Button>}
+                        </div>)}
+                      </div>
+                    </td></tr>}
+                    </Fragment>
                   );
                 })}
               </tbody>

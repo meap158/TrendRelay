@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Lightbox, useLightboxSet } from "../ui/lightbox";
 
 import { money } from "./format";
 import type { ProductRow } from "./types";
@@ -57,6 +58,8 @@ export function ListingPanel({
   listing: FullListing;
 }) {
   const images = listing.images ?? [];
+  const gallery = [...new Set([...images, ...(listing.tier_variations ?? []).flatMap((tier) => tier.images ?? [])].filter(Boolean))];
+  const { openAt, open, close, previous, next } = useLightboxSet(gallery.length);
   const [heroIndex, setHeroIndex] = useState(0);
   const [fullDescription, setFullDescription] = useState(false);
   // Clamped at render rather than corrected by an effect: a re-fetch can
@@ -76,20 +79,27 @@ export function ListingPanel({
 
   return (
     <div className="listing-pdp">
+      {openAt !== null && <Lightbox open src={gallery[openAt]}
+        alt={`${listing.title ?? product.name} · Picture ${openAt + 1} of ${gallery.length}`}
+        onClose={close} onPrevious={previous} onNext={next} />}
       {images.length > 0 && (
         <div className="listing-gallery">
-          {/* eslint-disable-next-line @next/next/no-img-element -- Shopee CDN */}
-          <img className="listing-hero" src={images[hero]} alt={listing.title ?? product.name} loading="lazy" />
+          <button type="button" className="listing-hero-button" aria-label={`View ${listing.title ?? product.name} picture ${hero + 1}`}
+            onClick={() => open(gallery.indexOf(images[hero]))}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Shopee CDN */}
+            <img className="listing-hero" src={images[hero]} alt={listing.title ?? product.name} loading="lazy" />
+          </button>
           {images.length > 1 && (
             <div className="listing-thumbs" role="group" aria-label="Pictures">
               {images.map((url, index) => (
                 <button
-                  key={url}
+                  key={`${url}-${index}`}
                   type="button"
                   className={index === hero ? "selected" : ""}
-                  aria-label={`Picture ${index + 1}`}
+                  aria-label={`View picture ${index + 1}`}
                   onMouseEnter={() => setHeroIndex(index)}
-                  onClick={() => setHeroIndex(index)}
+                  onFocus={() => setHeroIndex(index)}
+                  onClick={() => { setHeroIndex(index); open(gallery.indexOf(url)); }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- Shopee CDN */}
                   <img src={url} alt="" loading="lazy" />
@@ -118,8 +128,11 @@ export function ListingPanel({
               {tier.options.map((option, index) => (
                 <span key={option}>
                   {tier.images?.[index] && (
-                    /* eslint-disable-next-line @next/next/no-img-element -- Shopee CDN */
-                    <img src={tier.images[index]} alt="" loading="lazy" />
+                    <button type="button" className="listing-variation-picture" aria-label={`View ${tier.name}: ${option}`}
+                      onClick={() => open(gallery.indexOf(tier.images![index]))}>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Shopee CDN */}
+                      <img src={tier.images[index]} alt="" loading="lazy" />
+                    </button>
                   )}
                   {option}
                 </span>
