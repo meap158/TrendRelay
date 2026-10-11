@@ -229,6 +229,25 @@ def npm_command() -> str:
     return "npm.cmd" if IS_WINDOWS else "npm"
 
 
+#: Preloaded into the dev server: Next evaluates each page's client-reference
+#: manifest in a new V8 context on every request in dev, and those contexts are
+#: never collected - the dev server reached 6,657 of them and 20 GB. The preload
+#: reuses a manifest while its text is unchanged. See the file itself.
+DEV_SERVER_PRELOAD = ROOT / "apps" / "web" / "dev" / "manifest-cache.cjs"
+
+
+def dev_server_node_options() -> str:
+    """NODE_OPTIONS for `next dev`: the operator's own, plus the preload.
+
+    NODE_OPTIONS rather than a flag because `next dev` starts the real server
+    as a child process and passes it NODE_OPTIONS, not its own arguments. The
+    path is quoted because the checkout lives under a directory with a space.
+    """
+    existing = os.environ.get("NODE_OPTIONS", "").strip()
+    preload = f'--require "{DEV_SERVER_PRELOAD}"'
+    return f"{existing} {preload}".strip() if preload not in existing else existing
+
+
 #: Directories the freshness check below must not walk into. `node_modules` is
 #: tens of thousands of files that never decide whether a build is stale, and
 #: the build outputs are what is being compared against.
@@ -633,7 +652,10 @@ def build_services(
             ],
             "green",
             f"http://127.0.0.1:{frontend_port}/",
-            {"NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{backend_port}"},
+            {
+                "NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{backend_port}",
+                **({} if production else {"NODE_OPTIONS": dev_server_node_options()}),
+            },
             restart_on_exit=True,
             port=frontend_port,
             # A production server answers as soon as it binds - there is no
