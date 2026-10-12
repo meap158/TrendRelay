@@ -606,15 +606,80 @@
   outline: 2px solid var(--link);
   outline-offset: 1px;
 }
+/* Prompt, title, description, and pictures are separate cells. One
+   running column made the next field look like more of the same text.
+   These rules include .campaign-dialog-form so they beat the shared
+   .generate-use label and paragraph styles further down. */
+.generate-dialog .campaign-dialog-form .generate-send[open] > summary {
+  margin-block-end: 10px;
+  border-block-end: 1px solid var(--line);
+}
 .generate-send-body {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   padding: 0 10px 12px;
+}
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-prompt,
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-use,
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-send-product,
+.generate-dialog .campaign-dialog-form .generate-send-body > p {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  min-inline-size: 0;
+}
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-prompt,
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-use {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-use > strong,
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-prompt > strong,
+.generate-dialog .campaign-dialog-form .generate-send-product .generate-use > strong {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.generate-dialog .campaign-dialog-form .generate-send-body .generate-field-value {
+  color: var(--text);
+}
+/* The long listing text scrolls inside its own cell, so the scrollbar
+   belongs to Description and not to the dialog. */
+.generate-dialog .campaign-dialog-form .generate-send-body .generate-field-scroll {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+/* The picture count sits on the heading row. The thumbnails are a fixed
+   grid under it, the full width of the cell. */
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-use:has(.generate-gallery) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-use:has(.generate-gallery) > .generate-gallery {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 64px);
+  gap: 6px;
+}
+.generate-dialog .campaign-dialog-form .generate-send-body > .generate-use:has(.generate-gallery) > small {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  white-space: nowrap;
 }
 .generate-send-product {
   display: grid;
   gap: 8px;
   margin: 0;
+}
+.generate-dialog .generate-send-product > .generate-use + .generate-use {
+  margin-block-start: 2px;
   padding-block-start: 8px;
   border-block-start: 1px solid var(--line);
 }
@@ -633,10 +698,79 @@
   font-weight: 400;
   line-height: 1.45;
 }
-/* Recipes are chosen by picture: each card previews the finished file, and
-   the note under them says what the green in every preview stands for. */
-.generate-dialog .campaign-dialog-form .generate-recipes { display: grid; gap: 6px; min-inline-size: 0; }
+/* The body scrollbar comes and goes with one line of content. Reserving
+   its gutter keeps the two columns from changing width when a recipe
+   switch redraws the form. */
+.generate-dialog .ui-dialog-body { scrollbar-gutter: stable; }
+
+/* Type and the form stay on the start side. Recipes occupy the end
+   column from the top, in the width the wide dialog adds, and they scroll
+   on their own so a long video list does not push the prompt down. The cap
+   is the dialog's own height minus its head, foot, and padding, so the rail
+   is never taller than the part of the panel that can show it. On a narrow
+   panel Type stays first, then a short row of the same compact cards. */
+.generate-dialog .generate-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-areas:
+    "kind recipes"
+    "main recipes";
+  gap: 16px 20px;
+  align-items: start;
+  min-inline-size: 0;
+}
+.generate-dialog .generate-kind { grid-area: kind; min-inline-size: 0; }
+.generate-dialog .generate-main { grid-area: main; display: grid; gap: 12px; min-inline-size: 0; align-content: start; }
+.generate-dialog .campaign-dialog-form .generate-recipes {
+  position: sticky;
+  inset-block-start: 0;
+  align-self: start;
+  grid-area: recipes;
+  display: grid;
+  gap: 6px;
+  min-inline-size: 0;
+  max-block-size: calc(min(88vh, 920px) - 200px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--panel-raised);
+}
 .generate-dialog .campaign-dialog-form .generate-recipes > small { color: var(--muted); font-size: 11px; }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-options { grid-template-columns: 1fr; }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option {
+  grid-template-columns: 96px auto minmax(0, 1fr);
+  align-items: center;
+}
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option input { margin-block-start: 0; }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-media {
+  grid-column: 1;
+  grid-row: 1;
+  aspect-ratio: 3 / 2;
+}
+/* The wide panel is min(1120px, 100vw - 48px). Below this the end column
+   would leave the form under about 320px, so Kind, the recipes, and the
+   form stack. The compact cards wrap once the panel fits a 240px card. */
+@media (max-width: 860px) {
+  .generate-dialog .generate-columns {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "kind"
+      "recipes"
+      "main";
+  }
+  .generate-dialog .campaign-dialog-form .generate-recipes {
+    position: static;
+    max-block-size: 280px;
+  }
+  /* One compact card per row on a phone; several per row once the panel
+     is wide enough for a 240px card. */
+  .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-options {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
 
 /* What this ask attaches, named, so a long listing is not mistaken for the
    subject. Selected listing values follow the prompt, so they do not push it
@@ -684,7 +818,14 @@
 .generate-subject-list .picker-thumb { flex: 0 0 auto; width: 76px; height: 44px; }
 .generate-subject-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .generate-subject-actions small { color: var(--muted); font-size: 11px; font-weight: 400; }
-.generate-dialog .campaign-dialog-form .generate-omitted { display: grid; gap: 6px; }
+.generate-dialog .campaign-dialog-form .generate-omitted,
+.generate-dialog .generate-listing-pictures {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
 .generate-omitted ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .generate-omitted li { margin: 0; padding: 0; }
 .generate-omitted button {
@@ -724,14 +865,16 @@
 }
 .generate-scope .product-listing-filter { align-self: start; }
 .generate-scope .product-listing-filter button:disabled { cursor: not-allowed; opacity: .5; }
+/* The pictures stay in the flow. A scrollport on this list painted a
+   scrollbar for two pixels of rounding, beside a row that already fit.
+   The dialog body is the scrollport, and the footer stays put. */
 .generate-member-list {
   display: grid;
   gap: 12px;
-  max-block-size: min(420px, 60vh);
   margin: 0;
   padding: 0;
-  overflow: auto;
   list-style: none;
+  min-inline-size: 0;
 }
 .generate-member-list li { display: grid; gap: 6px; min-width: 0; }
 .generate-member-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
@@ -1133,3 +1276,45 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 .pending-draft-products > li.pending-draft-more { color: var(--muted); font-size: 11px; }
 .pending-draft-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pending-draft-actions .product-draft-discard { margin-inline-start: auto; }
+
+/* Recipe cards in the Generate rail: picture, then the words aligned to the
+   picture's top edge, with the radio pinned to the card's corner. The radio
+   sat in its own column between the two, so the title started a radio's
+   width in from every other line and the text column lost that width. It
+   stays a real radio - focus, arrow keys and screen readers are unchanged -
+   it only moves; the whole card is still the label. */
+.generate-dialog .generate-columns { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option {
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 8px;
+  padding-inline-end: 30px;
+}
+/* `inline-size` and `padding` undo the dialog form's full-width text-input
+   rule, which also matches a radio once it leaves its own grid cell. */
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option input {
+  position: absolute;
+  inset-block-start: 9px;
+  inset-inline-end: 9px;
+  inline-size: auto;
+  margin: 0;
+  padding: 0;
+}
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option > span:not(.ui-choice-media) {
+  grid-column: 2;
+  grid-row: 1;
+  gap: 3px;
+  padding-block-start: 2px;
+}
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option strong { font-size: 13px; line-height: 1.25; }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option small { font-size: 11px; line-height: 1.4; }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option:not([data-disabled]):hover { border-color: var(--green); }
+.generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option[data-selected] { background: color-mix(in srgb, var(--green) 6%, var(--panel)); }
+/* Stacked under the form on a narrow panel the cards wrap; each keeps room
+   for a sentence beside its 112px picture rather than a word a line. */
+@media (max-width: 860px) {
+  .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-options {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}

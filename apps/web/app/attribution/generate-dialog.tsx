@@ -320,14 +320,23 @@ export function GenerateDialog({
   const characterSent = characterOn && recipeTakesCharacter(recipe) ? characterId : "";
   const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${cardCount}|${backgroundReady}|${together ? "together" : "each"}|${characterSent}`;
 
-  // A different ask clears the prompt and members previewed for the last one.
-  // Adjusted while rendering rather than in an effect, so the stale prompt is
-  // never painted and no second render follows.
+  // The prompt belongs to this ask. A recipe, kind, or background change
+  // clears it while rendering, so the stale wording is never painted and
+  // Queue cannot file it. The listing pictures belong to the products, not
+  // the recipe. Clearing them here blanked that row for the whole preview
+  // round trip, and the column jumped as the row left and came back. They
+  // drop only when the products in the shot change.
+  const roster = `${together ? "together" : "each"}|${products.map((item) => item.id).join(",")}`;
   const [previewedShape, setPreviewedShape] = useState(shape);
+  const [previewedRoster, setPreviewedRoster] = useState(roster);
+  if (!draft && previewedRoster !== roster) {
+    setPreviewedRoster(roster);
+    setPrompt("");
+    setMembers([]);
+  }
   if (!draft && previewedShape !== shape) {
     setPreviewedShape(shape);
     setPrompt("");
-    setMembers([]);
   }
 
   function imageOn(productId: string, url: string) {
@@ -637,9 +646,11 @@ export function GenerateDialog({
     : [];
   const togetherUncovered = uncoveredNames.length > 0;
   // Why Queue is off, said beside it. The picture list that would explain it
-  // is hidden while Listing pictures is off.
+  // is hidden while Listing pictures is off. An empty prompt is not a reason
+  // to take the line away: the prompt clears while the next recipe is read,
+  // and removing the line here shifted the listing for that round trip.
   const characterUnchosen = characterOn && recipeTakesCharacter(recipe) && !characterId;
-  const queueBlocker = draft || reviewing || !prompt
+  const queueBlocker = draft || reviewing
     ? ""
     : queueNeedsLibrary && subjects.length === 0
       ? t("attribution.generate.blockedPick")
@@ -962,6 +973,7 @@ export function GenerateDialog({
     <>
     <Dialog
       className="generate-dialog"
+      size="wide"
       open={open && products.length > 0}
       title={reviewing
         ? reviewGroup
@@ -1095,7 +1107,8 @@ export function GenerateDialog({
             {t("attribution.generate.duplicateSingles", { count: singlesPending, total: products.length })}
           </p>
         )}
-        <label>
+        <div className="generate-columns">
+        <label className="generate-kind">
           {t("attribution.generate.kind")}
           <Select
             aria-label={t("attribution.generate.kind")}
@@ -1108,26 +1121,7 @@ export function GenerateDialog({
             <option value="video">{t("attribution.generate.kindVideo")}</option>
           </Select>
         </label>
-        <div className="generate-recipes">
-          <ChoiceGroup
-            name="generate-recipe"
-            legend={t("attribution.generate.recipe")}
-            layout="cards"
-            value={recipe}
-            disabled={locked}
-            options={(locked ? [recipe] : RECIPES_BY_KIND[kind]).map((option) => ({
-              value: option,
-              label: creativeRecipe(t, option),
-              description: t(RECIPE_HELP[option]),
-              media: <RecipePreview recipe={option} />,
-            }))}
-            onChange={(next) => {
-              setRecipe(next);
-              setError("");
-            }}
-          />
-          <small>{t("attribution.generate.recipePreviewKey")}</small>
-        </div>
+        <div className="generate-main">
         {mirror && (
           <label>
             {t("attribution.generate.variant")}
@@ -1398,7 +1392,7 @@ export function GenerateDialog({
           <summary>{t("attribution.generate.sendPreview")}</summary>
           <div className="generate-send-body">
             <label className="generate-prompt">
-              {t("attribution.generate.prompt")}
+              <strong>{t("attribution.generate.prompt")}</strong>
               <textarea readOnly rows={8} value={prompt} />
               <small>{reviewing || draft
                 ? t("attribution.generate.promptStored")
@@ -1503,6 +1497,28 @@ export function GenerateDialog({
         {notice && <p role="status">{notice}</p>}
         {error && !reviewing && <p role="alert">{error}</p>}
         {error && reviewing && draft && <p role="alert">{error}</p>}
+        </div>
+        <div className="generate-recipes">
+          <ChoiceGroup
+            name="generate-recipe"
+            legend={t("attribution.generate.recipe")}
+            layout="cards"
+            value={recipe}
+            disabled={locked}
+            options={(locked ? [recipe] : RECIPES_BY_KIND[kind]).map((option) => ({
+              value: option,
+              label: creativeRecipe(t, option),
+              description: t(RECIPE_HELP[option]),
+              media: <RecipePreview recipe={option} />,
+            }))}
+            onChange={(next) => {
+              setRecipe(next);
+              setError("");
+            }}
+          />
+          <small>{t("attribution.generate.recipePreviewKey")}</small>
+        </div>
+        </div>
         </>
         )}
       </div>
