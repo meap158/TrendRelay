@@ -20,6 +20,28 @@ campaign post waits for media. The same ready providers also appear on a
 Library image, in the editing row. That path files a new video and does not
 write a product link.
 
+The provider sends one Library image, the first of `subject_assets`, as a
+reference and not as a locked first frame. A draft confirmed without that
+image cannot be given one later, and the provider refuses it. Queue a clean
+photograph of the garment when the clip will be generated in the app. A
+listing card with a text panel, a logo, or an inset photo is a poor subject:
+the model copies the lettering. The clip is 10 seconds and vertical, including
+when the recipe describes a longer sequence. One generation at a time. A
+moderated frame stops that recipe; the prompt is not rewritten to get past
+the filter. On this account a clip is stored only when the request includes
+a presigned upload address in the Publish bucket. The provider does that.
+The Grok video tools do it after their ZDR bucket config is loaded.
+`scripts/fill_creative_videos.py` is how a video draft is generated and
+filed: section 5 of `SOP/attribution/fill-product-creatives.md` names the
+commands. Worn sleepwear in the fan and model prompts stays opaque, with
+no nipples through the fabric and no camel toe, and the model is described as
+a real person on camera. The recipe ids stay `hikaru_lookbook` and
+`hikaru_walk`. The wording calls her the model. The dialog shows these as
+Model lookbook and Model walk. A ceiling-fan pass is a new product. With one
+product the blade does not cross until late in the clip, and the outfit
+does not change again.
+`docs/third-party/video-generation.md` has the run notes.
+
 ## Shape
 
 - **`product_creative_recipes.py`** — the only prompt resolver. `bed_flat_lay`
@@ -35,7 +57,10 @@ write a product link.
   `held_up_garment` (video), `hikaru_lookbook` (image or carousel), and
   `ceiling_fan_transition` (video). `hikaru_lookbook` is the one recipe with a
   recurring person: `HIKARU_PROFILE` in `CHARACTERS` is her character sheet,
-  carried word for word in every Hikaru prompt so the same face comes back.
+  carried word for word in every model prompt so the same face comes back.
+  The wording calls her the model. The profile asks for a real person on
+  camera, and every model wording plus the fan closes with an opaque garment:
+  no nipples through the fabric, and no camel toe.
   Editing it changes later drafts, never one already stored. Migration
   `20261011_0094` widens the recipe check. The dialog's `RECIPES_BY_KIND`
   mirrors `RECIPES` and must change with it. The sleepwear brand and the

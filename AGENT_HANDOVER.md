@@ -3120,3 +3120,12 @@ Verify F2's licence before vendoring.
 - Verification: web TypeScript, ESLint, and `git diff --check` pass. Live
   desktop measurement kept the sticky sidebar at 174px through campaign
   switches; before the fix it moved to 164.5px and back.
+
+
+## Attribution batch media generation (2026-10-12)
+
+The five-product image-generation batch is documented at S:\Vibe Coding\TrendRelay\output\imagegen\attribution-2026-10-12\ (workspace-relative: output/imagegen/attribution-2026-10-12/). Start with prompts-and-coverage.md for art direction, final-generation-prompts.md for adapted prompts, generation-plan.json for the 15 planned templates, and assets-index.json for file-to-draft-to-asset receipts. Exact products and reference photos are in batch-products.json and the product_*-hero.jpg/product_*-reference.jpg files.
+
+All 15 planned drafts and all 26 image files are complete. Each current draft was checked against the live Attribution API and is succeeded with owed=0 and linked=true. Three Vietnamese adult character defaults (Mai, Thảo, An) have Library portraits and consistency sheets; see character-imports.json plus the mai-, thao-, and an-character-sheet.png and portrait files. Every carousel image is a separate file.
+
+Quality notes: the standalone Cozy model-lookbook contact sheet was unlinked from its product and replaced by a single-frame lookbook image; the original remains in Library. The provider refused direct model-worn attempts for Navy Suit and Bowie Set. Navy uses an accepted full-length Thảo image from the sleepwear carousel; Bowie and Belle use garment-faithful mannequin catalog stills. These adaptations and the Cozy character-frame in its paired carousel are recorded in prompts-and-coverage.md. No image work remains queued.

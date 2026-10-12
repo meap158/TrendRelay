@@ -134,6 +134,72 @@ Lessons from the runs:
 - The CLI sometimes writes into a folder named after the target. The script
   accepts that.
 
+## BELLE SET video recipes (2026-10-12)
+
+Two Attribution products match BELLE SET. This run used the navy short set
+`product_304ade4fb18743ba937a72cc2e11183b` (Shopee 1705171269.57715273517).
+The long-sleeve listing is `product_231f142e6a114820b1399ede979e4200` and was
+left alone.
+
+The six newer video recipes are queued, background off, with Library subject
+`asset_3887e4cbe8f448318b780385f476318f` (the clean front photograph, not the
+graphic cover card):
+
+| Recipe | Draft |
+| --- | --- |
+| `mannequin_walkaround` | `pcreative_61a2cf6d7ccc4cad8eba1305112a1921` |
+| `flat_lay_reveal` | `pcreative_6e917a2b112f4996a1e23ef825659ee2` |
+| `held_up_garment` | `pcreative_09223ece680845eba2a689ef0eab7bc5` |
+| `ceiling_fan_transition` | `pcreative_e302834b3ca74726ad297642289242a9` |
+| `hanger_rail_reveal` | `pcreative_09431046fe4a4a7380da55faa50d381c` |
+| `hikaru_walk` | `pcreative_e542e445a3734a24bef4989641de8c84` |
+
+An earlier set of the same six, queued with no Library subject, was discarded.
+The provider cannot be pointed at those. Nothing was published.
+
+All six clips are in the Library. Each draft reads succeeded, owed 0, linked.
+
+| Recipe | Draft | Library asset |
+| --- | --- | --- |
+| `mannequin_walkaround` | `pcreative_61a2cf6d7ccc4cad8eba1305112a1921` | `asset_2cdb4dcd0b3641af9aece9977067cbf3` |
+| `flat_lay_reveal` | `pcreative_6e917a2b112f4996a1e23ef825659ee2` | `asset_70c468b8e69d4dba8625c96ada5de03e` |
+| `held_up_garment` | `pcreative_09223ece680845eba2a689ef0eab7bc5` | `asset_325d797d68bb43d2a77a730d6f7d9a35` |
+| `ceiling_fan_transition` | `pcreative_e302834b3ca74726ad297642289242a9` | `asset_de6a4ca9b59945b0aceeb3ca6c0aafba` |
+| `hanger_rail_reveal` | `pcreative_09431046fe4a4a7380da55faa50d381c` | `asset_de587253f65f4fad8944b9f05cc08846` |
+| `hikaru_walk` | `pcreative_e542e445a3734a24bef4989641de8c84` | `asset_a5c183bbe1f445cfbfa285931618ab2f` |
+
+ZDR does not block the clip when the request carries `output.upload_url`, a
+presigned PUT into the Publish R2 bucket, under `product-clips/`. That is the
+call `generate_xai` already makes. The Grok video tools stay blocked until
+`~/.grok/managed_config.toml` points at that bucket and Grok Build is
+restarted; writing the file mid-session did not change the tools already
+running. Tools still has no saved xAI key and the switch is off, so the
+in-app Generate button stays hidden. One request at a time. Nothing was
+published.
+
+The standing procedure is the commands in
+`SOP/attribution/fill-product-creatives.md` section 5, run as
+`python scripts/fill_creative_videos.py`. The provider note is
+`docs/third-party/video-generation.md`.
+
+The ceiling-fan and Hikaru prompts were revised after the first six clips.
+A fan pass is a new product; with one product the blade waits until late in
+the clip, passes once, and the pose stays put. Hikaru is a real person on
+camera, with ordinary phone-camera detail, and the garment is thick, matte,
+and opaque in every frame: no nipples through the fabric, and no camel toe.
+The dialog now shows Model lookbook and Model walk. A prompt queued after
+that calls her the model. The recipe ids are unchanged, and a draft already
+stored still has the wording it was queued with.
+The other four recipes were left alone. The clips to review are the second
+pair filed by the fill command. An earlier replacement of the same two
+recipes is also in the Library (`asset_bdb6db632f144e24b3ebb36d24cc4a26`,
+`asset_70bde40343b941feb4c8a1a5f546fa1e`), as are the originals.
+
+| Recipe | Draft | Library asset |
+| --- | --- | --- |
+| `ceiling_fan_transition` | `pcreative_deac32272d294c7ab0211ba72695c625` | `asset_f99eb799d8bc452d816c2607eb472858` |
+| `hikaru_walk` | `pcreative_ab178f80a8cc4d1eb5a275aff065e8cd` | `asset_195f7bbba14f4ab587268385fd8a4dc1` |
+
 ## Generate media review and hardening (2026-10-04)
 
 An adversarial review of Generate media landed as atomic commits after
@@ -245,8 +311,9 @@ still filled from outside. A video draft can be filled by a provider that
 Tools reports ready (Video generation: a key, a switch, and a check that does
 not spend a clip). With nobody ready, the file still comes from outside. The
 same ready providers also appear on a Library image, in the editing row, and
-file a new video without a product link. That video-provider path is
-uncommitted in this checkout. Leave it in place.
+file a new video without a product link. The provider is
+`integrations/video_generation.py`. It stays off the draft until Tools has
+the key, the switch, and a check that passed.
 
 Filed, and not to be regenerated: gym-gloves draft
 `pcreative_1215e31071154383a68dde1d9ad06393`, Library asset
