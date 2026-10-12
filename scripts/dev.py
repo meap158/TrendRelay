@@ -233,7 +233,7 @@ def npm_command() -> str:
 #: manifest in a new V8 context on every request in dev, and those contexts are
 #: never collected - the dev server reached 6,657 of them and 20 GB. The preload
 #: reuses a manifest while its text is unchanged. See the file itself.
-DEV_SERVER_PRELOAD = ROOT / "apps" / "web" / "dev" / "manifest-cache.cjs"
+DEV_SERVER_PRELOAD = (ROOT / "apps" / "web" / "dev" / "manifest-cache.cjs").as_posix()
 
 
 def dev_server_node_options() -> str:
@@ -242,6 +242,8 @@ def dev_server_node_options() -> str:
     NODE_OPTIONS rather than a flag because `next dev` starts the real server
     as a child process and passes it NODE_OPTIONS, not its own arguments. The
     path is quoted because the checkout lives under a directory with a space.
+    Forward slashes are used so Node's CLI option parser on Windows does not
+    treat backslashes as escape characters.
     """
     existing = os.environ.get("NODE_OPTIONS", "").strip()
     preload = f'--require "{DEV_SERVER_PRELOAD}"'

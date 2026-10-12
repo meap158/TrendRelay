@@ -93,3 +93,14 @@ def test_the_supervisor_starts_the_mcp_server_itself() -> None:
         and node.func.attr == "start_server"
     )
     assert any(keyword.arg == "parent_pid" for keyword in start.keywords)
+
+
+def test_dev_server_node_options_uses_forward_slashes_in_preload_path(dev_module) -> None:
+    """Windows backslashes in NODE_OPTIONS --require are stripped as escapes by Node.js.
+
+    Ensures the path uses forward slashes so Node.js can resolve the manifest-cache preload.
+    """
+    options = dev_module.dev_server_node_options()
+    assert "--require" in options
+    assert "manifest-cache.cjs" in options
+    assert "\\" not in options
