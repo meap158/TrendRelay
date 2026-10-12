@@ -446,17 +446,28 @@ HELD_UP_ON = _HELD_UP_SCENE_ON + _HELD_UP_SINGLE
 HELD_UP_OFF_TOGETHER = _HELD_UP_SCENE_OFF + _HELD_UP_TOGETHER
 HELD_UP_ON_TOGETHER = _HELD_UP_SCENE_ON + _HELD_UP_TOGETHER
 
-#: Hikaru, the recurring virtual model. Every Hikaru prompt carries this
+#: The recurring virtual model. Every one of her prompts carries this
 #: profile word for word, so the same face, hair, and build come back in
 #: every card and every draft. Change it here and every later draft follows.
+#: She is "the model" in the wording. The recipe ids stay hikaru_*.
 HIKARU_PROFILE = (
-    "Hikaru is a Japanese woman in her mid-twenties. She has long, straight, "
+    "The model is a Japanese woman in her mid-twenties. She has long, straight, "
     "glossy dark-brown hair past her chest, with soft wispy bangs swept to "
     "one side; fair, clear skin with a natural flush; gentle almond-shaped "
     "dark-brown eyes; soft natural makeup with light pink lips; a warm, wide "
     "smile that shows her teeth; and a slim build. Her signature gestures "
     "are tucking her hair behind one ear, resting a hand lightly at her "
-    "collar, and glancing back over her shoulder."
+    "collar, and glancing back over her shoulder. She looks like a real "
+    "person on camera, with natural skin texture, pores, slight facial "
+    "asymmetry, and ordinary phone-camera detail, not a doll, a plastic "
+    "render, or a beauty filter."
+)
+#: Worn sleepwear stays covered. Thin fabric was rendering nipples and a
+#: camel toe; the sentence is part of every model wording and the fan.
+_COVERED = (
+    " The garment is thick, matte, and fully opaque in every frame, "
+    "including the full-length view. No nipples are visible through the "
+    "fabric, and the fit shows no camel toe."
 )
 CHARACTERS: dict[str, str] = {"hikaru": HIKARU_PROFILE}
 
@@ -479,16 +490,16 @@ _HIKARU_CAMERA = (
     "same in every card. "
 )
 HIKARU_OFF = (
-    "A photorealistic photograph of Hikaru. " + HIKARU_PROFILE + " She wears "
+    "A photorealistic photograph of the model. " + HIKARU_PROFILE + " She wears "
     "the exact clothing from the attached product image. " + _HIKARU_SCENE_OFF
-    + _HIKARU_CAMERA + _KEEP
+    + _HIKARU_CAMERA.rstrip() + _COVERED + " " + _KEEP
 )
 HIKARU_ON = (
-    "A photorealistic photograph of Hikaru. " + HIKARU_PROFILE + " She wears "
+    "A photorealistic photograph of the model. " + HIKARU_PROFILE + " She wears "
     "the exact clothing from the attached product image. " + _HIKARU_SCENE_ON
-    + _HIKARU_CAMERA + _KEEP
+    + _HIKARU_CAMERA.rstrip() + _COVERED + " " + _KEEP
 )
-#: Hikaru is one person, so a group shot is one product per card, not one
+#: The model is one person, so a group shot is one product per card, not one
 #: outfit made of every product.
 _HIKARU_EACH = (
     " The set features every attached product: each card shows her wearing one "
@@ -496,15 +507,15 @@ _HIKARU_EACH = (
     "attached products at once. " + _KEEP_EACH + " "
 )
 HIKARU_OFF_TOGETHER = (
-    "A photorealistic photograph set of Hikaru. " + HIKARU_PROFILE
-    + _HIKARU_EACH + _HIKARU_SCENE_OFF + _HIKARU_CAMERA.rstrip()
+    "A photorealistic photograph set of the model. " + HIKARU_PROFILE
+    + _HIKARU_EACH + _HIKARU_SCENE_OFF + _HIKARU_CAMERA.rstrip() + _COVERED
 )
 HIKARU_ON_TOGETHER = (
-    "A photorealistic photograph set of Hikaru. " + HIKARU_PROFILE
-    + _HIKARU_EACH + _HIKARU_SCENE_ON + _HIKARU_CAMERA.rstrip()
+    "A photorealistic photograph set of the model. " + HIKARU_PROFILE
+    + _HIKARU_EACH + _HIKARU_SCENE_ON + _HIKARU_CAMERA.rstrip() + _COVERED
 )
 
-#: Hikaru on video: the walk toward a camera that backs away, then the stop
+#: The model on video: the walk toward a camera that backs away, then the stop
 #: and the smile. The profile rides along word for word, as in the photos.
 _HIKARU_WALK_SCENE_OFF = (
     "She walks along a Tokyo street at night, past glowing shop signs and "
@@ -522,14 +533,14 @@ _HIKARU_WALK_MOTION = (
     "9:16 frame. Her face, hair, and build stay the same throughout. "
 )
 HIKARU_WALK_OFF = (
-    "A vertical video of Hikaru. " + HIKARU_PROFILE + " She wears the exact "
+    "A vertical video of the model. " + HIKARU_PROFILE + " She wears the exact "
     "clothing from the attached product image. " + _HIKARU_WALK_SCENE_OFF
-    + _HIKARU_WALK_MOTION + _KEEP
+    + _HIKARU_WALK_MOTION.rstrip() + _COVERED + " " + _KEEP
 )
 HIKARU_WALK_ON = (
-    "A vertical video of Hikaru. " + HIKARU_PROFILE + " She wears the exact "
+    "A vertical video of the model. " + HIKARU_PROFILE + " She wears the exact "
     "clothing from the attached product image. " + _HIKARU_WALK_SCENE_ON
-    + _HIKARU_WALK_MOTION + _KEEP
+    + _HIKARU_WALK_MOTION.rstrip() + _COVERED + " " + _KEEP
 )
 #: One person cannot wear every product at once: each one is its own walk,
 #: cut together in order.
@@ -539,17 +550,18 @@ _HIKARU_WALK_EACH = (
     "product images, never two attached products at once. " + _KEEP_EACH + " "
 )
 HIKARU_WALK_OFF_TOGETHER = (
-    "A vertical video of Hikaru. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
-    + _HIKARU_WALK_SCENE_OFF + _HIKARU_WALK_MOTION.rstrip()
+    "A vertical video of the model. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
+    + _HIKARU_WALK_SCENE_OFF + _HIKARU_WALK_MOTION.rstrip() + _COVERED
 )
 HIKARU_WALK_ON_TOGETHER = (
-    "A vertical video of Hikaru. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
-    + _HIKARU_WALK_SCENE_ON + _HIKARU_WALK_MOTION.rstrip()
+    "A vertical video of the model. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
+    + _HIKARU_WALK_SCENE_ON + _HIKARU_WALK_MOTION.rstrip() + _COVERED
 )
 
-#: An overhead outfit change. The camera looks straight down past a turning
-#: ceiling fan; each blade that crosses the lens hides a cut, and the outfit
-#: underneath has changed when it clears. The pose barely moves.
+#: An overhead outfit change. Each blade pass is a new product. With one
+#: product the fan turns and no blade crosses until late in the clip, and
+#: that single pass is the only change. A pass never changes only the pose.
+#: The camera looks straight down; the blade hides the cut.
 _FAN_SCENE_OFF = (
     "A vertical video shot from directly overhead, as if from a camera fixed "
     "to the ceiling beside a slowly turning ceiling fan. A young woman lies "
@@ -569,21 +581,25 @@ _FAN_POSE = (
     "shoulders, looking up into the camera."
 )
 _FAN_SINGLE = (
-    " At first she wears a plain cream knit lounge set. A dark wooden fan "
-    "blade sweeps across the frame and briefly covers it; as the blade "
-    "clears, she is wearing the exact clothing from the attached product "
-    "image, in the same pose. Two more blade passes follow, and after each "
-    "one the outfit stays the same while her pose changes slightly: hands "
-    "near her hair, ankles crossed, a small smile. The passing blade hides "
-    "every cut, so each change feels seamless. " + _KEEP
+    " At first she wears a plain cream knit lounge set, and she keeps "
+    "wearing it while the fan turns slowly above her. No blade crosses the "
+    "lens until late in the clip. One dark wooden fan blade then sweeps "
+    "across the frame and briefly covers it; as that blade clears, she is "
+    "wearing the exact clothing from the attached product image, in the "
+    "same pose. Her arms, hands, legs, and head stay where they were. "
+    "There is only one product, so this is the only pass, and "
+    "the outfit does not change again. The passing blade hides every cut, "
+    "so the change feels seamless." + _COVERED + " " + _KEEP
 )
 _FAN_TOGETHER = (
-    " At first she wears a plain cream knit lounge set. A dark wooden fan "
-    "blade sweeps across the frame and briefly covers it; as each blade "
-    "clears, she is wearing the next garment from the attached product "
-    "images, in order, in nearly the same pose, so every attached product "
-    "appears once and she never wears two at once. The passing blade hides "
-    "every cut, so each change feels seamless. " + _KEEP_EACH
+    " At first she wears a plain cream knit lounge set. Each fan transition "
+    "is a new product: a dark wooden fan blade sweeps across the frame, and "
+    "as each blade clears she is wearing the next garment from the attached "
+    "product images, in order, one new product per pass, in nearly the same "
+    "pose, so every attached product appears once and she never wears two "
+    "at once. A pass never repeats a product and never changes only the "
+    "pose. The passing blade hides every cut, so each change feels "
+    "seamless." + _COVERED + " " + _KEEP_EACH
 )
 CEILING_FAN_OFF = _FAN_SCENE_OFF + _FAN_POSE + _FAN_SINGLE
 CEILING_FAN_ON = _FAN_SCENE_ON + _FAN_POSE + _FAN_SINGLE

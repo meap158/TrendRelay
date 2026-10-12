@@ -131,12 +131,20 @@ def test_every_hikaru_wording_carries_her_whole_profile() -> None:
             prompt = resolve_prompt("hikaru_lookbook", background=background, together=together)
             assert HIKARU_PROFILE in prompt
             assert "Her face, hair, and build stay the same in every card." in prompt
+            assert "No nipples are visible" in prompt
+            assert "camel toe" in prompt
+            assert "not a doll" in prompt
     group = resolve_prompt("hikaru_lookbook", background=False, together=True)
     assert "never wears two attached products at once" in group
     for background in (False, True):
         for together in (False, True):
             walk = resolve_prompt("hikaru_walk", background=background, together=together)
             assert HIKARU_PROFILE in walk
+            assert "No nipples are visible" in walk
+            assert "camel toe" in walk
+            assert "thick, matte" in walk
+            assert "not a doll" in walk
+            assert "phone-camera detail" in walk
     walks = resolve_prompt("hikaru_walk", background=False, together=True)
     assert "never two attached products at once" in walks
 
@@ -156,4 +164,11 @@ def test_the_ceiling_fan_blade_hides_each_change() -> None:
     for prompt in (single, group):
         assert "directly overhead" in prompt
         assert "blade" in prompt and "hides every cut" in prompt
+        assert "No nipples are visible" in prompt
+        assert "camel toe" in prompt
+        assert "thick, matte" in prompt
+    assert "only one product, so this is the only pass" in single
+    assert "until late in the clip" in single
+    assert "stay where they were" in single
+    assert "one new product per pass" in group
     assert "next garment from the attached product images, in order" in group
