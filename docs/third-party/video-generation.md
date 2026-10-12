@@ -101,3 +101,53 @@ renews the job's lease and honours a cancel.
 A draft filled from outside while its job waited is not sent at all. A
 draft filled while the provider was working keeps the paid clip as a
 Library video without a product link.
+
+## How a clip is filed
+
+From the repository root:
+
+```
+python scripts/fill_creative_videos.py setup-zdr
+python scripts/fill_creative_videos.py fill --draft <draft_id>
+python scripts/fill_creative_videos.py fill --product <id> --subject-asset <id> --recipe <recipe>
+```
+
+`setup-zdr` writes `~/.grok/managed_config.toml` from the Publish R2 settings
+when that file is missing, and leaves it alone when it is already there.
+`fill` does not read it. Grok Build loads it only after a restart, which the
+command does not do. `fill` creates the draft when `--product` is passed,
+sends one xAI request at a time with a presigned upload under
+`product-clips/<draft_id>.mp4`, saves `.data/creative-videos/<draft_id>.mp4`,
+and submits that file. A later `fill --draft` for an id that already has a
+clip submits the file and does not send another request. `OK` means the
+draft is succeeded, owed 0, and linked. The procedure is section 5 of
+`SOP/attribution/fill-product-creatives.md`. The in-app Generate button
+stays hidden until Tools has a saved key, the switch on, and a passing
+check. This command does not turn those on.
+
+## What a run showed
+
+Checked on 2026-10-12 while queueing the newer video recipes for one
+Attribution product.
+
+- With no `XAI_API_KEY`, the switch off, and Check never run, Generate
+  offers no provider. The Publish R2 bucket can already be ready, and the
+  worker can already be running. Generate then answers `xAI is not ready.
+  Switch it on in Tools and check the key.` and queues no job.
+- The provider needs a Library subject on the draft. There is no way to add
+  one after confirm, so a draft queued on the listing gallery alone stays a
+  file from outside.
+- The Grok video tools return that ZDR sentence until
+  `~/.grok/managed_config.toml` names this bucket and Grok Build is
+  restarted. A request that already includes `output.upload_url`, the
+  presigned PUT this provider builds, is accepted. That is how the six
+  BELLE SET clips were made and filed. One request at a time.
+- Four requests sent together were refused at two a second (`429` on
+  `grok-imagine-video-1.5`). The worker's one-at-a-time lane is the limit
+  to keep.
+- An overhead frame of someone wearing the set, and a frame that dressed
+  another person in the set from the listing photo, were rejected by image
+  moderation. Stop that recipe. Do not reword the prompt to get past the
+  filter. A listing card with a text panel is also a bad subject, because
+  the model copies the lettering. The provider clip is 10 seconds even when
+  the recipe describes a longer sequence.

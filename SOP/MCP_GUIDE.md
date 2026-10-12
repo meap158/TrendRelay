@@ -220,13 +220,23 @@ When a product is waiting on an image, a carousel, or a video, load
    product's own `listing_fields`, and keep that product's fields and pictures
    with it. Otherwise use `listing_fields` only for keys that are present.
    Do not rewrite the prompt.
-2. Generate that file with the client's own image or video tool. TrendRelay
-   does not generate the pixels. Generating it is not the end of the task.
-3. `submit_product_creative_media` with exactly one source: the `media` file,
-   a public https `media_url`, or `media_base64`. An image or carousel draft
-   takes an image; a video draft takes a video. The ingest finishes in this
-   call, including video. Do this in the same task, including when you queued
-   the draft yourself. A file left on disk or in the chat is unfinished.
+2. An image or a carousel is generated with the client's own image tool.
+   A video is this command, from the repository root, and nothing else.
+   Section 5 of `attribution.fill-product-creatives` is the whole procedure:
+
+   `python scripts/fill_creative_videos.py fill --draft <draft_id>`
+
+   When the operator asked for a recipe and no draft exists yet:
+
+   `python scripts/fill_creative_videos.py fill --product <product_id> --subject-asset <asset_id> --recipe <recipe>`
+
+   The command generates one clip at a time and submits it. `OK` is the
+   creative done. Do not also call a video tool.
+3. For an image or a carousel, `submit_product_creative_media` with exactly
+   one source: the `media` file, a public https `media_url`, or
+   `media_base64`. Do this in the same task, including when you queued the
+   draft yourself. A file left on disk or in the chat is unfinished. A video
+   that printed `OK` is already submitted. Do not submit it again.
 4. Read the draft again. A carousel stays pending, with no new product link,
    until every card has been submitted. Read `owed`. `linked` is true only
    when the set is complete. An image or a video is done when `status` is
