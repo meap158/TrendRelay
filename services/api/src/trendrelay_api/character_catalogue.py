@@ -38,6 +38,24 @@ class CharacterSpec:
 
 DEFAULT_CHARACTERS: tuple[CharacterSpec, ...] = (
     CharacterSpec(
+        "mai", "Mai",
+        "a fictional Vietnamese woman aged twenty-five with long center-parted black hair, "
+        "light-medium warm skin, a soft round-oval face and dark-brown eyes",
+        "an ivory blouse and taupe trousers",
+    ),
+    CharacterSpec(
+        "thao", "Thảo",
+        "a fictional Vietnamese woman aged twenty-nine with a wavy shoulder-length "
+        "dark-brown bob, medium tan skin, an athletic build and dark-brown eyes",
+        "a pale-blue t-shirt and charcoal trousers",
+    ),
+    CharacterSpec(
+        "an", "An",
+        "a fictional Vietnamese woman aged thirty-four with black hair in a low ponytail, "
+        "medium warm skin, a curvy build and dark-brown eyes",
+        "a sage blouse, navy trousers and a small silver pendant",
+    ),
+    CharacterSpec(
         "aiko", "Aiko",
         "a Japanese woman in her mid-twenties with shoulder-length straight black hair "
         "and soft curtain bangs, fair skin with a natural flush, and dark-brown eyes",

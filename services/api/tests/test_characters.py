@@ -153,13 +153,15 @@ def ready_generator(monkeypatch) -> list[tuple[str, str]]:
 
 
 def test_the_shipped_cast_is_complete_and_mostly_asian() -> None:
-    assert len(DEFAULT_CHARACTERS) == 12
+    assert len(DEFAULT_CHARACTERS) == 15
     for spec in DEFAULT_CHARACTERS:
         portrait, sheet = default_paths(spec.slug)
         assert portrait.is_file(), spec.slug
         assert sheet.is_file(), spec.slug
-        assert portrait.read_bytes()[:3] == b"\xff\xd8\xff"
-    assert len({spec.slug for spec in DEFAULT_CHARACTERS}) == 12
+        # JPEG, like the rest of the cast: a PNG portrait is ten times the size.
+        assert portrait.read_bytes()[:3] == b"\xff\xd8\xff", spec.slug
+        assert sheet.read_bytes()[:3] == b"\xff\xd8\xff", spec.slug
+    assert len({spec.slug for spec in DEFAULT_CHARACTERS}) == len(DEFAULT_CHARACTERS)
 
 
 def test_listing_copies_the_cast_into_the_library_once() -> None:
@@ -179,7 +181,8 @@ def test_listing_copies_the_cast_into_the_library_once() -> None:
         params={"source_type": "character", "limit": 100},
     )
     assert library.status_code == 200, library.text
-    assert library.json()["total"] == 24
+    # A portrait and a sheet for every built-in character.
+    assert library.json()["total"] == 2 * len(DEFAULT_CHARACTERS)
     with TestingSession() as session:
         kinds = set(session.scalars(select(MediaAsset.source_type)).all())
     assert kinds == {"character"}
@@ -187,12 +190,13 @@ def test_listing_copies_the_cast_into_the_library_once() -> None:
 
 def test_a_removed_builtin_stays_removed() -> None:
     workspace_id = make_workspace()
-    aiko = list_cast(workspace_id)["characters"][0]
+    # Found by name, not position: the cast's order changes as it grows.
+    aiko = next(item for item in list_cast(workspace_id)["characters"] if item["slug"] == "aiko")
     removed = request("DELETE", f"/api/workspaces/{workspace_id}/characters/{aiko['id']}")
     assert removed.status_code == 200, removed.text
     slugs = [item["slug"] for item in list_cast(workspace_id)["characters"]]
     assert "aiko" not in slugs
-    assert len(slugs) == 11
+    assert len(slugs) == len(DEFAULT_CHARACTERS) - 1
 
 
 def test_a_draft_featuring_a_character_appends_its_line_and_keeps_it() -> None:
