@@ -10,6 +10,9 @@ set "TRENDRELAY_DESKTOP_REQUESTED=0"
 set "TRENDRELAY_CHECK_REQUESTED=0"
 for %%A in (%*) do if /I "%%~A"=="--desktop" set "TRENDRELAY_DESKTOP_REQUESTED=1"
 for %%A in (%*) do if /I "%%~A"=="--check" set "TRENDRELAY_CHECK_REQUESTED=1"
+set "TRENDRELAY_TITLE=TrendRelay"
+if "%TRENDRELAY_DESKTOP_REQUESTED%"=="1" set "TRENDRELAY_TITLE=TrendRelay - Desktop"
+title %TRENDRELAY_TITLE%
 
 where node >nul 2>nul
 if errorlevel 1 (
@@ -92,6 +95,8 @@ if "%TRENDRELAY_CHECK_REQUESTED%"=="1" (
   exit /b 0
 )
 
+rem npm/pnpm rename the window when they start; restore the title once they have.
+start "" /b cmd /c "timeout /t 5 /nobreak >nul 2>&1 & title %TRENDRELAY_TITLE%"
 ".venv\Scripts\python.exe" scripts\dev.py %*
 if errorlevel 1 goto :run_error
 exit /b 0

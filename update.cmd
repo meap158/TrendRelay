@@ -5,7 +5,7 @@ cd /d "%~dp0" || (
   exit /b 1
 )
 
-title TrendRelay Project Updater
+title TrendRelay - Update
 set "TRENDRELAY_NO_PAUSE="
 if /i "%~1"=="--no-pause" set "TRENDRELAY_NO_PAUSE=1"
 
