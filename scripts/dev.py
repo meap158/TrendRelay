@@ -229,11 +229,11 @@ def npm_command() -> str:
     return "npm.cmd" if IS_WINDOWS else "npm"
 
 
-#: Preloaded into the dev server: Next evaluates each page's client-reference
-#: manifest in a new V8 context on every request in dev, and those contexts are
-#: never collected - the dev server reached 6,657 of them and 20 GB. The preload
-#: reuses a manifest while its text is unchanged. See the file itself.
-DEV_SERVER_PRELOAD = (ROOT / "apps" / "web" / "dev" / "manifest-cache.cjs").as_posix()
+#: Preloaded into the dev server, which leaked in two ways: a V8 context per
+#: page request (6,657 of them, towards 20 GB), and a React debug channel per
+#: render no browser claimed - this runner's own two-second health probe among
+#: them. See the files under apps/web/dev.
+DEV_SERVER_PRELOAD = (ROOT / "apps" / "web" / "dev" / "preload.cjs").as_posix()
 
 
 def dev_server_node_options() -> str:
