@@ -40,19 +40,22 @@ DEFAULT_CHARACTERS: tuple[CharacterSpec, ...] = (
     CharacterSpec(
         "mai", "Mai",
         "a fictional Vietnamese woman aged twenty-five with long center-parted black hair, "
-        "light-medium warm skin, a soft round-oval face and dark-brown eyes",
+        "light-medium warm skin with natural tonal variation, a soft round-oval face with "
+        "subtle natural asymmetry and dark-brown eyes",
         "an ivory blouse and taupe trousers",
     ),
     CharacterSpec(
         "thao", "Thảo",
         "a fictional Vietnamese woman aged twenty-nine with a wavy shoulder-length "
-        "dark-brown bob, medium tan skin, an athletic build and dark-brown eyes",
+        "dark-brown bob, medium tan skin with natural tonal variation, an athletic build, "
+        "subtle facial asymmetry and dark-brown eyes",
         "a pale-blue t-shirt and charcoal trousers",
     ),
     CharacterSpec(
         "an", "An",
         "a fictional Vietnamese woman aged thirty-four with black hair in a low ponytail, "
-        "medium warm skin, a curvy build and dark-brown eyes",
+        "medium warm skin with natural tonal variation, a curvy build, subtle facial "
+        "asymmetry and dark-brown eyes",
         "a sage blouse, navy trousers and a small silver pendant",
     ),
     CharacterSpec(
@@ -156,10 +159,14 @@ def portrait_prompt(appearance: str, outfit: str) -> str:
         "straight on at eye level and the face large in the upper half of the frame. "
         "They face the camera squarely with a neutral, relaxed expression and both "
         "eyes open. Neutral light-grey seamless studio background, soft even studio "
-        "lighting, natural skin texture with visible pores and slight asymmetry, "
-        "individual hair strands, sharp focus, 85mm portrait lens with no wide-angle "
+        "lighting, unretouched skin with visible pores and natural tonal variation, "
+        "believable under-eye texture and subtle asymmetry that preserves identity. Show "
+        "individual hair strands and a few natural flyaways. Keep skin texture; do not "
+        "airbrush, symmetrize, or invent conspicuous marks absent from the description. "
+        "Sharp focus, 85mm portrait lens with no wide-angle "
         "distortion, true-to-life color. A real person photographed in a studio, not "
-        "a render, with no heavy makeup, no beauty filter and no text."
+        "a render or fashion-campaign retouch, with no heavy makeup, airbrushing, "
+        "beauty filter, or text."
     )
 
 
@@ -193,9 +200,13 @@ def sheet_prompt(outfit: str) -> str:
         "what is visible, adding no new distinguishing features.\n\n"
         "Presentation: a premium film-production character bible, clean editorial "
         "layout, soft realistic studio lighting, consistent camera perspective, sharp "
-        "facial detail, natural skin pores, individual hair strands, realistic fabric "
+        "facial detail, natural skin pores and tonal variation, believable under-eye "
+        "texture, subtle asymmetry, individual hair strands and flyaways, realistic "
+        "fabric "
         "and accessories, accurate anatomy. Ultra-photorealistic real human appearance "
-        "with natural shadows and realistic eyes; real skin rather than a CGI, waxy or "
+        "with natural shadows and realistic eyes. Keep the reference face unretouched "
+        "and recognizable; do not invent conspicuous marks. Use real skin rather than "
+        "a CGI, waxy, airbrushed or "
         "doll-like finish, and their own face rather than a beauty-filter face. Every "
         "panel shows the same person with one consistent identity."
     )
