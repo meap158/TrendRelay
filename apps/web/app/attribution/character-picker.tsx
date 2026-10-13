@@ -422,7 +422,7 @@ export function CharacterUse({
       <label className="campaign-dialog-check">
         <input
           type="checkbox"
-          checked={enabled && allowed}
+          checked={enabled}
           disabled={locked || !allowed}
           onChange={(event) => onEnabledChange(event.target.checked)}
         />
