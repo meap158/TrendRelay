@@ -3126,6 +3126,15 @@ Verify F2's licence before vendoring.
 
 The five-product image-generation batch is documented at S:\Vibe Coding\TrendRelay\output\imagegen\attribution-2026-10-12\ (workspace-relative: output/imagegen/attribution-2026-10-12/). Start with prompts-and-coverage.md for art direction, final-generation-prompts.md for adapted prompts, generation-plan.json for the 15 planned templates, and assets-index.json for file-to-draft-to-asset receipts. Exact products and reference photos are in batch-products.json and the product_*-hero.jpg/product_*-reference.jpg files.
 
-All 15 planned drafts and all 26 image files are complete. Each current draft was checked against the live Attribution API and is succeeded with owed=0 and linked=true. Three Vietnamese adult character defaults (Mai, Thảo, An) have Library portraits and consistency sheets; see character-imports.json plus the mai-, thao-, and an-character-sheet.png and portrait files. Every carousel image is a separate file.
+All 15 planned drafts and all 26 image files are complete. Each current draft was checked against the live Attribution API and is succeeded with owed=0 and linked=true. Three Vietnamese defaults (Mai, Thảo, An) now use refreshed natural-realism Library portraits and consistency sheets; the old assets remain in Library. See character-natural-refresh.json for file, asset, job, and previous-pointer receipts, plus the six *-natural.png files. Every carousel image is a separate file.
 
 Quality notes: the standalone Cozy model-lookbook contact sheet was unlinked from its product and replaced by a single-frame lookbook image; the original remains in Library. The provider refused direct model-worn attempts for Navy Suit and Bowie Set. Navy uses an accepted full-length Thảo image from the sleepwear carousel; Bowie and Belle use garment-faithful mannequin catalog stills. These adaptations and the Cozy character-frame in its paired carousel are recorded in prompts-and-coverage.md. No image work remains queued.
+
+
+## Natural character refresh, 2026-10-13
+
+Mai, Thảo, and An now use refreshed human-realism portraits and 12-view consistency sheets in the Library. Their existing character IDs are preserved, their portrait and sheet pointers now target the new character-sourced assets, and the existing descriptive records include natural skin variation and subtle facial asymmetry. The prior assets remain available in Library.
+
+Review the six images in `output/imagegen/attribution-2026-10-12/` (`mai-portrait-natural.png`, `mai-character-sheet-natural.png`, and matching `thao-`/`an-` files). `character-natural-refresh.json` and `assets-index.json` hold the exact Library asset IDs, import jobs, prior IDs, and verification. Reusable identity-locked human-realism prompts are in `character-naturalism-prompts.md`. Future portrait and sheet prompts were tightened in `services/api/src/trendrelay_api/character_catalogue.py` to request unretouched skin, believable under-eye detail, flyaway hair, natural asymmetry, and no invented identity marks.
+
+Verification: all six Library import jobs succeeded; ORM checks confirmed the three records are ready and linked to the new assets; `services/api/tests/test_characters.py` passed (11 tests); Ruff passed.
