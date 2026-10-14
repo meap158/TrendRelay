@@ -2397,6 +2397,50 @@ def test_unknown_dimensions_are_not_treated_as_wrong_ones(
     publishing._validate_request(publishing.PROVIDERS["zernio"], body)
 
 
+def test_a_card_outside_instagrams_proportions_is_refused_at_validation(
+    monkeypatch, carousel_images: list[str]
+) -> None:
+    """Zernio relayed Instagram's refusal only after every image had uploaded:
+    "Aspect ratio 0.5622:1 (940 x 1672px) is outside Instagram's allowed range
+    (0.5625 to 1.91)" for a card one pixel too narrow. Said here instead, and
+    numbered the way the engine numbers it so the message points at the card.
+    """
+    monkeypatch.setattr(
+        publishing, "_video_dimensions",
+        lambda path: (940, 1672) if "frame1" in path else (941, 1672),
+    )
+    body = instagram_carousel(carousel_images)
+
+    with pytest.raises(ValueError) as refusal:
+        publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+    assert "Instagram" in str(refusal.value)
+    assert "image 2" in str(refusal.value)
+    assert "940×1672" in str(refusal.value)
+
+
+def test_instagram_cards_on_the_boundary_pass(
+    monkeypatch, carousel_images: list[str]
+) -> None:
+    # Exactly 0.5625 is inside the range the engine enforces, and an
+    # unprobeable card is not evidence the post is wrong.
+    monkeypatch.setattr(publishing, "_video_dimensions", lambda _path: (864, 1536))
+    publishing._validate_request(
+        publishing.PROVIDERS["zernio"], instagram_carousel(carousel_images)
+    )
+
+
+def test_image_proportions_only_cover_networks_with_an_enforced_refusal(
+    monkeypatch, carousel_images: list[str]
+) -> None:
+    # The same narrow cards post fine where no network has refused them: only
+    # limits an engine has actually enforced are encoded.
+    monkeypatch.setattr(publishing, "_video_dimensions", lambda _path: (940, 1672))
+    body = carousel(carousel_images)  # a TikTok photo post
+
+    publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+
 # --- threads topics -----------------------------------------------------------
 
 

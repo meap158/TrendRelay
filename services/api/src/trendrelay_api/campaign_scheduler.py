@@ -1159,6 +1159,7 @@ def plan_campaign(
             from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
             from trendrelay_api.integrations.publishing import (
                 carousel_fits_destination,
+                images_fit_platform,
                 post_type_for_media,
                 text_post_fits_destination,
                 video_fits_platform,
@@ -1222,6 +1223,14 @@ def plan_campaign(
                     fits, why = carousel_fits_destination(
                         destination.provider, destination.platform, len(candidate.image_paths),
                     )
+                    if fits:
+                        # A card the network's API refuses on sight is routed
+                        # around the same way: the slot goes to a post Instagram
+                        # will take, and the note names the card to fix. Only
+                        # networks with a known enforced limit probe anything.
+                        fits, why = images_fit_platform(
+                            destination.platform, list(candidate.image_paths),
+                        )
                     if fits:
                         item = candidate
                         break

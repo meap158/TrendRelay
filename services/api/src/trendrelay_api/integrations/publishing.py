@@ -1506,7 +1506,11 @@ def _video_shape(path_text: str) -> VideoShape | None:
 
 
 def _video_dimensions(path_text: str) -> tuple[int, int] | None:
-    """The clip's width and height, for callers that need only those."""
+    """The file's width and height, for callers that need only those.
+
+    The probe reports a still's dimensions the same way as a clip's, so this
+    serves pictures as well as video.
+    """
     shape = _video_shape(path_text)
     return (shape.width, shape.height) if shape else None
 
@@ -1662,6 +1666,11 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
             fits, why = video_fits_platform(platform, request.video_path)
             if not fits:
                 raise ValueError(why)
+    if _is_image_post(request):
+        for platform in sorted(chosen):
+            fits, why = images_fit_platform(platform, request.image_paths)
+            if not fits:
+                raise ValueError(why)
     if NEEDS_SUBREDDIT in chosen and not request.subreddit:
         raise ValueError(
             "Reddit needs a target subreddit; every engine rejects the post without one."
@@ -1697,6 +1706,53 @@ def video_fits_platform(platform: str, video_path: str | None) -> tuple[bool, st
         f"wide and this one is {width}×{height}. Render a narrower cut - the "
         "Library's resize effects can - or drop that destination."
     )
+
+
+#: Image proportions a network's API refuses, as width over height, learned
+#: from a real rejection rather than transcribed from marketing pages: Zernio
+#: relayed Instagram's "Aspect ratio 0.5622:1 (940 x 1672px) is outside
+#: Instagram's allowed range (0.5625 to 1.91)" for a carousel card one pixel
+#: too narrow, after the job had uploaded every image. Networks absent here
+#: have shown no such limit.
+PLATFORM_IMAGE_ASPECT_RANGE: dict[str, tuple[float, float]] = {"instagram": (0.5625, 1.91)}
+
+
+def images_fit_platform(
+    platform: str,
+    image_paths: list[str],
+) -> tuple[bool, str | None]:
+    """Whether this network's API will take these pictures, and why not.
+
+    The counterpart to `video_fits_platform`, asked the same way, so a
+    campaign declines a bad pairing before it makes a post out of it rather
+    than finding out from the engine afterwards. Numbered from one, like the
+    engine's own refusal ("Instagram Image 5"), so the message points at the
+    same card.
+
+    (True, None) also covers dimensions that cannot be known: an unprobeable
+    file is not evidence the media is wrong, and delivery already fails an
+    unreadable file by name. Only limits an engine has actually enforced are
+    encoded, so nothing is refused on an invented constraint.
+    """
+    bounds = PLATFORM_IMAGE_ASPECT_RANGE.get(platform)
+    if not bounds or not image_paths:
+        return True, None
+    low, high = bounds
+    for index, path_text in enumerate(image_paths, start=1):
+        dimensions = _video_dimensions(path_text)
+        if not dimensions:
+            continue
+        width, height = dimensions
+        ratio = width / height if height else 0
+        if height and low <= ratio <= high:
+            continue
+        return False, (
+            f"{PLATFORM_LABELS.get(platform, platform)} takes images with a "
+            f"width-to-height ratio from {low} to {high}, and image {index} is "
+            f"{width}×{height} ({ratio:.4f}). Pad or crop it into range - the "
+            "Library's resize effects can - or drop that destination."
+        )
+    return True, None
 
 
 def carousel_fits_destination(

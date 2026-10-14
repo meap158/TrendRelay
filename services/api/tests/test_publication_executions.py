@@ -697,6 +697,52 @@ def test_repeated_auth_refusals_pause_the_campaign(session, tmp_path, engine_stu
     assert "Reconnect" in pilot.last_note
 
 
+def test_repeated_content_refusals_never_pause_the_campaign(
+    session, tmp_path, engine_stub
+) -> None:
+    """The Instagram card one pixel too narrow failed every slot for an evening.
+
+    An engine refusing the content on its merits is not the engine being
+    broken: a full window of these leaves the campaign switched on, with no
+    pause in the record. Bad content pauses its own queue item, never the
+    campaign - and reads as validation, not as a provider fault.
+    """
+    from trendrelay_api.models import AuditEvent
+
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", str(clip(tmp_path)))
+    pilot = autopilot(session)
+    refusal = (
+        "zernio-meap66-gmail-com: zernio.com: Instagram Image 5: Aspect ratio "
+        "0.5622:1 (940 × 1672px) is outside Instagram's allowed range (0.5625 "
+        "to 1.91). Resize your image to fit Instagram's aspect ratio requirements."
+    )
+
+    for round_number in range(6):
+        moment = NOW.replace(day=NOW.day + round_number)
+        run_campaign(session, pilot, now=moment)
+        attempted = False
+        for execution in executions(session):
+            if execution.state == "queued":
+                attempted = True
+                settle_job(session, execution.job_id, "failed", error=refusal)
+        assert attempted, "a post should have been attempted every round"
+        reconcile_executions(session, now=moment)
+        session.commit()
+
+    assert {
+        execution.failure_class
+        for execution in executions(session)
+        if execution.state == "failed"
+    } == {"validation"}
+    assert pilot.enabled is True
+    assert "Paused automatically" not in (pilot.last_note or "")
+    assert session.scalars(
+        select(AuditEvent).where(AuditEvent.action == "campaign.autopilot_paused")
+    ).all() == []
+
+
 def test_uncertain_deliveries_pause_before_duplicates_can_pile_up(
     session, tmp_path, engine_stub
 ) -> None:

@@ -658,6 +658,38 @@ def test_a_video_the_network_refuses_is_routed_around_not_posted_into(
     assert "at most 1920px" in note and "2160×3840" in note
 
 
+def test_a_card_instagram_refuses_is_routed_around_not_posted_into(
+    session, monkeypatch
+) -> None:
+    """A 940px-wide card is one pixel too narrow for Instagram's 0.5625 floor.
+
+    Zernio relayed the refusal only after every image had uploaded, and the
+    same post then failed every slot. The planner skips the unfit pairing and
+    takes the next post that fits, and the note names the card to fix.
+    """
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(
+        publishing, "_video_dimensions",
+        lambda path: (940, 1672) if "narrow" in path else (941, 1672),
+    )
+    destination(session, "d-ig", "instagram", provider="zernio")
+    slot(session, 12)
+    queue_item(
+        session, "q-narrow", video_path="",
+        image_paths=[r"S:\media\narrow0.jpg", r"S:\media\narrow1.jpg"],
+    )
+    queue_item(
+        session, "q-fits", video_path="",
+        image_paths=[r"S:\media\ok0.jpg", r"S:\media\ok1.jpg"], position=1,
+    )
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-fits"]
+    assert "image 1" in note and "940×1672" in note
+
+
 def test_the_link_lands_in_the_caption_on_youtube_and_in_the_bio_on_tiktok(session) -> None:
     """The decision the feature turns on, seen end to end."""
     destination(session, "d-tube", "youtube")

@@ -208,7 +208,15 @@ def _classify_failure(error: str) -> str:
         return "auth"
     if any(marker in text for marker in ("no such media", "media file", "not found beneath")):
         return "media"
-    if any(marker in text for marker in ("422", "400", "refus", "invalid", "requires")):
+    # An engine refusing the content on its merits - a caption too long, a
+    # card outside the network's allowed proportions ("Aspect ratio ...
+    # outside Instagram's allowed range"). Sending it again buys the same
+    # refusal, so this is the class redelivery never retries, and no breaker
+    # counts it: bad content pauses its own item, never the campaign.
+    if any(marker in text for marker in (
+        "422", "400", "refus", "invalid", "requires",
+        "aspect ratio", "allowed range",
+    )):
         return "validation"
     return "provider"
 
@@ -380,6 +388,7 @@ def finalization_problems(
         PublishRequest,
         _validate_request,
         carousel_fits_destination,
+        images_fit_platform,
         resolve_provider,
     )
 
@@ -424,6 +433,15 @@ def finalization_problems(
     if execution.image_paths:
         fits, why = carousel_fits_destination(
             execution.provider, execution.platform, len(execution.image_paths),
+        )
+        if not fits and why:
+            problems.append(why)
+        # A card the network's API will refuse on sight, said while the post
+        # can still be fixed rather than by the engine after the upload.
+        # Unattended this fails the execution and pauses the item - the media
+        # needs looking at - while the campaign itself keeps posting.
+        fits, why = images_fit_platform(
+            execution.platform, list(execution.image_paths or []),
         )
         if not fits and why:
             problems.append(why)
@@ -1739,6 +1757,7 @@ def publish_queue_item_now(
         delivery_block,
         engine_off_note,
         first_comment_deliverable,
+        images_fit_platform,
         post_type_for_media,
         thread_deliverable,
         topic_deliverable,
@@ -1849,6 +1868,16 @@ def publish_queue_item_now(
         if item.image_paths:
             fits, why = carousel_fits_destination(
                 destination.provider, destination.platform, len(item.image_paths)
+            )
+            if not fits:
+                skipped.append({
+                    "destination_id": destination.id,
+                    "label": dest_label,
+                    "reason": why,
+                })
+                continue
+            fits, why = images_fit_platform(
+                destination.platform, list(item.image_paths)
             )
             if not fits:
                 skipped.append({
