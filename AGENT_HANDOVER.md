@@ -1,4 +1,66 @@
+## Active Mây Meo / Linh generation — 2026-10-15
+
+Continue from `output/may-meo-linh-2026-10-15/manifest.json` (authoritative per-draft files and asset IDs). Built-in imagegen only. Live API base `http://127.0.0.1:8011/api/workspaces/ws_03c59534908647d892d8e0dab62780e8`. NOIR and COZY: all six jobs complete, 14 images each, linked true/owed zero. BOWIE: both standalone images complete and linked; four carousel drafts created; hero renders currently underway. Total filed 30 images, 14 completed jobs of 168 planned (392 cards). Do not requeue jobs with draft_id or re-ingest existing files. Original Linh portrait is runtime character_defaults/linh/portrait.jpg. Source product references and prompts are alongside manifest. COZY inaccurate alternatives retained but NOT ingested. Full batch remains unfinished.
+
 # Agent Handover
+
+## Active Mây Meo + corrected Linh generation batch (2026-10-15)
+
+User authorized all image/carousel media for Mây Meo Sleepwear using corrected
+Linh. Live API `http://127.0.0.1:8011`, workspace
+`ws_03c59534908647d892d8e0dab62780e8`. Full plan and resumable per-file status:
+`output/may-meo-linh-2026-10-15/manifest.json` (28 products, six compatible
+recipe/kind combinations, 168 jobs / 392 images). Start newest import first.
+Do not requeue the first editorial draft
+`pcreative_8e5b288ce19f42699b908dcd9ae6fd2d` for NOIR PYJAMA SET. Card 1 is
+already filed as `asset_247fe8c8bcd744aa88cc0701205d39b9`; remaining files
+and submitted IDs must be checked in manifest and live draft before uploading.
+All generation uses built-in imagegen; use stored reviewed prompts from draft
+and actual listing/character references. No collateral user work should be
+committed. MCP tools appeared but SOP read was rejected by approval policy;
+canonical local SOP and working authenticated local API used instead.
+
+
+## Linh reference correction (2026-10-15)
+
+The earlier Linh invented a Vietnamese identity and did not match the supplied
+Instagram model. Corrected the catalogue description to use reference identity,
+without inferred ethnicity/name. The portrait now uses the original Instagram
+close-up, and the sheet was regenerated with built-in imagegen from three original
+photos with a follow-up for opposing profile directions and natural skin texture.
+Provenance/prompts: `Research/social-miner-2026-10-13/LINH_REFERENCE_CORRECTION.md`.
+Rejected assets are preserved under `linh-rejected-v1/` in that research folder.
+Existing non-archived built-in Linh records refresh their image pointers once on
+character-list read, preserving old assets and character/draft IDs. Thirteen
+character tests and Ruff pass. Live API character-list refresh succeeded on port 8011. Corrected Linh now points
+to portrait `asset_0b410fc095244501b04b97157ad9d199` and sheet
+`asset_4c23c68328124299a3c3e7b763836006`; the same character ID is retained.
+
+
+## Shared product media generator and character carousel (2026-10-15)
+
+Library pending product drafts now open `apps/web/app/ui/product-media-generator.tsx`,
+the same full composer Attribution uses through its compatibility export. Review
+retains the stored configuration, upload/provider workflow, character references,
+progress and discard actions. Create new media starts a fresh configurable ask for
+the products while retaining the old draft; Open in Attribution is optional.
+Library refreshes its draft list and assets when generation changes.
+
+Added `character_editorial_carousel`: exactly five separate cards, a required
+Library character and at most five products. The sequence is hero, seated, detail,
+side and front. Research informed poses; Linh is an invented adult Vietnamese
+character, with portrait/sheet assets in `character_defaults/linh`. Characters
+are seeded into Library when the workspace character list is read. Generation
+guidance is in `SOP/attribution/fill-product-creatives.md` version 5.
+
+Migration `20261015_0097` is applied locally; current revision confirms head.
+Verification: 67 focused API tests, 18 web tests, TypeScript checking passed.
+Ruff checks pass for the fixed draft/API files and new migration test. ESLint
+commands did not complete within the timeout; browser verification was unavailable
+(no connected browser surfaces). No server or worker was restarted.
+The mixed worktree remains uncommitted; preserve the earlier Library Products
+filter changes and do not stage unrelated `.claude/settings.local.json`.
+
 
 ## Campaign product manager (2026-10-10)
 
@@ -3138,3 +3200,37 @@ Mai, Thảo, and An now use refreshed human-realism portraits and 12-view consis
 Review the six images in `output/imagegen/attribution-2026-10-12/` (`mai-portrait-natural.png`, `mai-character-sheet-natural.png`, and matching `thao-`/`an-` files). `character-natural-refresh.json` and `assets-index.json` hold the exact Library asset IDs, import jobs, prior IDs, and verification. Reusable identity-locked human-realism prompts are in `character-naturalism-prompts.md`. Future portrait and sheet prompts were tightened in `services/api/src/trendrelay_api/character_catalogue.py` to request unretouched skin, believable under-eye detail, flyaway hair, natural asymmetry, and no invented identity marks.
 
 Verification: all six Library import jobs succeeded; ORM checks confirmed the three records are ready and linked to the new assets; `services/api/tests/test_characters.py` passed (11 tests); Ruff passed.
+
+## Generation checkpoint 2026-10-16
+NOIR, COZY and BOWIE all six formats complete: 42 images total, 18 jobs, live verification linked true/owed zero. NAVY six drafts queued, six hero/single renders underway. Remaining batch in `output/may-meo-linh-2026-10-15/manifest.json`. BOWIE rejected first editorial cover had incorrect shorts lace; approved v2 plain hems ingested. BOWIE generated cards recovered from generated_images and filed in order.
+
+## Latest 2026-10-16 checkpoint
+NOIR/COZY/BOWIE all six formats complete (42 images). NAVY and BELLE each four product-only formats complete (two singles and two two-card flatlay carousels); hanger lookbooks staged2/3. Linh full-height renders for NAVY twice and BELLE once blocked by tool output filter; notes in manifest. Total 58 filed images, 26 completed jobs. Next four products (Pink Ruffle Muse, Cherry, Blush Bow, Summer One) eight standalone image drafts queued and renders underway. Product refs downloaded. Batch unfinished.
+
+## Latest completed checkpoint
+82 images filed; 42 completed jobs verified live linked true/owed zero. NOIR/COZY/BOWIE all six formats complete. NAVY/BELLE four product-only formats complete and hanger lookbooks staged2/3; model outputs blocked. Pink Ruffle Muse/Cherry/Blush Bow/Summer One two standalone images and both 2-card flatlay carousels each complete. Their lookbook/editorial remain planned. Nineteen other products remain planned. Manifest authoritative: `output/may-meo-linh-2026-10-15/manifest.json`; verification.json stores live draft checks. Nothing published.
+
+## Latest generation checkpoint
+90 images filed, 50 completed jobs verified live linked true/owed zero. LILY, WILD MUSE, FAIRY, DOTTIE each now have both standalone images completed and linked. Their four carousel recipes remain planned. Next 15 products still lack new standalone renders. See authoritative manifest and verification.json in output/may-meo-linh-2026-10-15. Full task remains unfinished; no publishing.
+
+## Linh proportion correction, 2026-10-17
+
+User feedback: Linh's head appeared oversized relative to her body. Created a fully clothed full-body proportion reference and a matching 12-view consistency sheet with the built-in image tool, reviewed both, and saved them in `output/may-meo-linh-2026-10-15/` as `linh-proportions-v2.png` and `linh-sheet-proportions-v2.png`. Matching `.prompt.txt` files preserve the prompts. The prior shipped sheet is retained there as `linh-sheet-before-proportion-correction.jpg`.
+
+Updated the shipped Linh sheet and her catalogue appearance with balanced adult proportions, natural shoulders and torso, and an explicit distinction between portrait identity and selfie perspective. The existing character-list refresh imported the new sheet and updated the same Linh character ID. Live verification: ready; original portrait remains `asset_0b410fc095244501b04b97157ad9d199`; new sheet is `asset_5a990441be524e02b837f43faf7a1ea9`. The full-body reference was also imported successfully as `asset_9207ccda96ff4bde87f9de67387cbb86`. Before/after API reads and the upload receipt are saved alongside the files.
+
+Pink Ruffle Muse editorial draft `pcreative_da7cc18def2846a8a7da91a53df4af07` was queued, but its first model render was rejected by the image tool's output safety filter (sexual). No output was produced or ingested; all five cards remain owed. Do not count this as completed. Other product work remains as recorded in the manifest: 90 filed product images, 50 completed jobs. Existing product media was preserved, and nothing was published.
+
+Verification: all 13 character tests passed, Ruff passed, and `git diff --check` passed. Future character drafts include the proportion guidance and use the new live sheet; stored prompts on old pending drafts remain unchanged, so also apply the user's proportion correction when rendering those.
+
+## Product-only generation resumed, 2026-10-17
+DOLLY DOT's two standalone drafts are now complete: `dolly-dot-styled_flat_lay-image.png` and `dolly-dot-bed_flat_lay-image.png`, created with the built-in image tool from the exact listing references. Both were visually reviewed, imported through their own drafts, and verified live succeeded/owed=0/linked=true. Receipts and prompts are saved beside the images, and manifest plus verification.json were updated. Product-image batch now has 92 filed images and 52 completed jobs. User was asked whether blocked model shots should be replaced by product-only creatives or left pending; no answer received yet. Original blocked model drafts remain pending; do not substitute product-only images into a character-editorial draft or claim it complete.
+
+2026-10-17 continuation: SWAN SET BLACK standalone styled and bed photographs generated, visually reviewed and ingested through own drafts; owed0 linkedtrue. Files swan-black-*-image.png and receipts in output/may-meo-linh-2026-10-15. Manifest updated; full batch remains incomplete.
+
+## User priority: every Mây Meo product needs Linh carousel
+Prioritize model carousel coverage over standalone images. Coverage audit: output/may-meo-linh-2026-10-15/linh-carousel-coverage.json. Every product must have linked carousel featuring Linh, corrected proportions. Do not count product-only sets toward this requirement. Midnight Sweet five-card editorial started using corrected Linh body reference. Prior blocked model jobs remain incomplete.
+
+MIDNIGHT SWEET Linh five-card editorial completed using corrected proportions, all five filed via draft and live verified owed0 linkedtrue. Files midnight-linh-editorial-1..5.png; prompts and final verification alongside. Mandatory Linh coverage now4/28 complete in linh-carousel-coverage.json. Remaining24 pending or blocked, do not claim full coverage.
+
+Latest Linh-priority continuation: Peony Dress and Sunny Set neutral catalogue model renders both rejected by built-in image tool output sexual filter. No images produced or imported. Peony draft pcreative_1386bbfa69fb4992bb99c4de2ce11d96 stays pending. Coverage remains4/28. Blockers recorded in manifest and linh-carousel-coverage.json. Do not silently replace model-worn content with product-only images.
