@@ -288,8 +288,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-collection-toolbar > strong { color: var(--muted); font-size: 11px; font-weight: 600; }
 .library-collection-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
 .library-collection { width: 100%; min-width: 0; box-sizing: border-box; }
-/* The Drafts view: unfinished AutoCut/Storytelling videos to pick up later.
-   Library-only; the shared picker never renders this. */
+/* The Drafts view: unfinished creation videos and Attribution generate-media
+   drafts to pick up later. Library-only; the shared picker never renders this. */
+.library-drafts-count { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+.library-draft-products { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
 .library-drafts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .library-draft-card { display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 .library-draft-card:hover { border-color: var(--link); background: var(--panel-raised); }

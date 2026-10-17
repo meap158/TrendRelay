@@ -24,6 +24,15 @@ test("media and effect filters combine instead of replacing one another", () => 
   assert.equal(activeFilterCount({ mediaKind: "video", effect: "any" }), 2);
 });
 
+test("product-tagged media filters serialize and count as an active filter", () => {
+  const params = assetFilterParams({ hasProducts: true });
+
+  assert.equal(params.get("has_products"), "true");
+  assert.equal(activeFilterCount({ hasProducts: true }), 1);
+  assert.equal(assetFilterParams({ hasProducts: false }).has("has_products"), false);
+});
+
+
 test("clearing a filter removes it from the request", () => {
   const params = assetFilterParams({ mediaKind: "", effect: "", processing: "" });
 

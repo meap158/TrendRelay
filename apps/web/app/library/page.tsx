@@ -56,6 +56,7 @@ import { CHARACTER_SOURCE } from "../../lib/characters";
 const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
 const CampaignPicker = dynamic(() => import("./campaign-picker").then((m) => m.CampaignPicker), { ssr: false });
+const ProductMediaGenerator = dynamic(() => import("../ui/product-media-generator").then((m) => m.ProductMediaGenerator), { ssr: false });
 const ProductPicker = dynamic(() => import("./product-picker").then((m) => m.ProductPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 // Memoised: both are handed stable props (a memoised assets array, useCallback
@@ -1340,6 +1341,7 @@ function LibraryContent() {
   const patchFilters = (next: Partial<AssetFilterValues>) =>
     setFilters((current) => ({ ...current, ...next }));
   const charactersView = filters.source === CHARACTER_SOURCE;
+  const productsView = Boolean(filters.hasProducts);
   const [sortOrder, setSortOrder] = usePersistedState(
     "trendrelay.library.sort", "newest", isSortOrder,
   );
@@ -1443,6 +1445,25 @@ function LibraryContent() {
     updated_at: string | null;
   };
   const [creationDrafts, setCreationDrafts] = useState<CreationDraftRow[]>([]);
+  type AttributionDraft = {
+    id: string; kind: string; recipe: string; status: string; owed: number;
+    product_count: number; product_ids: string[]; product_names: string[];
+  };
+  const [attributionDrafts, setAttributionDrafts] = useState<AttributionDraft[]>([]);
+  const [activeAttributionDraft, setActiveAttributionDraft] = useState<AttributionDraft | null>(null);
+  const activeGeneratorProducts = useMemo(() => activeAttributionDraft
+    ? activeAttributionDraft.product_ids.map((id, index) => ({
+      id,
+      name: activeAttributionDraft.product_names[index] || id,
+      creative_drafts: attributionDrafts.filter((draft) => draft.product_ids.includes(id)),
+    }))
+    : [], [activeAttributionDraft, attributionDrafts]);
+  /** A recipe slug never reaches the card: `held_up_garment` reads as words. */
+  const humanizeRecipe = (slug: string) => slug
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
   const [draftsView, setDraftsView] = useState(false);
   // Listing the characters is what copies the built-in cast into a
   // workspace's Library, so the tab asks for them before it filters.
@@ -1455,7 +1476,7 @@ function LibraryContent() {
         // The tab still shows whatever character pictures are already here.
       }
     }
-    patchFilters({ mediaKind: "image", source: CHARACTER_SOURCE });
+    patchFilters({ mediaKind: "image", source: CHARACTER_SOURCE, hasProducts: false });
   }
   const [resumeDraft, setResumeDraft] = useState<{ kind: string; id: string } | null>(null);
   const refreshCreationDrafts = useCallback(() => {
@@ -1464,6 +1485,38 @@ function LibraryContent() {
       .then((res) => res.json())
       .then((body) => { if (Array.isArray(body.items)) setCreationDrafts(body.items); })
       .catch(() => { /* the chip just shows nothing if the store cannot be read */ });
+    void apiFetch(`/api/workspaces/${workspaceId}/attribution/products`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!Array.isArray(body.products)) return;
+        const seen = new Map<string, AttributionDraft>();
+        for (const product of body.products as { id: string; name: string; creative_drafts?: { id: string; kind: string; recipe: string; status: string; owed: number; product_count?: number }[] }[]) {
+          for (const draft of product.creative_drafts ?? []) {
+            if (draft.status === "discarded") continue;
+            if (draft.status === "succeeded" && (draft.owed ?? 0) <= 0) continue;
+            const entry = seen.get(draft.id);
+            if (entry) {
+              if (!entry.product_ids.includes(product.id)) {
+                entry.product_ids.push(product.id);
+                entry.product_names.push(product.name);
+              }
+            } else {
+              seen.set(draft.id, {
+                id: draft.id,
+                kind: draft.kind,
+                recipe: draft.recipe,
+                status: draft.status,
+                owed: draft.owed ?? 0,
+                product_count: draft.product_count ?? 1,
+                product_ids: [product.id],
+                product_names: [product.name],
+              });
+            }
+          }
+        }
+        setAttributionDrafts([...seen.values()]);
+      })
+      .catch(() => { /* Attribution drafts just stay hidden if products cannot be read */ });
   }, [workspaceId, apiFetch]);
   // Stable handlers for the creation dialogs, so their memoised components skip
   // the library poll's re-renders. succeed/refreshCreationDrafts and the state
@@ -1482,13 +1535,8 @@ function LibraryContent() {
   }, [succeed, refreshCreationDrafts]);
   useEffect(() => {
     if (!workspaceId) return;
-    let live = true;
-    void apiFetch(`/api/workspaces/${workspaceId}/creations?limit=100`)
-      .then((res) => res.json())
-      .then((body) => { if (live && Array.isArray(body.items)) setCreationDrafts(body.items); })
-      .catch(() => undefined);
-    return () => { live = false; };
-  }, [workspaceId, apiFetch]);
+    refreshCreationDrafts();
+  }, [workspaceId, refreshCreationDrafts]);
   // The editing row offers Generate only when a provider is actually ready.
   // This read is our own list. It does not call a vendor. Coming back to the
   // tab picks up a key that was just saved and checked.
@@ -1524,6 +1572,24 @@ function LibraryContent() {
     () => creationDrafts.filter((draft) => draft.status === "draft" || draft.status === "rendering"),
     [creationDrafts],
   );
+  const totalDrafts = unfinishedDrafts.length + attributionDrafts.length;
+  // In Drafts view the media search box narrows the pick-up list instead: the
+  // asset filters below do not apply to drafts, so the query filters titles,
+  // kinds and product names locally rather than refreshing hidden assets.
+  const draftQuery = query.trim().toLowerCase();
+  const visibleCreationDrafts = useMemo(
+    () => draftQuery
+      ? unfinishedDrafts.filter((draft) => `${draft.kind} ${draft.title}`.toLowerCase().includes(draftQuery))
+      : unfinishedDrafts,
+    [unfinishedDrafts, draftQuery],
+  );
+  const visibleAttributionDrafts = useMemo(
+    () => draftQuery
+      ? attributionDrafts.filter((draft) => [draft.kind, draft.recipe, ...draft.product_names].join(" ").toLowerCase().includes(draftQuery))
+      : attributionDrafts,
+    [attributionDrafts, draftQuery],
+  );
+  const visibleDrafts = visibleCreationDrafts.length + visibleAttributionDrafts.length;
   /** The machine reading open in the reader, or null. */
   const [readingDraft, setReadingDraft] = useState<ReadableTranscript | null>(null);
   const [effectsOpen, setEffectsOpen] = useState(false);
@@ -1685,6 +1751,30 @@ function LibraryContent() {
       setCreationDrafts((current) => current.filter((draft) => draft.id !== draftId));
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "That draft could not be put away.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /** Discard an Attribution generate-media draft from the Library pick-up list. */
+  async function discardAttributionDraft(draftId: string) {
+    setBusy(`discard-${draftId}`);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/creative-drafts/${draftId}/discard`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(typeof body?.detail === "string" && body.detail.trim()
+          ? body.detail
+          : "That draft could not be discarded.");
+      }
+      setAttributionDrafts((current) => current.filter((draft) => draft.id !== draftId));
+      setActiveAttributionDraft((current) => (current?.id === draftId ? null : current));
+      succeed("Draft discarded.");
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "That draft could not be discarded.");
     } finally {
       setBusy("");
     }
@@ -2341,7 +2431,7 @@ function LibraryContent() {
             </div>
           )}
           <div className="library-search-row">
-            <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
+            <form className="library-search" onSubmit={(event) => { event.preventDefault(); if (!draftsView) void refresh(); }}>
               <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
               <Button type="submit"><ActionIcon name="search" />{t("common.search")}</Button>
             </form>
@@ -2370,15 +2460,18 @@ function LibraryContent() {
 
           <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
-              <button type="button" className={!mediaKind && !draftsView && !charactersView ? "selected" : ""} aria-pressed={!mediaKind && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "" }); }}>{t("common.all")} <span>{mediaTotal}</span></button>
-              <button type="button" className={mediaKind === "video" && !draftsView && !charactersView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video", source: "" }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
-              <button type="button" className={mediaKind === "image" && !draftsView && !charactersView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image", source: "" }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
-              <button type="button" className={mediaKind === "audio" && !draftsView && !charactersView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView && !charactersView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio", source: "" }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
-              <button type="button" className={charactersView && !draftsView ? "selected" : ""} aria-pressed={charactersView && !draftsView} onClick={() => void openCharacters()}>{t("attribution.characters.libraryTab")}</button>
-              {unfinishedDrafts.length > 0 && (
-                <button type="button" className={draftsView ? "selected" : ""} aria-pressed={draftsView} onClick={() => setDraftsView(true)}>Drafts <span>{unfinishedDrafts.length}</span></button>
+              <button type="button" className={!mediaKind && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={!mediaKind && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "", hasProducts: false }); }}>{t("common.all")} <span>{mediaTotal}</span></button>
+              <button type="button" className={mediaKind === "video" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video", source: "", hasProducts: false }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
+              <button type="button" className={mediaKind === "image" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image", source: "", hasProducts: false }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
+              <button type="button" className={mediaKind === "audio" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio", source: "", hasProducts: false }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
+              <button type="button" title={t("library.productsHelp")} className={productsView && !draftsView ? "selected" : ""} aria-pressed={productsView && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "", hasProducts: true }); }}>{t("library.products")} <span>{facets.product_assets ?? 0}</span></button>
+              <button type="button" className={charactersView && !draftsView && !productsView ? "selected" : ""} aria-pressed={charactersView && !draftsView && !productsView} onClick={() => void openCharacters()}>{t("attribution.characters.libraryTab")}</button>
+              {totalDrafts > 0 && (
+                <button type="button" className={draftsView ? "selected" : ""} aria-pressed={draftsView} onClick={() => setDraftsView(true)}>Drafts <span>{totalDrafts}</span></button>
               )}
             </div>
+            {/* Sort and grouping order media, not drafts - the pick-up list hides them. */}
+            {!draftsView && (
             <div className="library-arrange-controls">
               <label>{t("library.sortLabel")}
                 <Select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
@@ -2396,14 +2489,20 @@ function LibraryContent() {
                 </Select>
               </label>
             </div>
+            )}
           </nav>
 
+          {/* Asset filters narrow media, never drafts - the pick-up list hides them. */}
+          {!draftsView && (
           <AssetFilters
             values={filters}
             facets={facets}
             fields={["channel", "platform", "effect", "processing", "campaign", "downloaded"]}
             onChange={setFilters}
           />
+          )}
+          {/* Counts, download refresh and gallery/list order the media collection. */}
+          {!draftsView && (
           <div className="library-collection-toolbar">
             <strong aria-live="polite">
               {loadingAssets ? "Filtering…" : `${total} ${total === 1 ? "item" : "items"}`}
@@ -2423,11 +2522,13 @@ function LibraryContent() {
                     icon: <ActionIcon name="list" /> },
                 ]}
               />
-            </div>
-          </div>
+                </div>
+              </div>
+            )}
             </div>
 
-            {assets.length > 0 && (
+            {/* Bulk media selection has nothing to act on in the pick-up list. */}
+            {!draftsView && assets.length > 0 && (
               <div className={`library-selection-bar${selection.size ? " active" : ""}`}>
               <span
                 className="library-pick"
@@ -2568,9 +2669,15 @@ function LibraryContent() {
             <WaitingBlock className="library-collection-wait" message={t("common.loading")} />
           ) : draftsView ? (
             <div className="library-collection library-grid library-drafts">
-              {unfinishedDrafts.length === 0 ? (
-                <p>No unfinished AutoCut or Storytelling videos - the ones you save appear here to pick up later.</p>
-              ) : unfinishedDrafts.map((draft) => (
+              {totalDrafts === 0 ? (
+                <p>No unfinished drafts - saved AutoCut, Storytelling, and Attribution generate-media drafts appear here to pick up later.</p>
+              ) : visibleDrafts === 0 ? (
+                <p>No drafts match “{query.trim()}”.</p>
+              ) : (<>
+              {draftQuery && (
+                <p className="library-drafts-count">{visibleDrafts} of {totalDrafts} drafts</p>
+              )}
+              {visibleCreationDrafts.map((draft) => (
                 <div key={draft.id} className="library-draft-card">
                   <button
                     type="button"
@@ -2584,6 +2691,7 @@ function LibraryContent() {
                     <span className="library-draft-kind">
                       {draft.kind === "autocut" ? "AutoCut" : "Storytelling"}
                     </span>
+                    <Badge tone="neutral">Video draft</Badge>
                     <strong className="library-draft-title">{draft.title}</strong>
                     <small>
                       {draft.status === "rendering"
@@ -2601,12 +2709,50 @@ function LibraryContent() {
                     <Button
                       variant="quiet"
                       size="sm"
+                      title="Removes this draft from the list. It stays on record and can be restored."
                       busy={busy === `archive-${draft.id}`}
                       onClick={() => void archiveDraft(draft.id)}
-                    >Put away</Button>
+                    >Remove</Button>
                   )}
                 </div>
               ))}
+              {visibleAttributionDrafts.map((draft) => {
+                const lead = draft.product_names[0] ?? "Attribution draft";
+                const title = draft.product_count > 1 ? `${lead} +${draft.product_count - 1} more` : lead;
+                return (
+                <div key={`attribution-${draft.id}`} className="library-draft-card">
+                  {/* Same two-row shape as a creation card: the body opens the
+                      Review modal, the quiet action below deletes. */}
+                  <button
+                    type="button"
+                    className="library-draft-open"
+                    title="Review what this draft still needs, without leaving the Library."
+                    onClick={() => setActiveAttributionDraft(draft)}
+                  >
+                    <span className="library-draft-kind">
+                      {draft.kind === "video" ? "Video" : draft.kind === "carousel" ? "Carousel" : "Image"} · {humanizeRecipe(draft.recipe)}
+                    </span>
+                    <Badge tone="info">Generate media</Badge>
+                    <strong className="library-draft-title" title={title}>
+                      {title}
+                    </strong>
+                    <small>
+                      {draft.owed > 0 ? `${draft.owed} file${draft.owed === 1 ? "" : "s"} owed` : draft.status} · {draft.product_count} product{draft.product_count === 1 ? "" : "s"}
+                    </small>
+                  </button>
+                  {draft.status === "pending" && (
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      title="Takes this draft out of the queue. Its products stay in Attribution."
+                      busy={busy === `discard-${draft.id}`}
+                      onClick={() => void discardAttributionDraft(draft.id)}
+                    >Delete</Button>
+                  )}
+                </div>
+                );
+              })}
+              </>)}
             </div>
           ) : <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
             {groupBy === "none"
@@ -2637,7 +2783,9 @@ function LibraryContent() {
             )}
           </div>}
 
-          {!!jobs.length && (
+          {/* The ingestion log belongs to the media list, not the pick-up list:
+              in Drafts view it sat below the cards as a half-empty strip. */}
+          {!draftsView && !!jobs.length && (
             <div className="library-jobs">
               <strong>{t("library.recentIngestion")}</strong>
               {jobs.slice(0, 5).map((job, index) => (
@@ -3322,6 +3470,24 @@ function LibraryContent() {
             succeed(msg);
             void refresh();
             void refreshGlobalJobs();
+          }}
+        />
+      )}
+      {workspaceId && activeAttributionDraft && (
+        <ProductMediaGenerator
+          key={`${workspaceId}-${activeAttributionDraft.id}`}
+          open
+          products={activeGeneratorProducts}
+          draftId={activeAttributionDraft.id}
+          attributionHref={`/attribution?products=${activeAttributionDraft.product_ids.join(",")}`}
+          onClose={() => setActiveAttributionDraft(null)}
+          onChanged={() => {
+            refreshCreationDrafts();
+            void refresh();
+          }}
+          onOpenDraft={(_productId, draftId) => {
+            const existing = attributionDrafts.find((draft) => draft.id === draftId);
+            if (existing) setActiveAttributionDraft(existing);
           }}
         />
       )}

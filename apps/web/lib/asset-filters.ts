@@ -49,6 +49,8 @@ export type AssetFilterValues = {
    * Characters tab sets `character`: the cast's portraits and sheets.
    */
   source?: string;
+  /** Keep assets with at least one attached Attribution product. */
+  hasProducts?: boolean;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -59,6 +61,8 @@ export type AssetFacets = {
   effects: Facet[];
   processing: Facet[];
   campaigns?: Facet[];
+  /** Number of unique media assets attached to one or more products. */
+  product_assets?: number;
 };
 
 export const EMPTY_FACETS: AssetFacets = {
@@ -68,6 +72,7 @@ export const EMPTY_FACETS: AssetFacets = {
   effects: [],
   processing: [],
   campaigns: [],
+  product_assets: 0,
 };
 
 /** One canonical mapping from controls to the API query. */
@@ -88,6 +93,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   if (values.notInCampaign) params.set("not_in_campaign", values.notInCampaign);
   if (values.inCampaign) params.set("in_campaign", values.inCampaign);
   if (values.source) params.set("source_type", values.source);
+  if (values.hasProducts) params.set("has_products", "true");
   return params;
 }
 
@@ -97,7 +103,7 @@ export function activeFilterCount(
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
-    "downloadedWithinDays", "notInCampaign", "inCampaign", "source",
+    "downloadedWithinDays", "notInCampaign", "inCampaign", "source", "hasProducts",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];
