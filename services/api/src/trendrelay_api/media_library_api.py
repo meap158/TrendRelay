@@ -1055,6 +1055,8 @@ class AssetFilter(BaseModel):
     #: How the asset arrived, by its recorded `source_type`. The Library's
     #: Characters tab is `character`: portraits and sheets of the cast.
     source_type: str | None = None
+    #: Keep only files attached to one or more Attribution products.
+    has_products: bool = False
 
 
 #: Filter values that are not the id of an effect.
@@ -1148,6 +1150,16 @@ def _processing_condition(wanted: str) -> Any:
     return MediaAsset.id.is_(None)
 
 
+def _has_product_attachment(workspace_id: str) -> Any:
+    """A correlated membership check: one asset counts once, however many products it has."""
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+
+    return select(ProductCreativeLink.id).where(
+        ProductCreativeLink.workspace_id == workspace_id,
+        ProductCreativeLink.asset_id == MediaAsset.id,
+    ).correlate(MediaAsset).exists()
+
+
 def asset_conditions(
     workspace_id: str, filters: AssetFilter, *, omit: str | None = None
 ) -> list[Any]:
@@ -1194,6 +1206,8 @@ def asset_conditions(
         values.append(MediaAsset.media_kind == filters.media_kind)
     if omit != "source_type" and filters.source_type:
         values.append(MediaAsset.source_type == filters.source_type)
+    if omit != "has_products" and filters.has_products:
+        values.append(_has_product_attachment(workspace_id))
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
     if omit != "collected_within_days" and filters.collected_within_days:
@@ -1295,6 +1309,7 @@ def list_asset_ids(
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     source_type: Annotated[str | None, Query(max_length=40)] = None,
+    has_products: Annotated[bool, Query()] = False,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -1310,7 +1325,7 @@ def list_asset_ids(
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
-        source_type=source_type,
+        source_type=source_type, has_products=has_products,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -1356,6 +1371,7 @@ def list_assets(
     not_in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     source_type: Annotated[str | None, Query(max_length=40)] = None,
+    has_products: Annotated[bool, Query()] = False,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     # Without this a caller could read the first hundred matches and no more,
@@ -1374,7 +1390,7 @@ def list_assets(
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
-        source_type=source_type,
+        source_type=source_type, has_products=has_products,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:
@@ -1446,6 +1462,12 @@ def list_assets(
                 missing_label="Other media",
                 omit="media_kind",
             ),
+            "product_assets": session.scalar(
+                select(func.count(MediaAsset.id)).where(
+                    *conditions(omit="has_products"),
+                    _has_product_attachment(workspace_id),
+                )
+            ) or 0,
             # Not a column but a related row, so it is counted on its own rather
             # than through `facet`. It belongs beside the others because it is
             # the same kind of question: how much of this library has it.

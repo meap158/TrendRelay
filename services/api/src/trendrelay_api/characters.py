@@ -144,12 +144,39 @@ def ensure_defaults(session: Session, workspace_id: str, actor_user_id: str) -> 
     A built-in row the operator archived stays archived: the slug is still
     taken, so it is not added back. Returns how many were added.
     """
-    taken = set(session.scalars(
-        select(Character.slug).where(Character.workspace_id == workspace_id)
-    ).all())
+    existing = {row.slug: row for row in session.scalars(
+        select(Character).where(Character.workspace_id == workspace_id)
+    ).all()}
+    taken = set(existing)
+    refreshed = False
     added = 0
     for spec in DEFAULT_CHARACTERS:
         if spec.slug in taken:
+            row = existing[spec.slug]
+            # Correct the previously invented Linh identity without deleting files
+            # or changing the character id referenced by existing drafts.
+            if (spec.slug == "linh" and row.builtin and row.archived_at is None
+                    and row.appearance != spec.appearance):
+                portrait, sheet = default_paths(spec.slug)
+                if portrait.is_file() and sheet.is_file():
+                    try:
+                        portrait_id = _ingest(
+                            workspace_id, actor_user_id, _stage_file(portrait),
+                            f"{spec.name} - Instagram reference portrait",
+                        )
+                        sheet_id = _ingest(
+                            workspace_id, actor_user_id, _stage_file(sheet),
+                            f"{spec.name} - corrected character sheet",
+                        )
+                    except Exception:  # noqa: BLE001 - retry on the next list
+                        logger.exception("Corrected Linh references could not be imported")
+                    else:
+                        row.portrait_asset_id = portrait_id
+                        row.sheet_asset_id = sheet_id
+                        row.appearance = spec.appearance
+                        row.outfit = spec.outfit
+                        row.updated_at = utc_now()
+                        refreshed = True
             continue
         portrait, sheet = default_paths(spec.slug)
         if not portrait.is_file() or not sheet.is_file():
@@ -186,7 +213,7 @@ def ensure_defaults(session: Session, workspace_id: str, actor_user_id: str) -> 
             # Another request added it first.
             continue
         added += 1
-    if added:
+    if added or refreshed:
         session.commit()
     return added
 

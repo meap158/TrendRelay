@@ -198,6 +198,26 @@ const SCENES: Record<string, { video: boolean; art: (marker: string) => ReactNod
       </>
     ),
   },
+  character_editorial_carousel: {
+    video: false,
+    art: () => (
+      <>
+        <rect x={3} y={8} width={20} height={64} rx={3} style={SOFT} />
+        <Person x={13} y={68} s={0.75} hair />
+        <rect x={27} y={8} width={20} height={64} rx={3} style={SOFT} />
+        <rect x={30} y={29} width={14} height={30} rx={2} />
+        <Person x={37} y={68} s={0.64} hair />
+        <rect x={51} y={8} width={20} height={64} rx={3} style={SOFT} />
+        <Top x={61} y={36} s={0.55} />
+        <path d="M55 58 Q61 51 67 58" />
+        <rect x={75} y={8} width={20} height={64} rx={3} style={SOFT} />
+        <Person x={85} y={68} s={0.68} hair />
+        <path d="M81 42 L89 36" />
+        <rect x={99} y={8} width={18} height={64} rx={3} style={SOFT} />
+        <Person x={108} y={68} s={0.7} hair />
+      </>
+    ),
+  },
   hikaru_walk: {
     video: true,
     art: (m) => (

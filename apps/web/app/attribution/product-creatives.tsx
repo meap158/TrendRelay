@@ -585,6 +585,7 @@ const RECIPE_LABELS: Record<string, string> = {
   sleepwear_lookbook: "attribution.generate.recipeSleepwearLookbook",
   held_up_garment: "attribution.generate.recipeHeldUp",
   hikaru_lookbook: "attribution.generate.recipeHikaru",
+  character_editorial_carousel: "attribution.generate.recipeCharacterEditorialCarousel",
   ceiling_fan_transition: "attribution.generate.recipeCeilingFan",
   hanger_rail_reveal: "attribution.generate.recipeHangerRail",
   hikaru_walk: "attribution.generate.recipeHikaruWalk",

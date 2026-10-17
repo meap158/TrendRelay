@@ -52,6 +52,7 @@ def attach_media_products(
     user: AuthenticatedUser, session: DatabaseSession,
 ) -> dict[str, Any]:
     from sqlalchemy import select
+
     from trendrelay_api.media_models import MediaAsset
     from trendrelay_api.opportunity_models import Product
     from trendrelay_api.product_creative_models import ProductCreativeLink
@@ -96,6 +97,7 @@ def detach_media_product(
     user: AuthenticatedUser, session: DatabaseSession,
 ) -> dict[str, Any]:
     from sqlalchemy import select
+
     from trendrelay_api.media_models import MediaAsset
     from trendrelay_api.opportunity_models import Product
     from trendrelay_api.product_creative_models import ProductCreativeLink
@@ -103,7 +105,10 @@ def detach_media_product(
     require_role(membership(session, workspace_id, user.id), _EDITORS)
     asset = session.get(MediaAsset, asset_id)
     product = session.get(Product, product_id)
-    if not asset or asset.workspace_id != workspace_id or not product or product.workspace_id != workspace_id:
+    if (
+        not asset or asset.workspace_id != workspace_id
+        or not product or product.workspace_id != workspace_id
+    ):
         raise HTTPException(status_code=404, detail="Media or product not found in this workspace.")
     link = session.scalar(select(ProductCreativeLink).where(
         ProductCreativeLink.workspace_id == workspace_id,
@@ -125,6 +130,7 @@ class DraftBody(BaseModel):
         "bed_flat_lay", "mannequin_transition", "mirror_selfie",
         "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
         "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
+        "character_editorial_carousel",
         "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk",
     ]
     variant: Literal["female", "male"] | None = None

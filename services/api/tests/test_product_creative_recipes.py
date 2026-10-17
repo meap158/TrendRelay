@@ -89,7 +89,8 @@ def test_together_is_a_sibling_and_leaves_the_single_product_scripts_alone() -> 
 _READ_BACK = (
     "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
     "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
-    "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk",
+    "character_editorial_carousel", "ceiling_fan_transition",
+    "hanger_rail_reveal", "hikaru_walk",
 )
 
 
@@ -118,6 +119,9 @@ def test_the_read_back_recipes_offer_the_kinds_their_wording_can_hold() -> None:
     assert RECIPES["sleepwear_lookbook"]["kinds"] == ("carousel",)
     assert RECIPES["styled_flat_lay"]["kinds"] == ("image", "carousel")
     assert RECIPES["hikaru_lookbook"]["kinds"] == ("image", "carousel")
+    assert RECIPES["character_editorial_carousel"]["kinds"] == ("carousel",)
+    assert RECIPES["character_editorial_carousel"]["requires_character"] is True
+    assert RECIPES["character_editorial_carousel"]["card_count"] == 5
     for recipe in ("mannequin_walkaround", "flat_lay_reveal", "held_up_garment",
                    "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk"):
         assert RECIPES[recipe]["kinds"] == ("video",)

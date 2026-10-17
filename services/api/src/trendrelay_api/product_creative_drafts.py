@@ -421,6 +421,14 @@ def _prepare(
         session, workspace_id,
         product_id=product_id, together=together, product_ids=product_ids,
     )
+    if spec.get("max_products") and len(products) > spec["max_products"]:
+        raise ValueError(
+            f"{recipe} supports at most {spec['max_products']} products "
+            "so every product fits the carousel."
+        )
+    cards = _card_count(kind, card_count)
+    if spec.get("card_count") is not None and cards != spec["card_count"]:
+        raise ValueError(f"{recipe} uses exactly {spec['card_count']} cards.")
     subjects = _subject_assets(session, workspace_id, subject_asset_ids)
     chosen = _image_choices(included_images)
     if chosen is not None:
@@ -451,6 +459,8 @@ def _prepare(
     enabled, reference = _background(recipe, background_enabled, background_reference)
     group = len(products) > 1
     character = for_draft(session, workspace_id, character_id)
+    if spec.get("requires_character") and character is None:
+        raise ValueError(f"{recipe} needs a selected Library character.")
     if character is not None and spec.get("character"):
         raise ValueError(
             "This recipe already features its own model. Switch the character off "
@@ -476,7 +486,7 @@ def _prepare(
         "background_enabled": enabled,
         "background_reference": reference,
         "prompt": prompt,
-        "card_count": _card_count(kind, card_count),
+        "card_count": cards,
         "product_images": kept[0],
         "subject_assets": subjects,
         "character": character,
@@ -719,11 +729,7 @@ def create_draft(
             product_id=product_id,
             position=member["position"],
             listing_fields=member["listing_fields"],
-            included_images=(
-                included_by_product[product_id]
-                if product_id in included_by_product
-                else None
-            ),
+            included_images=included_by_product.get(product_id),
             created_at=now,
         ))
     # MCP closes the session on the way out and rolls back whatever was only

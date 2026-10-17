@@ -8,6 +8,7 @@ import {
   characterField,
   isPickable,
   paidRequests,
+  recipeRequiresCharacter,
   recipeTakesCharacter,
   type Character,
 } from "./characters.ts";
@@ -64,4 +65,12 @@ test("the recipes with their own model do not take a character", () => {
   assert.equal(recipeTakesCharacter("hikaru_lookbook"), false);
   assert.equal(recipeTakesCharacter("hikaru_walk"), false);
   assert.equal(recipeTakesCharacter("mirror_selfie"), true);
+});
+
+// A mandatory character recipe cannot silently fall back to an invented model.
+test("editorial carousel needs an explicit character while ordinary recipes allow none", () => {
+  assert.equal(recipeRequiresCharacter("character_editorial_carousel"), true);
+  assert.equal(recipeTakesCharacter("character_editorial_carousel"), true);
+  assert.equal(recipeRequiresCharacter("bed_flat_lay"), false);
+  assert.equal(recipeRequiresCharacter("hikaru_lookbook"), false);
 });

@@ -369,6 +369,64 @@ SLEEPWEAR_LOOKBOOK_ON_TOGETHER = (
     + _LOOKBOOK_POSES.rstrip()
 )
 
+# A five-card apparel story based on the recurring poses in the supplied
+# Instagram research: a clear hero, relaxed seated frame, construction detail,
+# profile fit, and a full-length close. The selected Library character provides
+# identity; the product gallery remains the authority for the garment.
+_CHARACTER_EDITORIAL_COMMON = (
+    "Create exactly five separate, finished portrait-format carousel images, "
+    "one complete image per card. Never make a contact sheet, grid, collage, "
+    "or image containing multiple cards. Use the selected Library character's "
+    "portrait and consistency sheet as the identity reference; show the same "
+    "adult character with the same face, hair, skin tone and build in every "
+    "card. Use the attached product image or images as the sole authority for "
+    "the product's exact cut, color, fabric, trims, fit and construction. "
+    "The outfit on the character sheet is only an identity reference: replace "
+    "it with the exact selected product and do not redesign or embellish it. "
+    "Keep camera height, lens feel, color, lighting and set consistent across "
+    "all five cards. Card 1: full-length three-quarter hero pose with the "
+    "complete silhouette visible and relaxed natural hands. Card 2: seated "
+    "three-quarter pose on a simple pale chair, torso on a gentle diagonal, "
+    "one hand near the temple without obscuring the face or garment. Card 3: "
+    "medium close-up that makes one visible product detail easy to inspect; "
+    "a natural hand may rest beside the detail, never over it. Card 4: clean "
+    "side or over-shoulder view showing fit and drape. Card 5: full-length "
+    "front view in a distinct relaxed pose, showing the complete garment and "
+    "hem. Use an eye-level fashion-camera perspective, realistic anatomy, "
+    "natural skin texture, clear garment edges and crop-safe space. No text, "
+    "price, claims, fake labels, logos, watermarks, extra people, or "
+    "unrequested props. Keep the garment opaque and modestly presented."
+)
+CHARACTER_EDITORIAL_OFF = (
+    _CHARACTER_EDITORIAL_COMMON + " The set is one uncluttered warm-grey studio "
+    "with a soft seamless backdrop and broad diffused light; use the pale chair "
+    "only for Card 2. Keep the background and light direction the same on all "
+    "five cards."
+)
+CHARACTER_EDITORIAL_ON = (
+    _CHARACTER_EDITORIAL_COMMON + " Use the attached background image as the "
+    "same set for all five cards, matching its lighting and perspective. Do not "
+    "switch rooms or add another scene."
+)
+_CHARACTER_EDITORIAL_EACH = (
+    " This set features every attached product. Assign one product to each "
+    "card in the order provided, one product per frame; do not combine "
+    "garments or change a product's colorway. If fewer than five products are "
+    "attached, use the remaining cards for alternate poses and details of the "
+    "first product, preserving the same card sequence."
+)
+CHARACTER_EDITORIAL_OFF_TOGETHER = (
+    _CHARACTER_EDITORIAL_COMMON + _CHARACTER_EDITORIAL_EACH
+    + " The set is one uncluttered warm-grey studio with a soft seamless "
+    "backdrop and broad diffused light; use the pale chair only for Card 2. "
+    "Keep the background and light direction the same on all five cards."
+)
+CHARACTER_EDITORIAL_ON_TOGETHER = (
+    _CHARACTER_EDITORIAL_COMMON + _CHARACTER_EDITORIAL_EACH
+    + " Use the attached background image as the same set for all five cards, "
+    "matching its lighting and perspective. Do not switch rooms or add another scene."
+)
+
 #: The sleepwear brand's own video: a set on hangers on a rail, a hand that
 #: lifts the top away to show the bottoms, then the fabric in close-up.
 _RAIL_SCENE_OFF = (
@@ -658,6 +716,14 @@ RECIPES: dict[str, dict[str, Any]] = {
         "variants": (),
         "character": "hikaru",
     },
+    "character_editorial_carousel": {
+        "kinds": ("carousel",),
+        "background": "optional",
+        "variants": (),
+        "requires_character": True,
+        "card_count": 5,
+        "max_products": 5,
+    },
     "ceiling_fan_transition": {
         "kinds": ("video",),
         "background": "optional",
@@ -695,6 +761,8 @@ _PROMPTS: dict[tuple[str, bool, str | None], str] = {
     ("held_up_garment", True, None): HELD_UP_ON,
     ("hikaru_lookbook", False, None): HIKARU_OFF,
     ("hikaru_lookbook", True, None): HIKARU_ON,
+    ("character_editorial_carousel", False, None): CHARACTER_EDITORIAL_OFF,
+    ("character_editorial_carousel", True, None): CHARACTER_EDITORIAL_ON,
     ("ceiling_fan_transition", False, None): CEILING_FAN_OFF,
     ("ceiling_fan_transition", True, None): CEILING_FAN_ON,
     ("hanger_rail_reveal", False, None): HANGER_RAIL_OFF,
@@ -722,6 +790,8 @@ _TOGETHER: dict[tuple[str, bool, str | None], str] = {
     ("held_up_garment", True, None): HELD_UP_ON_TOGETHER,
     ("hikaru_lookbook", False, None): HIKARU_OFF_TOGETHER,
     ("hikaru_lookbook", True, None): HIKARU_ON_TOGETHER,
+    ("character_editorial_carousel", False, None): CHARACTER_EDITORIAL_OFF_TOGETHER,
+    ("character_editorial_carousel", True, None): CHARACTER_EDITORIAL_ON_TOGETHER,
     ("ceiling_fan_transition", False, None): CEILING_FAN_OFF_TOGETHER,
     ("ceiling_fan_transition", True, None): CEILING_FAN_ON_TOGETHER,
     ("hanger_rail_reveal", False, None): HANGER_RAIL_OFF_TOGETHER,

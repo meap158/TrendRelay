@@ -45,6 +45,20 @@ DEFAULT_CHARACTERS: tuple[CharacterSpec, ...] = (
         "an ivory blouse and taupe trousers",
     ),
     CharacterSpec(
+        "linh", "Linh",
+        "the adult woman in the supplied hemell_official Instagram reference photos; "
+        "preserve the reference identity, fair skin tone, dark-brown eyes, exact eye "
+        "shape and spacing, brows, nose, small mouth and softly tapered jaw. Long "
+        "dark centre-parted hair is half tied back with fine wispy forehead strands. "
+        "Use the original portrait as the identity authority; no invented beauty "
+        "marks, ethnicity substitution, face redesign or plastic skin. Keep balanced "
+        "adult head-to-body proportions, natural shoulder width and torso; the close "
+        "portrait defines facial identity, not selfie perspective or head size. Use "
+        "the full-body sheet for anatomy; avoid an oversized head, pinched shoulders "
+        "or stretched legs",
+        "an opaque ivory crew-neck t-shirt, beige straight-leg trousers and white sneakers",
+    ),
+    CharacterSpec(
         "thao", "Thảo",
         "a fictional Vietnamese woman aged twenty-nine with a wavy shoulder-length "
         "dark-brown bob, medium tan skin with natural tonal variation, an athletic build, "

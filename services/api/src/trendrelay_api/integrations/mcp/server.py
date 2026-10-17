@@ -1429,6 +1429,8 @@ def build_server(workspace_id: str) -> FastMCP:
             "image, carousel, or video. recipe is bed_flat_lay (image or "
             "carousel), styled_flat_lay (image or carousel), hikaru_lookbook "
             "(image or carousel), sleepwear_lookbook (carousel), "
+            "character_editorial_carousel (exactly five carousel cards, requires "
+            "character_id, at most five products), "
             "mannequin_transition, mirror_selfie, mannequin_walkaround, "
             "flat_lay_reveal, held_up_garment, hanger_rail_reveal, "
             "hikaru_walk, or ceiling_fan_transition "

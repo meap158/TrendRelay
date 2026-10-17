@@ -153,7 +153,7 @@ def ready_generator(monkeypatch) -> list[tuple[str, str]]:
 
 
 def test_the_shipped_cast_is_complete_and_mostly_asian() -> None:
-    assert len(DEFAULT_CHARACTERS) == 15
+    assert len(DEFAULT_CHARACTERS) == 16
     for spec in DEFAULT_CHARACTERS:
         portrait, sheet = default_paths(spec.slug)
         assert portrait.is_file(), spec.slug
@@ -186,6 +186,32 @@ def test_listing_copies_the_cast_into_the_library_once() -> None:
     with TestingSession() as session:
         kinds = set(session.scalars(select(MediaAsset.source_type)).all())
     assert kinds == {"character"}
+
+
+def test_existing_linh_is_corrected_once_without_deleting_old_library_files(monkeypatch) -> None:
+    workspace_id = make_workspace()
+    linh = next(item for item in list_cast(workspace_id)["characters"] if item["slug"] == "linh")
+    original_ids = [linh["portrait_asset_id"], linh["sheet_asset_id"]]
+    with TestingSession.begin() as session:
+        row = session.get(Character, linh["id"])
+        row.appearance = "a fictional Vietnamese woman from the rejected version"
+
+    calls = []
+
+    def ingest(workspace_id, actor_user_id, path, title):
+        calls.append(title)
+        return original_ids[len(calls) - 1]
+
+    monkeypatch.setattr(characters, "_ingest", ingest)
+    corrected = next(item for item in list_cast(workspace_id)["characters"]
+                     if item["slug"] == "linh")
+    assert corrected["id"] == linh["id"]
+    assert "supplied hemell_official" in corrected["appearance"]
+    assert len(calls) == 2
+    list_cast(workspace_id)
+    assert len(calls) == 2
+    with TestingSession() as session:
+        assert all(session.get(MediaAsset, asset_id) is not None for asset_id in original_ids)
 
 
 def test_a_removed_builtin_stays_removed() -> None:
@@ -249,6 +275,41 @@ def test_a_recipe_with_its_own_model_refuses_a_character() -> None:
     )
     assert refused.status_code == 422
     assert "own model" in refused.json()["detail"]
+
+
+def test_editorial_carousel_requires_a_library_character_and_five_cards() -> None:
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id)
+    linh = next(item for item in list_cast(workspace_id)["characters"] if item["slug"] == "linh")
+    base = {
+        "product_id": product_id,
+        "kind": "carousel",
+        "recipe": "character_editorial_carousel",
+        "character_id": linh["id"],
+    }
+    preview = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json={**base, "card_count": 5},
+    )
+    assert preview.status_code == 200, preview.text
+    prompt = preview.json()["draft"]["prompt"]
+    assert "exactly five separate" in prompt
+    assert "Card 1:" in prompt and "Card 5:" in prompt
+    assert "character Linh" in prompt
+
+    missing_character = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json={**base, "character_id": None, "card_count": 5},
+    )
+    assert missing_character.status_code == 422
+    assert "needs a selected Library character" in missing_character.json()["detail"]
+
+    wrong_count = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json={**base, "card_count": 4},
+    )
+    assert wrong_count.status_code == 422
+    assert "exactly 5 cards" in wrong_count.json()["detail"]
 
 
 def test_every_recipe_still_fits_the_stored_prompt_with_the_longest_character() -> None:

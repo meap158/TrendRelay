@@ -1258,6 +1258,67 @@ def test_a_campaign_browser_can_hide_what_it_already_queued() -> None:
     assert other.json()["total"] == 2
 
 
+def test_product_category_filters_assets_counts_and_select_all_once() -> None:
+    """A product view shows linked media, with one count per asset and matching select-all."""
+    from trendrelay_api.opportunity_models import Product
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+
+    workspace_id = create_workspace()
+    with TestingSession.begin() as session:
+        session.add_all([
+            Product(
+                id="product-a", workspace_id=workspace_id, catalog_key="catalog-a",
+                name="Product A", marketplace="shopee", created_by="library-owner",
+            ),
+            Product(
+                id="product-b", workspace_id=workspace_id, catalog_key="catalog-b",
+                name="Product B", marketplace="shopee", created_by="library-owner",
+            ),
+            MediaAsset(
+                id="asset-product", workspace_id=workspace_id, title="Tagged image",
+                media_kind="image", source_type="attribution", original_path="/images/tagged.jpg",
+                original_sha256="a" * 64, mime_type="image/jpeg", size_bytes=10,
+                created_by="library-owner",
+            ),
+            MediaAsset(
+                id="asset-unlinked", workspace_id=workspace_id, title="Unlinked video",
+                media_kind="video", source_type="upload", original_path="/clips/unlinked.mp4",
+                original_sha256="b" * 64, mime_type="video/mp4", size_bytes=10,
+                created_by="library-owner",
+            ),
+        ])
+        session.flush()
+        session.add_all([
+            ProductCreativeLink(
+                id="link-a", workspace_id=workspace_id, product_id="product-a",
+                asset_id="asset-product", draft_id=None,
+            ),
+            ProductCreativeLink(
+                id="link-b", workspace_id=workspace_id, product_id="product-b",
+                asset_id="asset-product", draft_id=None,
+            ),
+        ])
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    everything = asyncio.run(request("GET", f"{base}/assets"))
+    assert everything.status_code == 200
+    assert everything.json()["facets"]["product_assets"] == 1
+
+    products = asyncio.run(request("GET", f"{base}/assets?has_products=true"))
+    assert products.status_code == 200
+    assert products.json()["total"] == 1
+    assert [asset["id"] for asset in products.json()["assets"]] == ["asset-product"]
+    assert products.json()["facets"]["media_kinds"] == [
+        {"value": "image", "label": "image", "count": 1},
+    ]
+    assert products.json()["facets"]["product_assets"] == 1
+
+    selectable = asyncio.run(request("GET", f"{base}/assets/ids?has_products=true"))
+    assert selectable.status_code == 200
+    assert selectable.json()["matched"] == 1
+    assert selectable.json()["asset_ids"] == ["asset-product"]
+
+
 def test_the_library_can_narrow_to_one_campaigns_own_media() -> None:
     """The positive twin of the exclusion: what does campaign X post?
 

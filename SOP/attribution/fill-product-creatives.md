@@ -3,7 +3,7 @@ id: attribution.fill-product-creatives
 action: attribution.fill-product-creatives
 title: Fill pending Attribution product creatives
 summary: Work the pending product-creative queue one draft at a time. Read the stored prompt and the product's image references, generate that file outside TrendRelay, and submit it to the Library before the task is done. A carousel stays unlinked until every card has landed. Nothing is published.
-version: 4
+version: 5
 tags: [attribution, media, creatives, library]
 aliases: [fill-product-creatives, attribution.needs-creatives, generate-product-creative]
 ---
@@ -86,6 +86,15 @@ pending, and neither side shows a new link.
 
 ## 3. Recipes
 
+For `character_editorial_carousel`, use the portrait and character sheet returned
+with the draft to lock identity. Listing images are the product authority; the
+character sheet outfit is replaced by the product. Research informs poses and
+framing, without treating the Instagram model as the generated character.
+Generate five separate finished images in the stored card order, never a grid
+or contact sheet. Submit each image through the same draft; reread after each
+upload to establish the next unfilled card and avoid duplicate submissions.
+
+
 The recipe was chosen when the draft was queued. Read it; do not switch it.
 
 | Recipe | Kind | Background |
@@ -97,6 +106,7 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `styled_flat_lay` | image or carousel | Optional. Off is the round cream ottoman. On uses the attached background. |
 | `flat_lay_reveal` | video | Optional. The same styled flat lay as a handheld rise from the fabric to the whole outfit. |
 | `sleepwear_lookbook` | carousel | Optional. Card 1 is the hanger, card 2 the fabric, later cards the model. Only the model's room follows the background. |
+| `character_editorial_carousel` | carousel, exactly 5 cards | Optional. Requires a selected Library character. Same adult identity, set and lighting across hero, seated, detail, side and front views. At most 5 products; one product per frame in input order. |
 | `held_up_garment` | video | Optional. Off is a warm room with walnut panelling, the holder's face out of frame. On uses the attached background. |
 | `hikaru_lookbook` | image or carousel | Optional. Shown as Model lookbook. The stored prompt carries the model's full character profile, including a real person on camera. The garment is opaque: no nipples through the fabric, and no camel toe. Keep her face, hair, and build the same on every card. |
 | `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. Each blade pass is a new product and hides the cut. With one product the blade does not cross until late in the clip, and that pass is the only change. The garment is opaque. |

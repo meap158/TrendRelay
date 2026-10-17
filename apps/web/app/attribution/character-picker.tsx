@@ -10,6 +10,7 @@ import {
   anyDrawing,
   isPickable,
   paidRequests,
+  recipeRequiresCharacter,
   recipeTakesCharacter,
   type Character,
   type CharacterGenerator,
@@ -415,6 +416,7 @@ export function CharacterUse({
   }
 
   const allowed = recipeTakesCharacter(recipe);
+  const required = recipeRequiresCharacter(recipe);
   return (
     <div className="generate-use">
       <strong>{t("attribution.characters.heading")}</strong>
@@ -422,14 +424,15 @@ export function CharacterUse({
       <label className="campaign-dialog-check">
         <input
           type="checkbox"
-          checked={enabled}
-          disabled={locked || !allowed}
+          checked={enabled || required}
+          disabled={locked || !allowed || required}
           onChange={(event) => onEnabledChange(event.target.checked)}
         />
         <span>{t("attribution.characters.enable")}</span>
       </label>
       {!allowed && <small>{t("attribution.characters.recipeHasModel")}</small>}
-      {enabled && allowed && (
+      {required && <small>{t("attribution.characters.requiredForRecipe")}</small>}
+      {(enabled || required) && allowed && (
         <>
           {loading ? (
             <p>{t("attribution.characters.loading")}</p>

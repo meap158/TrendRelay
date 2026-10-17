@@ -67,6 +67,14 @@ export function paidRequests(fromReference: boolean): number {
 /** Recipes that already bring their own recurring model cannot feature another. */
 export const RECIPES_WITH_OWN_MODEL: readonly string[] = ["hikaru_lookbook", "hikaru_walk"];
 
+export const RECIPES_REQUIRING_CHARACTER: readonly string[] = [
+  "character_editorial_carousel",
+];
+
+export function recipeRequiresCharacter(recipe: string): boolean {
+  return RECIPES_REQUIRING_CHARACTER.includes(recipe);
+}
+
 export function recipeTakesCharacter(recipe: string): boolean {
   return !RECIPES_WITH_OWN_MODEL.includes(recipe);
 }
