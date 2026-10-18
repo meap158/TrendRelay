@@ -129,14 +129,16 @@ def import_rows(
 ) -> ImportOutcome:
     """File each row and return Shopee's own ready-to-publish links.
 
-    `filename` is the batch this came from, recorded on every product it files
-    so the catalogue can later be filtered to one import.
+    `filename` is recorded on every product and offer it files so the catalogue
+    can later be filtered to one import without including other links on that
+    product.
     """
     outcome = ImportOutcome()
+    imported_at = utc_now()
     for row in rows:
         if not row.affiliate_url:
             continue
-        product = _upsert_product(session, workspace_id, user_id, row, filename)
+        product = _upsert_product(session, workspace_id, user_id, row, filename, imported_at)
         if product not in outcome.products:
             outcome.products.append(product)
         fingerprint = content_key(NETWORK, row.affiliate_url)
@@ -147,7 +149,7 @@ def import_rows(
             )
         )
         if existing:
-            _backfill_offer(existing, row)
+            _backfill_offer(existing, row, filename, imported_at)
             outcome.already_present += 1
             outcome.affiliate_links.append({
                 "offer_id": existing.id,
@@ -172,6 +174,8 @@ def import_rows(
                 to_minor(row.commission_dong, CURRENCY)
                 if row.commission_dong is not None else None
             ),
+            import_filename=filename[:260] if filename else None,
+            imported_at=imported_at,
             created_by=user_id,
         )
         session.add(offer)
@@ -186,7 +190,12 @@ def import_rows(
     return outcome
 
 
-def _backfill_offer(offer: ProductOffer, row: Any) -> None:
+def _backfill_offer(
+    offer: ProductOffer,
+    row: Any,
+    filename: str | None = None,
+    imported_at: Any = None,
+) -> None:
     """Fill what an earlier import did not know, touching nothing it did.
 
     A pasted link files an offer knowing nothing but its own URL. The export
@@ -206,10 +215,21 @@ def _backfill_offer(offer: ProductOffer, row: Any) -> None:
         offer.commission_bps = row.commission_bps
     if offer.commission_flat_cents is None and row.commission_dong is not None:
         offer.commission_flat_cents = to_minor(row.commission_dong, CURRENCY)
+    # A re-import refreshes the link's batch membership just as it refreshes
+    # Product's. A paste with no filename keeps the last named source.
+    if filename:
+        offer.import_filename = filename[:260]
+    if imported_at is not None:
+        offer.imported_at = imported_at
 
 
 def _upsert_product(
-    session: Session, workspace_id: str, user_id: str, row: Any, filename: str | None = None
+    session: Session,
+    workspace_id: str,
+    user_id: str,
+    row: Any,
+    filename: str | None = None,
+    imported_at: Any = None,
 ) -> Product:
     """The product this offer sells, created once and found thereafter.
 
@@ -239,7 +259,7 @@ def _upsert_product(
         # Most-recent import wins for the timestamp; the file name is only
         # replaced when this batch had one, so a later paste refresh does not
         # erase the workbook an earlier batch recorded.
-        product.imported_at = utc_now()
+        product.imported_at = imported_at or utc_now()
         if filename:
             product.import_filename = filename[:260]
         return product
@@ -258,7 +278,7 @@ def _upsert_product(
         ),
         created_by=user_id,
         import_filename=filename[:260] if filename else None,
-        imported_at=utc_now(),
+        imported_at=imported_at or utc_now(),
     )
     session.add(product)
     session.flush()

@@ -11,6 +11,9 @@ export type ProductOffer = {
   commission_flat_cents: number | null;
   cookie_days: number | null;
   availability: string;
+  /** Batch and time when this affiliate link was imported. */
+  import_filename?: string | null;
+  imported_at?: string | null;
 };
 
 export type ProductLink = {

@@ -271,6 +271,10 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
                     "commission_flat_cents": offer.commission_flat_cents,
                     "cookie_days": offer.cookie_days,
                     "availability": offer.availability,
+                    "import_filename": offer.import_filename,
+                    "imported_at": (
+                        offer.imported_at.isoformat() if offer.imported_at else None
+                    ),
                 }
                 for offer in product_offers
             ],

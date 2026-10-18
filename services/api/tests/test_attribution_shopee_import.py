@@ -73,6 +73,21 @@ def test_an_import_records_the_file_it_came_from_and_when(session) -> None:
     assert product.imported_at is not None
 
 
+def test_batch_provenance_stays_with_the_link_when_product_is_imported_again(session) -> None:
+    from dataclasses import replace
+
+    original = export_rows()[0]
+    importer.import_rows(session, "workspace-1", "user-1", [original], filename="first.csv")
+    second = replace(original, affiliate_url="https://s.shopee.vn/second-link")
+    importer.import_rows(session, "workspace-1", "user-1", [second], filename="second.csv")
+    offers = list(session.scalars(select(ProductOffer)).all())
+    assert len(offers) == 2
+    assert {offer.import_filename for offer in offers} == {"first.csv", "second.csv"}
+    assert all(offer.imported_at is not None for offer in offers)
+    importer.import_rows(session, "workspace-1", "user-1", [second], filename="third.csv")
+    assert {offer.import_filename for offer in offers} == {"first.csv", "third.csv"}
+
+
 def test_reimporting_updates_the_file_but_a_paste_keeps_the_last_one(session) -> None:
     """Most-recent import wins for the name it had; a pasted refresh with no file
     name does not erase the workbook an earlier batch recorded."""

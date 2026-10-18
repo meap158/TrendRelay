@@ -64,8 +64,14 @@ export function offerChoices(products: ProductRow[]): OfferChoice[] {
         commission_flat_cents: offer.commission_flat_cents,
         availability: offer.availability,
         creators: product.creators,
-        import_filename: product.import_filename,
-        imported_at: product.imported_at,
+        // Old API payloads and older records only know the product-level
+        // source. It is exact when the product has one link; with several,
+        // copying it would make every link look like it came from the same
+        // batch and defeat the import filter.
+        import_filename: offer.import_filename
+          ?? (product.offers.length === 1 ? product.import_filename : null),
+        imported_at: offer.imported_at
+          ?? (product.offers.length === 1 ? product.imported_at : null),
       })),
   );
 }
@@ -146,6 +152,45 @@ function subIdValues(product: ProductRow): string[] {
  * - a product is in a campaign if any of its offers is - but they live here
  * together so the semantics are one thing with one home.
  */
+/**
+ * Canonical batch key for an import run (PM-166): either a recorded Shopee
+ * CSV/XLSX filename, a recorded `links:<timestamp>` batch id, or a minute-bucketed
+ * `links:<YYYY-MM-DDTHH:mm>` run key for products imported via pasted product links
+ * before explicit link-batch filenames were recorded.
+ */
+export function importRunKey(row: {
+  import_filename?: string | null;
+  imported_at?: string | null;
+}): string | null {
+  const filename = row.import_filename?.trim() ?? "";
+  if (filename) return filename;
+  const importedAt = row.imported_at?.trim() ?? "";
+  if (!importedAt) return null;
+  return `links:${importedAt.slice(0, 16)}`;
+}
+
+export function describeImportRun(key: string): {
+  kind: "csv" | "links";
+  label: string;
+  sourceLabel: string;
+} {
+  if (key.startsWith("links:")) {
+    const stamp = key.slice("links:".length).replace("T", " ").slice(0, 16);
+    return {
+      kind: "links",
+      label: stamp ? `Product links (${stamp})` : "Product links",
+      sourceLabel: "Product links",
+    };
+  }
+  const lower = key.toLowerCase();
+  const sourceLabel = lower.endsWith(".xlsx") ? "Shopee workbook" : "Shopee CSV";
+  return {
+    kind: "csv",
+    label: key,
+    sourceLabel,
+  };
+}
+
 export function productMatches(
   product: ProductRow,
   filters: OfferFilters,
@@ -175,12 +220,23 @@ export function productMatches(
     const wanted = filters.subId.trim().toLowerCase();
     if (wanted && !subIdValues(product).some((value) => value.includes(wanted))) return false;
   }
-  if (filters.file && product.import_filename !== filters.file) return false;
-  // Compared as dates rather than instants, exactly as `offerMatches` does,
-  // so the two surfaces agree about what "imported that day" means.
-  const day = (product.imported_at ?? "").slice(0, 10);
-  if (filters.from && (!day || day < filters.from)) return false;
-  if (filters.to && (!day || day > filters.to)) return false;
+  const offerImportMatches = product.offers.some((offer) =>
+    offer.import_filename === filters.file || importRunKey(offer) === filters.file,
+  );
+  if (filters.file && product.import_filename !== filters.file
+    && importRunKey(product) !== filters.file && !offerImportMatches) {
+    return false;
+  }
+  // Product-level filters include a product when one of its affiliate links
+  // belongs to the requested import day, even if the product was re-imported
+  // in a different batch later.
+  if (filters.from || filters.to) {
+    const days = [product.imported_at, ...product.offers.map((offer) => offer.imported_at)]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.slice(0, 10));
+    if (!days.some((day) => (!filters.from || day >= filters.from)
+      && (!filters.to || day <= filters.to))) return false;
+  }
   return true;
 }
 
@@ -209,7 +265,9 @@ export function offerMatches(
   // table has just hidden - the offers are narrowed to the products that do
   // match, resolved by the caller that holds them.
   if (filters.subId && !(subIdProducts?.has(row.product_id) ?? false)) return false;
-  if (filters.file && row.import_filename !== filters.file) return false;
+  if (filters.file && row.import_filename !== filters.file && importRunKey(row) !== filters.file) {
+    return false;
+  }
   // Compared as dates rather than instants, so a range reads inclusively at
   // both ends the way the two date controls look like it should. A row with no
   // import date is not in any range - it is not evidence of one.

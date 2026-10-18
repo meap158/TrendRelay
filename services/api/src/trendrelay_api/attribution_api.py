@@ -1270,12 +1270,20 @@ def import_shopee_offers(
         if len(problems) > 1:
             detail += f" ({len(problems) - 1} more problem(s).)"
         raise HTTPException(status_code=422, detail=detail)
+    effective_filename = (body.filename or "").strip() or None
+    if (
+        not effective_filename
+        and (body.links or "").strip()
+        and not (body.csv_text or "").strip()
+        and not (body.xlsx_base64 or "").strip()
+    ):
+        effective_filename = f"links:{utc_now().strftime('%Y-%m-%d %H:%M:%S')}"
     outcome = attribution_shopee_import.import_rows(
         session,
         workspace_id,
         user.id,
         rows,
-        filename=body.filename,
+        filename=effective_filename,
     )
     # Tagged as they land, to the campaigns the import named. Every offer the
     # batch touched, not only the new ones: re-importing an export to refresh

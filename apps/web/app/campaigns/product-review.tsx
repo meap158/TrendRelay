@@ -14,7 +14,7 @@ import { Button } from "../ui/button";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { ListingPanel, type FullListing } from "../attribution/listing-panel";
 import type { ProductRow } from "../attribution/types";
-import { offerChoices, offerMatches, NO_OFFER_FILTERS } from "../publish/offer-rows";
+import { offerChoices, offerMatches, importRunKey, NO_OFFER_FILTERS } from "../publish/offer-rows";
 import { commissionRate } from "../commission";
 import { money } from "../attribution/format";
 import { campaignProductGroups, chooseProductOffer } from "../../lib/campaign-product-groups";
@@ -105,6 +105,7 @@ export function CampaignProductReview({ workspaceId, base, item, limit, apiFetch
         <span className="product-picker-count" aria-live="polite">{productGroups.length} products · {shown.length} of {offers.length} offers</span>
       </div>
       <ProductPickerFilters products={(products ?? []).filter((p) => p.offers.some((o) => allowed.has(o.id)))}
+        importFiles={[...new Set(offers.map(importRunKey).filter((value): value is string => Boolean(value)))]}
         filters={filters} onFilters={setFilters} listing={listingFilter} onListing={setListingFilter}
         creative={creative} onCreative={setCreative} group={group} onGroup={setGroup} onReset={clearFilters}
         extra={<>

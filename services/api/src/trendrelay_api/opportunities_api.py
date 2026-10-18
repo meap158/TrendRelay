@@ -481,12 +481,16 @@ def import_offers(
                 if identifier and not product.identifier:
                     product.identifier = identifier
             fingerprint = _key(network, affiliate_url)
-            if session.scalar(
-                select(ProductOffer.id).where(
+            existing_offer = session.scalar(
+                select(ProductOffer).where(
                     ProductOffer.workspace_id == workspace_id,
                     ProductOffer.fingerprint == fingerprint,
                 )
-            ):
+            )
+            if existing_offer:
+                if body.filename:
+                    existing_offer.import_filename = body.filename[:260]
+                existing_offer.imported_at = product.imported_at
                 skipped += 1
                 continue
             session.add(
@@ -504,6 +508,8 @@ def import_offers(
                     cookie_days=cookie_days,
                     availability=availability,
                     restrictions=restrictions,
+                    import_filename=body.filename[:260] if body.filename else None,
+                    imported_at=product.imported_at,
                     created_by=user.id,
                 )
             )

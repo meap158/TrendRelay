@@ -39,6 +39,7 @@ import { money } from "../attribution/format";
 import { sortRows } from "../attribution/sort";
 import {
   offerChoices,
+  importRunKey,
   offerMatches,
   productMatches,
   offerValue,
@@ -237,6 +238,7 @@ export function OfferPicker({
         </div>
 
         <ProductPickerFilters products={products} campaigns={campaigns}
+          importFiles={[...new Set(all.map(importRunKey).filter((value): value is string => Boolean(value)))]}
           filters={{ query, campaign: filterCampaign, file: filterFile, from: filterFrom, to: filterTo, creator: filterCreator, subId }}
           onFilters={(f) => { setQuery(f.query); setFilterCampaign(f.campaign); setFilterFile(f.file); setFilterFrom(f.from); setFilterTo(f.to); setFilterCreator(f.creator); setSubId(f.subId); }}
           creative={creative} onCreative={setCreative} listing={listing} onListing={setListing} group={group} onGroup={setGroup}

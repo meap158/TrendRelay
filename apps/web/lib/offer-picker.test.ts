@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import {
   NO_OFFER_FILTERS,
+  describeImportRun,
+  importRunKey,
   offerChoices,
   offerMatches,
   offerValue,
@@ -51,6 +53,21 @@ function product(id: string, offers: ProductOffer[], name = id): ProductRow {
 }
 
 // --- what becomes a row -------------------------------------------------------
+
+test("batch filters keep only that batch's links even when a product has several offers", () => {
+  const row = product("p1", [
+    offer("links-only", { import_filename: "links:2026-10-17 12:19:00", imported_at: "2026-10-17T12:19:00Z" }),
+    offer("exported", { import_filename: "export.csv", commission_bps: 2100, price_cents: 360000 }),
+  ]);
+  row.import_filename = "export.csv";
+  const rows = offerChoices([row]);
+  const pasted = rows.filter((entry) => offerMatches(entry, { ...NO_OFFER_FILTERS, file: "links:2026-10-17 12:19:00" }));
+  assert.deepEqual(pasted.map((entry) => entry.offer_id), ["links-only"]);
+  assert.equal(pasted[0].price_cents, null);
+  assert.equal(pasted[0].commission_bps, null);
+  assert.deepEqual(pasted[0].creators, []);
+  assert.deepEqual(rows.filter((entry) => offerMatches(entry, { ...NO_OFFER_FILTERS, file: "export.csv" })).map((entry) => entry.offer_id), ["exported"]);
+});
 
 test("each offer is its own row, because each is a different link and rate", () => {
   const rows = offerChoices([
@@ -333,4 +350,41 @@ test("the picker filters offers by creator the same way the table does", () => {
 
   assert.equal(offerMatches(rows[0], filters({ creator: "Đông Nhi" })), true);
   assert.equal(offerMatches(rows[0], filters({ creator: "Somebody else" })), false);
+});
+
+test("All imports distinguishes Shopee CSV exports from product-link batches (PM-166)", () => {
+  const csvRow = product("p1", [offer("o1")], "CSV item");
+  csvRow.import_filename = "shopee-export.csv";
+  csvRow.imported_at = "2026-10-17T12:00:00Z";
+
+  const linkRow = product("p2", [offer("o2")], "Link item");
+  linkRow.import_filename = null;
+  linkRow.imported_at = "2026-10-17T12:30:45Z";
+
+  const recordedLinkRow = product("p3", [offer("o3")], "Recorded link item");
+  recordedLinkRow.import_filename = "links:2026-10-17 12:35:00";
+  recordedLinkRow.imported_at = "2026-10-17T12:35:00Z";
+
+  const csvKey = importRunKey(csvRow)!;
+  const linkKey = importRunKey(linkRow)!;
+  const recordedKey = importRunKey(recordedLinkRow)!;
+
+  assert.equal(csvKey, "shopee-export.csv");
+  assert.equal(linkKey, "links:2026-10-17T12:30");
+  assert.equal(recordedKey, "links:2026-10-17 12:35:00");
+
+  assert.deepEqual(describeImportRun(csvKey), {
+    kind: "csv",
+    label: "shopee-export.csv",
+    sourceLabel: "Shopee CSV",
+  });
+  assert.deepEqual(describeImportRun(linkKey), {
+    kind: "links",
+    label: "Product links (2026-10-17 12:30)",
+    sourceLabel: "Product links",
+  });
+
+  assert.equal(productMatches(linkRow, filters({ file: linkKey })), true);
+  assert.equal(productMatches(csvRow, filters({ file: linkKey })), false);
+  assert.equal(productMatches(recordedLinkRow, filters({ file: recordedKey })), true);
 });
