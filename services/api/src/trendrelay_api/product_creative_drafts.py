@@ -30,7 +30,7 @@ from trendrelay_api.product_creative_models import (
     ProductCreativeDraftProduct,
     ProductCreativeLink,
 )
-from trendrelay_api.product_creative_recipes import RECIPES, resolve_prompt
+from trendrelay_api.product_creative_recipes import RECIPES, _SILENT, resolve_prompt
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 DEFAULT_PAGE = 50
@@ -474,8 +474,12 @@ def _prepare(
     )
     if character is not None:
         # Appended, never woven in: the recipe's own wording stays byte for
-        # byte what it is without a character.
+        # byte what it is without a character. On a video the silence line
+        # follows that paragraph, so the character note does not bury it.
+        # Image and carousel drafts do not gain it.
         prompt = f"{prompt}\n\n{character.pop('prompt_line')}"
+        if kind == "video":
+            prompt += _SILENT
     keys = _listing_keys(listing_fields)
     snapshots = [_listing_snapshot(session, product, keys) for product in products]
     return {

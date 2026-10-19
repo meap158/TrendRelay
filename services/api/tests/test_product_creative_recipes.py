@@ -149,6 +149,8 @@ def test_every_hikaru_wording_carries_her_whole_profile() -> None:
             assert "thick, matte" in walk
             assert "not a doll" in walk
             assert "phone-camera detail" in walk
+            assert "looks into the camera with her mouth closed" in walk
+            assert "smiles into the camera" not in walk
     walks = resolve_prompt("hikaru_walk", background=False, together=True)
     assert "never two attached products at once" in walks
 
@@ -160,6 +162,35 @@ def test_only_the_model_cards_of_the_lookbook_follow_the_background() -> None:
         assert "Card 1:" in prompt and "Card 2:" in prompt and "Every later card:" in prompt
         assert "dark wooden clothing rail against a plain white wall" in prompt
     assert "hotel suite" in off and "hotel suite" not in on
+
+
+def test_every_video_wording_keeps_people_silent() -> None:
+    phrase = "Nobody speaks or mouths words."
+    for name, spec in RECIPES.items():
+        if "video" not in spec["kinds"]:
+            continue
+        backgrounds = (True,) if spec["background"] == "required" else (False, True)
+        variants = spec["variants"] or (None,)
+        for background in backgrounds:
+            for variant in variants:
+                for together in (False, True):
+                    prompt = resolve_prompt(
+                        name, background=background, variant=variant, together=together,
+                    )
+                    assert prompt.count(phrase) == 1
+                    assert "no dialogue, narration, or voice-over" in prompt
+    for name, spec in RECIPES.items():
+        if "video" in spec["kinds"]:
+            continue
+        backgrounds = (True,) if spec["background"] == "required" else (False, True)
+        variants = spec["variants"] or (None,)
+        for background in backgrounds:
+            for variant in variants:
+                for together in (False, True):
+                    prompt = resolve_prompt(
+                        name, background=background, variant=variant, together=together,
+                    )
+                    assert phrase not in prompt
 
 
 def test_the_ceiling_fan_blade_hides_each_change() -> None:
@@ -176,3 +207,10 @@ def test_the_ceiling_fan_blade_hides_each_change() -> None:
     assert "stay where they were" in single
     assert "one new product per pass" in group
     assert "next garment from the attached product images, in order" in group
+    for prompt in (single, group):
+        assert "vertical centre line" in prompt
+        assert "presses" in prompt and "remote" in prompt
+        assert "covers her completely" in prompt
+        assert "does not pan, tilt, or zoom" in prompt
+        assert "No text appears on screen" in prompt
+    assert "not across the bottom" in single

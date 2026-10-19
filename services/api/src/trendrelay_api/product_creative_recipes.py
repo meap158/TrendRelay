@@ -53,6 +53,12 @@ BED_FLAT_LAY_ON = (
     "setting of the attached background image."
 )
 
+#: A product clip stays silent. A smile was being read as a cue to speak.
+_SILENT = (
+    " Nobody speaks or mouths words. The clip has no dialogue, narration, "
+    "or voice-over."
+)
+
 #: Mannequin to Model Transition, without a background: the narrow beige hallway.
 MANNEQUIN_OFF = (
     "A vertical video shot in a narrow beige hallway with white tile floors. "
@@ -66,7 +72,7 @@ MANNEQUIN_OFF = (
     "As she steps backward, a seamless jump-cut occurs. The woman's outfit "
     "instantly changes, and she is now wearing the exact clothing from the "
     "attached product image. She continues walking backward out of the frame."
-)
+) + _SILENT
 
 #: The same transition against the attached background. The hallway sentence is
 #: gone; the rest of the reference script is unchanged.
@@ -82,7 +88,7 @@ MANNEQUIN_ON = (
     "As she steps backward, a seamless jump-cut occurs. The woman's outfit "
     "instantly changes, and she is now wearing the exact clothing from the "
     "attached product image. She continues walking backward out of the frame."
-)
+) + _SILENT
 
 MIRROR_FEMALE = (
     "A photorealistic mirror selfie video of a Vietnamese slender woman with "
@@ -94,7 +100,7 @@ MIRROR_FEMALE = (
     "side, lightly touching her waist, and taking a small step forward. Fixed "
     "camera angle from the mirror's perspective, matching the lighting and "
     "ambiance of the background image."
-)
+) + _SILENT
 
 MIRROR_MALE = (
     "A photorealistic mirror selfie video of a slender Vietnamese man with a "
@@ -108,7 +114,7 @@ MIRROR_MALE = (
     "are relaxed, confident, and understated, like a casual outfit-check "
     "video. Fixed camera angle from the mirror's perspective, matching the "
     "lighting, reflections, framing, and ambiance of the background image."
-)
+) + _SILENT
 
 #: The same bedroom, with every attached product in the one shot. Each garment
 #: keeps its own look. Nobody wears the set.
@@ -152,7 +158,7 @@ MANNEQUIN_OFF_TOGETHER = (
     "displayed clothing with her right index finger. Her own clothes stay as "
     "they are. She continues walking backward out of the frame. The mannequins "
     "keep each product separate."
-)
+) + _SILENT
 
 MANNEQUIN_ON_TOGETHER = (
     "A vertical video set against the background from the attached background "
@@ -167,7 +173,7 @@ MANNEQUIN_ON_TOGETHER = (
     "displayed clothing with her right index finger. Her own clothes stay as "
     "they are. She continues walking backward out of the frame. The mannequins "
     "keep each product separate."
-)
+) + _SILENT
 
 MIRROR_FEMALE_TOGETHER = (
     "A photorealistic mirror selfie video in the exact room from the provided "
@@ -180,7 +186,7 @@ MIRROR_FEMALE_TOGETHER = (
     "subtle fashion poses, gently shifting their weight. Fixed camera angle "
     "from the mirror's perspective, matching the lighting and ambiance of the "
     "background image."
-)
+) + _SILENT
 
 MIRROR_MALE_TOGETHER = (
     "A photorealistic mirror selfie video in the exact room from the provided "
@@ -193,7 +199,7 @@ MIRROR_MALE_TOGETHER = (
     "subtle, natural fashion poses, gently shifting their weight. Fixed "
     "camera angle from the mirror's perspective, matching the lighting, "
     "reflections, framing, and ambiance of the background image."
-)
+) + _SILENT
 
 #: Every wording below closes with the same promise about the product.
 _KEEP = (
@@ -228,7 +234,7 @@ _WALKAROUND_SINGLE = (
     "so the fabric catches the light. The camera arcs around to the side and "
     "the back, then pulls out to a wide shot of the back of the outfit. Soft, "
     "even daylight. No face appears, and there is no text or logo on "
-    "screen. " + _KEEP
+    "screen. " + _KEEP + _SILENT
 )
 _WALKAROUND_TOGETHER = (
     " A row of these mannequins each wears one garment from the attached "
@@ -238,7 +244,7 @@ _WALKAROUND_TOGETHER = (
     "to the next. At each one, a hand lightly touches the details: the "
     "neckline, the ties or buttons, the trim, the waistband. The camera ends "
     "on a wide shot of the whole row. Soft, even daylight. No face appears, "
-    "and there is no text or logo on screen."
+    "and there is no text or logo on screen." + _SILENT
 )
 WALKAROUND_OFF = _WALKAROUND_SCENE_OFF + _WALKAROUND_SINGLE
 WALKAROUND_ON = _WALKAROUND_SCENE_ON + _WALKAROUND_SINGLE
@@ -298,7 +304,7 @@ _REVEAL_MOTION = (
     "fabric, then rises and pulls back in one smooth, slightly handheld move "
     "to reveal the whole outfit from directly above, and holds with a gentle "
     "drift. A hand briefly enters to smooth a sleeve. There is no text or "
-    "logo on screen."
+    "logo on screen." + _SILENT
 )
 FLAT_LAY_REVEAL_OFF = (
     "A vertical handheld phone video looking down at a styled outfit flat "
@@ -447,7 +453,7 @@ _RAIL_SINGLE = (
     "and hem show, then moves it aside to reveal the bottoms. The camera "
     "moves close as the hand gathers and gently squeezes the fabric to show "
     "its sheen, its lace, or its knit, then pulls back to the whole set. No "
-    "face appears, and there is no text on screen. " + _KEEP
+    "face appears, and there is no text on screen. " + _KEEP + _SILENT
 )
 _RAIL_TOGETHER = (
     " Every garment from the attached product images hangs on the rail, side "
@@ -457,7 +463,7 @@ _RAIL_TOGETHER = (
     "straps, neckline, and hem show, and the camera moves close as the hand "
     "gathers each fabric to show its sheen, its lace, or its knit. It ends "
     "on the full rail. No face appears, and there is no text on screen. "
-    + _KEEP_EACH
+    + _KEEP_EACH + _SILENT
 )
 HANGER_RAIL_OFF = _RAIL_SCENE_OFF + _RAIL_SINGLE
 HANGER_RAIL_ON = _RAIL_SCENE_ON + _RAIL_SINGLE
@@ -488,7 +494,7 @@ _HELD_UP_SINGLE = (
     "its pocket or seams; a hand pulls the cuff to show its snap, button, or "
     "elastic; and the hem is turned up to show its fastening. The fabric "
     "shows its real weight and texture. No face appears, and there is no "
-    "text on screen. " + _KEEP
+    "text on screen. " + _KEEP + _SILENT
 )
 _HELD_UP_TOGETHER = (
     " A person in a plain black T-shirt, face out of frame, holds up each "
@@ -497,7 +503,7 @@ _HELD_UP_TOGETHER = (
     "garment gets a small shake, a turn to show the back, and hard-cut "
     "close-ups of its collar, a sleeve or cuff, and its hem, before the next "
     "one takes its place, so every attached product appears once. No face appears, "
-    "and there is no text on screen. " + _KEEP_EACH
+    "and there is no text on screen. " + _KEEP_EACH + _SILENT
 )
 HELD_UP_OFF = _HELD_UP_SCENE_OFF + _HELD_UP_SINGLE
 HELD_UP_ON = _HELD_UP_SCENE_ON + _HELD_UP_SINGLE
@@ -573,8 +579,9 @@ HIKARU_ON_TOGETHER = (
     + _HIKARU_EACH + _HIKARU_SCENE_ON + _HIKARU_CAMERA.rstrip() + _COVERED
 )
 
-#: The model on video: the walk toward a camera that backs away, then the stop
-#: and the smile. The profile rides along word for word, as in the photos.
+#: The model on video: the walk toward a camera that backs away, then the stop.
+#: She looks at the lens with her mouth closed. A smile at the lens was being
+#: read as a cue to speak. The profile rides along word for word, as in the photos.
 _HIKARU_WALK_SCENE_OFF = (
     "She walks along a Tokyo street at night, past glowing shop signs and "
     "neon, the wet pavement reflecting the lights, a handbag in one hand."
@@ -586,19 +593,20 @@ _HIKARU_WALK_SCENE_ON = (
 _HIKARU_WALK_MOTION = (
     " The camera moves backward ahead of her in one smooth tracking shot as "
     "she walks toward it, glancing around and touching her hair. She slows, "
-    "stops in a medium close-up, and smiles into the camera. Photorealistic, "
+    "stops in a medium close-up, and looks into the camera with her mouth "
+    "closed. Photorealistic, "
     "with a shallow depth of field and true-to-life color, in a vertical "
     "9:16 frame. Her face, hair, and build stay the same throughout. "
 )
 HIKARU_WALK_OFF = (
     "A vertical video of the model. " + HIKARU_PROFILE + " She wears the exact "
     "clothing from the attached product image. " + _HIKARU_WALK_SCENE_OFF
-    + _HIKARU_WALK_MOTION.rstrip() + _COVERED + " " + _KEEP
+    + _HIKARU_WALK_MOTION.rstrip() + _COVERED + " " + _KEEP + _SILENT
 )
 HIKARU_WALK_ON = (
     "A vertical video of the model. " + HIKARU_PROFILE + " She wears the exact "
     "clothing from the attached product image. " + _HIKARU_WALK_SCENE_ON
-    + _HIKARU_WALK_MOTION.rstrip() + _COVERED + " " + _KEEP
+    + _HIKARU_WALK_MOTION.rstrip() + _COVERED + " " + _KEEP + _SILENT
 )
 #: One person cannot wear every product at once: each one is its own walk,
 #: cut together in order.
@@ -609,55 +617,64 @@ _HIKARU_WALK_EACH = (
 )
 HIKARU_WALK_OFF_TOGETHER = (
     "A vertical video of the model. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
-    + _HIKARU_WALK_SCENE_OFF + _HIKARU_WALK_MOTION.rstrip() + _COVERED
+    + _HIKARU_WALK_SCENE_OFF + _HIKARU_WALK_MOTION.rstrip() + _COVERED + _SILENT
 )
 HIKARU_WALK_ON_TOGETHER = (
     "A vertical video of the model. " + HIKARU_PROFILE + _HIKARU_WALK_EACH
-    + _HIKARU_WALK_SCENE_ON + _HIKARU_WALK_MOTION.rstrip() + _COVERED
+    + _HIKARU_WALK_SCENE_ON + _HIKARU_WALK_MOTION.rstrip() + _COVERED + _SILENT
 )
 
-#: An overhead outfit change. Each blade pass is a new product. With one
-#: product the fan turns and no blade crosses until late in the clip, and
-#: that single pass is the only change. A pass never changes only the pose.
-#: The camera looks straight down; the blade hides the cut.
+#: An overhead outfit change, read from the fan-wipe reels: a fixed camera,
+#: her body on the centre line, a remote press, then one blade for one whole
+#: outfit. With one product the blade waits until late in the clip. The blade
+#: hides the cut. The frame stays free of captions, because this wording has
+#: no product name to print and an invented label would be wrong.
 _FAN_SCENE_OFF = (
     "A vertical video shot from directly overhead, as if from a camera fixed "
-    "to the ceiling beside a slowly turning ceiling fan. A young woman lies "
-    "on her back on a faded vintage patterned rug in a cosy living room, with "
-    "the edge of a cream sofa at one side, a TV remote on the rug beside "
-    "her, and warm afternoon sunlight falling across the floor in slatted "
-    "stripes."
+    "to the ceiling beside a slowly turning ceiling fan. The camera stays "
+    "fixed: it does not pan, tilt, or zoom. A young woman lies on her back "
+    "on a faded vintage patterned rug in a cosy living room, with the edge "
+    "of a cream sofa along one side, not across the bottom of the frame, a "
+    "TV remote on the rug beside her, and warm afternoon sunlight falling "
+    "across the floor in slatted stripes."
 )
 _FAN_SCENE_ON = (
     "A vertical video shot from directly overhead, as if from a camera fixed "
-    "to the ceiling beside a slowly turning ceiling fan. A young woman lies "
-    "on her back on the floor of the scene from the attached background "
-    "image, matching its lighting and setting."
+    "to the ceiling beside a slowly turning ceiling fan. The camera stays "
+    "fixed: it does not pan, tilt, or zoom. A young woman lies on her back "
+    "on the floor of the scene from the attached background image, matching "
+    "its lighting and setting, with a TV remote on the floor beside her."
 )
 _FAN_POSE = (
-    " She lies still and relaxed, arms bent with her hands near her "
-    "shoulders, looking up into the camera."
+    " She lies straight along the vertical centre line, head toward the top "
+    "of the frame and feet toward the bottom, not on a diagonal. Her arms "
+    "are bent, her hands rest near her shoulders, and she looks up into the "
+    "camera."
 )
 _FAN_SINGLE = (
     " At first she wears a plain cream knit lounge set, and she keeps "
     "wearing it while the fan turns slowly above her. No blade crosses the "
-    "lens until late in the clip. One dark wooden fan blade then sweeps "
-    "across the frame and briefly covers it; as that blade clears, she is "
-    "wearing the exact clothing from the attached product image, in the "
-    "same pose. Her arms, hands, legs, and head stay where they were. "
-    "There is only one product, so this is the only pass, and "
-    "the outfit does not change again. The passing blade hides every cut, "
-    "so the change feels seamless." + _COVERED + " " + _KEEP
+    "lens until late in the clip. She reaches to the remote, presses it "
+    "once, and puts her hand back. One dark wooden fan blade then sweeps "
+    "across the frame and covers her completely; as that blade clears, she "
+    "is wearing the exact clothing from the attached product image, the "
+    "whole outfit at once, in the same pose. Her arms, hands, legs, and "
+    "head stay where they were. There is only one product, so this is the "
+    "only pass, and the outfit does not change again. The passing blade "
+    "hides every cut, so the change feels seamless. No text appears on "
+    "screen." + _COVERED + " " + _KEEP + _SILENT
 )
 _FAN_TOGETHER = (
-    " At first she wears a plain cream knit lounge set. Each fan transition "
-    "is a new product: a dark wooden fan blade sweeps across the frame, and "
-    "as each blade clears she is wearing the next garment from the attached "
-    "product images, in order, one new product per pass, in nearly the same "
-    "pose, so every attached product appears once and she never wears two "
-    "at once. A pass never repeats a product and never changes only the "
-    "pose. The passing blade hides every cut, so each change feels "
-    "seamless." + _COVERED + " " + _KEEP_EACH
+    " At first she wears a plain cream knit lounge set. She presses the "
+    "remote once, and then each fan transition is a new product: a dark "
+    "wooden fan blade sweeps across the frame and covers her completely, "
+    "and as each blade clears she is wearing the next garment from the "
+    "attached product images, in order, one new product per pass, the whole "
+    "outfit at once, in nearly the same pose, so every attached product "
+    "appears once and she never wears two at once. A pass never repeats a "
+    "product, never mixes two products, and never changes only the pose. "
+    "The passing blade hides every cut, so each change feels seamless. No "
+    "text appears on screen." + _COVERED + " " + _KEEP_EACH + _SILENT
 )
 CEILING_FAN_OFF = _FAN_SCENE_OFF + _FAN_POSE + _FAN_SINGLE
 CEILING_FAN_ON = _FAN_SCENE_ON + _FAN_POSE + _FAN_SINGLE

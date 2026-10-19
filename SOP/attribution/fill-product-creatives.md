@@ -97,6 +97,8 @@ upload to establish the next unfilled card and avoid duplicate submissions.
 
 The recipe was chosen when the draft was queued. Read it; do not switch it.
 
+Every video wording says nobody speaks or mouths words, and that the clip has no dialogue, narration, or voice-over. Image and carousel wordings do not. When a video draft features a Library character, that same sentence follows the character line.
+
 | Recipe | Kind | Background |
 | --- | --- | --- |
 | `bed_flat_lay` | image or carousel | Optional. Off names the bed. On uses the attached background and the stored prompt does not say bed. |
@@ -109,9 +111,9 @@ The recipe was chosen when the draft was queued. Read it; do not switch it.
 | `character_editorial_carousel` | carousel, exactly 5 cards | Optional. Requires a selected Library character. Same adult identity, set and lighting across hero, seated, detail, side and front views. At most 5 products; one product per frame in input order. |
 | `held_up_garment` | video | Optional. Off is a warm room with walnut panelling, the holder's face out of frame. On uses the attached background. |
 | `hikaru_lookbook` | image or carousel | Optional. Shown as Model lookbook. The stored prompt carries the model's full character profile, including a real person on camera. The garment is opaque: no nipples through the fabric, and no camel toe. Keep her face, hair, and build the same on every card. |
-| `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. Each blade pass is a new product and hides the cut. With one product the blade does not cross until late in the clip, and that pass is the only change. The garment is opaque. |
+| `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. She lies on the centre line, head toward the top of the frame, and presses the remote once. The camera stays fixed. One blade covers her completely and reveals one whole outfit. With one product that blade waits until late in the clip, and that pass is the only change. No text on screen. The garment is opaque. |
 | `hanger_rail_reveal` | video | Optional. Off is the dark wooden rail against a white wall. A hand lifts the top away to show the bottoms, then the fabric in close-up. |
-| `hikaru_walk` | video | Optional. Shown as Model walk. Off is a Tokyo street at night. The stored prompt carries the model's full character profile, including a real person on camera. The garment is opaque: no nipples through the fabric, and no camel toe. |
+| `hikaru_walk` | video | Optional. Shown as Model walk. Off is a Tokyo street at night. She stops and looks into the camera with her mouth closed. Nobody speaks. The stored prompt carries the model's full character profile, including a real person on camera. The garment is opaque: no nipples through the fabric, and no camel toe. |
 
 When `subject_assets` is non-empty, those Library image ids are the subject,
 in that order, at most 8. Read them with `get_asset_thumbnails`. When

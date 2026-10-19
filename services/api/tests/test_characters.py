@@ -35,7 +35,7 @@ from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product
-from trendrelay_api.product_creative_recipes import RECIPES, resolve_prompt
+from trendrelay_api.product_creative_recipes import RECIPES, _SILENT, resolve_prompt
 
 engine = create_engine(
     "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -241,8 +241,9 @@ def test_a_draft_featuring_a_character_appends_its_line_and_keeps_it() -> None:
     )
     assert preview.status_code == 200, preview.text
     base = resolve_prompt("mirror_selfie", background=True, variant="male")
-    expected = f"{base}\n\n{draft_line(wei['name'], wei['appearance'])}"
+    expected = f"{base}\n\n{draft_line(wei['name'], wei['appearance'])}{_SILENT}"
     assert preview.json()["draft"]["prompt"] == expected
+    assert preview.json()["draft"]["prompt"].count("Nobody speaks or mouths words.") == 2
 
     created = request(
         "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts", json=body,
@@ -259,6 +260,24 @@ def test_a_draft_featuring_a_character_appends_its_line_and_keeps_it() -> None:
     )
     assert without.json()["draft"]["prompt"] == base
     assert without.json()["draft"]["character"] is None
+
+
+def test_an_image_draft_featuring_a_character_does_not_gain_the_silence_line() -> None:
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id)
+    wei = next(item for item in list_cast(workspace_id)["characters"] if item["slug"] == "wei")
+    preview = request(
+        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+        json={
+            "product_id": product_id, "kind": "image", "recipe": "bed_flat_lay",
+            "character_id": wei["id"],
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    base = resolve_prompt("bed_flat_lay", background=False)
+    prompt = preview.json()["draft"]["prompt"]
+    assert prompt == f"{base}\n\n{draft_line(wei['name'], wei['appearance'])}"
+    assert "Nobody speaks" not in prompt
 
 
 def test_a_recipe_with_its_own_model_refuses_a_character() -> None:
