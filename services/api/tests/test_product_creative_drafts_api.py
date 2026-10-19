@@ -228,7 +228,7 @@ def test_queueing_stores_the_reviewed_prompt_and_flips_it_with_the_background() 
     assert "hallway" not in room.json()["draft"]["prompt"]
 
 
-def test_a_product_without_an_image_and_a_mirror_without_a_background_are_refused() -> None:
+def test_a_product_without_an_image_is_refused_and_a_mirror_needs_no_background() -> None:
     workspace_id = make_workspace()
     bare = add_product(workspace_id, image=False, name="Bare")
     pictured = add_product(workspace_id, image=True, name="Pictured")
@@ -245,8 +245,9 @@ def test_a_product_without_an_image_and_a_mirror_without_a_background_are_refuse
             pictured, kind="video", recipe="mirror_selfie", variant="female",
         ),
     )
-    assert mirror.status_code == 422
-    assert "background" in mirror.json()["detail"].lower()
+    assert mirror.status_code == 201, mirror.text
+    assert "tall mirror in a bright, tidy bedroom" in mirror.json()["draft"]["prompt"]
+    assert mirror.json()["draft"]["background_enabled"] is False
 
 
 def test_a_background_without_a_host_and_a_choice_without_urls_are_refused() -> None:

@@ -326,7 +326,7 @@ export function ProductMediaGenerator({
 
   const reviewing = Boolean(activeDraftId);
   const mirror = recipe === "mirror_selfie";
-  const backgroundOn = mirror || backgroundEnabled;
+  const backgroundOn = backgroundEnabled;
   const backgroundValid = isHttpsUrl(backgroundReference);
   const backgroundReady = !backgroundOn || backgroundValid;
   const locked = draft !== null || reviewing;
@@ -1322,25 +1322,24 @@ export function ProductMediaGenerator({
           )}
           <div className="generate-use">
             <strong>{t("attribution.generate.backgroundHeading")}</strong>
-            {!mirror && (
-              <label className="campaign-dialog-check">
-                <input
-                  type="checkbox"
-                  checked={backgroundEnabled}
-                  disabled={locked}
-                  onChange={(event) => {
-                    setBackgroundEnabled(event.target.checked);
-                    if (!event.target.checked) setBackgroundReference("");
-                    setError("");
-                  }}
-                />
-                <span>
-                  {t("attribution.generate.background")}
-                  <small>{t("attribution.generate.backgroundHint")}</small>
-                </span>
-              </label>
-            )}
-            {mirror && <p>{t("attribution.generate.backgroundHint")}</p>}
+            {/* Optional for every recipe, the mirror selfie included: without
+                a background it has its own bedroom-mirror wording. */}
+            <label className="campaign-dialog-check">
+              <input
+                type="checkbox"
+                checked={backgroundEnabled}
+                disabled={locked}
+                onChange={(event) => {
+                  setBackgroundEnabled(event.target.checked);
+                  if (!event.target.checked) setBackgroundReference("");
+                  setError("");
+                }}
+              />
+              <span>
+                {t("attribution.generate.background")}
+                <small>{t("attribution.generate.backgroundHint")}</small>
+              </span>
+            </label>
             {backgroundOn && (
               <label>
                 {t("attribution.generate.backgroundUrl")}

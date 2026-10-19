@@ -40,7 +40,7 @@ def test_the_hallway_is_only_the_mannequin_without_a_background() -> None:
     assert "attached product image" in on
 
 
-def test_mirror_selfie_keeps_both_genders_and_has_no_wording_without_a_background() -> None:
+def test_mirror_selfie_keeps_both_genders_with_and_without_a_background() -> None:
     female = resolve_prompt("mirror_selfie", background=True, variant="female")
     male = resolve_prompt("mirror_selfie", background=True, variant="male")
     assert female == MIRROR_FEMALE and male == MIRROR_MALE
@@ -48,8 +48,66 @@ def test_mirror_selfie_keeps_both_genders_and_has_no_wording_without_a_backgroun
     assert "completely obscure" in female and "completely obscure" in male
     assert "background reference" in female and "background reference" in male
     assert "hallway" not in female and "hallway" not in male
-    with pytest.raises(ValueError, match="background"):
-        resolve_prompt("mirror_selfie", background=False, variant="female")
+    # Without a background it is its own room, not a refusal.
+    for together in (False, True):
+        for variant in ("female", "male"):
+            off = resolve_prompt(
+                "mirror_selfie", background=False, variant=variant, together=together,
+            )
+            assert "background" not in off
+            assert "tall mirror in a bright, tidy bedroom" in off
+            assert "completely obscure" in off
+            assert "Nobody speaks" in off
+    assert RECIPES["mirror_selfie"]["background"] == "optional"
+
+
+def test_no_recipe_insists_on_a_background_or_refuses_a_character() -> None:
+    for name, spec in RECIPES.items():
+        assert spec["background"] == "optional", name
+        assert "character" not in spec, name
+        variant = spec["variants"][0] if spec["variants"] else None
+        for kind_together in (False, True):
+            resolve_prompt(name, background=False, variant=variant, together=kind_together)
+            resolve_prompt(
+                name, background=False, variant=variant, together=kind_together, character=True,
+            )
+
+
+def test_a_featured_character_replaces_the_person_a_recipe_describes() -> None:
+    """One person per prompt: the character, never Hikaru or the mirror's woman too."""
+    for background in (False, True):
+        for together in (False, True):
+            for recipe in ("hikaru_lookbook", "hikaru_walk"):
+                cast = resolve_prompt(
+                    recipe, background=background, together=together, character=True,
+                )
+                assert HIKARU_PROFILE not in cast
+                assert "Japanese woman" not in cast
+                assert "character described below" in cast.lower()
+                assert "No nipples are visible" in cast and "not a doll" in cast
+                assert " she " not in f" {cast.lower()} " and " her " not in f" {cast.lower()} "
+                # Without a character it is still Hikaru, word for word.
+                own = resolve_prompt(recipe, background=background, together=together)
+                assert HIKARU_PROFILE in own
+            mirror = resolve_prompt(
+                "mirror_selfie", background=background, variant="female",
+                together=together, character=True,
+            )
+            assert "character described below" in mirror.lower()
+            assert "woman" not in mirror and "Several" not in mirror
+            assert "completely obscure" in mirror
+            held = resolve_prompt(
+                "held_up_garment", background=background, together=together, character=True,
+            )
+            assert "face is visible" in held
+            assert "face out of frame" not in held and "No face appears" not in held
+            assert "face out of frame" in resolve_prompt(
+                "held_up_garment", background=background, together=together,
+            )
+    # A recipe with nobody in particular keeps its own wording with a character.
+    assert resolve_prompt("ceiling_fan_transition", background=False, character=True) == (
+        resolve_prompt("ceiling_fan_transition", background=False)
+    )
 
 
 def test_a_variant_on_the_bed_recipe_is_refused() -> None:

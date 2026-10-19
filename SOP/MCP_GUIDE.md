@@ -248,12 +248,21 @@ When a product is waiting on an image, a carousel, or a video, load
 `create_product_creative_draft` queues a new one for a product that already
 has an image. `bed_flat_lay` is an image or a carousel and may take an optional
 background. `mannequin_transition` is a video and may take one. `mirror_selfie`
-is a video that requires `variant` `female` or `male` and an https background;
-it has no wording without one. `styled_flat_lay` and `hikaru_lookbook` are an
-image or a carousel, `sleepwear_lookbook` is a carousel, and
-`mannequin_walkaround`, `flat_lay_reveal`, `held_up_garment`,
-`hanger_rail_reveal`, `hikaru_walk`, and `ceiling_fan_transition` are videos; each may take an optional background. The
-recipe table in `attribution.fill-product-creatives` says what each one shows.
+is a video that requires `variant` `female` or `male`; its background is
+optional too, and without one it is a bedroom mirror. `styled_flat_lay` and
+`hikaru_lookbook` are an image or a carousel, `sleepwear_lookbook` is a
+carousel, and `mannequin_walkaround`, `flat_lay_reveal`, `held_up_garment`,
+`hanger_rail_reveal`, `hikaru_walk`, and `ceiling_fan_transition` are videos;
+each may take an optional background. No recipe requires a background.
+
+Any recipe can feature a ready Library character through `character_id`.
+`hikaru_lookbook` and `hikaru_walk` show Hikaru only when no character is
+chosen; with one, the character takes her place. `mirror_selfie` and
+`held_up_garment` likewise describe the character instead of their own
+person, and `held_up_garment` then shows the face. Do not skip a recipe
+because it has a model or no background - choose the character, and leave the
+background off when none was asked for. The recipe table in
+`attribution.fill-product-creatives` says what each one shows.
 A carousel's `card_count` is 2 to 10 and cannot
 be lowered. Confirm stores the prompt and does not ingest media.
 

@@ -1133,7 +1133,7 @@ export const en = {
       blockedPick: "Choose a character, or switch the character off.",
       requiredForRecipe: "This recipe requires a character.",
       blockedRequired: "Choose a character to use this recipe.",
-      recipeHasModel: "This recipe already features its own model.",
+      recipeHasModel: "Without a character this shows Hikaru. A chosen character takes her place.",
       reviewNone: "No character was featured.",
       reviewChosen: "Featured {name}. Their portrait and sheet are attached.",
       removed: "{name} (removed)",

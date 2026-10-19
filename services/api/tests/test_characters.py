@@ -35,7 +35,12 @@ from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product
-from trendrelay_api.product_creative_recipes import RECIPES, _SILENT, resolve_prompt
+from trendrelay_api.product_creative_recipes import (
+    _SILENT,
+    HIKARU_PROFILE,
+    RECIPES,
+    resolve_prompt,
+)
 
 engine = create_engine(
     "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -241,7 +246,11 @@ def test_a_draft_featuring_a_character_appends_its_line_and_keeps_it() -> None:
     )
     assert preview.status_code == 200, preview.text
     base = resolve_prompt("mirror_selfie", background=True, variant="male")
-    expected = f"{base}\n\n{draft_line(wei['name'], wei['appearance'])}{_SILENT}"
+    # The mirror describes a person of its own, so with a character it uses
+    # the wording that describes the character instead, then the line.
+    cast = resolve_prompt("mirror_selfie", background=True, variant="male", character=True)
+    assert "Vietnamese man" in base and "Vietnamese man" not in cast
+    expected = f"{cast}\n\n{draft_line(wei['name'], wei['appearance'])}{_SILENT}"
     assert preview.json()["draft"]["prompt"] == expected
     assert preview.json()["draft"]["prompt"].count("Nobody speaks or mouths words.") == 2
 
@@ -280,20 +289,25 @@ def test_an_image_draft_featuring_a_character_does_not_gain_the_silence_line() -
     assert "Nobody speaks" not in prompt
 
 
-def test_a_recipe_with_its_own_model_refuses_a_character() -> None:
+def test_a_recipe_with_its_own_model_features_the_chosen_character_instead() -> None:
+    """Model walk with Linh is Linh: Hikaru's profile is gone, Linh's line follows."""
     workspace_id = make_workspace()
     product_id = add_product(workspace_id)
-    aiko = list_cast(workspace_id)["characters"][0]
-    refused = request(
-        "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
-        json={
-            "product_id": product_id, "kind": RECIPES["hikaru_lookbook"]["kinds"][0],
-            "recipe": "hikaru_lookbook",
-            "character_id": aiko["id"],
-        },
-    )
-    assert refused.status_code == 422
-    assert "own model" in refused.json()["detail"]
+    linh = next(item for item in list_cast(workspace_id)["characters"] if item["slug"] == "linh")
+    for recipe in ("hikaru_walk", "hikaru_lookbook", "held_up_garment"):
+        preview = request(
+            "POST", f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview",
+            json={
+                "product_id": product_id, "kind": RECIPES[recipe]["kinds"][0],
+                "recipe": recipe, "character_id": linh["id"],
+            },
+        )
+        assert preview.status_code == 200, preview.text
+        prompt = preview.json()["draft"]["prompt"]
+        assert HIKARU_PROFILE not in prompt, recipe
+        assert "character described below" in prompt.lower(), recipe
+        assert prompt.count(draft_line(linh["name"], linh["appearance"])) == 1, recipe
+        assert "face out of frame" not in prompt, recipe
 
 
 def test_editorial_carousel_requires_a_library_character_and_five_cards() -> None:

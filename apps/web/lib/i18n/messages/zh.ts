@@ -1116,7 +1116,7 @@ export const zh: Messages = {
       blockedPick: "请选择一个角色,或关闭角色。",
       requiredForRecipe: "此模板需要角色。",
       blockedRequired: "请选择此模板使用的角色。",
-      recipeHasModel: "此方案已有自己的模特。",
+      recipeHasModel: "未选择角色时此方案展示光（Hikaru），所选角色会取代她。",
       reviewNone: "未使用角色。",
       reviewChosen: "使用了 {name}。已附上其肖像和设定图。",
       removed: "{name}(已移除)",

@@ -8,6 +8,7 @@ import {
   characterField,
   isPickable,
   paidRequests,
+  recipeHasDefaultModel,
   recipeRequiresCharacter,
   recipeTakesCharacter,
   type Character,
@@ -61,10 +62,14 @@ test("the Library's Characters tab asks the server for character pictures", () =
   assert.equal(activeFilterCount({ source: CHARACTER_SOURCE }), 1);
 });
 
-test("the recipes with their own model do not take a character", () => {
-  assert.equal(recipeTakesCharacter("hikaru_lookbook"), false);
-  assert.equal(recipeTakesCharacter("hikaru_walk"), false);
-  assert.equal(recipeTakesCharacter("mirror_selfie"), true);
+// The Model recipes show Hikaru by default; a chosen character takes her place.
+test("every recipe takes a character, and the Model recipes say who they show without one", () => {
+  for (const recipe of ["hikaru_lookbook", "hikaru_walk", "mirror_selfie", "held_up_garment"]) {
+    assert.equal(recipeTakesCharacter(recipe), true, recipe);
+  }
+  assert.equal(recipeHasDefaultModel("hikaru_walk"), true);
+  assert.equal(recipeHasDefaultModel("hikaru_lookbook"), true);
+  assert.equal(recipeHasDefaultModel("mirror_selfie"), false);
 });
 
 // A mandatory character recipe cannot silently fall back to an invented model.

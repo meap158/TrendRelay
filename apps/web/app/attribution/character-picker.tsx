@@ -10,6 +10,7 @@ import {
   anyDrawing,
   isPickable,
   paidRequests,
+  recipeHasDefaultModel,
   recipeRequiresCharacter,
   recipeTakesCharacter,
   type Character,
@@ -430,7 +431,9 @@ export function CharacterUse({
         />
         <span>{t("attribution.characters.enable")}</span>
       </label>
-      {!allowed && <small>{t("attribution.characters.recipeHasModel")}</small>}
+      {recipeHasDefaultModel(recipe) && (
+        <small>{t("attribution.characters.recipeHasModel")}</small>
+      )}
       {required && <small>{t("attribution.characters.requiredForRecipe")}</small>}
       {(enabled || required) && allowed && (
         <>

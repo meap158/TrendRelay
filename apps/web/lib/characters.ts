@@ -64,8 +64,17 @@ export function paidRequests(fromReference: boolean): number {
   return fromReference ? 1 : 2;
 }
 
-/** Recipes that already bring their own recurring model cannot feature another. */
-export const RECIPES_WITH_OWN_MODEL: readonly string[] = ["hikaru_lookbook", "hikaru_walk"];
+/**
+ * Recipes that show their own recurring model (Hikaru) when no character is
+ * chosen. They take a character like any other recipe: the chosen one takes
+ * her place in the wording, so the composer only says so rather than locking
+ * the choice.
+ */
+export const RECIPES_WITH_DEFAULT_MODEL: readonly string[] = ["hikaru_lookbook", "hikaru_walk"];
+
+export function recipeHasDefaultModel(recipe: string): boolean {
+  return RECIPES_WITH_DEFAULT_MODEL.includes(recipe);
+}
 
 export const RECIPES_REQUIRING_CHARACTER: readonly string[] = [
   "character_editorial_carousel",
@@ -75,8 +84,9 @@ export function recipeRequiresCharacter(recipe: string): boolean {
   return RECIPES_REQUIRING_CHARACTER.includes(recipe);
 }
 
-export function recipeTakesCharacter(recipe: string): boolean {
-  return !RECIPES_WITH_OWN_MODEL.includes(recipe);
+/** Every recipe can feature a Library character. */
+export function recipeTakesCharacter(_recipe: string): boolean {
+  return true;
 }
 
 /** The Library's source filter for character pictures. */

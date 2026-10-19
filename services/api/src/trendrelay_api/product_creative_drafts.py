@@ -461,16 +461,15 @@ def _prepare(
     character = for_draft(session, workspace_id, character_id)
     if spec.get("requires_character") and character is None:
         raise ValueError(f"{recipe} needs a selected Library character.")
-    if character is not None and spec.get("character"):
-        raise ValueError(
-            "This recipe already features its own model. Switch the character off "
-            "or choose another recipe."
-        )
+    # A recipe with a person of its own - Hikaru, the mirror's woman or man,
+    # the held-up hands - describes the chosen character instead of that
+    # person, so the prompt never names two people.
     prompt = resolve_prompt(
         recipe,
         background=enabled,
         variant=variant if spec["variants"] else None,
         together=group,
+        character=character is not None,
     )
     if character is not None:
         # Appended, never woven in: the recipe's own wording stays byte for

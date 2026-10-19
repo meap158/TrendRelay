@@ -1129,7 +1129,7 @@ export const vi: Messages = {
       blockedPick: "Hãy chọn một nhân vật, hoặc tắt nhân vật.",
       requiredForRecipe: "Mẫu này cần một nhân vật.",
       blockedRequired: "Chọn nhân vật để dùng mẫu này.",
-      recipeHasModel: "Công thức này đã có người mẫu riêng.",
+      recipeHasModel: "Khi không chọn nhân vật, công thức này dùng Hikaru. Nhân vật bạn chọn sẽ thay cô ấy.",
       reviewNone: "Không dùng nhân vật nào.",
       reviewChosen: "Đã dùng {name}. Ảnh chân dung và bảng nhân vật được gửi kèm.",
       removed: "{name} (đã gỡ)",

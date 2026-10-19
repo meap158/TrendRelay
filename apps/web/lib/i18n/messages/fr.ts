@@ -1141,7 +1141,7 @@ export const fr: Messages = {
       blockedPick: "Choisissez un personnage, ou désactivez le personnage.",
       requiredForRecipe: "Ce modèle nécessite un personnage.",
       blockedRequired: "Choisissez un personnage pour ce modèle.",
-      recipeHasModel: "Cette recette a déjà son propre modèle.",
+      recipeHasModel: "Sans personnage, cette recette montre Hikaru. Le personnage choisi prend sa place.",
       reviewNone: "Aucun personnage n'a été mis en scène.",
       reviewChosen: "Avec {name}. Son portrait et sa fiche sont joints.",
       removed: "{name} (retiré)",

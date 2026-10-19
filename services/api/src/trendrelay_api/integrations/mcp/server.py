@@ -1434,10 +1434,15 @@ def build_server(workspace_id: str) -> FastMCP:
             "mannequin_transition, mirror_selfie, mannequin_walkaround, "
             "flat_lay_reveal, held_up_garment, hanger_rail_reveal, "
             "hikaru_walk, or ceiling_fan_transition "
-            "(video). mirror_selfie requires variant female or male and an "
-            "https background_reference; it has no wording without a "
-            "background. Every other recipe takes an optional https "
-            "background, and the stored prompt changes when it is on. A "
+            "(video). mirror_selfie requires variant female or male. Every "
+            "recipe, mirror_selfie included, takes an optional https "
+            "background, and the stored prompt changes when it is on. Every "
+            "recipe can feature a Library character: hikaru_lookbook and "
+            "hikaru_walk show Hikaru only when no character is chosen, and "
+            "with one they, mirror_selfie and held_up_garment describe that "
+            "character instead of their own person (held_up_garment then "
+            "shows the face). Optional character_id is a ready Library "
+            "character's id. A "
             "carousel needs card_count from 2 to 10; that count "
             "cannot be lowered later. Optional subject_asset_ids are Library "
             "image ids, in order, at most 8. When they are set, those images "
@@ -1478,6 +1483,7 @@ def build_server(workspace_id: str) -> FastMCP:
         together: bool = False,
         product_ids: list[str] | None = None,
         included_images: list[dict[str, Any]] | None = None,
+        character_id: str | None = None,
     ) -> dict[str, Any]:
         return _call(
             "create_product_creative_draft",
@@ -1491,6 +1497,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 listing_fields=listing_fields,
                 together=together, product_ids=product_ids,
                 included_images=included_images,
+                character_id=character_id,
             ),
         )
 

@@ -1129,7 +1129,7 @@ export const ja: Messages = {
       blockedPick: "キャラクターを選ぶか、キャラクターをオフにしてください。",
       requiredForRecipe: "このテンプレートにはキャラクターが必要です。",
       blockedRequired: "このテンプレートのキャラクターを選んでください。",
-      recipeHasModel: "このレシピには専用のモデルがいます。",
+      recipeHasModel: "キャラクターを選ばない場合はヒカルが登場します。選んだキャラクターが代わりに登場します。",
       reviewNone: "キャラクターは登場しません。",
       reviewChosen: "{name} が登場します。ポートレートとシートが添付されています。",
       removed: "{name}(削除済み)",

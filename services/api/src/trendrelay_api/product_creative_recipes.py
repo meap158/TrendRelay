@@ -681,10 +681,252 @@ CEILING_FAN_ON = _FAN_SCENE_ON + _FAN_POSE + _FAN_SINGLE
 CEILING_FAN_OFF_TOGETHER = _FAN_SCENE_OFF + _FAN_POSE + _FAN_TOGETHER
 CEILING_FAN_ON_TOGETHER = _FAN_SCENE_ON + _FAN_POSE + _FAN_TOGETHER
 
+#: Mirror selfie without a background image: the same outfit check, in front
+#: of a tall mirror in an ordinary bright bedroom. It used to be refused - the
+#: reference post only had a with-room version - but the operator asked for
+#: every recipe to work without a background, so this is the room it uses.
+_MIRROR_ROOM_OFF = (
+    "in front of a tall mirror in a bright, tidy bedroom with white walls, a "
+    "neatly made bed, and soft daylight from a window"
+)
+MIRROR_FEMALE_OFF = (
+    "A photorealistic mirror selfie video of a Vietnamese slender woman with "
+    "long, voluminous wavy hair, holding a black smartphone directly in front "
+    "of her face to completely obscure it. She is wearing the exact outfit "
+    "from the provided subject reference image. She is standing "
+    + _MIRROR_ROOM_OFF + ". The woman strikes subtle fashion poses, gently "
+    "shifting her weight from side to side, lightly touching her waist, and "
+    "taking a small step forward. Fixed camera angle from the mirror's "
+    "perspective, in soft, natural daylight."
+) + _SILENT
+MIRROR_MALE_OFF = (
+    "A photorealistic mirror selfie video of a slender Vietnamese man with a "
+    "stylish, well-groomed hairstyle, holding a black smartphone directly in "
+    "front of his face to completely obscure it. He is wearing the exact "
+    "outfit from the provided subject reference image. He is standing "
+    + _MIRROR_ROOM_OFF + ". The man strikes subtle, natural fashion poses, "
+    "gently shifting his weight from side to side, briefly adjusting his shirt "
+    "or waistband, lightly placing one hand near his pocket, and taking a small "
+    "step forward. His movements are relaxed, confident, and understated, like "
+    "a casual outfit-check video. Fixed camera angle from the mirror's "
+    "perspective, in soft, natural daylight."
+) + _SILENT
+MIRROR_FEMALE_OFF_TOGETHER = (
+    "A photorealistic mirror selfie video " + _MIRROR_ROOM_OFF + ". Several "
+    "women stand in a row, each wearing one outfit from the attached product "
+    "images, so every attached product appears in this one shot. Each woman "
+    "keeps that one product's color, print, neckline, straps, and construction "
+    "exactly as in its own product image, and wears no other attached product. "
+    "Each holds a black smartphone directly in front of her face to completely "
+    "obscure it. They strike subtle fashion poses, gently shifting their "
+    "weight. Fixed camera angle from the mirror's perspective, in soft, "
+    "natural daylight."
+) + _SILENT
+MIRROR_MALE_OFF_TOGETHER = (
+    "A photorealistic mirror selfie video " + _MIRROR_ROOM_OFF + ". Several "
+    "men stand in a row, each wearing one outfit from the attached product "
+    "images, so every attached product appears in this one shot. Each man "
+    "keeps that one product's color, print, neckline, straps, and construction "
+    "exactly as in its own product image, and wears no other attached product. "
+    "Each holds a black smartphone directly in front of his face to completely "
+    "obscure it. They strike subtle, natural fashion poses, gently shifting "
+    "their weight. Fixed camera angle from the mirror's perspective, in soft, "
+    "natural daylight."
+) + _SILENT
+
+#: With a Library character switched on, the recipes that describe a person
+#: of their own describe the character instead. Appending the character line
+#: to them left two people in one prompt - Hikaru's whole profile, or the
+#: mirror's slender woman, or a holder whose face is kept out of frame, and
+#: then a different person to show. The character's own line still follows
+#: (see `characters.draft_line`), so the wording points at it. Characters
+#: record no gender, so these say "they". Without a character every recipe
+#: keeps its own wording byte for byte; the other recipes describe nobody in
+#: particular and still take the appended line alone.
+_CAST = "the character described below"
+_CAST_REAL = (
+    " They look like a real person on camera, with natural skin texture, "
+    "pores, slight facial asymmetry, and ordinary phone-camera detail, not a "
+    "doll, a plastic render, or a beauty filter."
+)
+
+_MIRROR_CAST_ROOM_ON = (
+    " They are standing inside the exact room from the provided background "
+    "reference image."
+)
+_MIRROR_CAST_ROOM_OFF = f" They are standing {_MIRROR_ROOM_OFF}."
+_MIRROR_CAST_LIGHT_ON = (
+    " Fixed camera angle from the mirror's perspective, matching the lighting "
+    "and ambiance of the background image."
+)
+_MIRROR_CAST_LIGHT_OFF = (
+    " Fixed camera angle from the mirror's perspective, in soft, natural "
+    "daylight."
+)
+_MIRROR_CAST_SINGLE = (
+    f"A photorealistic mirror selfie video of {_CAST}, holding a black "
+    "smartphone directly in front of their face to completely obscure it. They "
+    "are wearing the exact outfit from the provided subject reference image."
+)
+_MIRROR_CAST_POSE = (
+    " They strike subtle, natural fashion poses, gently shifting their weight "
+    "from side to side and taking a small step forward."
+)
+#: One person cannot stand in a row with themselves: a group is short mirror
+#: selfies cut together, one product each.
+_MIRROR_CAST_TOGETHER = (
+    "A photorealistic mirror selfie video that cuts between short mirror "
+    f"selfies in order. In each one, {_CAST} wears one outfit from the attached "
+    "product images, never two attached products at once, so every attached "
+    "product appears once, and holds a black smartphone directly in front of "
+    "their face to completely obscure it. " + _KEEP_EACH
+)
+MIRROR_CAST_ON = (
+    _MIRROR_CAST_SINGLE + _MIRROR_CAST_ROOM_ON + _MIRROR_CAST_POSE + _MIRROR_CAST_LIGHT_ON
+) + _SILENT
+MIRROR_CAST_OFF = (
+    _MIRROR_CAST_SINGLE + _MIRROR_CAST_ROOM_OFF + _MIRROR_CAST_POSE + _MIRROR_CAST_LIGHT_OFF
+) + _SILENT
+MIRROR_CAST_ON_TOGETHER = (
+    _MIRROR_CAST_TOGETHER + _MIRROR_CAST_ROOM_ON + _MIRROR_CAST_POSE + _MIRROR_CAST_LIGHT_ON
+) + _SILENT
+MIRROR_CAST_OFF_TOGETHER = (
+    _MIRROR_CAST_TOGETHER + _MIRROR_CAST_ROOM_OFF + _MIRROR_CAST_POSE + _MIRROR_CAST_LIGHT_OFF
+) + _SILENT
+
+#: The lookbook and the walk with the character in Hikaru's place: the same
+#: street, camera, and covering, with nothing of her profile left in.
+_LOOK_CAST_SCENE_OFF = (
+    "They stand on a quiet, tree-lined Tokyo side street beside a modern "
+    "building with a white textured facade and glass doors, in soft overcast "
+    "daylight."
+)
+_LOOK_CAST_SCENE_ON = (
+    "They stand in the scene from the attached background image, matching "
+    "its lighting and setting."
+)
+_LOOK_CAST_CAMERA = (
+    " A relaxed, natural pose, smiling at the camera. Shot like a "
+    "professional street-fashion photograph: an 85mm portrait lens, shallow "
+    "depth of field, eye level, true-to-life color, a vertical 3:4 frame. "
+    "When several cards are asked for, every card shows the same outfit in "
+    "the same place, with a different pose and framing: full-length, "
+    "three-quarter, and a close portrait. Their face, hair, and build stay "
+    "the same in every card."
+)
+_LOOK_CAST_EACH = (
+    " The set features every attached product: each card shows them wearing "
+    "one product from the attached product images, and they never wear two "
+    "attached products at once. " + _KEEP_EACH + " "
+)
+_LOOK_CAST_WEARS = " They wear the exact clothing from the attached product image. "
+LOOKBOOK_CAST_OFF = (
+    f"A photorealistic photograph of {_CAST}." + _CAST_REAL + _LOOK_CAST_WEARS
+    + _LOOK_CAST_SCENE_OFF + _LOOK_CAST_CAMERA + _COVERED + " " + _KEEP
+)
+LOOKBOOK_CAST_ON = (
+    f"A photorealistic photograph of {_CAST}." + _CAST_REAL + _LOOK_CAST_WEARS
+    + _LOOK_CAST_SCENE_ON + _LOOK_CAST_CAMERA + _COVERED + " " + _KEEP
+)
+LOOKBOOK_CAST_OFF_TOGETHER = (
+    f"A photorealistic photograph set of {_CAST}." + _CAST_REAL + _LOOK_CAST_EACH
+    + _LOOK_CAST_SCENE_OFF + _LOOK_CAST_CAMERA + _COVERED
+)
+LOOKBOOK_CAST_ON_TOGETHER = (
+    f"A photorealistic photograph set of {_CAST}." + _CAST_REAL + _LOOK_CAST_EACH
+    + _LOOK_CAST_SCENE_ON + _LOOK_CAST_CAMERA + _COVERED
+)
+
+_WALK_CAST_SCENE_OFF = (
+    "They walk along a Tokyo street at night, past glowing shop signs and "
+    "neon, the wet pavement reflecting the lights, a handbag in one hand."
+)
+_WALK_CAST_SCENE_ON = (
+    "They walk through the scene from the attached background image, "
+    "matching its lighting and setting, a handbag in one hand."
+)
+_WALK_CAST_MOTION = (
+    " The camera moves backward ahead of them in one smooth tracking shot as "
+    "they walk toward it, glancing around and touching their hair. They slow, "
+    "stop in a medium close-up, and look into the camera with their mouth "
+    "closed. Photorealistic, with a shallow depth of field and true-to-life "
+    "color, in a vertical 9:16 frame. Their face, hair, and build stay the "
+    "same throughout."
+)
+_WALK_CAST_EACH = (
+    " The video features every attached product: it cuts between short walks "
+    "in order, and in each walk they wear one product from the attached "
+    "product images, never two attached products at once. " + _KEEP_EACH + " "
+)
+WALK_CAST_OFF = (
+    f"A vertical video of {_CAST}." + _CAST_REAL + _LOOK_CAST_WEARS
+    + _WALK_CAST_SCENE_OFF + _WALK_CAST_MOTION + _COVERED + " " + _KEEP + _SILENT
+)
+WALK_CAST_ON = (
+    f"A vertical video of {_CAST}." + _CAST_REAL + _LOOK_CAST_WEARS
+    + _WALK_CAST_SCENE_ON + _WALK_CAST_MOTION + _COVERED + " " + _KEEP + _SILENT
+)
+WALK_CAST_OFF_TOGETHER = (
+    f"A vertical video of {_CAST}." + _CAST_REAL + _WALK_CAST_EACH
+    + _WALK_CAST_SCENE_OFF + _WALK_CAST_MOTION + _COVERED + _SILENT
+)
+WALK_CAST_ON_TOGETHER = (
+    f"A vertical video of {_CAST}." + _CAST_REAL + _WALK_CAST_EACH
+    + _WALK_CAST_SCENE_ON + _WALK_CAST_MOTION + _COVERED + _SILENT
+)
+
+#: Held up by the character, who is the point of featuring one: framed from
+#: the waist up so their face shows above the garment. The cuts are the same.
+_HELD_UP_CAST_SINGLE = (
+    f" {_CAST[0].upper()}{_CAST[1:]}, in a plain black T-shirt, holds the "
+    "exact garment from the attached product image up by its shoulders at "
+    "chest height, facing the camera, framed from the waist up so their face "
+    "is visible above it, and gives it a small shake so the fabric settles. "
+    "In about fifteen seconds of hard cuts: the garment is turned around to "
+    "show the back; the camera moves close on the collar and its zipper or "
+    "buttons; one sleeve is held out to show its pocket or seams; a hand "
+    "pulls the cuff to show its snap, button, or elastic; and the hem is "
+    "turned up to show its fastening. The fabric shows its real weight and "
+    "texture. There is no text on screen. " + _KEEP + _SILENT
+)
+_HELD_UP_CAST_TOGETHER = (
+    f" {_CAST[0].upper()}{_CAST[1:]}, in a plain black T-shirt, holds up each "
+    "garment from the attached product images in turn, by its shoulders at "
+    "chest height, facing the camera, framed from the waist up so their face "
+    "is visible above it. Each garment gets a small shake, a turn to show the "
+    "back, and hard-cut close-ups of its collar, a sleeve or cuff, and its "
+    "hem, before the next one takes its place, so every attached product "
+    "appears once. There is no text on screen. " + _KEEP_EACH + _SILENT
+)
+HELD_UP_CAST_OFF = _HELD_UP_SCENE_OFF + _HELD_UP_CAST_SINGLE
+HELD_UP_CAST_ON = _HELD_UP_SCENE_ON + _HELD_UP_CAST_SINGLE
+HELD_UP_CAST_OFF_TOGETHER = _HELD_UP_SCENE_OFF + _HELD_UP_CAST_TOGETHER
+HELD_UP_CAST_ON_TOGETHER = _HELD_UP_SCENE_ON + _HELD_UP_CAST_TOGETHER
+
+#: (recipe, background, together) -> the wording with a character in it.
+_CAST_WORDINGS: dict[tuple[str, bool, bool], str] = {
+    ("mirror_selfie", False, False): MIRROR_CAST_OFF,
+    ("mirror_selfie", True, False): MIRROR_CAST_ON,
+    ("mirror_selfie", False, True): MIRROR_CAST_OFF_TOGETHER,
+    ("mirror_selfie", True, True): MIRROR_CAST_ON_TOGETHER,
+    ("hikaru_lookbook", False, False): LOOKBOOK_CAST_OFF,
+    ("hikaru_lookbook", True, False): LOOKBOOK_CAST_ON,
+    ("hikaru_lookbook", False, True): LOOKBOOK_CAST_OFF_TOGETHER,
+    ("hikaru_lookbook", True, True): LOOKBOOK_CAST_ON_TOGETHER,
+    ("hikaru_walk", False, False): WALK_CAST_OFF,
+    ("hikaru_walk", True, False): WALK_CAST_ON,
+    ("hikaru_walk", False, True): WALK_CAST_OFF_TOGETHER,
+    ("hikaru_walk", True, True): WALK_CAST_ON_TOGETHER,
+    ("held_up_garment", False, False): HELD_UP_CAST_OFF,
+    ("held_up_garment", True, False): HELD_UP_CAST_ON,
+    ("held_up_garment", False, True): HELD_UP_CAST_OFF_TOGETHER,
+    ("held_up_garment", True, True): HELD_UP_CAST_ON_TOGETHER,
+}
+
 #: What each recipe can be, and whether a second wording exists.
-#: `background` is "optional" when the reference has a with-background script,
-#: and "required" when it does not have a version without one. Mirror selfie
-#: is required: inventing a no-background wording would be a different film.
+#: `background` is "optional" when the recipe has a wording with and without
+#: a background image, and "required" when it only has the first. Every
+#: recipe is optional now: the operator asked that none insist on one.
 RECIPES: dict[str, dict[str, Any]] = {
     "bed_flat_lay": {
         "kinds": ("image", "carousel"),
@@ -698,7 +940,7 @@ RECIPES: dict[str, dict[str, Any]] = {
     },
     "mirror_selfie": {
         "kinds": ("video",),
-        "background": "required",
+        "background": "optional",
         "variants": ("female", "male"),
     },
     "mannequin_walkaround": {
@@ -727,11 +969,13 @@ RECIPES: dict[str, dict[str, Any]] = {
         "background": "optional",
         "variants": (),
     },
+    #: Hikaru is who these show when no Library character is chosen; with one
+    #: chosen, that character takes her place (see `_CAST_WORDINGS`).
     "hikaru_lookbook": {
         "kinds": ("image", "carousel"),
         "background": "optional",
         "variants": (),
-        "character": "hikaru",
+        "default_character": "hikaru",
     },
     "character_editorial_carousel": {
         "kinds": ("carousel",),
@@ -755,7 +999,7 @@ RECIPES: dict[str, dict[str, Any]] = {
         "kinds": ("video",),
         "background": "optional",
         "variants": (),
-        "character": "hikaru",
+        "default_character": "hikaru",
     },
 }
 
@@ -766,6 +1010,8 @@ _PROMPTS: dict[tuple[str, bool, str | None], str] = {
     ("mannequin_transition", True, None): MANNEQUIN_ON,
     ("mirror_selfie", True, "female"): MIRROR_FEMALE,
     ("mirror_selfie", True, "male"): MIRROR_MALE,
+    ("mirror_selfie", False, "female"): MIRROR_FEMALE_OFF,
+    ("mirror_selfie", False, "male"): MIRROR_MALE_OFF,
     ("mannequin_walkaround", False, None): WALKAROUND_OFF,
     ("mannequin_walkaround", True, None): WALKAROUND_ON,
     ("styled_flat_lay", False, None): STYLED_FLAT_LAY_OFF,
@@ -795,6 +1041,8 @@ _TOGETHER: dict[tuple[str, bool, str | None], str] = {
     ("mannequin_transition", True, None): MANNEQUIN_ON_TOGETHER,
     ("mirror_selfie", True, "female"): MIRROR_FEMALE_TOGETHER,
     ("mirror_selfie", True, "male"): MIRROR_MALE_TOGETHER,
+    ("mirror_selfie", False, "female"): MIRROR_FEMALE_OFF_TOGETHER,
+    ("mirror_selfie", False, "male"): MIRROR_MALE_OFF_TOGETHER,
     ("mannequin_walkaround", False, None): WALKAROUND_OFF_TOGETHER,
     ("mannequin_walkaround", True, None): WALKAROUND_ON_TOGETHER,
     ("styled_flat_lay", False, None): STYLED_FLAT_LAY_OFF_TOGETHER,
@@ -824,13 +1072,16 @@ def resolve_prompt(
     background: bool,
     variant: str | None = None,
     together: bool = False,
+    character: bool = False,
 ) -> str:
     """The prompt a person reviews, for this recipe and this background switch.
 
     `together` selects the group wording. False returns the single-product
-    script unchanged. Raises ValueError when the combination is not one of
-    the reference wordings. Mirror selfie has no wording without a background,
-    so asking for one is refused rather than invented.
+    script unchanged. `character` says a Library character is featured: the
+    recipes that describe a person of their own then describe that character
+    instead (`_CAST_WORDINGS`); every other recipe's wording is unchanged and
+    the caller appends the character's line. Raises ValueError when the
+    combination is not one of the wordings.
     """
     spec = RECIPES.get(recipe)
     if spec is None:
@@ -845,6 +1096,10 @@ def resolve_prompt(
             raise ValueError("Choose female or male for the mirror selfie.")
     elif variant:
         raise ValueError("This recipe has no subject variant.")
+    if character:
+        cast = _CAST_WORDINGS.get((recipe, bool(background), bool(together)))
+        if cast is not None:
+            return cast
     key = (recipe, bool(background), variant if spec["variants"] else None)
     prompt = (_TOGETHER if together else _PROMPTS).get(key)
     if prompt is None:

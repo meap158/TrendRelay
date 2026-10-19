@@ -1131,7 +1131,7 @@ export const ar: Messages = {
       blockedPick: "اختر شخصية، أو أوقف الشخصية.",
       requiredForRecipe: "يتطلب هذا القالب شخصية.",
       blockedRequired: "اختر شخصية لاستخدام هذا القالب.",
-      recipeHasModel: "لهذه الوصفة عارضتها الخاصة.",
+      recipeHasModel: "من دون شخصية تعرض هذه الوصفة هيكارو، والشخصية التي تختارها تحل محلها.",
       reviewNone: "لم تظهر أي شخصية.",
       reviewChosen: "ظهرت {name}. أُرفقت الصورة الشخصية والورقة.",
       removed: "{name} (أُزيلت)",

@@ -97,19 +97,24 @@ upload to establish the next unfilled card and avoid duplicate submissions.
 
 The recipe was chosen when the draft was queued. Read it; do not switch it.
 
+No recipe requires a background, and every recipe can feature a Library
+character. `hikaru_lookbook` and `hikaru_walk` show Hikaru only when no
+character is chosen; with one, the stored prompt describes that character
+instead and carries no Hikaru profile.
+
 Every video wording says nobody speaks or mouths words, and that the clip has no dialogue, narration, or voice-over. Image and carousel wordings do not. When a video draft features a Library character, that same sentence follows the character line.
 
 | Recipe | Kind | Background |
 | --- | --- | --- |
 | `bed_flat_lay` | image or carousel | Optional. Off names the bed. On uses the attached background and the stored prompt does not say bed. |
 | `mannequin_transition` | video | Optional. Off is the narrow beige hallway. On opens on the attached background and drops the hallway. |
-| `mirror_selfie` | video | Required, with `variant` `female` or `male`. A mirror draft cannot be queued without a background image. |
+| `mirror_selfie` | video | Optional, with `variant` `female` or `male`. Off is a tall mirror in a bright bedroom. On uses the attached background as the room. With a character, the character takes the mirror's place, face still hidden behind the phone. |
 | `mannequin_walkaround` | video | Optional. Off is the white boutique corner with the black pedestal. On uses the attached background. |
 | `styled_flat_lay` | image or carousel | Optional. Off is the round cream ottoman. On uses the attached background. |
 | `flat_lay_reveal` | video | Optional. The same styled flat lay as a handheld rise from the fabric to the whole outfit. |
 | `sleepwear_lookbook` | carousel | Optional. Card 1 is the hanger, card 2 the fabric, later cards the model. Only the model's room follows the background. |
 | `character_editorial_carousel` | carousel, exactly 5 cards | Optional. Requires a selected Library character. Same adult identity, set and lighting across hero, seated, detail, side and front views. At most 5 products; one product per frame in input order. |
-| `held_up_garment` | video | Optional. Off is a warm room with walnut panelling, the holder's face out of frame. On uses the attached background. |
+| `held_up_garment` | video | Optional. Off is a warm room with walnut panelling, the holder's face out of frame. On uses the attached background. With a character, the character holds the garment, face visible. |
 | `hikaru_lookbook` | image or carousel | Optional. Shown as Model lookbook. The stored prompt carries the model's full character profile, including a real person on camera. The garment is opaque: no nipples through the fabric, and no camel toe. Keep her face, hair, and build the same on every card. |
 | `ceiling_fan_transition` | video | Optional. Off is the living-room rug in slatted sunlight. She lies on the centre line, head toward the top of the frame, and presses the remote once. The camera stays fixed. One blade covers her completely and reveals one whole outfit. With one product that blade waits until late in the clip, and that pass is the only change. No text on screen. The garment is opaque. |
 | `hanger_rail_reveal` | video | Optional. Off is the dark wooden rail against a white wall. A hand lifts the top away to show the bottoms, then the fabric in close-up. |
