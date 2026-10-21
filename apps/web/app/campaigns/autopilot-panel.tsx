@@ -741,9 +741,12 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
   const [ratio, setRatio] = useState(3 / 4);
   const { openAt, open, close, previous, next } = useLightboxSet(sources.length);
   // A clip has no preview URL of its own to enlarge, so the hover card shows
-  // the poster the row is already drawing - which is also what says the clip
-  // is worth opening.
-  const poster = useAssetPoster(video ? asset?.id : null, workspaceId, apiFetch);
+  // the still the row is already drawing - which is also what says the clip is
+  // worth opening. Taken from that picture's own load rather than fetched a
+  // second time: a second fetch could come back late or not at all, and the
+  // card then opened as an empty dark frame over a row that plainly had a still.
+  const [rowStill, setRowStill] = useState("");
+  const poster = rowStill;
   const count = sources.length;
   const position = (index: number) => (
     count > 1 ? `Picture ${index + 1} of ${count}` : "Picture"
@@ -773,6 +776,7 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
             const target = event.target as HTMLImageElement;
             if (target.naturalWidth && target.naturalHeight) {
               setRatio(target.naturalWidth / target.naturalHeight);
+              if (video && target.src) setRowStill(target.src);
             }
           }}
         >
