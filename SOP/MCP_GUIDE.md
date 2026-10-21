@@ -294,3 +294,6 @@ The canonical SOP root is the repository's `SOP/` directory. Procedures are
 discovered recursively from Markdown front matter, so new action files become
 available without adding another MCP handler. Never use a similarly named copy
 outside this directory as the source of truth.
+
+For character creation or appearance revisions, follow [the character SOP](creations/create-character.md). Externally generated portrait/sheet pairs must be registered as ready before they are offered in Attribution. Revisions use replace_character_id to retain the existing picker identity and preserve old assets.
+

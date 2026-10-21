@@ -471,3 +471,51 @@ def test_an_xai_video_sends_the_character_after_the_subject() -> None:
     assert len(images) == 3
     assert images[0] == "data:image/jpeg;base64," + base64.b64encode(_JPEG).decode()
     assert images[1].startswith("data:image/png;base64,")
+
+def test_register_reviewed_images_without_provider_and_use_in_draft(monkeypatch):
+    from io import BytesIO
+
+    from PIL import Image
+
+    workspace = make_workspace()
+    def fail(*args, **kwargs):
+        raise AssertionError("Registration must not call a generation provider")
+    monkeypatch.setattr(image_generation, "generate", fail)
+    monkeypatch.setattr(image_generation, "edit", fail)
+    def picture(color):
+        out = BytesIO()
+        Image.new("RGB", (32, 48), color).save(out, format="PNG")
+        return base64.b64encode(out.getvalue()).decode()
+    body = {"name": "Ha My", "appearance": "Fictional adult fashion model",
+            "portrait_base64": picture("red"), "sheet_base64": picture("blue")}
+    response = request("POST", f"/api/workspaces/{workspace}/characters/register/images", json=body)
+    assert response.status_code == 201, response.text
+    character = response.json()["character"]
+    assert character["status"] == "ready"
+    assert character["portrait_asset_id"] != character["sheet_asset_id"]
+    assert any(c["id"] == character["id"] for c in list_cast(workspace)["characters"])
+    with TestingSession() as session:
+        selected = characters.for_draft(session, workspace, character["id"])
+        assert selected["sheet_asset_id"] == character["sheet_asset_id"]
+        for aid in [character["portrait_asset_id"], character["sheet_asset_id"]]:
+            assert session.get(MediaAsset, aid).source_type == "character"
+    again = request("POST", f"/api/workspaces/{workspace}/characters/register/images", json=body)
+    assert again.json()["character"]["id"] == character["id"]
+    body["replace_character_id"] = character["id"]
+    body["portrait_base64"] = picture("green")
+    body["sheet_base64"] = picture("yellow")
+    body["appearance"] = "Revised fictional adult model with distinct features"
+    revised = request("POST", f"/api/workspaces/{workspace}/characters/register/images", json=body)
+    assert revised.status_code == 201, revised.text
+    assert revised.json()["character"]["id"] == character["id"]
+    assert revised.json()["character"]["portrait_asset_id"] != character["portrait_asset_id"]
+    assert revised.json()["character"]["appearance"] == body["appearance"]
+    other = make_workspace()
+    register_body = {"name": "Foreign", "appearance": "Fictional adult",
+                     "portrait_asset_id": character["portrait_asset_id"],
+                     "sheet_asset_id": character["sheet_asset_id"]}
+    foreign = request("POST", f"/api/workspaces/{other}/characters/register", json=register_body)
+    assert foreign.status_code == 422
+    body["sheet_base64"] = "not an image"
+    invalid = request("POST", f"/api/workspaces/{workspace}/characters/register/images", json=body)
+    assert invalid.status_code == 422

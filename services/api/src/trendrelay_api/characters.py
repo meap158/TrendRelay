@@ -297,6 +297,63 @@ def _reference_asset(session: Session, workspace_id: str, asset_id: str) -> str:
     return asset.id
 
 
+def register_character(
+    session: Session, workspace_id: str, actor_user_id: str, *,
+    name: str, portrait_asset_id: str, sheet_asset_id: str,
+    appearance: str | None = None, outfit: str | None = None,
+    replace_character_id: str | None = None,
+) -> dict[str, Any]:
+    """Register reviewed Library references without another provider call."""
+    clean_name = _clean(name, _NAME_LIMIT, "name", required=True)
+    clean_appearance = _clean(appearance, _APPEARANCE_LIMIT, "appearance", required=True)
+    clean_outfit = _clean(outfit, _OUTFIT_LIMIT, "outfit", required=False)
+    portrait = _reference_asset(session, workspace_id, portrait_asset_id)
+    sheet = _reference_asset(session, workspace_id, sheet_asset_id)
+    if portrait == sheet:
+        raise ValueError("Choose a separate portrait and character sheet.")
+    existing = session.scalar(select(Character).where(
+        Character.workspace_id == workspace_id,
+        Character.portrait_asset_id == portrait, Character.sheet_asset_id == sheet,
+        Character.archived_at.is_(None),
+    ))
+    if existing is not None and not replace_character_id:
+        return view(existing)
+    target = _row(session, workspace_id, replace_character_id) if replace_character_id else None
+    if target is not None and target.archived_at is not None:
+        raise ValueError("That character was removed. Choose an active character to revise.")
+    if existing is not None and target is not None and existing.id != target.id:
+        raise ValueError("These references already belong to another character.")
+    from trendrelay_api.media_models import MediaAsset
+
+    for asset_id in (portrait, sheet):
+        asset = session.get(MediaAsset, asset_id)
+        asset.source_type = SOURCE_TYPE
+    now = utc_now()
+    if target is not None:
+        target.name = clean_name
+        target.appearance = clean_appearance
+        target.outfit = clean_outfit or target.outfit
+        target.portrait_asset_id = portrait
+        target.sheet_asset_id = sheet
+        target.status = "ready"
+        target.error = None
+        target.updated_at = now
+        session.commit()
+        return view(target)
+    base = _SLUG.sub("-", clean_name.lower()).strip("-")[:40] or "character"
+    row = Character(
+        id=new_id("character"), workspace_id=workspace_id,
+        slug=f"{base}-{token_hex(3)}", name=clean_name,
+        appearance=clean_appearance, outfit=clean_outfit or "plain neutral everyday clothes",
+        builtin=False, status="ready", error=None,
+        portrait_asset_id=portrait, sheet_asset_id=sheet,
+        created_by=actor_user_id, created_at=now, updated_at=now,
+    )
+    session.add(row)
+    session.commit()
+    return view(row)
+
+
 def create_character(
     session: Session,
     workspace_id: str,

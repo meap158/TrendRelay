@@ -8,6 +8,9 @@ is refused without `confirm_external_action`.
 
 from __future__ import annotations
 
+import base64
+import binascii
+from io import BytesIO
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,10 +19,13 @@ from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.characters import (
+    _ingest,
+    _stage_bytes,
     archive_character,
     create_character,
     get_character,
     list_characters,
+    register_character,
     retry_character,
 )
 from trendrelay_api.database import get_session
@@ -38,6 +44,38 @@ class CharacterBody(BaseModel):
     #: A Library picture to use as the identity. Only the sheet is drawn.
     reference_asset_id: str | None = Field(default=None, max_length=64)
     confirm_external_action: bool = False
+
+
+class RegisterCharacterBody(BaseModel):
+    replace_character_id: str | None = Field(default=None, max_length=64)
+    name: str = Field(min_length=1, max_length=80)
+    portrait_asset_id: str = Field(min_length=1, max_length=64)
+    sheet_asset_id: str = Field(min_length=1, max_length=64)
+    appearance: str = Field(min_length=1, max_length=1000)
+    outfit: str | None = Field(default=None, max_length=500)
+
+
+class RegisterCharacterImagesBody(BaseModel):
+    replace_character_id: str | None = Field(default=None, max_length=64)
+    name: str = Field(min_length=1, max_length=80)
+    appearance: str = Field(min_length=1, max_length=1000)
+    outfit: str | None = Field(default=None, max_length=500)
+    portrait_base64: str = Field(min_length=1, max_length=12_000_000)
+    sheet_base64: str = Field(min_length=1, max_length=12_000_000)
+
+
+def _reviewed_image(value: str) -> bytes:
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        data = base64.b64decode(value, validate=True)
+        with Image.open(BytesIO(data)) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise ValueError("Use PNG, JPEG or WebP reference images.")
+            image.verify()
+        return data
+    except (binascii.Error, UnidentifiedImageError, OSError) as error:
+        raise ValueError("Provide a valid base64 reference image.") from error
 
 
 class ConfirmBody(BaseModel):
@@ -73,6 +111,56 @@ def read_characters(
         "characters": list_characters(session, workspace_id, actor),
         "generator": readiness(),
     }
+
+
+@router.post("/register", status_code=201)
+def register_reviewed_character(
+    workspace_id: str, body: RegisterCharacterBody, request: Request,
+    user: AuthenticatedUser, session: DatabaseSession,
+) -> dict[str, Any]:
+    """Make existing reviewed Library images available in creative pickers."""
+    require_role(membership(session, workspace_id, user.id), _EDITORS)
+    ensure_profile(session, user)
+    character = _call(lambda: register_character(
+        session, workspace_id, user.id, **body.model_dump(),
+    ))
+    audit(session, request, workspace_id, user.id,
+          "characters.registered", "character", character["id"],
+          {"portrait_asset_id": body.portrait_asset_id, "sheet_asset_id": body.sheet_asset_id})
+    return {"character": character}
+
+
+@router.post("/register/images", status_code=201)
+def register_reviewed_images(
+    workspace_id: str, body: RegisterCharacterImagesBody, request: Request,
+    user: AuthenticatedUser, session: DatabaseSession,
+) -> dict[str, Any]:
+    """Import externally generated references and register a ready character."""
+    require_role(membership(session, workspace_id, user.id), _EDITORS)
+    ensure_profile(session, user)
+    portrait, sheet = _call(lambda: (
+        _reviewed_image(body.portrait_base64), _reviewed_image(body.sheet_base64),
+    ))
+    if portrait == sheet:
+        raise HTTPException(
+            status_code=422, detail="Choose a separate portrait and character sheet.",
+        )
+    portrait_id = _ingest(
+        workspace_id, user.id, _stage_bytes(portrait, ".png"), f"{body.name} - portrait",
+    )
+    sheet_id = _ingest(
+        workspace_id, user.id, _stage_bytes(sheet, ".png"), f"{body.name} - character sheet",
+    )
+    character = _call(lambda: register_character(
+        session, workspace_id, user.id, name=body.name,
+        appearance=body.appearance, outfit=body.outfit,
+        replace_character_id=body.replace_character_id,
+        portrait_asset_id=portrait_id, sheet_asset_id=sheet_id,
+    ))
+    audit(session, request, workspace_id, user.id,
+          "characters.registered", "character", character["id"],
+          {"portrait_asset_id": portrait_id, "sheet_asset_id": sheet_id})
+    return {"character": character}
 
 
 @router.get("/{character_id}")

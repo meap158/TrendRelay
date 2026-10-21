@@ -74,7 +74,7 @@ function Portrait({ assetId, workspaceId, apiFetch }: {
   );
 }
 
-function SheetViewer({ character, workspaceId, apiFetch, onClose }: {
+export function SheetViewer({ character, workspaceId, apiFetch, onClose }: {
   character: { name: string; sheet_asset_id: string | null; portrait_asset_id: string | null } | null;
   workspaceId: string;
   apiFetch: Fetcher;
@@ -103,14 +103,14 @@ function SheetViewer({ character, workspaceId, apiFetch, onClose }: {
   );
 }
 
-function NewCharacterDialog({ open, workspaceId, apiFetch, generator, onClose, onCreated, onPickerChange }: {
+export function NewCharacterDialog({ open, workspaceId, apiFetch, generator, onClose, onCreated, onPickerChange }: {
   open: boolean;
   workspaceId: string;
   apiFetch: Fetcher;
   generator: CharacterGenerator | null;
   onClose: () => void;
   onCreated: (character: Character) => void;
-  onPickerChange: (open: boolean) => void;
+  onPickerChange?: (open: boolean) => void;
 }) {
   const t = useT();
   const [name, setName] = useState("");
@@ -123,7 +123,7 @@ function NewCharacterDialog({ open, workspaceId, apiFetch, generator, onClose, o
 
   function openPicker(next: boolean) {
     setPickerOpen(next);
-    onPickerChange(next);
+    onPickerChange?.(next);
   }
 
   const ready = Boolean(generator?.ready);
