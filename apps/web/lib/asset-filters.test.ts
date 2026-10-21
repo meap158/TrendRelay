@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { activeFilterCount, assetFilterParams } from "./asset-filters.ts";
+import {
+  activeFilterCount,
+  assetFilterParams,
+  isLibraryFilterPending,
+  libraryQueryKey,
+  shouldCommitLibraryResponse,
+} from "./asset-filters.ts";
 
 test("media and effect filters use the API parameter names", () => {
   const params = assetFilterParams({
@@ -113,5 +119,71 @@ test("the two campaign filters are distinct parameters and both count", () => {
   assert.equal(
     assetFilterParams({ notInCampaign: "camp-1" }).get("not_in_campaign"),
     "camp-1",
+  );
+});
+
+test("character filter serializes and counts as an active filter (PM-153, PM-180)", () => {
+  const params = assetFilterParams({ character: "char-linh" });
+  assert.equal(params.get("character_id"), "char-linh");
+  assert.equal(activeFilterCount({ character: "char-linh" }), 1);
+});
+
+test("changing any filter immediately enters pending loading state and ignores out-of-order responses (PM-180)", () => {
+  const baseKey = libraryQueryKey("ws-1", {}, "newest");
+  const linhKey = libraryQueryKey("ws-1", { character: "char-linh" }, "newest");
+  const videoKey = libraryQueryKey("ws-1", { character: "char-linh", mediaKind: "video" }, "newest");
+
+  assert.notEqual(baseKey, linhKey);
+  assert.notEqual(linhKey, videoKey);
+
+  // Before the microtask or network starts, loadedQueryKey is still baseKey while currentQueryKey
+  // is linhKey -> immediately pending (hides stale grid right away).
+  assert.equal(
+    isLibraryFilterPending({
+      workspaceId: "ws-1",
+      draftsView: false,
+      loadingAssets: false,
+      currentQueryKey: linhKey,
+      loadedQueryKey: baseKey,
+    }),
+    true,
+  );
+
+  // Rapid successive filter change: request 1 (linhKey) arrives after request 2 (videoKey) started.
+  assert.equal(
+    shouldCommitLibraryResponse({
+      requestSequence: 1,
+      activeSequence: 2,
+      requestWorkspaceId: "ws-1",
+      activeWorkspaceId: "ws-1",
+      requestQueryKey: linhKey,
+      activeQueryKey: videoKey,
+    }),
+    false,
+  );
+
+  // Only the latest request (sequence 2, videoKey) may commit and clear the loading indicator.
+  assert.equal(
+    shouldCommitLibraryResponse({
+      requestSequence: 2,
+      activeSequence: 2,
+      requestWorkspaceId: "ws-1",
+      activeWorkspaceId: "ws-1",
+      requestQueryKey: videoKey,
+      activeQueryKey: videoKey,
+    }),
+    true,
+  );
+
+  // Once loadedQueryKey matches currentQueryKey and loadingAssets is false, pending is false.
+  assert.equal(
+    isLibraryFilterPending({
+      workspaceId: "ws-1",
+      draftsView: false,
+      loadingAssets: false,
+      currentQueryKey: videoKey,
+      loadedQueryKey: videoKey,
+    }),
+    false,
   );
 });

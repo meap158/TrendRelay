@@ -17,6 +17,9 @@ export {
   EMPTY_FACETS,
   activeFilterCount,
   assetFilterParams,
+  isLibraryFilterPending,
+  libraryQueryKey,
+  shouldCommitLibraryResponse,
   type AssetFacets,
   type AssetFilterValues,
   type Facet,
@@ -38,6 +41,8 @@ export type FilterField =
   | "length" | "downloaded"
   /** Narrow to what one campaign's queue holds - the Library's own view. */
   | "campaign"
+  /** Narrow to assets belonging to or featuring one character (PM-153). */
+  | "character"
   /** Hide what the open campaign already queued; needs `campaignId`. */
   | "notInCampaign";
 
@@ -262,6 +267,21 @@ export function AssetFilters({
             <option value="">{t("filters.allCampaigns")}</option>
             {(facets.campaigns ?? []).map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, "Campaign")}</option>
+            ))}
+          </Select>
+        </label>
+      )}
+
+      {shown.has("character") && ((facets.characters ?? []).length > 0 || Boolean(values.character)) && (
+        <label>{t("attribution.characters.heading")}
+          <Select
+            aria-label="Filter by character"
+            value={values.character ?? ""}
+            onChange={(event) => set({ character: event.target.value || undefined })}
+          >
+            <option value="">All characters</option>
+            {(facets.characters ?? []).map((facet) => (
+              <option key={facet.value} value={facet.value}>{label(facet, "Character")}</option>
             ))}
           </Select>
         </label>

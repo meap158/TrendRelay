@@ -1318,6 +1318,15 @@ def test_product_category_filters_assets_counts_and_select_all_once() -> None:
     assert selectable.json()["matched"] == 1
     assert selectable.json()["asset_ids"] == ["asset-product"]
 
+    # Switching to Videos or Characters tab must not zero out the Products chip count (PM-167).
+    videos = asyncio.run(request("GET", f"{base}/assets?media_kind=video"))
+    assert videos.status_code == 200
+    assert videos.json()["facets"]["product_assets"] == 1
+
+    characters = asyncio.run(request("GET", f"{base}/assets?media_kind=image&source_type=character"))
+    assert characters.status_code == 200
+    assert characters.json()["facets"]["product_assets"] == 1
+
 
 def test_the_library_can_narrow_to_one_campaigns_own_media() -> None:
     """The positive twin of the exclusion: what does campaign X post?

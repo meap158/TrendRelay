@@ -13,6 +13,7 @@
  * it when a video provider is ready, add the file otherwise.
  */
 
+import { DraftThumbnail } from "../ui/draft-thumbnail";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -261,7 +262,7 @@ export function CreativeMedia({
       ))}
       {owed > 0 && (
         <span className="product-creative-owed" title={t("attribution.generate.owed", { count: owed })}>
-          {owed > 1 ? `+${owed}` : "+"}
+          <DraftThumbnail kind={kind} count={owed} size="compact" />
         </span>
       )}
       {openAt !== null && (

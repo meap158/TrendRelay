@@ -34,6 +34,9 @@ import {
   EMPTY_FACETS,
   activeFilterCount,
   assetFilterParams,
+  isLibraryFilterPending,
+  libraryQueryKey,
+  shouldCommitLibraryResponse,
   type AssetFacets,
   type AssetFilterValues,
 } from "../ui/asset-filters";
@@ -48,7 +51,14 @@ import {
   type LibrarySelectionTarget,
 } from "../../lib/library-selection-actions";
 import { campaignPickerSelection } from "../../lib/campaign-import";
-import { CHARACTER_SOURCE } from "../../lib/characters";
+import {
+  CHARACTER_SOURCE,
+  anyDrawing,
+  type Character,
+  type CharacterGenerator,
+} from "../../lib/characters";
+import { DraftThumbnail } from "../ui/draft-thumbnail";
+import { NewCharacterDialog, SheetViewer } from "../attribution/character-picker";
 
 // The editors are heavy and only render inside their dialogs, so their code is
 // loaded when one opens rather than in the Library page's first bundle. ssr:false
@@ -1352,9 +1362,11 @@ function LibraryContent() {
   const [total, setTotal] = useState(0);
   const [loadingAssets, setLoadingAssets] = useState(false);
   // Keep "not answered yet" separate from a genuine empty library. On route
-  // entry the asset array is necessarily empty; treating that as real data
-  // flashes the empty collection and detail prompts before the request lands.
+  // entry or when any filter changes, the previous asset array is stale;
+  // tracking the query key that produced `assets` hides stale cards immediately
+  // until the latest filter request resolves (PM-180).
   const [loadedWorkspaceId, setLoadedWorkspaceId] = useState("");
+  const [loadedQueryKey, setLoadedQueryKey] = useState("");
   // Background syncs, filter changes and job completion can all request a
   // refresh. They must all read the latest selection, and an older response
   // must never put an unfiltered list back after a newer filtered one arrived.
@@ -1420,7 +1432,8 @@ function LibraryContent() {
   const [captionsOpen, setCaptionsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [generateVideoOpen, setGenerateVideoOpen] = useState(false);
-  const [videoProviders, setVideoProviders] = useState<{ id: string; label: string }[]>([]);
+  const [videoProviderState, setVideoProviderState] = useState<{ workspaceId: string; rows: { id: string; label: string }[] } | null>(null);
+  const videoProviders = videoProviderState?.workspaceId === workspaceId ? videoProviderState.rows : [];
   /** What the campaign picker is about to add. Null closes it. */
   const [campaignPickerFor, setCampaignPickerFor] = useState<CampaignPickerSelection | null>(null);
   const [productPickerFor, setProductPickerFor] = useState<string[] | null>(null);
@@ -1465,17 +1478,32 @@ function LibraryContent() {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
   const [draftsView, setDraftsView] = useState(false);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [characterGenerator, setCharacterGenerator] = useState<CharacterGenerator | null>(null);
+  const [newCharacterOpen, setNewCharacterOpen] = useState(false);
+  const [viewingCharacter, setViewingCharacter] = useState<Character | null>(null);
+  const [characterBusyId, setCharacterBusyId] = useState("");
+  const refreshCharacters = useCallback((): Promise<Character[]> => {
+    if (!workspaceId) return Promise.resolve([] as Character[]);
+    return apiFetch(`/api/workspaces/${workspaceId}/characters`)
+      .then(async (response) => {
+        if (!response.ok) return [] as Character[];
+        const payload = await response.json() as {
+          characters?: Character[];
+          generator?: CharacterGenerator;
+        };
+        const next = Array.isArray(payload.characters) ? payload.characters : [];
+        setCharacters(next);
+        setCharacterGenerator(payload.generator ?? null);
+        return next;
+      })
+      .catch(() => [] as Character[]);
+  }, [apiFetch, workspaceId]);
   // Listing the characters is what copies the built-in cast into a
   // workspace's Library, so the tab asks for them before it filters.
   async function openCharacters() {
     setDraftsView(false);
-    if (workspaceId) {
-      try {
-        await apiFetch(`/api/workspaces/${workspaceId}/characters`);
-      } catch {
-        // The tab still shows whatever character pictures are already here.
-      }
-    }
+    await refreshCharacters();
     patchFilters({ mediaKind: "image", source: CHARACTER_SOURCE, hasProducts: false });
   }
   const [resumeDraft, setResumeDraft] = useState<{ kind: string; id: string } | null>(null);
@@ -1533,18 +1561,11 @@ function LibraryContent() {
   const queuedAutoCut = useCallback((text: string) => {
     succeed(text); setSelection(new Set()); refreshCreationDrafts();
   }, [succeed, refreshCreationDrafts]);
-  useEffect(() => {
-    if (!workspaceId) return;
-    refreshCreationDrafts();
-  }, [workspaceId, refreshCreationDrafts]);
   // The editing row offers Generate only when a provider is actually ready.
   // This read is our own list. It does not call a vendor. Coming back to the
   // tab picks up a key that was just saved and checked.
   useEffect(() => {
-    if (!workspaceId) {
-      setVideoProviders([]);
-      return undefined;
-    }
+    if (!workspaceId) return undefined;
     let live = true;
     function load() {
       void apiFetch(`/api/workspaces/${workspaceId}/media/library/video-providers`)
@@ -1553,8 +1574,8 @@ function LibraryContent() {
           const payload = await response.json() as { providers?: { id: string; label: string }[] };
           return payload.providers ?? [];
         })
-        .then((rows) => { if (live) setVideoProviders(rows); })
-        .catch(() => { if (live) setVideoProviders([]); });
+        .then((rows) => { if (live) setVideoProviderState({ workspaceId, rows }); })
+        .catch(() => { if (live) setVideoProviderState({ workspaceId, rows: [] }); });
     }
     load();
     function onVisible() {
@@ -1617,6 +1638,65 @@ function LibraryContent() {
   const filterCount = activeFilterCount(filters);
   const mediaTotal = facets.media_kinds.reduce((sum, facet) => sum + facet.count, 0);
   const mediaCount = (kind: Asset["media_kind"]) => facets.media_kinds.find((facet) => facet.value === kind)?.count ?? 0;
+  const productChipCount = Math.max(facets.product_assets ?? 0, productsView ? total : 0);
+  const characterChipCount =
+    characters.length
+    || (facets.characters?.length ?? 0)
+    || Math.ceil((facets.character_assets ?? 0) / 2);
+  const characterGroups = useMemo(() => {
+    if (!charactersView) return [];
+    const byId = new Map(assets.map((asset) => [asset.id, asset]));
+    const assigned = new Set<string>();
+    const visibleCharacters = filters.character
+      ? characters.filter((item) => item.id === filters.character)
+      : characters;
+    const groups: {
+      id: string;
+      label: string;
+      character: Character | null;
+      items: Asset[];
+    }[] = [];
+    const needle = query.trim().toLowerCase();
+    for (const character of visibleCharacters) {
+      const items: Asset[] = [];
+      const addAsset = (asset: Asset | undefined) => {
+        if (!asset || assigned.has(asset.id)) return;
+        assigned.add(asset.id);
+        items.push(asset);
+      };
+      if (character.portrait_asset_id) addAsset(byId.get(character.portrait_asset_id));
+      if (character.sheet_asset_id) addAsset(byId.get(character.sheet_asset_id));
+      const prefix = `${character.name.toLowerCase()} - `;
+      for (const asset of assets) {
+        if (!assigned.has(asset.id) && asset.title.toLowerCase().startsWith(prefix)) {
+          addAsset(asset);
+        }
+      }
+      const matchesQuery =
+        !needle
+        || character.name.toLowerCase().includes(needle)
+        || character.appearance.toLowerCase().includes(needle)
+        || items.length > 0;
+      if (items.length > 0 || (matchesQuery && (character.status === "generating" || character.status === "failed"))) {
+        groups.push({
+          id: character.id,
+          label: character.name,
+          character,
+          items,
+        });
+      }
+    }
+    const unassigned = assets.filter((asset) => !assigned.has(asset.id));
+    if (unassigned.length > 0) {
+      groups.push({
+        id: "__other_characters__",
+        label: t("attribution.characters.libraryTab"),
+        character: null,
+        items: unassigned,
+      });
+    }
+    return groups;
+  }, [assets, characters, charactersView, filters.character, query, t]);
   const groupedAssets = groupBy === "none"
     ? []
     : Array.from(assets.reduce((groups, asset) => {
@@ -1638,9 +1718,23 @@ function LibraryContent() {
     return params;
   }, [downloadFileHash, downloadJobFilter, filters, notificationAssetIds]);
 
+  const currentQueryKey = useMemo(
+    () =>
+      libraryQueryKey(
+        workspaceId,
+        filters,
+        sortOrder,
+        notificationAssetIds,
+        downloadJobFilter,
+        downloadFileHash,
+      ),
+    [downloadFileHash, downloadJobFilter, filters, notificationAssetIds, sortOrder, workspaceId],
+  );
+  const latestQueryKey = useRef(currentQueryKey);
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
   useEffect(() => { latestWorkspaceId.current = workspaceId; }, [workspaceId]);
+  useEffect(() => { latestQueryKey.current = currentQueryKey; }, [currentQueryKey]);
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
     if (nextWorkspace !== latestWorkspaceId.current) return;
@@ -1655,21 +1749,8 @@ function LibraryContent() {
     params.set("limit", "100");
     const suffix = `?${params}`;
     const snapshotKey = `${nextWorkspace}${suffix}`;
-    const snapshot = librarySnapshots.get(snapshotKey);
     const sequence = ++refreshSequence.current;
-    if (snapshot) {
-      setAssets(snapshot.assets);
-      setTotal(snapshot.total);
-      setFacets(snapshot.facets);
-      setJobs(snapshot.jobs);
-      setStatus(snapshot.status);
-      setSelectedId((current) =>
-        snapshot.assets.some((asset) => asset.id === current)
-          ? current
-          : (snapshot.assets[0]?.id ?? ""),
-      );
-    }
-    setLoadingAssets(!snapshot);
+    setLoadingAssets(true);
     try {
       const [assetBody, jobBody, statusBody] = await Promise.all([
         json<{ assets: Asset[]; total?: number; facets?: AssetFacets }>(
@@ -1683,8 +1764,14 @@ function LibraryContent() {
         ),
       ]);
       if (
-        sequence !== refreshSequence.current
-        || nextWorkspace !== latestWorkspaceId.current
+        !shouldCommitLibraryResponse({
+          requestSequence: sequence,
+          activeSequence: refreshSequence.current,
+          requestWorkspaceId: nextWorkspace,
+          activeWorkspaceId: latestWorkspaceId.current,
+          requestQueryKey: snapshotKey,
+          activeQueryKey: latestQueryKey.current,
+        })
       ) return;
       setAssets(assetBody.assets);
       setTotal(assetBody.total ?? assetBody.assets.length);
@@ -1703,13 +1790,100 @@ function LibraryContent() {
           ? current
           : (assetBody.assets[0]?.id ?? ""),
       );
-    } finally {
-      if (sequence === refreshSequence.current) {
-        setLoadingAssets(false);
+      setLoadedQueryKey(snapshotKey);
+      setLoadedWorkspaceId(nextWorkspace);
+    } catch (error) {
+      if (
+        shouldCommitLibraryResponse({
+          requestSequence: sequence,
+          activeSequence: refreshSequence.current,
+          requestWorkspaceId: nextWorkspace,
+          activeWorkspaceId: latestWorkspaceId.current,
+          requestQueryKey: snapshotKey,
+          activeQueryKey: latestQueryKey.current,
+        })
+      ) {
+        setAssets([]);
+        setTotal(0);
+        setSelectedId("");
+        setLoadedQueryKey(snapshotKey);
         setLoadedWorkspaceId(nextWorkspace);
+      }
+      throw error;
+    } finally {
+      if (
+        shouldCommitLibraryResponse({
+          requestSequence: sequence,
+          activeSequence: refreshSequence.current,
+          requestWorkspaceId: nextWorkspace,
+          activeWorkspaceId: latestWorkspaceId.current,
+          requestQueryKey: snapshotKey,
+          activeQueryKey: latestQueryKey.current,
+        })
+      ) {
+        setLoadingAssets(false);
       }
     }
   }, [apiFetch, downloadFileHash, downloadJobFilter, notificationAssetIds, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    refreshCreationDrafts();
+    void refreshCharacters().then((list) => {
+      if (list.length > 0) void refresh(workspaceId);
+    });
+  }, [workspaceId, refreshCreationDrafts, refreshCharacters, refresh]);
+
+  const characterDrawing = anyDrawing(characters);
+  useEffect(() => {
+    if (!workspaceId || !characterDrawing) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshCharacters().then(() => void refresh(workspaceId));
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [characterDrawing, refresh, refreshCharacters, workspaceId]);
+
+  async function retryCharacter(character: Character) {
+    if (!characterGenerator) return;
+    if (!window.confirm(t("attribution.characters.confirmRetry", { provider: characterGenerator.label }))) return;
+    setCharacterBusyId(character.id);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/characters/${character.id}/retry`,
+        { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(typeof body?.detail === "string" ? body.detail : t("attribution.generate.requestFailed"));
+      }
+      await refreshCharacters();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : t("attribution.generate.requestFailed"));
+    } finally {
+      setCharacterBusyId("");
+    }
+  }
+
+  async function removeCharacter(character: Character) {
+    if (!window.confirm(t("attribution.characters.confirmRemove", { name: character.name }))) return;
+    setCharacterBusyId(character.id);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/characters/${character.id}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(typeof body?.detail === "string" ? body.detail : t("attribution.generate.requestFailed"));
+      }
+      setCharacters((current) => current.filter((item) => item.id !== character.id));
+      if (filters.character === character.id) patchFilters({ character: undefined });
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : t("attribution.generate.requestFailed"));
+    } finally {
+      setCharacterBusyId("");
+    }
+  }
 
   useEffect(() => {
     const mediaJobs = notificationJobs.filter((job) => Boolean(job.assetId));
@@ -2338,6 +2512,13 @@ function LibraryContent() {
   if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">{t("library.signInPrompt")}</Link></main>;
 
   const initialAssetsPending = Boolean(workspaceId) && loadedWorkspaceId !== workspaceId;
+  const collectionRefreshPending = isLibraryFilterPending({
+    workspaceId,
+    draftsView,
+    loadingAssets,
+    currentQueryKey,
+    loadedQueryKey,
+  });
 
   return (
     <main className="library-page">
@@ -2461,11 +2642,17 @@ function LibraryContent() {
           <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
               <button type="button" className={!mediaKind && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={!mediaKind && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "", hasProducts: false }); }}>{t("common.all")} <span>{mediaTotal}</span></button>
-              <button type="button" className={mediaKind === "video" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video", source: "", hasProducts: false }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
-              <button type="button" className={mediaKind === "image" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image", source: "", hasProducts: false }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
-              <button type="button" className={mediaKind === "audio" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio", source: "", hasProducts: false }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
-              <button type="button" title={t("library.productsHelp")} className={productsView && !draftsView ? "selected" : ""} aria-pressed={productsView && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "", hasProducts: true }); }}>{t("library.products")} <span>{facets.product_assets ?? 0}</span></button>
-              <button type="button" className={charactersView && !draftsView && !productsView ? "selected" : ""} aria-pressed={charactersView && !draftsView && !productsView} onClick={() => void openCharacters()}>{t("attribution.characters.libraryTab")}</button>
+              {(mediaCount("video") > 0 || mediaKind === "video") && (
+                <button type="button" className={mediaKind === "video" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "video" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "video", source: "", hasProducts: false }); }}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
+              )}
+              {(mediaCount("image") > 0 || (mediaKind === "image" && !charactersView)) && (
+                <button type="button" className={mediaKind === "image" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "image" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "image", source: "", hasProducts: false }); }}>{t("library.images")} <span>{mediaCount("image")}</span></button>
+              )}
+              {(mediaCount("audio") > 0 || mediaKind === "audio") && (
+                <button type="button" className={mediaKind === "audio" && !draftsView && !charactersView && !productsView ? "selected" : ""} aria-pressed={mediaKind === "audio" && !draftsView && !charactersView && !productsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "audio", source: "", hasProducts: false }); }}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
+              )}
+              <button type="button" title={t("library.productsHelp")} className={productsView && !draftsView ? "selected" : ""} aria-pressed={productsView && !draftsView} onClick={() => { setDraftsView(false); patchFilters({ mediaKind: "", source: "", hasProducts: true }); }}>{t("library.products")} <span>{productChipCount}</span></button>
+              <button type="button" className={charactersView && !draftsView && !productsView ? "selected" : ""} aria-pressed={charactersView && !draftsView && !productsView} onClick={() => void openCharacters()}>{t("attribution.characters.libraryTab")} <span>{characterChipCount}</span></button>
               {totalDrafts > 0 && (
                 <button type="button" className={draftsView ? "selected" : ""} aria-pressed={draftsView} onClick={() => setDraftsView(true)}>Drafts <span>{totalDrafts}</span></button>
               )}
@@ -2494,20 +2681,36 @@ function LibraryContent() {
 
           {/* Asset filters narrow media, never drafts - the pick-up list hides them. */}
           {!draftsView && (
+          <section className="library-filter-panel" aria-label="Filters and order">
           <AssetFilters
             values={filters}
             facets={facets}
-            fields={["channel", "platform", "effect", "processing", "campaign", "downloaded"]}
+            fields={["channel", "platform", "character", "effect", "processing", "campaign", "downloaded"]}
             onChange={setFilters}
           />
+          </section>
           )}
           {/* Counts, download refresh and gallery/list order the media collection. */}
           {!draftsView && (
           <div className="library-collection-toolbar">
             <strong aria-live="polite">
-              {loadingAssets ? "Filtering…" : `${total} ${total === 1 ? "item" : "items"}`}
+              {loadingAssets
+                ? "Filtering…"
+                : charactersView
+                  ? `${characterGroups.length} ${characterGroups.length === 1 ? "character" : "characters"} · ${total} ${total === 1 ? "image" : "images"}`
+                  : `${total} ${total === 1 ? "item" : "items"}`}
             </strong>
             <div className="library-collection-actions">
+              {charactersView && canImport && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setNewCharacterOpen(true)}
+                >
+                  <ActionIcon name="add" />
+                  {t("attribution.characters.newCharacter")}
+                </Button>
+              )}
               {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}><ActionIcon name="refresh" />{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
               {/* The control this one always was, now shared - the campaign
                   timeline had a second version of it that did not match. */}
@@ -2665,7 +2868,7 @@ function LibraryContent() {
               </div>
             )}
           </div>
-          {initialAssetsPending ? (
+          {collectionRefreshPending ? (
             <WaitingBlock className="library-collection-wait" message={t("common.loading")} />
           ) : draftsView ? (
             <div className="library-collection library-grid library-drafts">
@@ -2688,6 +2891,7 @@ function LibraryContent() {
                       else setStorytellingOpen(true);
                     }}
                   >
+                    <DraftThumbnail kind={draft.kind} count={draft.summary?.clips ?? draft.summary?.pictures} />
                     <span className="library-draft-kind">
                       {draft.kind === "autocut" ? "AutoCut" : "Storytelling"}
                     </span>
@@ -2729,6 +2933,7 @@ function LibraryContent() {
                     title="Review what this draft still needs, without leaving the Library."
                     onClick={() => setActiveAttributionDraft(draft)}
                   >
+                    <DraftThumbnail kind={draft.kind} count={draft.product_count} />
                     <span className="library-draft-kind">
                       {draft.kind === "video" ? "Video" : draft.kind === "carousel" ? "Carousel" : "Image"} · {humanizeRecipe(draft.recipe)}
                     </span>
@@ -2754,29 +2959,83 @@ function LibraryContent() {
               })}
               </>)}
             </div>
-          ) : <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
-            {groupBy === "none"
-              ? assets.map(renderAsset)
-              : groupedAssets.map(([label, groupAssets]) => (
-                <section className="library-group" key={label}>
-                  <header><strong>{label}</strong><span>{groupTotal(label, groupAssets.length)}</span></header>
-                  <div className={`library-group-items library-${viewMode}`}>
-                    {groupAssets.map(renderAsset)}
-                  </div>
+          ) : <div className={`library-collection ${charactersView || groupBy !== "none" ? "library-grouped" : `library-${viewMode}`}`}>
+            {charactersView
+              ? characterGroups.map((group) => (
+                <section className="library-group library-character-group" key={group.id}>
+                  <header>
+                    <div className="library-character-group-title">
+                      <strong>{group.label}</strong>
+                      {group.character?.builtin && (
+                        <small className="library-character-meta">{t("attribution.characters.builtin")}</small>
+                      )}
+                      {group.character?.status === "generating" && (
+                        <small className="library-character-meta">{t("attribution.characters.generating")}</small>
+                      )}
+                      {group.character?.status === "failed" && (
+                        <small className="library-character-meta is-error">{group.character.error || t("attribution.characters.failed")}</small>
+                      )}
+                    </div>
+                    <div className="library-character-group-actions">
+                      {group.character?.sheet_asset_id && (
+                        <Button variant="quiet" size="sm" onClick={() => setViewingCharacter(group.character)}>
+                          {t("attribution.characters.viewSheet")}
+                        </Button>
+                      )}
+                      {group.character && group.character.status === "failed" && canImport && (
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          busy={characterBusyId === group.character.id}
+                          disabled={characterBusyId !== "" || !characterGenerator?.ready}
+                          onClick={() => void retryCharacter(group.character!)}
+                        >
+                          {t("attribution.characters.retry")}
+                        </Button>
+                      )}
+                      {group.character && group.character.status !== "generating" && canImport && (
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          busy={characterBusyId === group.character.id}
+                          disabled={characterBusyId !== ""}
+                          onClick={() => void removeCharacter(group.character!)}
+                        >
+                          {t("attribution.characters.remove")}
+                        </Button>
+                      )}
+                      <span>{group.items.length}</span>
+                    </div>
+                  </header>
+                  {group.items.length > 0 && (
+                    <div className={`library-group-items library-${viewMode}`}>
+                      {group.items.map(renderAsset)}
+                    </div>
+                  )}
                 </section>
-              ))}
-            {!assets.length && (
+              ))
+              : groupBy === "none"
+                ? assets.map(renderAsset)
+                : groupedAssets.map(([label, groupAssets]) => (
+                  <section className="library-group" key={label}>
+                    <header><strong>{label}</strong><span>{groupTotal(label, groupAssets.length)}</span></header>
+                    <div className={`library-group-items library-${viewMode}`}>
+                      {groupAssets.map(renderAsset)}
+                    </div>
+                  </section>
+                ))}
+            {(!assets.length && (!charactersView || characterGroups.length === 0)) && (
               <div className="library-empty-state">
-                <p>{t("library.empty")}</p>
+                <p>{charactersView ? t("attribution.characters.none") : t("library.empty")}</p>
                 {canImport && (
                   <Button
                     type="button"
                     variant="primary"
                     size="sm"
-                    onClick={() => setImportOpen(true)}
+                    onClick={() => (charactersView ? setNewCharacterOpen(true) : setImportOpen(true))}
                   >
                     <ActionIcon name="add" />
-                    {t("library.importMedia")}
+                    {charactersView ? t("attribution.characters.newCharacter") : t("library.importMedia")}
                   </Button>
                 )}
               </div>
@@ -3490,6 +3749,27 @@ function LibraryContent() {
             if (existing) setActiveAttributionDraft(existing);
           }}
         />
+      )}
+      {workspaceId && (
+        <>
+          <SheetViewer
+            character={viewingCharacter}
+            workspaceId={workspaceId}
+            apiFetch={apiFetch}
+            onClose={() => setViewingCharacter(null)}
+          />
+          <NewCharacterDialog
+            open={newCharacterOpen}
+            workspaceId={workspaceId}
+            apiFetch={apiFetch}
+            generator={characterGenerator}
+            onClose={() => setNewCharacterOpen(false)}
+            onCreated={(character) => {
+              setCharacters((current) => [...current, character]);
+              void refreshCharacters().then(() => void refresh(workspaceId));
+            }}
+          />
+        </>
       )}
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>

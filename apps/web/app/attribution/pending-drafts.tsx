@@ -1,5 +1,6 @@
 "use client";
 
+import { DraftThumbnail } from "../ui/draft-thumbnail";
 import { useT } from "../i18n-provider";
 import { Button } from "../ui/button";
 import { pendingDrafts } from "./creative-filter";
@@ -68,6 +69,7 @@ export function PendingDrafts<P extends DraftProduct>({
           const focused = activeGroup === draft.id;
           return (
             <li key={draft.id} className="pending-draft">
+              <DraftThumbnail kind={draft.kind} count={draft.product_count ?? featured.length} />
               <div className="pending-draft-head">
                 {together
                   ? <GroupChip number={draft.group_number} />

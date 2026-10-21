@@ -51,6 +51,8 @@ export type AssetFilterValues = {
   source?: string;
   /** Keep assets with at least one attached Attribution product. */
   hasProducts?: boolean;
+  /** Narrow to assets belonging to or featuring a specific character (PM-153). */
+  character?: string;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -61,8 +63,11 @@ export type AssetFacets = {
   effects: Facet[];
   processing: Facet[];
   campaigns?: Facet[];
+  characters?: Facet[];
   /** Number of unique media assets attached to one or more products. */
   product_assets?: number;
+  /** Number of character reference assets in the Library. */
+  character_assets?: number;
 };
 
 export const EMPTY_FACETS: AssetFacets = {
@@ -72,7 +77,9 @@ export const EMPTY_FACETS: AssetFacets = {
   effects: [],
   processing: [],
   campaigns: [],
+  characters: [],
   product_assets: 0,
+  character_assets: 0,
 };
 
 /** One canonical mapping from controls to the API query. */
@@ -94,6 +101,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   if (values.inCampaign) params.set("in_campaign", values.inCampaign);
   if (values.source) params.set("source_type", values.source);
   if (values.hasProducts) params.set("has_products", "true");
+  if (values.character) params.set("character_id", values.character);
   return params;
 }
 
@@ -103,10 +111,61 @@ export function activeFilterCount(
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
-    "downloadedWithinDays", "notInCampaign", "inCampaign", "source", "hasProducts",
+    "downloadedWithinDays", "notInCampaign", "inCampaign", "source", "hasProducts", "character",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];
     return Boolean(value) && value !== cleared[key];
   }).length;
+}
+
+/** Canonical request signature for the Library collection (PM-180). */
+export function libraryQueryKey(
+  workspaceId: string,
+  filters: AssetFilterValues,
+  sortOrder: string,
+  notificationAssetIds: readonly string[] = [],
+  downloadJobFilter = "",
+  downloadFileHash = "",
+): string {
+  if (!workspaceId) return "";
+  const params = assetFilterParams(filters);
+  if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
+  if (downloadJobFilter) params.set("download_job_ids", downloadJobFilter);
+  if (downloadFileHash) params.set("sha256", downloadFileHash);
+  params.set("sort", sortOrder);
+  params.set("limit", "100");
+  return `${workspaceId}?${params}`;
+}
+
+/**
+ * True while the Media Library collection is awaiting results for the currently selected filters
+ * (PM-180). Immediately true on the render where any filter changes (`loadedQueryKey !== currentQueryKey`)
+ * so stale cards from the previous filter never linger on screen.
+ */
+export function isLibraryFilterPending(input: {
+  workspaceId: string;
+  draftsView: boolean;
+  loadingAssets: boolean;
+  currentQueryKey: string;
+  loadedQueryKey: string;
+}): boolean {
+  if (!input.workspaceId || input.draftsView) return false;
+  return input.loadingAssets || input.loadedQueryKey !== input.currentQueryKey;
+}
+
+/** Guards against out-of-order responses when filters change rapidly (PM-180). */
+export function shouldCommitLibraryResponse(input: {
+  requestSequence: number;
+  activeSequence: number;
+  requestWorkspaceId: string;
+  activeWorkspaceId: string;
+  requestQueryKey: string;
+  activeQueryKey: string;
+}): boolean {
+  return (
+    input.requestSequence === input.activeSequence
+    && input.requestWorkspaceId === input.activeWorkspaceId
+    && input.requestQueryKey === input.activeQueryKey
+  );
 }

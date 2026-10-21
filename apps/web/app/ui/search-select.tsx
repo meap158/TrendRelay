@@ -153,8 +153,14 @@ export function SearchSelect({
   // Keep the active row in view when it moves by keyboard.
   useEffect(() => {
     if (!open) return;
-    listNode.current?.querySelector<HTMLElement>("[data-active='true']")
-      ?.scrollIntoView({ block: "nearest" });
+    const list = listNode.current;
+    const row = list?.querySelector<HTMLElement>("[data-active='true']");
+    if (!list || !row) return;
+    // Scroll only the option list; scrollIntoView also pans the Library rail.
+    const bounds = list.getBoundingClientRect();
+    const item = row.getBoundingClientRect();
+    if (item.top < bounds.top) list.scrollTop -= bounds.top - item.top;
+    else if (item.bottom > bounds.bottom) list.scrollTop += item.bottom - bounds.bottom;
   }, [active, open]);
 
   function choose(index: number) {
@@ -163,7 +169,7 @@ export function SearchSelect({
     onChange(row.value);
     setOpen(false);
     setQuery("");
-    trigger.current?.focus();
+    trigger.current?.focus({ preventScroll: true });
   }
 
   /**
@@ -184,7 +190,7 @@ export function SearchSelect({
     // Enter inside a form submits it.
     event.preventDefault();
     if (intent.type === "open") reveal();
-    else if (intent.type === "close") { setOpen(false); trigger.current?.focus(); }
+    else if (intent.type === "close") { setOpen(false); trigger.current?.focus({ preventScroll: true }); }
     else if (intent.type === "move") {
       const direction = event.key === "End" || event.key === "ArrowUp" ? -1 : 1;
       let candidate = intent.index;
@@ -240,7 +246,7 @@ export function SearchSelect({
         maxHeight: Math.max(0, Math.min(320, side === "above" ? above : below)),
         // Two pixels back from the edge, so a rounding remainder cannot be
         // what tips the box into showing a sideways scrollbar.
-        maxInlineSize: Math.max(180, Math.floor(inlineRoom) - 2),
+        maxInlineSize: Math.max(0, Math.floor(inlineRoom) - 2),
       });
   }, [preferredSide]);
 

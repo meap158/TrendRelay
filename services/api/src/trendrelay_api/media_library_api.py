@@ -1057,6 +1057,8 @@ class AssetFilter(BaseModel):
     source_type: str | None = None
     #: Keep only files attached to one or more Attribution products.
     has_products: bool = False
+    #: Narrow to assets belonging to or featuring one character (PM-153, PM-167).
+    character_id: str | None = None
 
 
 #: Filter values that are not the id of an effect.
@@ -1154,16 +1156,48 @@ def _has_product_attachment(workspace_id: str) -> Any:
     """A correlated membership check: one asset counts once, however many products it has."""
     from trendrelay_api.product_creative_models import ProductCreativeLink
 
-    return select(ProductCreativeLink.id).where(
+    linked = select(ProductCreativeLink.id).where(
         ProductCreativeLink.workspace_id == workspace_id,
         ProductCreativeLink.asset_id == MediaAsset.id,
     ).correlate(MediaAsset).exists()
+    return or_(linked, MediaAsset.source_type == "product-creative")
+
+
+def _character_condition(workspace_id: str, character_id: str) -> Any:
+    """Assets that are a character's portrait/sheet or were generated featuring that character."""
+    from trendrelay_api.character_models import Character
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    is_cast_asset = select(Character.id).where(
+        Character.workspace_id == workspace_id,
+        Character.id == character_id,
+        or_(
+            Character.portrait_asset_id == MediaAsset.id,
+            Character.sheet_asset_id == MediaAsset.id,
+        ),
+    ).correlate(MediaAsset).exists()
+    is_featured_asset = (
+        select(ProductCreativeLink.id)
+        .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
+        .where(
+            ProductCreativeLink.workspace_id == workspace_id,
+            ProductCreativeLink.asset_id == MediaAsset.id,
+            ProductCreativeDraft.character_id == character_id,
+        )
+        .correlate(MediaAsset)
+        .exists()
+    )
+    return or_(is_cast_asset, is_featured_asset)
 
 
 def asset_conditions(
-    workspace_id: str, filters: AssetFilter, *, omit: str | None = None
+    workspace_id: str,
+    filters: AssetFilter,
+    *,
+    omit: str | set[str] | frozenset[str] | None = None,
 ) -> list[Any]:
     """The WHERE clause for a library query, including the free-text search."""
+    omitted = {omit} if isinstance(omit, str) else set(omit or ())
     values: list[Any] = [MediaAsset.workspace_id == workspace_id]
     if filters.asset_ids:
         values.append(MediaAsset.id.in_(filters.asset_ids))
@@ -1188,29 +1222,31 @@ def asset_conditions(
                 ),
             ))
         values.append(or_(*batch_matches))
-    if omit != "platform":
+    if "platform" not in omitted:
         if filters.platform:
             values.append(MediaAsset.platform == filters.platform)
         elif filters.platform_missing:
             values.append(
                 (MediaAsset.platform.is_(None)) | (func.trim(MediaAsset.platform) == "")
             )
-    if omit != "creator":
+    if "creator" not in omitted:
         if filters.creator:
             values.append(MediaAsset.creator == filters.creator)
         elif filters.creator_missing:
             values.append(
                 (MediaAsset.creator.is_(None)) | (func.trim(MediaAsset.creator) == "")
             )
-    if omit != "media_kind" and filters.media_kind:
+    if "media_kind" not in omitted and filters.media_kind:
         values.append(MediaAsset.media_kind == filters.media_kind)
-    if omit != "source_type" and filters.source_type:
+    if "source_type" not in omitted and filters.source_type:
         values.append(MediaAsset.source_type == filters.source_type)
-    if omit != "has_products" and filters.has_products:
+    if "has_products" not in omitted and filters.has_products:
         values.append(_has_product_attachment(workspace_id))
+    if "character_id" not in omitted and filters.character_id:
+        values.append(_character_condition(workspace_id, filters.character_id))
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
-    if omit != "collected_within_days" and filters.collected_within_days:
+    if "collected_within_days" not in omitted and filters.collected_within_days:
         values.append(
             MediaAsset.collected_at
             >= utc_now() - timedelta(days=filters.collected_within_days)
@@ -1228,7 +1264,7 @@ def asset_conditions(
             CampaignQueueItem.asset_id == MediaAsset.id,
         ).correlate(MediaAsset).exists()
         values.append(~already)
-    if omit != "in_campaign" and filters.in_campaign:
+    if "in_campaign" not in omitted and filters.in_campaign:
         # The same membership question, asked the other way around: keep only
         # what this campaign's queue was built from.
         from trendrelay_api.autopilot_models import CampaignQueueItem
@@ -1239,9 +1275,9 @@ def asset_conditions(
             CampaignQueueItem.asset_id == MediaAsset.id,
         ).correlate(MediaAsset).exists()
         values.append(held)
-    if omit != "has_version" and filters.has_version:
+    if "has_version" not in omitted and filters.has_version:
         values.append(_effect_condition(filters.has_version))
-    if omit != "processing" and filters.processing:
+    if "processing" not in omitted and filters.processing:
         values.append(_processing_condition(filters.processing))
     if filters.q and filters.q.strip():
         escaped = (
@@ -1310,6 +1346,7 @@ def list_asset_ids(
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     source_type: Annotated[str | None, Query(max_length=40)] = None,
     has_products: Annotated[bool, Query()] = False,
+    character_id: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -1325,7 +1362,7 @@ def list_asset_ids(
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
-        source_type=source_type, has_products=has_products,
+        source_type=source_type, has_products=has_products, character_id=character_id,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -1372,6 +1409,7 @@ def list_assets(
     in_campaign: Annotated[str | None, Query(max_length=64)] = None,
     source_type: Annotated[str | None, Query(max_length=40)] = None,
     has_products: Annotated[bool, Query()] = False,
+    character_id: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     # Without this a caller could read the first hundred matches and no more,
@@ -1390,10 +1428,10 @@ def list_assets(
         asset_ids=_words(asset_ids, 200, 80), download_job_id=download_job_id,
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
-        source_type=source_type, has_products=has_products,
+        source_type=source_type, has_products=has_products, character_id=character_id,
     )
 
-    def conditions(*, omit: str | None = None) -> list[Any]:
+    def conditions(*, omit: str | set[str] | frozenset[str] | None = None) -> list[Any]:
         return asset_conditions(workspace_id, filters, omit=omit)
 
 
@@ -1460,12 +1498,22 @@ def list_assets(
             "media_kinds": facet(
                 MediaAsset.media_kind,
                 missing_label="Other media",
-                omit="media_kind",
+                omit=(
+                    {"media_kind", "source_type"}
+                    if filters.source_type == "character"
+                    else "media_kind"
+                ),
             ),
             "product_assets": session.scalar(
                 select(func.count(MediaAsset.id)).where(
-                    *conditions(omit="has_products"),
+                    *conditions(omit={"has_products", "media_kind", "source_type"}),
                     _has_product_attachment(workspace_id),
+                )
+            ) or 0,
+            "character_assets": session.scalar(
+                select(func.count(MediaAsset.id)).where(
+                    *conditions(omit={"media_kind", "source_type", "has_products"}),
+                    MediaAsset.source_type == "character",
                 )
             ) or 0,
             # Not a column but a related row, so it is counted on its own rather
@@ -1476,8 +1524,55 @@ def list_assets(
             "campaigns": _campaign_facet(
                 session, workspace_id, conditions(omit="in_campaign")
             ),
+            "characters": _character_facet(
+                session, workspace_id, conditions(omit="character_id")
+            ),
         },
     }
+
+
+def _character_facet(
+    session: Session, workspace_id: str, where: list[Any]
+) -> list[dict[str, Any]]:
+    """Characters with matching assets in this view, and how many assets each holds."""
+    from trendrelay_api.character_models import Character
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    characters = session.scalars(
+        select(Character).where(
+            Character.workspace_id == workspace_id,
+            Character.archived_at.is_(None),
+        )
+    ).all()
+    if not characters:
+        return []
+    matching_ids = set(session.scalars(select(MediaAsset.id).where(*where)).all())
+    if not matching_ids:
+        return []
+    featured_rows = session.execute(
+        select(ProductCreativeDraft.character_id, ProductCreativeLink.asset_id)
+        .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
+        .where(
+            ProductCreativeLink.workspace_id == workspace_id,
+            ProductCreativeDraft.character_id.is_not(None),
+        )
+    ).all()
+    featured_by_char: dict[str, set[str]] = {}
+    for char_id, asset_id in featured_rows:
+        if char_id and asset_id:
+            featured_by_char.setdefault(str(char_id), set()).add(str(asset_id))
+
+    facets: list[dict[str, Any]] = []
+    for character in characters:
+        char_assets = set(featured_by_char.get(character.id, set()))
+        if character.portrait_asset_id:
+            char_assets.add(character.portrait_asset_id)
+        if character.sheet_asset_id:
+            char_assets.add(character.sheet_asset_id)
+        count = len(char_assets & matching_ids)
+        if count > 0:
+            facets.append({"value": character.id, "label": character.name, "count": count})
+    return sorted(facets, key=lambda item: (-item["count"], item["label"].casefold()))
 
 
 def _campaign_facet(

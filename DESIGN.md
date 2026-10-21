@@ -82,3 +82,6 @@ Concise, confident, implementation-focused.
 - Every accessibility rule must be testable in implementation.
 - Teams should prefer system consistency over local visual exceptions.
 - Returning to a previously loaded tab must paint its last usable content immediately and revalidate in the background. List endpoints must batch related records; route mounting must not start reconciliation scans or other mutating maintenance work.
+
+
+PM-191: Library filter/order controls are always visible. Compact sort/group controls precede a single wrapping media-filter row; phone controls use two columns. No disclosure or hidden filter panel.
