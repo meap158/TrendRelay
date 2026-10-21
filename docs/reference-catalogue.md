@@ -47,6 +47,9 @@ Everything else (`structure`, `framing`, `poses`, `productsPerFrame`, `togetherS
 annotation after looking at the images locally. `mediaUrls` are only used to fetch images into `References/brand-pages/` for that
 local viewing; they are never stored in the catalogue entry. For videos the export keeps only the cover image.
 
+Convert an export into skeletons (facts filled, annotations empty; image URLs are not copied):
+`python scripts/catalogue_from_socialminer.py export.json --source hemell_official --out catalogue-hemell.json`
+
 ## From catalogue to original assets
 1. Aggregate: which `structure`, `framing` and `productsPerFrame` patterns recur in the higher-engagement posts. Engagement is
    not controlled for follower count, so use it only to rank posts within the same page.
