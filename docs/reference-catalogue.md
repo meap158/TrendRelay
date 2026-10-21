@@ -37,8 +37,15 @@ rilly_emulie_official, anmille.official, hemell_official (Instagram).
   "notes": "free text, our own words"
 }
 ```
-Fields `postId`, `postedAt`, `kind`, `slideCount`, `engagement` come from the export; the rest are our own annotations. The exact
-export field names are to be confirmed when the first export exists.
+Fields filled from the SocialMiner JSON export (`posts[]`, from `src/core/models.ts` in SocialMiner, read 2026-10-21):
+- `postId` = `externalId` (the `id` is `instagram:<externalId>`); `url` links back to the post.
+- `postedAt` = `timestamp` (Unix ms; check `timestampPrecision`, "relative" values are approximate).
+- `kind` = `mediaType` (`image`, `carousel`, `reel`, `video`); `slideCount` = the length of `mediaUrls` for a carousel.
+- `engagement` = `reactions` (likes and the other counts) plus `commentCount`; `viewCount` for reels.
+- `captionPattern` is derived from `text` and `hashtags`.
+Everything else (`structure`, `framing`, `poses`, `productsPerFrame`, `togetherSet`, `palette`, `styling`, `notes`) is our own
+annotation after looking at the images locally. `mediaUrls` are only used to fetch images into `References/brand-pages/` for that
+local viewing; they are never stored in the catalogue entry. For videos the export keeps only the cover image.
 
 ## From catalogue to original assets
 1. Aggregate: which `structure`, `framing` and `productsPerFrame` patterns recur in the higher-engagement posts. Engagement is
@@ -53,4 +60,5 @@ export field names are to be confirmed when the first export exists.
 ## Open items
 - Owner: run the SocialMiner mine of the three pages and give the export path.
 - Owner: confirm that "pribng" meant pricing; if so add a price-positioning column per page (price band shown, if any).
+- Confirm on the first real export that Instagram carousels list every slide in `mediaUrls` (SocialMiner's docs say they do).
 - Decide how TrendRelay invokes FrameMotion (package import vs `npm run carousel`).
