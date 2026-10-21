@@ -1067,3 +1067,7 @@ not checked.
   once produced a confident "fixed" message and no change at all.
 - **Report what happened, including the wrong turns.** Three of this session's
   useful findings came from a diagnosis being wrong the first time.
+
+- PM-170: Library groups sort/group and media filters behind one native Filters and order disclosure, retaining active-filter count. DraftThumbnail gives unfinished image/carousel/video/AutoCut/Storytelling drafts a consistent visual identity in Library, Attribution Pending and owed-media placeholders; these symbols identify drafts and do not imply finished generated media.
+
+- PM-191 supersedes the PM-170 disclosure: Library filters/order are always visible in a compact wrapping row. Sort/group stay narrow; phone controls form two columns. Filtering/loading behavior is unchanged.

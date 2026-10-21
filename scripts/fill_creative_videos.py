@@ -314,7 +314,30 @@ def _is_mp4(data: bytes) -> bool:
     return len(data) >= 12 and data[4:8] == b"ftyp"
 
 
-def _clip_bytes(draft_id: str, prompt: str, workspace: str, asset_id: str) -> bytes:
+def character_reference_ids(draft: dict) -> list[str]:
+    """Portrait then sheet, when the draft features a Library character.
+
+    The garment subject stays the first reference. These follow it so the
+    same person wears the product. A draft with no character stays one image.
+    """
+    character = draft.get("character") or {}
+    if not isinstance(character, dict):
+        return []
+    found: list[str] = []
+    for key in ("portrait_asset_id", "sheet_asset_id"):
+        asset_id = character.get(key)
+        if asset_id:
+            found.append(str(asset_id))
+    return found
+
+
+def _clip_bytes(
+    draft_id: str,
+    prompt: str,
+    workspace: str,
+    asset_id: str,
+    references: tuple[tuple[bytes, str], ...] = (),
+) -> bytes:
     cached = _local_mp4(draft_id)
     if cached is not None:
         print(f"using local clip {draft_id}", file=sys.stderr, flush=True)
@@ -343,7 +366,9 @@ def _clip_bytes(draft_id: str, prompt: str, workspace: str, asset_id: str) -> by
         image, mime = _subject_bytes(session, workspace, asset_id)
     print(f"generating {draft_id}", file=sys.stderr, flush=True)
     try:
-        data = generate_xai(PROVIDERS["xai"], prompt, image, mime, key)
+        data = generate_xai(
+            PROVIDERS["xai"], prompt, image, mime, key, references=references,
+        )
     except VideoError as error:
         raise FillFailure(error.code, public_text(error)) from error
     except Exception as error:
@@ -386,6 +411,33 @@ def _finish_line(recipe: str, draft_id: str, body: dict) -> None:
     raise FillFailure("incomplete", "The file was submitted and the draft is not linked.")
 
 
+def _character_references(workspace: str, draft: dict) -> tuple[tuple[bytes, str], ...]:
+    """The featured character's portrait and sheet, after the garment.
+
+    A picture removed from the Library is skipped. The prompt still names
+    the character. No character on the draft means no extra references.
+    """
+    ids = character_reference_ids(draft)
+    if not ids:
+        return ()
+    from trendrelay_api.database import SessionFactory
+    from trendrelay_api.integrations.video_generation import VideoError, _subject_bytes
+
+    found: list[tuple[bytes, str]] = []
+    with SessionFactory() as session:
+        for asset_id in ids:
+            try:
+                found.append(_subject_bytes(session, workspace, asset_id))
+            except VideoError:
+                print(f"character reference missing {asset_id}", file=sys.stderr, flush=True)
+    if not found:
+        raise FillFailure(
+            "subject",
+            "This draft features a character whose pictures could not be read.",
+        )
+    return tuple(found)
+
+
 def _subject_id(draft: dict) -> str:
     assets = draft.get("subject_assets") or []
     for item in assets:
@@ -424,7 +476,13 @@ def fill_draft(api_base: str, workspace: str, draft_id: str) -> None:
     if missing:
         raise FillFailure("stale", stale_message(missing))
     try:
-        data = _clip_bytes(draft_id, str(draft["prompt"]), workspace, _subject_id(draft))
+        data = _clip_bytes(
+            draft_id,
+            str(draft["prompt"]),
+            workspace,
+            _subject_id(draft),
+            _character_references(workspace, draft),
+        )
         body = _submit(api_base, workspace, draft_id, recipe, data)
     except FillFailure as error:
         if not error.draft_id:

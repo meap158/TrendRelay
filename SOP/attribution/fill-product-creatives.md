@@ -236,3 +236,11 @@ A draft of several products is refused before anything is sent. Its file
 still comes from outside, as sections 1–4 describe. An image or a carousel
 does too. The in-app Generate button stays hidden until Tools has a saved
 key, the switch on, and a passing check. This command does not turn those on.
+
+### Register externally generated characters
+
+After generating a new fictional character through the imagegen workflow, register its reviewed portrait and consistency sheet before using it in Attribution. POST `/api/workspaces/{workspace_id}/characters/register/images` with name, appearance, outfit, portrait_base64 and sheet_base64. This imports both originals into Library and creates a ready character without another image-provider call. For references already in Library, POST `/characters/register` with portrait_asset_id and sheet_asset_id instead. Both references must be distinct images in the same workspace. Repeating the same pair returns the existing character. Verify GET `/characters` includes its ready record and both asset IDs before claiming it is available in Generate a creative. Preserve fictional provenance in appearance; do not relabel real-person references as fictional.
+
+
+Character creation and appearance revisions must follow [Create or revise a photorealistic character](../creations/create-character.md), including distinct identities, portrait-first consistency sheets, Library registration and ready-picker verification.
+
