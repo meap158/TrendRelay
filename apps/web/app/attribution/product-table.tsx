@@ -28,7 +28,7 @@ import { useRelativeClock } from "../ui/relative-time";
 import { useWorkspace } from "../workspace-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
-import { productMatches } from "../publish/offer-rows";
+import { describeImportRun, importRunKey, productMatches } from "../publish/offer-rows";
 import {
   hasLibraryCreative,
   hasPendingCreative,
@@ -304,17 +304,18 @@ export function ProductTable({
   const fileImports = useMemo(() => {
     const found = new Map<string, { latest: number; count: number }>();
     for (const product of products) {
-      if (!product.import_filename) continue;
+      const runKey = importRunKey(product);
+      if (!runKey) continue;
       const at = product.imported_at ? Date.parse(product.imported_at) : Number.NaN;
-      const entry = found.get(product.import_filename) ?? { latest: Number.NaN, count: 0 };
+      const entry = found.get(runKey) ?? { latest: Number.NaN, count: 0 };
       entry.count += 1;
       if (!Number.isNaN(at) && !(at <= entry.latest)) entry.latest = at;
-      found.set(product.import_filename, entry);
+      found.set(runKey, entry);
     }
     return [...found.entries()]
-      .map(([name, entry]) => ({ name, ...entry }))
+      .map(([name, entry]) => ({ name, ...describeImportRun(name), ...entry }))
       .sort((a, b) => (Number.isNaN(b.latest) ? -1 : b.latest) - (Number.isNaN(a.latest) ? -1 : a.latest)
-        || a.name.localeCompare(b.name));
+        || a.label.localeCompare(b.label));
   }, [products]);
   /**
    * The creators actually present in these rows, counted.
@@ -654,8 +655,9 @@ export function ProductTable({
                   value={filterFile}
                   options={fileImports.map((item) => ({
                     value: item.name,
-                    label: item.name,
+                    label: item.label,
                     description: [
+                      item.sourceLabel,
                       Number.isNaN(item.latest)
                         ? null
                         : relativeTime(new Date(item.latest), { locale })

@@ -160,8 +160,8 @@ export function ShopeeImport({
             campaign_ids: [...importFor],
             fetch_listings: fetchListings,
             // The file this batch came from, so the catalogue can be filtered
-            // back to it. A pasted export or links have no name to record.
-            filename: workbookName || null,
+            // back to it. Product-link batches record their own link-run key on the server.
+            filename: mode === "export" ? (workbookName || null) : null,
           }),
         },
       );
