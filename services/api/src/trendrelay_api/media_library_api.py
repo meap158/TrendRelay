@@ -1156,13 +1156,21 @@ def _processing_condition(wanted: str) -> Any:
 
 
 def _has_product_attachment(workspace_id: str) -> Any:
-    """A correlated membership check: one asset counts once, however many products it has."""
+    """Membership in the set of linked asset ids: one asset counts once, however
+    many products it has.
+
+    An `IN` over the links rather than a correlated `EXISTS`. SQLite ran the
+    correlated form once per asset and searched the subquery through the links'
+    workspace index, scanning every link of the workspace for each asset - about
+    a second per count on a few thousand files, and the list endpoint counts
+    each facet with this filter applied, so choosing Products took eight. The
+    uncorrelated set is built once. The character and recipe filters below use
+    the same form for the same reason."""
     from trendrelay_api.product_creative_models import ProductCreativeLink
 
-    linked = select(ProductCreativeLink.id).where(
-        ProductCreativeLink.workspace_id == workspace_id,
-        ProductCreativeLink.asset_id == MediaAsset.id,
-    ).correlate(MediaAsset).exists()
+    linked = MediaAsset.id.in_(
+        select(ProductCreativeLink.asset_id).where(ProductCreativeLink.workspace_id == workspace_id)
+    )
     return or_(linked, MediaAsset.source_type == "product-creative")
 
 
@@ -1171,24 +1179,19 @@ def _character_condition(workspace_id: str, character_id: str) -> Any:
     from trendrelay_api.character_models import Character
     from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
 
-    is_cast_asset = select(Character.id).where(
-        Character.workspace_id == workspace_id,
-        Character.id == character_id,
-        or_(
-            Character.portrait_asset_id == MediaAsset.id,
-            Character.sheet_asset_id == MediaAsset.id,
-        ),
-    ).correlate(MediaAsset).exists()
-    is_featured_asset = (
-        select(ProductCreativeLink.id)
+    # Uncorrelated sets, built once; see `_has_product_attachment`.
+    character = (Character.workspace_id == workspace_id, Character.id == character_id)
+    is_cast_asset = or_(
+        MediaAsset.id.in_(select(Character.portrait_asset_id).where(*character)),
+        MediaAsset.id.in_(select(Character.sheet_asset_id).where(*character)),
+    )
+    is_featured_asset = MediaAsset.id.in_(
+        select(ProductCreativeLink.asset_id)
         .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
         .where(
             ProductCreativeLink.workspace_id == workspace_id,
-            ProductCreativeLink.asset_id == MediaAsset.id,
             ProductCreativeDraft.character_id == character_id,
         )
-        .correlate(MediaAsset)
-        .exists()
     )
     return or_(is_cast_asset, is_featured_asset)
 
@@ -1197,16 +1200,14 @@ def _recipe_condition(workspace_id: str, recipe: str) -> Any:
     """Assets a draft of this recipe produced and linked to its product."""
     from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
 
-    return (
-        select(ProductCreativeLink.id)
+    # An uncorrelated set, built once; see `_has_product_attachment`.
+    return MediaAsset.id.in_(
+        select(ProductCreativeLink.asset_id)
         .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
         .where(
             ProductCreativeLink.workspace_id == workspace_id,
-            ProductCreativeLink.asset_id == MediaAsset.id,
             ProductCreativeDraft.recipe == recipe,
         )
-        .correlate(MediaAsset)
-        .exists()
     )
 
 
