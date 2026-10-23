@@ -1106,6 +1106,10 @@ export function ProductMediaGenerator({
       suspendDismiss={pickerOpen || characterOverlay}
       footer={(
         <>
+          {/* Beside the button it explains, not at the end of the form: a
+              disabled Queue with its reason a screen away reads as broken. It
+              only shows before a draft exists, and Discard only after. */}
+          {queueBlocker && <small className="generate-queue-blocker" role="status">{queueBlocker}</small>}
           {canDiscard && (
             <span className="generate-discard">
               {confirmDiscard && <small>{t("attribution.generate.discardHelp")}</small>}
@@ -1641,7 +1645,6 @@ export function ProductMediaGenerator({
         {generation && retrying && (
           <p role="status">{t("attribution.generate.generationRetrying")}</p>
         )}
-        {queueBlocker && <p className="generate-blocker">{queueBlocker}</p>}
         {notice && <p role="status">{notice}</p>}
         {error && !reviewing && <p role="alert">{error}</p>}
         {error && reviewing && draft && <p role="alert">{error}</p>}

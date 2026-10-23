@@ -1504,3 +1504,15 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
     border-inline-start: 1px solid var(--line);
   }
 }
+
+/* Why Queue is off, at the footer's start and level with the button. It may
+   wrap to two lines; it never pushes Close or Queue out of a narrow dialog. */
+.generate-dialog .ui-dialog-foot { flex-wrap: wrap; }
+.generate-dialog .generate-queue-blocker {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  margin-inline-end: auto;
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.4;
+}
