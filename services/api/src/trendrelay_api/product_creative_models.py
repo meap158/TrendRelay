@@ -46,7 +46,17 @@ class ProductCreativeDraft(Base):
             "'mannequin_walkaround','styled_flat_lay','flat_lay_reveal',"
             "'sleepwear_lookbook','held_up_garment','hikaru_lookbook',"
             "'character_editorial_carousel',"
-            "'ceiling_fan_transition','hanger_rail_reveal','hikaru_walk')",
+            "'ceiling_fan_transition','hanger_rail_reveal','hikaru_walk',"
+            # Mined batch 2026-10-23 (migration 20261023_0099).
+            "'floral_bow_set_portraits','plain_wall_outfit_check',"
+            "'cafe_street_magazine','seamless_collection_lineup',"
+            "'night_city_lookbook','day_out_photo_dump','fabric_macro_to_portrait',"
+            "'faux_fur_salon_studio','single_bloom_window_light',"
+            "'plush_armchair_lounge','morning_kitchen_lounge','resort_sunset_story',"
+            "'catalogue_colourway_card','dress_form_arch_duo',"
+            "'draped_garment_still_life','profile_grid_checkerboard',"
+            "'seamless_swipe_triptych','window_knit_portrait_series',"
+            "'studio_turn_showcase')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(
