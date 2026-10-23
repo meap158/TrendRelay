@@ -25,6 +25,7 @@ import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { Lightbox, useLightboxSet } from "../ui/lightbox";
 import { opaquePreviewUrl } from "../../lib/media-preview";
+import { humanizeRecipeId, libraryRecipeLabel } from "../../lib/recipe-library";
 import { partitionDrafts } from "./draft-groups";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
@@ -593,7 +594,11 @@ const RECIPE_LABELS: Record<string, string> = {
 };
 
 export function creativeRecipe(t: (path: string) => string, recipe: string): string {
-  return t(RECIPE_LABELS[recipe] ?? RECIPE_LABELS.bed_flat_lay);
+  const key = RECIPE_LABELS[recipe];
+  if (key) return t(key);
+  // A mined recipe: its name came with the library, if the dialog has fetched
+  // it this session, and otherwise the id itself reads well enough.
+  return libraryRecipeLabel(recipe) ?? humanizeRecipeId(recipe);
 }
 
 /** The product list carries only id, kind, recipe, status, and owed. */

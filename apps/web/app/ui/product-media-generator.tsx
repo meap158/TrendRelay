@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "../auth-provider";
-import { useT } from "../i18n-provider";
+import { useLocale, useT } from "../i18n-provider";
+import { FilterChipStrip } from "./filter-strip";
+import {
+  facetChips,
+  filterRecipes,
+  localized,
+  rememberLibrary,
+  type FacetSelection,
+  type FacetVocabulary,
+  type LibraryRecipe,
+  type RecipeFacet,
+} from "../../lib/recipe-library";
 import { useWorkspace } from "../workspace-provider";
 import { AssetThumbnail, type LibraryAsset, MediaPicker } from "../publish/composer";
 import { Button, buttonClass } from "./button";
@@ -156,7 +167,12 @@ type ExistingDraft = {
   product_count?: number;
   group_number?: number | null;
 };
-type Recipe =
+/**
+ * A recipe id: one of the hand-written recipes below, or a mined one the API
+ * lists at `/attribution/creative-recipes`.
+ */
+type Recipe = string;
+type BuiltinRecipe =
   | "bed_flat_lay"
   | "mannequin_transition"
   | "mirror_selfie"
@@ -172,7 +188,7 @@ type Recipe =
   | "hikaru_walk";
 
 /** The recipes each kind offers, the first being its default. Mirrors the API. */
-const RECIPES_BY_KIND: Record<Kind, readonly Recipe[]> = {
+const RECIPES_BY_KIND: Record<Kind, readonly BuiltinRecipe[]> = {
   image: ["bed_flat_lay", "styled_flat_lay", "hikaru_lookbook"],
   carousel: [
     "bed_flat_lay",
@@ -194,7 +210,7 @@ const RECIPES_BY_KIND: Record<Kind, readonly Recipe[]> = {
 };
 
 /** One line under each recipe card: what the finished file shows. */
-const RECIPE_HELP: Record<Recipe, string> = {
+const RECIPE_HELP: Record<BuiltinRecipe, string> = {
   bed_flat_lay: "attribution.generate.recipeBedHelp",
   mannequin_transition: "attribution.generate.recipeMannequinHelp",
   mirror_selfie: "attribution.generate.recipeMirrorHelp",
@@ -209,6 +225,25 @@ const RECIPE_HELP: Record<Recipe, string> = {
   ceiling_fan_transition: "attribution.generate.recipeCeilingFanHelp",
   hanger_rail_reveal: "attribution.generate.recipeHangerRailHelp",
 };
+
+/**
+ * The chip rows over the recipe cards, and what each is called. Format is the
+ * kind tabs above, so it has no row here. A row with fewer than two values
+ * among the recipes in view is not drawn: one chip filters nothing.
+ */
+const FACET_ROWS: readonly { facet: RecipeFacet; label: string }[] = [
+  { facet: "layout", label: "attribution.generate.recipeFacetLayout" },
+  { facet: "pose", label: "attribution.generate.recipeFacetPose" },
+  { facet: "setting", label: "attribution.generate.recipeFacetSetting" },
+  { facet: "framing", label: "attribution.generate.recipeFacetFraming" },
+  { facet: "mood", label: "attribution.generate.recipeFacetMood" },
+  { facet: "cast", label: "attribution.generate.recipeFacetCast" },
+  { facet: "products", label: "attribution.generate.recipeFacetProducts" },
+];
+
+function isBuiltin(recipe: Recipe, kind: Kind): recipe is BuiltinRecipe {
+  return (RECIPES_BY_KIND[kind] as readonly string[]).includes(recipe);
+}
 
 type DraftView = {
   id: string;
@@ -270,9 +305,14 @@ export function ProductMediaGenerator({
   onOpenDraft?: (productId: string, draftId: string) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const { apiFetch } = useAuth();
   const { workspaceId } = useWorkspace();
   const [activeDraftId, setActiveDraftId] = useState(draftId);
+  /** The mined recipes and their chip vocabulary, fetched when the dialog opens. */
+  const [library, setLibrary] = useState<LibraryRecipe[]>([]);
+  const [vocabulary, setVocabulary] = useState<FacetVocabulary>({});
+  const [facetChoice, setFacetChoice] = useState<FacetSelection>({});
   const [kind, setKind] = useState<Kind>("image");
   const [recipe, setRecipe] = useState<Recipe>("bed_flat_lay");
   const [variant, setVariant] = useState<"female" | "male">("female");
@@ -331,18 +371,22 @@ export function ProductMediaGenerator({
   const backgroundReady = !backgroundOn || backgroundValid;
   const locked = draft !== null || reviewing;
   const many = products.length > 1;
-  const togetherLimit = recipe === "character_editorial_carousel" ? 5 : SUBJECT_LIMIT;
+  const mined = useMemo(() => library.find((item) => item.id === recipe) ?? null, [library, recipe]);
+  const togetherLimit = mined
+    ? mined.max_products
+    : recipe === "character_editorial_carousel" ? 5 : SUBJECT_LIMIT;
   const together = !locked && many && scope === "together";
   const tooManyTogether = together && products.length > togetherLimit;
   const groupShot = together || (draft?.product_count ?? 0) > 1;
   const leadId = products[0]?.id ?? "";
   const fieldsKey = LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)).join(",");
-  const characterRequired = recipeRequiresCharacter(recipe);
+  const characterRequired = recipeRequiresCharacter(recipe) || Boolean(mined?.requires_character);
   const characterSent = (characterOn || characterRequired) && recipeTakesCharacter(recipe)
     ? characterId
     : "";
   const characterReady = !characterRequired || Boolean(characterSent);
-  const fixedCardCount = recipe === "character_editorial_carousel" ? 5 : null;
+  const fixedCardCount = mined?.card_count
+    ?? (recipe === "character_editorial_carousel" ? 5 : null);
   const shape = `${kind}|${recipe}|${variant}|${backgroundOn}|${fixedCardCount ?? cardCount}|${backgroundReady}|${together ? "together" : "each"}|${characterSent}`;
 
   // The prompt belongs to this ask. A recipe, kind, or background change
@@ -492,6 +536,65 @@ export function ProductMediaGenerator({
   }
 
   useEffect(() => {
+    // Once per opening. A failure leaves the hand-written recipes, which are
+    // all this dialog offered before the library existed.
+    if (!open || !workspaceId) return;
+    let cancelled = false;
+    void apiFetch(`/api/workspaces/${workspaceId}/attribution/creative-recipes`)
+      .then(async (response): Promise<{ recipes?: LibraryRecipe[]; facets?: FacetVocabulary }> => (
+        response.ok ? response.json() : {}
+      ))
+      .then((payload) => {
+        if (cancelled) return;
+        const rows = Array.isArray(payload.recipes) ? payload.recipes : [];
+        setLibrary(rows);
+        setVocabulary(payload.facets ?? {});
+        rememberLibrary(rows, locale);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, workspaceId, apiFetch, locale]);
+
+  /** The mined recipes of this kind that pass the chips. */
+  const minedOfKind = useMemo(() => library.filter((item) => item.kind === kind), [library, kind]);
+  const minedShown = useMemo(() => filterRecipes(minedOfKind, facetChoice), [minedOfKind, facetChoice]);
+  const filtering = Object.values(facetChoice).some(Boolean);
+  // With a chip chosen only mined recipes can match: the hand-written ones
+  // carry no tags, and showing them under a filter they ignore would read as
+  // the filter not working.
+  const recipeOptions: Recipe[] = [
+    ...(filtering ? [] : RECIPES_BY_KIND[kind]),
+    ...minedShown.map((item) => item.id),
+  ];
+
+  function recipeLabel(option: Recipe): string {
+    const row = library.find((item) => item.id === option);
+    return row ? localized(row.label, locale) : creativeRecipe(t, option);
+  }
+
+  function recipeHelp(option: Recipe): string {
+    const row = library.find((item) => item.id === option);
+    if (row) return localized(row.help, locale);
+    return isBuiltin(option, kind) ? t(RECIPE_HELP[option]) : "";
+  }
+
+  function chooseFacet(facet: RecipeFacet, value: string) {
+    const next = { ...facetChoice, [facet]: facetChoice[facet] === value ? "" : value };
+    setFacetChoice(next);
+    // The chosen recipe follows the filter: a card the chips just hid must not
+    // stay the one that gets queued.
+    const narrowed = Object.values(next).some(Boolean);
+    const visible = [
+      ...(narrowed ? [] : RECIPES_BY_KIND[kind]),
+      ...filterRecipes(minedOfKind, next).map((item) => item.id),
+    ];
+    if (visible.length > 0 && !visible.includes(recipe)) setRecipe(visible[0]);
+    setError("");
+  }
+
+  useEffect(() => {
     if (!open || !reviewing || !activeDraftId || !workspaceId) return;
     let cancelled = false;
     void (async () => {
@@ -584,6 +687,7 @@ export function ProductMediaGenerator({
   function chooseKind(next: Kind) {
     setKind(next);
     setRecipe(RECIPES_BY_KIND[next][0]);
+    setFacetChoice({});
     setBackgroundEnabled(false);
     setBackgroundReference("");
     setError("");
@@ -1595,18 +1699,52 @@ export function ProductMediaGenerator({
         {error && reviewing && draft && <p role="alert">{error}</p>}
         </div>
         <div className="generate-recipes">
+          {!locked && minedOfKind.length > 0 && (
+            <div className="generate-recipe-filters" role="group" aria-label={t("attribution.generate.recipeFilters")}>
+              {FACET_ROWS.map(({ facet, label }) => {
+                const chips = facetChips(
+                  minedOfKind, facet, facetChoice, vocabulary, locale,
+                  t("attribution.generate.recipeFilterAny"),
+                );
+                if (chips.length < 3 && !facetChoice[facet]) return null;
+                return (
+                  <div key={facet} className="generate-recipe-facet">
+                    <span>{t(label)}</span>
+                    <FilterChipStrip
+                      dense
+                      chips={chips}
+                      selected={facetChoice[facet] ?? ""}
+                      onSelect={(value) => chooseFacet(facet, value)}
+                      ariaLabel={t(label)}
+                    />
+                  </div>
+                );
+              })}
+              {filtering && (
+                <Button variant="quiet" size="sm" onClick={() => setFacetChoice({})}>
+                  {t("attribution.generate.recipeFilterClear")}
+                </Button>
+              )}
+            </div>
+          )}
+          {!locked && recipeOptions.length === 0 && (
+            <p className="generate-blocker">{t("attribution.generate.recipeFilterNone")}</p>
+          )}
           <ChoiceGroup
             name="generate-recipe"
             legend={t("attribution.generate.recipe")}
             layout="cards"
             value={recipe}
             disabled={locked}
-            options={(locked ? [recipe] : RECIPES_BY_KIND[kind]).map((option) => ({
-              value: option,
-              label: creativeRecipe(t, option),
-              description: t(RECIPE_HELP[option]),
-              media: <RecipePreview recipe={option} />,
-            }))}
+            options={(locked ? [recipe] : recipeOptions).map((option) => {
+              const row = library.find((item) => item.id === option);
+              return {
+                value: option,
+                label: recipeLabel(option),
+                description: recipeHelp(option),
+                media: <RecipePreview recipe={option} mined={row} />,
+              };
+            })}
             onChange={(next) => {
               setRecipe(next);
               setError("");

@@ -739,6 +739,28 @@
   background: var(--panel-raised);
 }
 .generate-dialog .campaign-dialog-form .generate-recipes > small { color: var(--muted); font-size: 11px; }
+/* The chips stay at the top of the recipe column while the cards scroll under
+   them, one compact row per facet: the facet's name, then its chips. */
+.generate-dialog .generate-recipe-filters {
+  position: sticky;
+  inset-block-start: -10px;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  margin-block: -10px 2px;
+  padding-block: 10px 6px;
+  border-block-end: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+.generate-dialog .generate-recipe-facet {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+.generate-dialog .generate-recipe-facet > span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.generate-dialog .generate-recipe-filters > .ui-button { justify-self: end; }
 .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-options { grid-template-columns: 1fr; }
 .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option {
   grid-template-columns: 96px auto minmax(0, 1fr);

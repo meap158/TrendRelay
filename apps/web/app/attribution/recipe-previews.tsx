@@ -264,10 +264,110 @@ const SCENES: Record<string, { video: boolean; art: (marker: string) => ReactNod
   },
 };
 
-export function RecipePreview({ recipe }: { recipe: string }) {
+/** What the generic drawing needs to know about a mined recipe. */
+type MinedShape = {
+  kind: string;
+  card_count: number | null;
+  cast: string;
+  facets: { layout?: string[]; framing?: string[] };
+};
+
+/**
+ * One drawing for every mined recipe, composed from its shape rather than
+ * drawn per recipe: the library grows a batch at a time, and a picture each
+ * would be the one part of a batch nobody could write from the data. The
+ * layout decides the arrangement; the cast decides person or garment.
+ */
+function minedScene(shape: MinedShape): { video: boolean; art: (marker: string) => ReactNode } {
+  const layout = shape.facets.layout ?? [];
+  const person = shape.cast === "person";
+  const flat = (shape.facets.framing ?? []).includes("flat_lay");
+  const figure = (x: number, y: number, s: number) => (
+    person
+      ? <Person x={x} y={y} s={s} hair />
+      : flat
+        ? <Top x={x} y={y - 22 * s} s={s} />
+        : <g><Hanger x={x} y={y - 40 * s} /><Top x={x} y={y - 26 * s} s={s} /></g>
+  );
+  if (shape.kind === "video") {
+    return {
+      video: true,
+      art: (m) => (
+        <>
+          <rect x={38} y={4} width={44} height={72} rx={3} style={SOFT} />
+          {figure(60, 70, 1.3)}
+          <Arrow m={m} d="M88 56 Q98 40 88 24" />
+        </>
+      ),
+    };
+  }
+  if (shape.kind === "image") {
+    return {
+      video: false,
+      art: () => (
+        <>
+          <rect x={34} y={4} width={52} height={72} rx={3} style={SOFT} />
+          {figure(60, 70, 1.4)}
+        </>
+      ),
+    };
+  }
+  if (layout.includes("profile_mosaic")) {
+    // Six tiles that read as one picture: the figure spans them.
+    return {
+      video: false,
+      art: () => (
+        <>
+          {[0, 1, 2].map((col) => [0, 1].map((row) => (
+            <rect key={`${col}-${row}`} x={24 + col * 24} y={6 + row * 34} width={23} height={33} rx={1} style={SOFT} />
+          )))}
+          {figure(60, 74, 1.7)}
+        </>
+      ),
+    };
+  }
+  if (layout.includes("panorama")) {
+    return {
+      video: false,
+      art: () => (
+        <>
+          <rect x={4} y={10} width={112} height={60} rx={3} style={SOFT} />
+          <path d="M41 10 L41 70 M79 10 L79 70" style={{ strokeDasharray: "2 2" }} />
+          {figure(30, 66, 1.05)}
+          {figure(92, 66, 1.05)}
+        </>
+      ),
+    };
+  }
+  const cards = Math.min(Math.max(shape.card_count ?? 3, 2), 5);
+  const width = 110 / cards;
+  return {
+    video: false,
+    art: () => (
+      <>
+        {Array.from({ length: cards }, (_, index) => {
+          const x = 5 + index * width;
+          // A detail-to-full sequence opens on the fabric; every other layout
+          // shows the look on each card.
+          const detail = layout.includes("detail_to_full") && index === 0;
+          return (
+            <g key={index}>
+              <rect x={x} y={8} width={width - 4} height={64} rx={3} style={SOFT} />
+              {detail
+                ? <Top x={x + (width - 4) / 2} y={40} s={0.8} />
+                : figure(x + (width - 4) / 2, 68, Math.min(0.8, width / 30))}
+            </g>
+          );
+        })}
+      </>
+    ),
+  };
+}
+
+export function RecipePreview({ recipe, mined }: { recipe: string; mined?: MinedShape | null }) {
   // Every card draws its own picture, so each needs its own marker id.
   const marker = `recipe-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const scene = SCENES[recipe];
+  const scene = SCENES[recipe] ?? (mined ? minedScene(mined) : undefined);
   if (!scene) return null;
   return (
     <svg
