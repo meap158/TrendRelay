@@ -145,7 +145,12 @@ the accounts.
 
 New recipes go in
 `services/api/src/trendrelay_api/product_creative_library/batch-<batch>.json`,
-one file per batch, under `"recipes"`. An entry:
+one file per batch, under `"recipes"`. The running API reads that folder as it
+reloads, and a malformed entry stops it from starting: draft the file under
+`.data/`, point `LIBRARY_DIR` at it in a quick local check or run the library
+test against a copy, and move it into the folder only once it loads. A later
+pass over the same export is its own file (`batch-<batch>b.json`) with its own
+migration; never edit a committed batch's migration. An entry:
 
 | Field | What it holds |
 | --- | --- |

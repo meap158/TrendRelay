@@ -381,7 +381,9 @@ export function ProductMediaGenerator({
   const leadId = products[0]?.id ?? "";
   const fieldsKey = LISTING_FIELD_KEYS.filter((key) => selectedFields.has(key)).join(",");
   const characterRequired = recipeRequiresCharacter(recipe) || Boolean(mined?.requires_character);
-  const characterSent = (characterOn || characterRequired) && recipeTakesCharacter(recipe)
+  // A product-only mined recipe has no person to cast; the API refuses one.
+  const takesCharacter = recipeTakesCharacter(recipe) && mined?.cast !== "none";
+  const characterSent = (characterOn || characterRequired) && takesCharacter
     ? characterId
     : "";
   const characterReady = !characterRequired || Boolean(characterSent);
@@ -780,7 +782,7 @@ export function ProductMediaGenerator({
   // and removing the line here shifted the listing for that round trip.
   const characterUnchosen = characterRequired
     ? !characterId
-    : characterOn && recipeTakesCharacter(recipe) && !characterId;
+    : characterOn && takesCharacter && !characterId;
   const queueBlocker = draft || reviewing
     ? ""
     : tooManyTogether
@@ -1406,7 +1408,7 @@ export function ProductMediaGenerator({
               </small>
             )}
           </div>
-          {workspaceId && (
+          {workspaceId && takesCharacter && (
             <CharacterUse
               workspaceId={workspaceId}
               apiFetch={apiFetch}

@@ -76,6 +76,17 @@ def test_the_card_count_and_product_ceiling_follow_the_entry() -> None:
         assert spec["max_products"] <= 5 or entry["together"] == "card"
 
 
+def test_a_product_only_recipe_carries_its_cast_so_a_character_is_refused() -> None:
+    """The refusal itself is exercised through the API in test_characters.py."""
+    product_only = [r for r in MINED if library()[r]["cast"] == "none"]
+    assert product_only
+    for recipe in product_only:
+        assert RECIPES[recipe]["cast"] == "none"
+        assert "no other people in the picture" in resolve_prompt(
+            recipe, background=False, together=True, character=False
+        )
+
+
 def test_no_two_recipes_are_the_same_recipe_twice() -> None:
     """Distinct means a different kind, set, pose family or card structure.
 

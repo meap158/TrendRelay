@@ -461,6 +461,11 @@ def _prepare(
     character = for_draft(session, workspace_id, character_id)
     if spec.get("requires_character") and character is None:
         raise ValueError(f"{recipe} needs a selected Library character.")
+    if spec.get("cast") == "none" and character is not None:
+        raise ValueError(
+            f"{recipe} shows only the product, with no person in it, so it "
+            "cannot feature a character. Turn the character off."
+        )
     # A recipe with a person of its own - Hikaru, the mirror's woman or man,
     # the held-up hands - describes the chosen character instead of that
     # person, so the prompt never names two people.

@@ -171,6 +171,9 @@ def spec(entry: dict[str, Any]) -> dict[str, Any]:
         "background": "optional",
         "variants": (),
         "library": True,
+        # "none" has no person to cast, so a chosen character is refused
+        # rather than appended after "no other people in the picture".
+        "cast": entry["cast"],
     }
     if kind == "carousel":
         shaped["card_count"] = len(entry["beats"])

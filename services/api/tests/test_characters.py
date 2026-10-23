@@ -310,6 +310,29 @@ def test_a_recipe_with_its_own_model_features_the_chosen_character_instead() -> 
         assert "face out of frame" not in prompt, recipe
 
 
+def test_a_product_only_mined_recipe_refuses_a_character_and_a_worn_one_casts_it() -> None:
+    """A catalogue card has nobody in it; a mined lookbook puts the character in."""
+    workspace_id = make_workspace()
+    product_id = add_product(workspace_id)
+    linh = next(item for item in list_cast(workspace_id)["characters"] if item["slug"] == "linh")
+    url = f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview"
+    refused = request("POST", url, json={
+        "product_id": product_id, "kind": "image",
+        "recipe": "catalogue_colourway_card", "character_id": linh["id"],
+    })
+    assert refused.status_code == 422
+    assert "cannot feature a character" in refused.json()["detail"]
+    cast = request("POST", url, json={
+        "product_id": product_id, "kind": "carousel", "card_count": 4,
+        "recipe": "floral_bow_set_portraits", "character_id": linh["id"],
+    })
+    assert cast.status_code == 200, cast.text
+    prompt = cast.json()["draft"]["prompt"]
+    assert "the character described below" in prompt
+    assert "mid-twenties" not in prompt
+    assert prompt.count(draft_line(linh["name"], linh["appearance"])) == 1
+
+
 def test_editorial_carousel_requires_a_library_character_and_five_cards() -> None:
     workspace_id = make_workspace()
     product_id = add_product(workspace_id)
