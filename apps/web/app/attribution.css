@@ -1283,7 +1283,6 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
    width in from every other line and the text column lost that width. It
    stays a real radio - focus, arrow keys and screen readers are unchanged -
    it only moves; the whole card is still the label. */
-.generate-dialog .generate-columns { grid-template-columns: minmax(0, 1fr) minmax(400px, 540px); }
 .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option {
   grid-template-columns: 112px minmax(0, 1fr);
   align-items: start;
@@ -1416,14 +1415,22 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.generate-dialog .generate-columns {
-  grid-template-columns: minmax(360px, 1fr) minmax(480px, 1.35fr);
-  gap: 14px 22px;
+/* A flex item is as wide as its unbroken line unless told it may shrink; the
+   one-line description would otherwise push Close out of a narrow dialog. */
+.generate-dialog .ui-dialog-head > div:first-child { flex: 1 1 auto; min-inline-size: 0; }
+/* Two columns only where they fit: written after the 860px stacking rule,
+   these would otherwise keep a second, empty column on a narrow screen and
+   let the rail fill the whole view above the form. */
+@media (min-width: 861px) {
+  .generate-dialog .generate-columns {
+    grid-template-columns: minmax(360px, 1fr) minmax(480px, 1.35fr);
+    gap: 14px 22px;
+  }
+  .generate-dialog .campaign-dialog-form .generate-recipes {
+    max-block-size: calc(100vh - 32px - 170px);
+  }
 }
-.generate-dialog .campaign-dialog-form .generate-recipes {
-  max-block-size: calc(100vh - 32px - 170px);
-  overflow-x: hidden;
-}
+.generate-dialog .campaign-dialog-form .generate-recipes { overflow-x: hidden; }
 .generate-dialog .generate-kind { display: flex; align-items: center; gap: 10px; }
 .generate-dialog .generate-kind > span { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 
@@ -1470,25 +1477,30 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 .recipe-picker .filter-chip-count { opacity: .6; font-size: 10px; }
 
 /* What generation uses: subject images, character and background side by
-   side when the column is wide enough, each with a thin divider, so the
-   section is as tall as its tallest part rather than all three stacked. */
+   side when the section itself has room for three, each with a thin divider,
+   so the section is as tall as its tallest part. Measured on the section, not
+   the screen: the dialog's form column is narrower than the window, and a
+   wide window can still give it a narrow column. */
 .generate-dialog .campaign-dialog-form .generate-uses {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  container: generate-uses / inline-size;
+  /* Three columns from 560px, one below it, never two: the clamp is 100%
+     under the threshold and a third of the width over it. */
+  grid-template-columns: repeat(auto-fit, minmax(clamp(calc(33.33% - 10px), calc((560px - 100%) * 999), 100%), 1fr));
   gap: 8px 14px;
   align-items: start;
 }
 .generate-dialog .campaign-dialog-form .generate-uses > h3,
 .generate-dialog .campaign-dialog-form .generate-uses > p { grid-column: 1 / -1; }
 .generate-dialog .campaign-dialog-form .generate-uses > .generate-use + .generate-use {
-  padding-inline-start: 14px;
-  border-inline-start: 1px solid var(--line);
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--line);
 }
 .generate-dialog .campaign-dialog-form .generate-use p { font-size: 11px; }
-@media (max-width: 860px) {
+@container generate-uses (min-width: 560px) {
   .generate-dialog .campaign-dialog-form .generate-uses > .generate-use + .generate-use {
-    padding-inline-start: 0;
-    padding-block-start: 8px;
-    border-inline-start: 0;
-    border-block-start: 1px solid var(--line);
+    padding-block-start: 0;
+    border-block-start: 0;
+    padding-inline-start: 14px;
+    border-inline-start: 1px solid var(--line);
   }
 }
