@@ -1468,3 +1468,27 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 .recipe-picker-facet { grid-template-columns: 64px minmax(0, 1fr); }
 .recipe-picker .filter-chip { padding: 2px 8px; font-size: 11px; line-height: 1.5; }
 .recipe-picker .filter-chip-count { opacity: .6; font-size: 10px; }
+
+/* What generation uses: subject images, character and background side by
+   side when the column is wide enough, each with a thin divider, so the
+   section is as tall as its tallest part rather than all three stacked. */
+.generate-dialog .campaign-dialog-form .generate-uses {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  align-items: start;
+}
+.generate-dialog .campaign-dialog-form .generate-uses > h3,
+.generate-dialog .campaign-dialog-form .generate-uses > p { grid-column: 1 / -1; }
+.generate-dialog .campaign-dialog-form .generate-uses > .generate-use + .generate-use {
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--line);
+}
+.generate-dialog .campaign-dialog-form .generate-use p { font-size: 11px; }
+@media (max-width: 860px) {
+  .generate-dialog .campaign-dialog-form .generate-uses > .generate-use + .generate-use {
+    padding-inline-start: 0;
+    padding-block-start: 8px;
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--line);
+  }
+}
