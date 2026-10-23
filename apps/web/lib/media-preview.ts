@@ -50,6 +50,18 @@ export function mediaTypeFor(path: string, fallback: string): string {
 }
 
 /**
+ * How many items a post thumbnail can open in the lightbox.
+ *
+ * A video post has no `image_paths`, so its `sources` array is empty - passing
+ * `sources.length` to `useLightboxSet` gave a count of zero, which clamped the
+ * open index back to `null` on every click and left the video unable to open.
+ * One clip is one item to open.
+ */
+export function lightboxItemCount(sources: readonly string[], video?: string): number {
+  return video ? 1 : sources.length;
+}
+
+/**
  * The same preview URL, asking for bytes rather than for a recognisable file.
  *
  * Every preview request in the interface goes through here. A caller that

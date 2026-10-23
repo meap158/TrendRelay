@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { lightboxItemCount, useOpaqueMedia } from "../../lib/media-preview";
 import { readTabSnapshot, refreshTabSnapshot } from "../../lib/tab-snapshots";
 import { AUTHORITIES } from "./authority-options";
 
@@ -739,7 +740,17 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
   const [ratio, setRatio] = useState(3 / 4);
-  const { openAt, open, close, previous, next } = useLightboxSet(sources.length);
+  const { openAt, open, close, previous, next } = useLightboxSet(
+    lightboxItemCount(sources, video),
+  );
+  const [videoWanted, setVideoWanted] = useState(false);
+  const { objectUrl: videoBlob, problem: videoProblem } = useOpaqueMedia(
+    video ?? "",
+    video ?? "",
+    "video/mp4",
+    Boolean(video) && (videoWanted || openAt !== null),
+    apiFetch,
+  );
   // A clip has no preview URL of its own to enlarge, so the hover card shows
   // the still the row is already drawing - which is also what says the clip is
   // worth opening. Taken from that picture's own load rather than fetched a
@@ -761,7 +772,10 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
         label={label}
         ratio={ratio}
         className="autopilot-queue-zoom"
-        onActivate={() => open(0)}
+        onActivate={() => {
+          if (video) setVideoWanted(true);
+          open(0);
+        }}
         media={enlarged ? (
           // eslint-disable-next-line @next/next/no-img-element -- preview URL
           <img src={enlarged} alt={`Larger view of ${video ? "this video" : position(0).toLowerCase()}`} />
@@ -784,7 +798,11 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
             <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element -- preview URL
-            <img className="autopilot-queue-zoom-still" src={sources[0]} alt="" />
+            <img
+              className="autopilot-queue-zoom-still"
+              src={sources[0] ?? (video ? `${video}&thumbnail=true` : undefined)}
+              alt=""
+            />
           )}
         </span>
         {count > 1 && (
@@ -801,7 +819,7 @@ function QueuePictureThumb({ asset, sources, video, workspaceId, apiFetch }: {
         <Lightbox
           open
           kind={video ? "video" : "image"}
-          src={video ?? sources[openAt] ?? ""}
+          src={video ? (videoBlob || (videoProblem ? video : "")) : (sources[openAt] ?? "")}
           alt={video ? "This post's video" : position(openAt)}
           onClose={close}
           // One clip is not a set, so it offers no way to step through one.
@@ -862,10 +880,14 @@ function TimelineThumb({ entry, asset, workspaceId, apiFetch }: {
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
   const pictures = entry.video_path ? [] : entry.image_paths;
-  if (pictures.length > 0) {
+  if (entry.video_path || pictures.length > 0) {
     return (
       <QueuePictureThumb
-        asset={asset ? { ...asset, media_kind: "image" } : null}
+        video={entry.video_path
+          ? `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+            + `?path=${encodeURIComponent(entry.video_path)}`
+          : undefined}
+        asset={asset ? { ...asset, media_kind: entry.video_path ? "video" : "image" } : null}
         sources={pictures.map((path) => (
           `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
           + `?path=${encodeURIComponent(path)}`

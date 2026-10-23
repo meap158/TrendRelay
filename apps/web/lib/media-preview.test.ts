@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mediaTypeFor, opaquePreviewUrl } from "./media-preview.ts";
+import { lightboxItemCount, mediaTypeFor, opaquePreviewUrl } from "./media-preview.ts";
 
 test("a preview is always asked for opaquely", () => {
   // The regression this guards: the API grew the opaque mode, nothing asked
@@ -41,3 +41,13 @@ test("an unknown or absent extension falls back rather than guessing", () => {
   assert.equal(mediaTypeFor("S:/media/no-extension", "video/mp4"), "video/mp4");
   assert.equal(mediaTypeFor("", "image/jpeg"), "image/jpeg");
 });
+
+test("a video post counts as one lightbox item even though its picture list is empty", () => {
+  // QueuePictureThumb passed `sources.length` to `useLightboxSet`, which is 0
+  // for a video post - so `useLightboxSet(0)` clamped `openAt` back to `null`
+  // and clicking a video thumbnail never opened the lightbox.
+  assert.equal(lightboxItemCount([], "http://host/preview?path=clip.mp4"), 1);
+  assert.equal(lightboxItemCount(["http://host/1.jpg", "http://host/2.jpg"]), 2);
+  assert.equal(lightboxItemCount([]), 0);
+});
+
