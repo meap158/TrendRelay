@@ -14,6 +14,7 @@ import { Button, buttonClass } from "./button";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
 import { Select } from "../ui/select";
+import { SegmentedControl } from "../ui/segmented";
 import { money } from "../attribution/format";
 import {
   DEFAULT_LISTING_FIELDS,
@@ -1241,19 +1242,31 @@ export function ProductMediaGenerator({
           </p>
         )}
         <div className="generate-columns">
-        <label className="generate-kind">
-          {t("attribution.generate.kind")}
-          <Select
-            aria-label={t("attribution.generate.kind")}
-            value={kind}
-            disabled={locked}
-            onChange={(event) => chooseKind(event.target.value as Kind)}
-          >
-            <option value="image">{t("attribution.generate.kindImage")}</option>
-            <option value="carousel">{t("attribution.generate.kindCarousel")}</option>
-            <option value="video">{t("attribution.generate.kindVideo")}</option>
-          </Select>
-        </label>
+        {locked ? (
+          <label className="generate-kind">
+            {t("attribution.generate.kind")}
+            <Select aria-label={t("attribution.generate.kind")} value={kind} disabled onChange={() => undefined}>
+              <option value="image">{t("attribution.generate.kindImage")}</option>
+              <option value="carousel">{t("attribution.generate.kindCarousel")}</option>
+              <option value="video">{t("attribution.generate.kindVideo")}</option>
+            </Select>
+          </label>
+        ) : (
+          // Three kinds, one tap each: a select hid the other two behind a click.
+          <div className="generate-kind">
+            <span>{t("attribution.generate.kind")}</span>
+            <SegmentedControl
+              label={t("attribution.generate.kind")}
+              value={kind}
+              onChange={chooseKind}
+              options={[
+                { value: "image", label: t("attribution.generate.kindImage") },
+                { value: "carousel", label: t("attribution.generate.kindCarousel") },
+                { value: "video", label: t("attribution.generate.kindVideo") },
+              ]}
+            />
+          </div>
+        )}
         <div className="generate-main">
         {mirror && (
           <label>

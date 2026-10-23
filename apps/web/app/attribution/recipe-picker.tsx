@@ -112,11 +112,13 @@ export function RecipePicker({
     narrow(query, { ...choice, [facet]: choice[facet] === key || !key ? "" : key });
   }
 
+  // "Any" is not drawn: pressing the chosen chip again clears its row, and a
+  // leading "Any" on every row was the widest thing in the panel.
   const rows = FACET_ROWS.map(({ facet, label }) => ({
     facet,
     label,
-    chips: facetChips(ofKind, facet, choice, vocabulary, locale, t("attribution.generate.recipeFilterAny")),
-  })).filter((row) => row.chips.length > 2 || choice[row.facet]);
+    chips: facetChips(ofKind, facet, choice, vocabulary, locale, "").slice(1),
+  })).filter((row) => row.chips.length > 1 || choice[row.facet]);
 
   const chosen = FACET_ROWS.flatMap(({ facet }) => {
     const key = choice[facet];
@@ -207,22 +209,19 @@ export function RecipePicker({
             value: option,
             label: labelOf(option),
             description: helpOf(option),
-            media: <RecipePreview recipe={option} mined={row?.builtin ? null : row} />,
-            meta: made && made.count > 0 && workspaceId ? (
-              <span className="recipe-made">
-                <span className="recipe-made-thumbs">
-                  {made.assets.slice(0, 3).map((asset) => (
-                    <AssetThumbnail
-                      key={asset.id}
-                      asset={asset}
-                      workspaceId={workspaceId}
-                      apiFetch={apiFetch}
-                      hoverPreview
-                    />
-                  ))}
-                </span>
-                <small>{t("attribution.generate.recipeMade", { count: made.count })}</small>
+            // What the recipe has really made is the better picture of it; the
+            // drawing stands in until it has made something here.
+            media: made && made.assets.length > 0 && workspaceId ? (
+              <span className="recipe-cover" data-count={Math.min(made.assets.length, 3)}>
+                {made.assets.slice(0, 3).map((asset) => (
+                  <AssetThumbnail key={asset.id} asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                ))}
               </span>
+            ) : (
+              <RecipePreview recipe={option} mined={row?.builtin ? null : row} />
+            ),
+            meta: made && made.count > 0 ? (
+              <span className="recipe-made">{t("attribution.generate.recipeMade", { count: made.count })}</span>
             ) : undefined,
           };
         })}

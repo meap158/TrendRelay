@@ -1395,20 +1395,76 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
   -webkit-line-clamp: 3;
 }
 
-/* What the recipe has already made: up to three of its files, then a count. */
 .ui-choice-meta { display: block; margin-block-start: 4px; }
-.recipe-made { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
-.recipe-made-thumbs { display: flex; gap: 3px; }
-.recipe-made-thumbs > * {
-  flex: none;
-  inline-size: 30px;
-  block-size: 30px;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-}
-.recipe-made-thumbs img, .recipe-made-thumbs video { inline-size: 100%; block-size: 100%; object-fit: cover; }
-.recipe-made > small { color: var(--green); font-size: 10px; font-weight: 650; }
 
 @media (max-width: 860px) {
   .generate-dialog .campaign-dialog-form .generate-recipes { max-block-size: 460px; }
 }
+
+/* --- Generate dialog, roomier and calmer --------------------------------
+   The dialog is a workspace, not a confirm box: it takes nearly the whole
+   viewport, the recipe rail gets the larger share and runs the dialog's full
+   height, and the head stays one line however long the product's name. */
+.ui-dialog.ui-dialog-wide.generate-dialog {
+  width: min(1680px, calc(100vw - 32px));
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+}
+.generate-dialog .ui-dialog-head [id$="-description"],
+.generate-dialog .ui-dialog-head > div > p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.generate-dialog .generate-columns {
+  grid-template-columns: minmax(360px, 1fr) minmax(480px, 1.35fr);
+  gap: 14px 22px;
+}
+.generate-dialog .campaign-dialog-form .generate-recipes {
+  max-block-size: calc(100vh - 32px - 170px);
+  overflow-x: hidden;
+}
+.generate-dialog .generate-kind { display: flex; align-items: center; gap: 10px; }
+.generate-dialog .generate-kind > span { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+/* Three cards across once the rail is wide enough. */
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-options {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+}
+.generate-dialog .recipe-picker .ui-choice-group > legend { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Real results as the card's picture: one large tile and up to two beside it. */
+.recipe-cover {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+.recipe-cover[data-count="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.recipe-cover[data-count="2"] { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; }
+.recipe-cover > :first-child { grid-row: 1 / -1; }
+.ui-dialog-wide .recipe-cover .picker-thumb {
+  inline-size: 100%;
+  block-size: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+.recipe-made {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--green-line, var(--line));
+  border-radius: 999px;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+/* Compact chips: smaller, counts muted, rows tight, the panel short. */
+.recipe-picker-filters { max-block-size: 30vh; gap: 4px; }
+.recipe-picker-facet { grid-template-columns: 64px minmax(0, 1fr); }
+.recipe-picker .filter-chip { padding: 2px 8px; font-size: 11px; line-height: 1.5; }
+.recipe-picker .filter-chip-count { opacity: .6; font-size: 10px; }
