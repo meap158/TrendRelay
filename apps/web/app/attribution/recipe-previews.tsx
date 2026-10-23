@@ -269,8 +269,42 @@ type MinedShape = {
   kind: string;
   card_count: number | null;
   cast: string;
-  facets: { layout?: string[]; framing?: string[] };
+  facets: { layout?: string[]; framing?: string[]; setting?: string[] };
 };
+
+/**
+ * A line-drawn hint of where the recipe is set, behind the figure, so two
+ * product-only recipes on different sets do not draw the same picture.
+ * Drawn faint: the figure and the arrangement stay the subject.
+ */
+function SettingHint({ setting }: { setting: string | undefined }) {
+  const faint = { strokeOpacity: 0.45 };
+  switch (setting) {
+    case "bedroom":
+      return <path d="M8 62 L112 62 M8 62 L8 72 M112 62 L112 72 M8 52 Q8 46 16 46 L40 46 Q46 46 46 52 L46 62" style={faint} />;
+    case "living_room":
+      return <path d="M88 70 L88 50 Q88 44 94 44 L106 44 Q112 44 112 50 L112 70 M84 58 L116 58" style={faint} />;
+    case "window_room":
+      return <path d="M86 8 L112 8 L112 44 L86 44 Z M99 8 L99 44 M86 26 L112 26" style={faint} />;
+    case "architecture":
+      return <path d="M84 74 L84 30 Q98 10 112 30 L112 74" style={faint} />;
+    case "nature":
+      return <path d="M100 74 L100 46 M100 50 Q88 40 92 26 Q104 30 100 50 M100 56 Q112 48 110 36 Q100 40 100 56" style={faint} />;
+    case "cafe":
+      return <path d="M86 56 L114 56 M100 56 L100 74 M92 74 L108 74 M96 50 L104 50 L103 56 L97 56 Z" style={faint} />;
+    case "street_day":
+    case "street_night":
+      return <path d="M104 74 L104 18 Q104 12 98 12 L94 12 M92 12 Q90 18 94 18 Q98 18 96 12" style={faint} />;
+    case "waterside":
+      return <path d="M4 66 Q12 62 20 66 T36 66 M84 66 Q92 62 100 66 T116 66 M100 20 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0" style={faint} />;
+    case "floral_set":
+      return <path d="M96 20 m-4 0 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 M108 34 m-4 0 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 M94 44 m-4 0 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 M10 26 m-4 0 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0" style={faint} />;
+    case "corridor":
+      return <path d="M88 74 L88 14 L110 14 L110 74 M104 44 L106 44" style={faint} />;
+    default:
+      return <path d="M6 74 L114 74" style={faint} />;
+  }
+}
 
 /**
  * One drawing for every mined recipe, composed from its shape rather than
@@ -281,7 +315,11 @@ type MinedShape = {
 function minedScene(shape: MinedShape): { video: boolean; art: (marker: string) => ReactNode } {
   const layout = shape.facets.layout ?? [];
   const person = shape.cast === "person";
-  const flat = (shape.facets.framing ?? []).includes("flat_lay");
+  const framing = shape.facets.framing ?? [];
+  const flat = framing.includes("flat_lay");
+  // Only a set with no person and only detail framing is a close-up picture.
+  const macro = !person && framing.length > 0 && framing.every((value) => value === "detail");
+  const setting = (shape.facets.setting ?? []).find((value) => value !== "studio") ?? shape.facets.setting?.[0];
   const figure = (x: number, y: number, s: number) => (
     person
       ? <Person x={x} y={y} s={s} hair />
@@ -294,6 +332,7 @@ function minedScene(shape: MinedShape): { video: boolean; art: (marker: string) 
       video: true,
       art: (m) => (
         <>
+          <SettingHint setting={setting} />
           <rect x={38} y={4} width={44} height={72} rx={3} style={SOFT} />
           {figure(60, 70, 1.3)}
           <Arrow m={m} d="M88 56 Q98 40 88 24" />
@@ -306,8 +345,15 @@ function minedScene(shape: MinedShape): { video: boolean; art: (marker: string) 
       video: false,
       art: () => (
         <>
+          <SettingHint setting={setting} />
           <rect x={34} y={4} width={52} height={72} rx={3} style={SOFT} />
-          {figure(60, 70, 1.4)}
+          {macro ? (
+            <>
+              <Top x={56} y={38} s={1.1} />
+              <circle cx={64} cy={42} r={16} strokeWidth={2} />
+              <path d="M75 54 L84 64" strokeWidth={3} />
+            </>
+          ) : figure(60, 70, 1.4)}
         </>
       ),
     };
