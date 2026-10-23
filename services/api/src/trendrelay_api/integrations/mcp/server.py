@@ -1423,6 +1423,32 @@ def build_server(workspace_id: str) -> FastMCP:
         )
 
     @server.tool(
+        name="list_creative_recipes",
+        description=(
+            "The recipes mined from reference posts, beside the hand-written "
+            "ones named in create_product_creative_draft. Each has an id, its "
+            "one kind, a fixed card_count for a carousel, max_products, whether "
+            "it shows a person (cast), how several products appear (together: "
+            "card = one per card or shot, frame = all in each picture), filter "
+            "facets (pose, framing, setting, mood, layout) and an English label "
+            "and help line. Read-only."
+        ),
+    )
+    def list_creative_recipes() -> dict[str, Any]:
+        from trendrelay_api.product_creative_library import catalogue
+
+        return {
+            "recipes": [
+                {
+                    **{key: value for key, value in row.items() if key not in ("label", "help")},
+                    "label": row["label"].get("en", ""),
+                    "help": row["help"].get("en", ""),
+                }
+                for row in catalogue()
+            ]
+        }
+
+    @server.tool(
         name="create_product_creative_draft",
         description=(
             "Queue a reviewed prompt for one Attribution product. kind is "
@@ -1434,7 +1460,9 @@ def build_server(workspace_id: str) -> FastMCP:
             "mannequin_transition, mirror_selfie, mannequin_walkaround, "
             "flat_lay_reveal, held_up_garment, hanger_rail_reveal, "
             "hikaru_walk, or ceiling_fan_transition "
-            "(video). mirror_selfie requires variant female or male. Every "
+            "(video), or any recipe list_creative_recipes returns, with its "
+            "own kind and, for a carousel, exactly its card_count. "
+            "mirror_selfie requires variant female or male. Every "
             "recipe, mirror_selfie included, takes an optional https "
             "background, and the stored prompt changes when it is on. Every "
             "recipe can feature a Library character: hikaru_lookbook and "
@@ -1594,6 +1622,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     # Its own group: it makes a product creative, not a campaign post.
     "Product creatives": (
         "list_product_creative_drafts", "get_product_creative_draft",
+        "list_creative_recipes",
         "create_product_creative_draft", "submit_product_creative_media",
     ),
 }

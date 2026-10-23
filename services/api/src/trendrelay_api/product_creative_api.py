@@ -126,13 +126,10 @@ def detach_media_product(
 class DraftBody(BaseModel):
     product_id: str = Field(min_length=1, max_length=64)
     kind: Literal["image", "carousel", "video"]
-    recipe: Literal[
-        "bed_flat_lay", "mannequin_transition", "mirror_selfie",
-        "mannequin_walkaround", "styled_flat_lay", "flat_lay_reveal",
-        "sleepwear_lookbook", "held_up_garment", "hikaru_lookbook",
-        "character_editorial_carousel",
-        "ceiling_fan_transition", "hanger_rail_reveal", "hikaru_walk",
-    ]
+    #: Any id in the registry: the hand-written recipes and the mined library.
+    #: Checked against `RECIPES` rather than a literal list, because the library
+    #: grows a batch at a time and a second copy of its ids here would drift.
+    recipe: str = Field(min_length=1, max_length=64)
     variant: Literal["female", "male"] | None = None
     background_enabled: bool = False
     background_reference: str | None = Field(default=None, max_length=2000)
@@ -179,6 +176,23 @@ def _call(fn):
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/creative-recipes")
+def list_creative_recipes(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The mined recipe library and the vocabulary its filter chips use.
+
+    The hand-written recipes are not listed: the dialog already knows them,
+    with their own drawings and translated help. These arrive as data, labels
+    included, because the library grows a batch at a time."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.product_creative_library import catalogue, vocabulary
+
+    return {"recipes": catalogue(), "facets": vocabulary()}
 
 
 @router.post("/creative-drafts/preview")

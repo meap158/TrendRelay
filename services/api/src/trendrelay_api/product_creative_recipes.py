@@ -1003,6 +1003,21 @@ RECIPES: dict[str, dict[str, Any]] = {
     },
 }
 
+#: The hand-written recipes above. Everything after them in RECIPES is mined.
+HAND_WRITTEN: tuple[str, ...] = tuple(RECIPES)
+
+
+def _merge_library() -> None:
+    from trendrelay_api.product_creative_library import library, spec
+
+    for recipe, entry in library().items():
+        if recipe in RECIPES:
+            raise ValueError(f"The mined recipe {recipe!r} reuses a hand-written id.")
+        RECIPES[recipe] = spec(entry)
+
+
+_merge_library()
+
 _PROMPTS: dict[tuple[str, bool, str | None], str] = {
     ("bed_flat_lay", False, None): BED_FLAT_LAY_OFF,
     ("bed_flat_lay", True, None): BED_FLAT_LAY_ON,
@@ -1096,6 +1111,13 @@ def resolve_prompt(
             raise ValueError("Choose female or male for the mirror selfie.")
     elif variant:
         raise ValueError("This recipe has no subject variant.")
+    if spec.get("library"):
+        from trendrelay_api.product_creative_library import resolve
+
+        return resolve(
+            recipe, background=bool(background), together=bool(together),
+            character=bool(character),
+        )
     if character:
         cast = _CAST_WORDINGS.get((recipe, bool(background), bool(together)))
         if cast is not None:

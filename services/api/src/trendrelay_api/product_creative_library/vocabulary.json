@@ -1,0 +1,73 @@
+{
+  "about": "Filter chips for the recipe picker. Every value a mined recipe carries in `facets` must be listed here with all seven labels; add new values here first (SOP/attribution/mine-reference-recipes.md).",
+  "facets": {
+    "format": {
+      "image": {"en": "Image", "vi": "Ảnh", "ja": "画像", "zh": "图片", "ru": "Изображение", "fr": "Image", "ar": "صورة"},
+      "carousel": {"en": "Carousel", "vi": "Băng chuyền", "ja": "カルーセル", "zh": "轮播", "ru": "Карусель", "fr": "Carrousel", "ar": "دوّار"},
+      "video": {"en": "Video", "vi": "Video", "ja": "動画", "zh": "视频", "ru": "Видео", "fr": "Vidéo", "ar": "فيديو"}
+    },
+    "cast": {
+      "person": {"en": "With a model", "vi": "Có người mẫu", "ja": "モデルあり", "zh": "有模特", "ru": "С моделью", "fr": "Avec mannequin", "ar": "مع عارضة"},
+      "none": {"en": "Product only", "vi": "Chỉ sản phẩm", "ja": "商品のみ", "zh": "仅商品", "ru": "Только товар", "fr": "Produit seul", "ar": "المنتج فقط"}
+    },
+    "products": {
+      "card": {"en": "One product per card", "vi": "Mỗi thẻ một sản phẩm", "ja": "1枚に1商品", "zh": "每张一件商品", "ru": "Один товар на кадр", "fr": "Un produit par carte", "ar": "منتج واحد لكل بطاقة"},
+      "frame": {"en": "Products together", "vi": "Sản phẩm chung khung", "ja": "商品を一緒に", "zh": "商品同框", "ru": "Товары вместе", "fr": "Produits ensemble", "ar": "المنتجات معًا"}
+    },
+    "pose": {
+      "standing": {"en": "Standing", "vi": "Đứng", "ja": "立ちポーズ", "zh": "站姿", "ru": "Стоя", "fr": "Debout", "ar": "وقوف"},
+      "leaning": {"en": "Leaning", "vi": "Tựa tường", "ja": "もたれる", "zh": "倚靠", "ru": "Опираясь", "fr": "Appuyée", "ar": "اتكاء"},
+      "walking": {"en": "Walking", "vi": "Bước đi", "ja": "歩く", "zh": "行走", "ru": "В движении", "fr": "En marche", "ar": "مشي"},
+      "seated": {"en": "Seated", "vi": "Ngồi ghế", "ja": "座る", "zh": "坐姿", "ru": "Сидя", "fr": "Assise", "ar": "جلوس"},
+      "floor": {"en": "On the floor", "vi": "Ngồi sàn", "ja": "床に座る", "zh": "席地而坐", "ru": "На полу", "fr": "Au sol", "ar": "على الأرض"},
+      "reclining": {"en": "Reclining", "vi": "Nằm tựa", "ja": "寝そべる", "zh": "斜躺", "ru": "Полулёжа", "fr": "Allongée", "ar": "استلقاء"},
+      "over_shoulder": {"en": "Over the shoulder", "vi": "Ngoái lại", "ja": "振り返り", "zh": "回眸", "ru": "Взгляд через плечо", "fr": "Par-dessus l'épaule", "ar": "نظرة فوق الكتف"},
+      "hands_to_face": {"en": "Hands to face", "vi": "Tay chạm mặt", "ja": "手を顔に", "zh": "手托脸", "ru": "Руки у лица", "fr": "Mains au visage", "ar": "اليدان على الوجه"},
+      "holding_prop": {"en": "Holding a prop", "vi": "Cầm đạo cụ", "ja": "小物を持つ", "zh": "手持道具", "ru": "С реквизитом", "fr": "Avec accessoire", "ar": "مع غرض"},
+      "selfie": {"en": "Selfie", "vi": "Tự chụp", "ja": "自撮り", "zh": "自拍", "ru": "Селфи", "fr": "Selfie", "ar": "سيلفي"},
+      "motion": {"en": "Twirl and motion", "vi": "Xoay chuyển động", "ja": "動き・回転", "zh": "旋转动态", "ru": "Движение", "fr": "Mouvement", "ar": "حركة ودوران"}
+    },
+    "framing": {
+      "close_up": {"en": "Close-up", "vi": "Cận cảnh", "ja": "アップ", "zh": "特写", "ru": "Крупный план", "fr": "Gros plan", "ar": "لقطة قريبة"},
+      "half_body": {"en": "Half body", "vi": "Nửa người", "ja": "上半身", "zh": "半身", "ru": "По пояс", "fr": "Mi-corps", "ar": "نصف الجسم"},
+      "full_length": {"en": "Full length", "vi": "Toàn thân", "ja": "全身", "zh": "全身", "ru": "В полный рост", "fr": "En pied", "ar": "كامل الطول"},
+      "detail": {"en": "Fabric detail", "vi": "Chi tiết vải", "ja": "生地のディテール", "zh": "面料细节", "ru": "Детали ткани", "fr": "Détail du tissu", "ar": "تفاصيل القماش"},
+      "flat_lay": {"en": "Flat lay", "vi": "Bày phẳng", "ja": "平置き", "zh": "平铺", "ru": "Раскладка", "fr": "À plat", "ar": "عرض مسطح"}
+    },
+    "setting": {
+      "studio": {"en": "Studio", "vi": "Studio", "ja": "スタジオ", "zh": "影棚", "ru": "Студия", "fr": "Studio", "ar": "استوديو"},
+      "floral_set": {"en": "Floral set", "vi": "Phông hoa", "ja": "花のセット", "zh": "花艺布景", "ru": "Цветочный декор", "fr": "Décor floral", "ar": "ديكور زهري"},
+      "bedroom": {"en": "Bedroom", "vi": "Phòng ngủ", "ja": "寝室", "zh": "卧室", "ru": "Спальня", "fr": "Chambre", "ar": "غرفة نوم"},
+      "living_room": {"en": "Living room", "vi": "Phòng khách", "ja": "リビング", "zh": "客厅", "ru": "Гостиная", "fr": "Salon", "ar": "غرفة معيشة"},
+      "window_room": {"en": "Window light", "vi": "Ánh sáng cửa sổ", "ja": "窓辺の光", "zh": "窗边光", "ru": "Свет из окна", "fr": "Lumière de fenêtre", "ar": "ضوء النافذة"},
+      "cafe": {"en": "Cafe", "vi": "Quán cà phê", "ja": "カフェ", "zh": "咖啡馆", "ru": "Кафе", "fr": "Café", "ar": "مقهى"},
+      "street_day": {"en": "Street by day", "vi": "Phố ban ngày", "ja": "昼の街", "zh": "白天街头", "ru": "Улица днём", "fr": "Rue de jour", "ar": "شارع نهارًا"},
+      "street_night": {"en": "City at night", "vi": "Phố về đêm", "ja": "夜の街", "zh": "夜晚城市", "ru": "Город ночью", "fr": "Ville la nuit", "ar": "المدينة ليلًا"},
+      "architecture": {"en": "Stairs and arches", "vi": "Cầu thang, mái vòm", "ja": "階段とアーチ", "zh": "楼梯与拱门", "ru": "Лестницы и арки", "fr": "Escaliers et arches", "ar": "سلالم وأقواس"},
+      "nature": {"en": "Garden and park", "vi": "Vườn, công viên", "ja": "庭・公園", "zh": "花园公园", "ru": "Сад и парк", "fr": "Jardin et parc", "ar": "حديقة ومتنزه"},
+      "waterside": {"en": "Waterside", "vi": "Bên nước", "ja": "水辺", "zh": "水边", "ru": "У воды", "fr": "Au bord de l'eau", "ar": "بجانب الماء"},
+      "corridor": {"en": "Plain wall", "vi": "Tường trơn", "ja": "無地の壁", "zh": "素墙", "ru": "Простая стена", "fr": "Mur uni", "ar": "جدار بسيط"}
+    },
+    "mood": {
+      "soft_feminine": {"en": "Soft and sweet", "vi": "Ngọt ngào", "ja": "ガーリー", "zh": "甜美", "ru": "Нежно", "fr": "Doux", "ar": "ناعم ولطيف"},
+      "clean_minimal": {"en": "Clean minimal", "vi": "Tối giản", "ja": "ミニマル", "zh": "简约", "ru": "Минимализм", "fr": "Épuré", "ar": "بسيط"},
+      "romantic": {"en": "Romantic", "vi": "Lãng mạn", "ja": "ロマンティック", "zh": "浪漫", "ru": "Романтично", "fr": "Romantique", "ar": "رومانسي"},
+      "cozy": {"en": "Cozy home", "vi": "Ấm cúng", "ja": "おうち時間", "zh": "居家温馨", "ru": "Уютно", "fr": "Cocooning", "ar": "دافئ ومنزلي"},
+      "candid": {"en": "Candid", "vi": "Tự nhiên", "ja": "自然体", "zh": "随性", "ru": "Непринуждённо", "fr": "Spontané", "ar": "عفوي"},
+      "elegant": {"en": "Elegant", "vi": "Thanh lịch", "ja": "エレガント", "zh": "优雅", "ru": "Элегантно", "fr": "Élégant", "ar": "أنيق"},
+      "playful": {"en": "Playful", "vi": "Tinh nghịch", "ja": "遊び心", "zh": "俏皮", "ru": "Игриво", "fr": "Ludique", "ar": "مرح"},
+      "cinematic": {"en": "Cinematic", "vi": "Điện ảnh", "ja": "シネマティック", "zh": "电影感", "ru": "Кинематографично", "fr": "Cinématographique", "ar": "سينمائي"},
+      "seasonal": {"en": "Seasonal", "vi": "Theo mùa", "ja": "季節感", "zh": "季节感", "ru": "Сезонное", "fr": "Saisonnier", "ar": "موسمي"}
+    },
+    "layout": {
+      "story_sequence": {"en": "Story sequence", "vi": "Chuỗi kể chuyện", "ja": "ストーリー構成", "zh": "故事序列", "ru": "Сюжетная серия", "fr": "Séquence narrative", "ar": "تسلسل قصصي"},
+      "detail_to_full": {"en": "Detail to full look", "vi": "Từ chi tiết đến toàn thân", "ja": "ディテールから全身へ", "zh": "从细节到全身", "ru": "От детали к образу", "fr": "Du détail à la tenue", "ar": "من التفصيل إلى الإطلالة"},
+      "multi_outfit": {"en": "Several looks", "vi": "Nhiều set đồ", "ja": "複数コーデ", "zh": "多套搭配", "ru": "Несколько образов", "fr": "Plusieurs tenues", "ar": "عدة إطلالات"},
+      "photo_dump": {"en": "Photo dump", "vi": "Tổng hợp khoảnh khắc", "ja": "フォトダンプ", "zh": "日常合集", "ru": "Фотоподборка", "fr": "Album du jour", "ar": "مجموعة لقطات"},
+      "profile_mosaic": {"en": "Profile grid mosaic", "vi": "Ghép lưới trang cá nhân", "ja": "プロフィールグリッド", "zh": "主页拼图", "ru": "Мозаика профиля", "fr": "Mosaïque de profil", "ar": "فسيفساء الملف"},
+      "panorama": {"en": "Seamless swipe", "vi": "Vuốt liền mạch", "ja": "つながるスワイプ", "zh": "无缝滑动", "ru": "Бесшовная прокрутка", "fr": "Glissé continu", "ar": "تمرير متصل"},
+      "single_hero": {"en": "Single hero shot", "vi": "Một ảnh chủ đạo", "ja": "一枚で見せる", "zh": "单张主图", "ru": "Один главный кадр", "fr": "Image phare", "ar": "لقطة رئيسية واحدة"},
+      "colour_story": {"en": "Colour story", "vi": "Câu chuyện màu sắc", "ja": "カラーストーリー", "zh": "色彩故事", "ru": "Цветовая история", "fr": "Histoire de couleur", "ar": "قصة الألوان"}
+    }
+  }
+}

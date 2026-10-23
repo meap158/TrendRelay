@@ -206,6 +206,7 @@ EXPOSURE: dict[str, Access] = {
     # stay refused; there is no operation here that sends anything.
     "list_product_creative_drafts": Access.READ,
     "get_product_creative_draft": Access.READ,
+    "list_creative_recipes": Access.READ,
     "create_product_creative_draft": Access.WORKSPACE_WRITE,
     "submit_product_creative_media": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
