@@ -1174,12 +1174,18 @@ def creative_drafts_by_product(
 def attribution_products_by_asset(
     session: Session, workspace_id: str, asset_ids: list[str]
 ) -> dict[str, list[dict[str, Any]]]:
-    """The Attribution products each Library asset is tied to."""
+    """The Attribution products each Library asset is tied to.
+
+    Each link also names the recipe of the draft that made it, read through the
+    draft rather than stored on the asset: the draft is where the recipe was
+    chosen, and a copy on the asset could disagree with it. A link made by
+    hand, with no draft, has no recipe."""
     if not asset_ids:
         return {}
     rows = session.execute(
-        select(ProductCreativeLink, Product.name, Product.image_url)
+        select(ProductCreativeLink, Product.name, Product.image_url, ProductCreativeDraft.recipe)
         .join(Product, Product.id == ProductCreativeLink.product_id)
+        .outerjoin(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
         .where(
             ProductCreativeLink.workspace_id == workspace_id,
             ProductCreativeLink.asset_id.in_(asset_ids),
@@ -1187,11 +1193,12 @@ def attribution_products_by_asset(
         .order_by(Product.name)
     ).all()
     found: dict[str, list[dict[str, Any]]] = {}
-    for link, name, image_url in rows:
+    for link, name, image_url, recipe in rows:
         found.setdefault(link.asset_id, []).append({
             "product_id": link.product_id,
             "name": name,
             "image_url": image_url,
             "draft_id": link.draft_id,
+            "recipe": recipe,
         })
     return found

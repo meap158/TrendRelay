@@ -125,6 +125,19 @@ def test_tags_and_names_come_from_the_vocabulary_in_every_language() -> None:
         assert row["facets"]["cast"] in (["person"], ["none"])
 
 
+def test_the_hand_written_recipes_are_tagged_from_the_same_vocabulary() -> None:
+    """A chip narrows every recipe, so the thirteen carry tags too."""
+    from trendrelay_api.product_creative_recipes import builtin_catalogue
+
+    words = vocabulary()
+    rows = builtin_catalogue()
+    assert [row["id"] for row in rows] == list(HAND_WRITTEN)
+    for row in rows:
+        assert row["builtin"] is True
+        for facet, values in row["facets"].items():
+            assert set(values) <= set(words[facet]), (row["id"], facet)
+
+
 def test_no_entry_names_an_account_or_a_platform_handle() -> None:
     for path in LIBRARY_DIR.glob("batch-*.json"):
         text = path.read_text(encoding="utf-8")

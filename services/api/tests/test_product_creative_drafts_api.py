@@ -349,6 +349,8 @@ def test_submitting_an_image_and_a_video_links_both_ways(monkeypatch, tmp_path: 
             "name": "Angel set",
             "image_url": "https://shop.example/angel.jpg",
             "draft_id": image_id if asset_id == image_asset else video_id,
+            # Read through the draft, so the Library can tag and filter by it.
+            "recipe": "bed_flat_lay" if asset_id == image_asset else "mannequin_transition",
         }]
 
 

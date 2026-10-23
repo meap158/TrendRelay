@@ -273,6 +273,7 @@ def test_submit_links_the_library_asset_both_ways(session, monkeypatch, tmp_path
     assert view["attribution_products"] == [{
         "product_id": "product-1", "name": "Angel set",
         "image_url": "https://shop.example/angel.jpg", "draft_id": image["id"],
+        "recipe": image["recipe"],
     }]
 
 

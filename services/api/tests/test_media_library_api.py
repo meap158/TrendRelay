@@ -1258,6 +1258,84 @@ def test_a_campaign_browser_can_hide_what_it_already_queued() -> None:
     assert other.json()["total"] == 2
 
 
+def test_recipe_filter_tags_assets_through_their_draft_and_counts_files_once() -> None:
+    """A group shot is one file under its recipe; list, ids and facet agree."""
+    from trendrelay_api.opportunity_models import Product
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    workspace_id = create_workspace()
+    with TestingSession.begin() as session:
+        session.add_all([
+            Product(
+                id=f"product-{key}", workspace_id=workspace_id, catalog_key=f"catalog-{key}",
+                name=f"Product {key}", marketplace="shopee", created_by="library-owner",
+            )
+            for key in ("a", "b")
+        ])
+        session.add_all([
+            MediaAsset(
+                id=f"asset-{key}", workspace_id=workspace_id, title=key, media_kind="image",
+                source_type="product-creative", original_path=f"/images/{key}.png",
+                original_sha256=sha * 64, mime_type="image/png", size_bytes=10,
+                created_by="library-owner",
+            )
+            for key, sha in (("group", "c"), ("single", "d"), ("hand", "e"))
+        ])
+        session.flush()
+        session.add_all([
+            ProductCreativeDraft(
+                id=f"draft-{recipe}", workspace_id=workspace_id, product_id="product-a",
+                kind="carousel", recipe=recipe, prompt="p", card_count=2,
+                status="succeeded", created_by="library-owner",
+            )
+            for recipe in ("floral_bow_set_portraits", "bed_flat_lay")
+        ])
+        session.flush()
+        session.add_all([
+            ProductCreativeLink(id="l1", workspace_id=workspace_id, product_id="product-a",
+                                asset_id="asset-group", draft_id="draft-floral_bow_set_portraits"),
+            ProductCreativeLink(id="l2", workspace_id=workspace_id, product_id="product-b",
+                                asset_id="asset-group", draft_id="draft-floral_bow_set_portraits"),
+            ProductCreativeLink(id="l3", workspace_id=workspace_id, product_id="product-a",
+                                asset_id="asset-single", draft_id="draft-bed_flat_lay"),
+            # Linked by hand: no draft, so no recipe.
+            ProductCreativeLink(id="l4", workspace_id=workspace_id, product_id="product-b",
+                                asset_id="asset-hand", draft_id=None),
+        ])
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    everything = asyncio.run(request("GET", f"{base}/assets"))
+    assert everything.json()["facets"]["recipes"] == [
+        {"value": "bed_flat_lay", "label": "bed_flat_lay", "count": 1},
+        {"value": "floral_bow_set_portraits", "label": "floral_bow_set_portraits", "count": 1},
+    ]
+    tags = {
+        asset["id"]: {p["recipe"] for p in asset["attribution_products"]}
+        for asset in everything.json()["assets"]
+    }
+    assert tags["asset-group"] == {"floral_bow_set_portraits"}
+    assert tags["asset-hand"] == {None}
+
+    floral = asyncio.run(request("GET", f"{base}/assets?recipe=floral_bow_set_portraits"))
+    assert floral.json()["total"] == 1
+    assert [a["id"] for a in floral.json()["assets"]] == ["asset-group"]
+    # The recipe facet ignores its own choice, so the other recipe stays offered.
+    assert {f["value"] for f in floral.json()["facets"]["recipes"]} == {
+        "bed_flat_lay", "floral_bow_set_portraits",
+    }
+    ids = asyncio.run(request("GET", f"{base}/assets/ids?recipe=floral_bow_set_portraits"))
+    assert ids.json()["asset_ids"] == ["asset-group"]
+
+    examples = asyncio.run(request(
+        "GET", f"/api/workspaces/{workspace_id}/attribution/creative-recipes/examples"
+    ))
+    assert examples.status_code == 200
+    found = examples.json()["examples"]
+    assert found["floral_bow_set_portraits"]["count"] == 1
+    assert [a["id"] for a in found["floral_bow_set_portraits"]["assets"]] == ["asset-group"]
+    assert set(found) == {"floral_bow_set_portraits", "bed_flat_lay"}
+
+
 def test_product_category_filters_assets_counts_and_select_all_once() -> None:
     """A product view shows linked media, with one count per asset and matching select-all."""
     from trendrelay_api.opportunity_models import Product

@@ -1059,6 +1059,9 @@ class AssetFilter(BaseModel):
     has_products: bool = False
     #: Narrow to assets belonging to or featuring one character (PM-153, PM-167).
     character_id: str | None = None
+    #: Narrow to what one Generate recipe produced, read through the draft that
+    #: linked the file to its product (`ProductCreativeLink.draft_id`).
+    recipe: str | None = None
 
 
 #: Filter values that are not the id of an effect.
@@ -1190,6 +1193,23 @@ def _character_condition(workspace_id: str, character_id: str) -> Any:
     return or_(is_cast_asset, is_featured_asset)
 
 
+def _recipe_condition(workspace_id: str, recipe: str) -> Any:
+    """Assets a draft of this recipe produced and linked to its product."""
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    return (
+        select(ProductCreativeLink.id)
+        .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
+        .where(
+            ProductCreativeLink.workspace_id == workspace_id,
+            ProductCreativeLink.asset_id == MediaAsset.id,
+            ProductCreativeDraft.recipe == recipe,
+        )
+        .correlate(MediaAsset)
+        .exists()
+    )
+
+
 def asset_conditions(
     workspace_id: str,
     filters: AssetFilter,
@@ -1244,6 +1264,8 @@ def asset_conditions(
         values.append(_has_product_attachment(workspace_id))
     if "character_id" not in omitted and filters.character_id:
         values.append(_character_condition(workspace_id, filters.character_id))
+    if "recipe" not in omitted and filters.recipe:
+        values.append(_recipe_condition(workspace_id, filters.recipe))
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
     if "collected_within_days" not in omitted and filters.collected_within_days:
@@ -1347,6 +1369,7 @@ def list_asset_ids(
     source_type: Annotated[str | None, Query(max_length=40)] = None,
     has_products: Annotated[bool, Query()] = False,
     character_id: Annotated[str | None, Query(max_length=64)] = None,
+    recipe: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -1363,6 +1386,7 @@ def list_asset_ids(
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
         source_type=source_type, has_products=has_products, character_id=character_id,
+        recipe=recipe,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -1410,6 +1434,7 @@ def list_assets(
     source_type: Annotated[str | None, Query(max_length=40)] = None,
     has_products: Annotated[bool, Query()] = False,
     character_id: Annotated[str | None, Query(max_length=64)] = None,
+    recipe: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     # Without this a caller could read the first hundred matches and no more,
@@ -1429,6 +1454,7 @@ def list_assets(
         download_job_ids=_download_job_ids(download_job_ids),
         sha256=sha256, not_in_campaign=not_in_campaign, in_campaign=in_campaign,
         source_type=source_type, has_products=has_products, character_id=character_id,
+        recipe=recipe,
     )
 
     def conditions(*, omit: str | set[str] | frozenset[str] | None = None) -> list[Any]:
@@ -1527,8 +1553,37 @@ def list_assets(
             "characters": _character_facet(
                 session, workspace_id, conditions(omit="character_id")
             ),
+            "recipes": _recipe_facet(session, workspace_id, conditions(omit="recipe")),
         },
     }
+
+
+def _recipe_facet(
+    session: Session, workspace_id: str, where: list[Any]
+) -> list[dict[str, Any]]:
+    """Recipes that produced assets in this view, and how many distinct assets each.
+
+    Distinct, because a group shot is one file linked to every product in it:
+    counting links would count that file once per product. The label is the
+    recipe id; the interface names it in the reader's language."""
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    matching = select(MediaAsset.id).where(*where)
+    rows = session.execute(
+        select(ProductCreativeDraft.recipe, func.count(func.distinct(ProductCreativeLink.asset_id)))
+        .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
+        .where(
+            ProductCreativeLink.workspace_id == workspace_id,
+            ProductCreativeLink.asset_id.in_(matching),
+        )
+        .group_by(ProductCreativeDraft.recipe)
+    ).all()
+    facets = [
+        {"value": recipe, "label": recipe, "count": count}
+        for recipe, count in rows
+        if recipe and count
+    ]
+    return sorted(facets, key=lambda item: (-item["count"], item["value"]))
 
 
 def _character_facet(

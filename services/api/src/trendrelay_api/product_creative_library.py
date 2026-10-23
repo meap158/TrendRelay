@@ -267,7 +267,9 @@ def catalogue() -> list[dict[str, Any]]:
         shaped = spec(entry)
         rows.append({
             "id": recipe,
+            "builtin": False,
             "kind": entry["kinds"][0],
+            "kinds": [entry["kinds"][0]],
             "card_count": shaped.get("card_count"),
             "max_products": shaped["max_products"],
             "cast": entry["cast"],

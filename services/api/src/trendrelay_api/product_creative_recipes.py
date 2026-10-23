@@ -1006,6 +1006,55 @@ RECIPES: dict[str, dict[str, Any]] = {
 #: The hand-written recipes above. Everything after them in RECIPES is mined.
 HAND_WRITTEN: tuple[str, ...] = tuple(RECIPES)
 
+#: Filter-chip tags for the hand-written recipes, from the same vocabulary the
+#: mined ones use, so a chip narrows every recipe rather than hiding these.
+#: Their names stay the dialog's own translated strings.
+_BUILTIN_FACETS: dict[str, dict[str, Any]] = {
+    "bed_flat_lay": {"cast": "none", "together": "frame", "framing": ["flat_lay"], "setting": ["bedroom"], "mood": ["clean_minimal"], "layout": ["single_hero"]},
+    "styled_flat_lay": {"cast": "none", "together": "frame", "framing": ["flat_lay", "detail"], "setting": ["living_room"], "mood": ["cozy"], "layout": ["detail_to_full"]},
+    "sleepwear_lookbook": {"cast": "person", "together": "card", "pose": ["standing", "seated"], "framing": ["detail", "full_length"], "setting": ["bedroom", "studio"], "mood": ["elegant"], "layout": ["story_sequence", "detail_to_full"]},
+    "hikaru_lookbook": {"cast": "person", "together": "card", "pose": ["standing"], "framing": ["full_length", "half_body", "close_up"], "setting": ["street_day"], "mood": ["candid"], "layout": ["story_sequence"]},
+    "character_editorial_carousel": {"cast": "person", "together": "card", "pose": ["standing", "seated", "over_shoulder"], "framing": ["full_length", "half_body", "detail"], "setting": ["studio"], "mood": ["clean_minimal"], "layout": ["story_sequence"]},
+    "mannequin_transition": {"cast": "person", "together": "card", "pose": ["walking"], "framing": ["full_length"], "setting": ["corridor"], "mood": ["playful"], "layout": ["single_hero"]},
+    "mirror_selfie": {"cast": "person", "together": "card", "pose": ["selfie"], "framing": ["full_length"], "setting": ["bedroom"], "mood": ["candid"], "layout": ["single_hero"]},
+    "mannequin_walkaround": {"cast": "none", "together": "card", "framing": ["detail", "full_length"], "setting": ["studio"], "mood": ["clean_minimal"], "layout": ["detail_to_full"]},
+    "flat_lay_reveal": {"cast": "none", "together": "frame", "framing": ["flat_lay", "detail"], "setting": ["living_room"], "mood": ["cozy"], "layout": ["detail_to_full"]},
+    "held_up_garment": {"cast": "person", "together": "card", "pose": ["holding_prop"], "framing": ["detail"], "setting": ["studio"], "mood": ["candid"], "layout": ["detail_to_full"]},
+    "ceiling_fan_transition": {"cast": "person", "together": "card", "pose": ["reclining"], "framing": ["full_length"], "setting": ["living_room"], "mood": ["playful"], "layout": ["single_hero"]},
+    "hanger_rail_reveal": {"cast": "none", "together": "card", "framing": ["detail"], "setting": ["studio"], "mood": ["clean_minimal"], "layout": ["detail_to_full"]},
+    "hikaru_walk": {"cast": "person", "together": "card", "pose": ["walking"], "framing": ["full_length", "half_body"], "setting": ["street_night"], "mood": ["cinematic"], "layout": ["single_hero"]},
+}
+
+
+def builtin_catalogue() -> list[dict[str, Any]]:
+    """The hand-written recipes in the shape the picker filters, without labels."""
+    from trendrelay_api.product_creative_library import FACETS
+
+    rows = []
+    for recipe in HAND_WRITTEN:
+        spec, tags = RECIPES[recipe], _BUILTIN_FACETS[recipe]
+        rows.append({
+            "id": recipe,
+            "builtin": True,
+            "kind": spec["kinds"][0],
+            "kinds": list(spec["kinds"]),
+            "card_count": spec.get("card_count"),
+            "max_products": spec.get("max_products") or 8,
+            "cast": tags["cast"],
+            "together": tags["together"],
+            "requires_character": bool(spec.get("requires_character")),
+            "facets": {
+                "format": list(spec["kinds"]),
+                "cast": [tags["cast"]],
+                "products": [tags["together"]],
+                **{name: list(tags.get(name) or []) for name in FACETS},
+            },
+            "label": {},
+            "help": {},
+            "preview": "",
+        })
+    return rows
+
 
 def _merge_library() -> None:
     from trendrelay_api.product_creative_library import library, spec

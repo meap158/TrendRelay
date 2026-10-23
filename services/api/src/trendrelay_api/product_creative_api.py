@@ -184,15 +184,70 @@ def list_creative_recipes(
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
-    """The mined recipe library and the vocabulary its filter chips use.
+    """Every recipe with its filter tags, and the vocabulary the chips use.
 
-    The hand-written recipes are not listed: the dialog already knows them,
-    with their own drawings and translated help. These arrive as data, labels
-    included, because the library grows a batch at a time."""
+    The hand-written recipes come first, flagged `builtin`, with no labels: the
+    dialog names them in its own translated strings and draws them by hand. The
+    mined ones arrive with their names in every locale, because that library
+    grows a batch at a time."""
     membership(session, workspace_id, user.id)
     from trendrelay_api.product_creative_library import catalogue, vocabulary
+    from trendrelay_api.product_creative_recipes import builtin_catalogue
 
-    return {"recipes": catalogue(), "facets": vocabulary()}
+    return {"recipes": [*builtin_catalogue(), *catalogue()], "facets": vocabulary()}
+
+
+@router.get("/creative-recipes/examples")
+def list_creative_recipe_examples(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    per_recipe: Annotated[int, Query(ge=1, le=6)] = 3,
+) -> dict[str, Any]:
+    """What each recipe has already made in this workspace.
+
+    A file counts once it is linked to its product by the draft that made it,
+    which is when a draft's cards are all in. Counted in distinct files - a group
+    shot is one file linked to several products - and the newest few are
+    returned as Library asset views, so the picker can show them with the same
+    thumbnails the Library uses."""
+    membership(session, workspace_id, user.id)
+    from sqlalchemy import func, select
+
+    from trendrelay_api.media_library_api import _asset_views
+    from trendrelay_api.media_models import MediaAsset
+    from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
+
+    rows = session.execute(
+        select(ProductCreativeDraft.recipe, ProductCreativeLink.asset_id,
+               func.max(ProductCreativeLink.created_at))
+        .join(ProductCreativeDraft, ProductCreativeDraft.id == ProductCreativeLink.draft_id)
+        .where(ProductCreativeLink.workspace_id == workspace_id)
+        .group_by(ProductCreativeDraft.recipe, ProductCreativeLink.asset_id)
+    ).all()
+    by_recipe: dict[str, list[tuple[Any, str]]] = {}
+    for recipe, asset_id, linked_at in rows:
+        by_recipe.setdefault(recipe, []).append((linked_at, asset_id))
+    newest: dict[str, list[str]] = {}
+    for recipe, items in by_recipe.items():
+        items.sort(key=lambda pair: pair[0], reverse=True)
+        newest[recipe] = [asset_id for _, asset_id in items[:per_recipe]]
+    wanted = {asset_id for ids in newest.values() for asset_id in ids}
+    assets = session.scalars(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id, MediaAsset.id.in_(wanted)
+        )
+    ).all() if wanted else []
+    views = {view["id"]: view for view in _asset_views(session, list(assets))}
+    return {
+        "examples": {
+            recipe: {
+                "count": len(by_recipe[recipe]),
+                "assets": [views[asset_id] for asset_id in ids if asset_id in views],
+            }
+            for recipe, ids in newest.items()
+        }
+    }
 
 
 @router.post("/creative-drafts/preview")
