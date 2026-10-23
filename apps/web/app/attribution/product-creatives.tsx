@@ -25,7 +25,7 @@ import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { Lightbox, useLightboxSet } from "../ui/lightbox";
 import { opaquePreviewUrl } from "../../lib/media-preview";
-import { humanizeRecipeId, libraryRecipeLabel } from "../../lib/recipe-library";
+import { creativeRecipe } from "../../lib/recipe-library";
 import { partitionDrafts } from "./draft-groups";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
@@ -576,30 +576,8 @@ export function creativeKind(t: (path: string) => string, kind: string): string 
   return t("attribution.generate.kindImage");
 }
 
-/** The label of every recipe the API can store. */
-const RECIPE_LABELS: Record<string, string> = {
-  bed_flat_lay: "attribution.generate.recipeBed",
-  mannequin_transition: "attribution.generate.recipeMannequin",
-  mirror_selfie: "attribution.generate.recipeMirror",
-  mannequin_walkaround: "attribution.generate.recipeWalkaround",
-  styled_flat_lay: "attribution.generate.recipeStyledFlatLay",
-  flat_lay_reveal: "attribution.generate.recipeFlatLayReveal",
-  sleepwear_lookbook: "attribution.generate.recipeSleepwearLookbook",
-  held_up_garment: "attribution.generate.recipeHeldUp",
-  hikaru_lookbook: "attribution.generate.recipeHikaru",
-  character_editorial_carousel: "attribution.generate.recipeCharacterEditorialCarousel",
-  ceiling_fan_transition: "attribution.generate.recipeCeilingFan",
-  hanger_rail_reveal: "attribution.generate.recipeHangerRail",
-  hikaru_walk: "attribution.generate.recipeHikaruWalk",
-};
-
-export function creativeRecipe(t: (path: string) => string, recipe: string): string {
-  const key = RECIPE_LABELS[recipe];
-  if (key) return t(key);
-  // A mined recipe: its name came with the library, if the dialog has fetched
-  // it this session, and otherwise the id itself reads well enough.
-  return libraryRecipeLabel(recipe) ?? humanizeRecipeId(recipe);
-}
+/** Named in lib/recipe-library, re-exported for the callers that import it from here. */
+export { creativeRecipe };
 
 /** The product list carries only id, kind, recipe, status, and owed. */
 const LISTING_FIELD_ORDER = ["title", "price", "description", "gallery", "variations"] as const;

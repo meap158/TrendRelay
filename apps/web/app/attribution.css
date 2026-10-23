@@ -739,28 +739,6 @@
   background: var(--panel-raised);
 }
 .generate-dialog .campaign-dialog-form .generate-recipes > small { color: var(--muted); font-size: 11px; }
-/* The chips stay at the top of the recipe column while the cards scroll under
-   them, one compact row per facet: the facet's name, then its chips. */
-.generate-dialog .generate-recipe-filters {
-  position: sticky;
-  inset-block-start: -10px;
-  z-index: 2;
-  display: grid;
-  gap: 2px;
-  margin-block: -10px 2px;
-  padding-block: 10px 6px;
-  border-block-end: 1px solid var(--line);
-  background: var(--panel-raised);
-}
-.generate-dialog .generate-recipe-facet {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
-  min-inline-size: 0;
-}
-.generate-dialog .generate-recipe-facet > span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.generate-dialog .generate-recipe-filters > .ui-button { justify-self: end; }
 .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-options { grid-template-columns: 1fr; }
 .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option {
   grid-template-columns: 96px auto minmax(0, 1fr);
@@ -1305,7 +1283,7 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
    width in from every other line and the text column lost that width. It
    stays a real radio - focus, arrow keys and screen readers are unchanged -
    it only moves; the whole card is still the label. */
-.generate-dialog .generate-columns { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
+.generate-dialog .generate-columns { grid-template-columns: minmax(0, 1fr) minmax(400px, 540px); }
 .generate-dialog .generate-recipes .ui-choice-group[data-layout="cards"] .ui-choice-option {
   grid-template-columns: 112px minmax(0, 1fr);
   align-items: start;
@@ -1348,4 +1326,89 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
   justify-content: space-between;
   flex-wrap: wrap;
   gap: .5rem;
+}
+
+/* --- The recipe picker: search, folding filters, a two-across card grid ---
+   The bar is sticky at the top of the rail and spans the rail's padding as
+   well as its content: at exactly the cards' width, the selected card's 1px
+   ring (border plus box-shadow) showed past both edges as it scrolled under.
+   The rail is the only scroll container; the picker inside it does not
+   scroll on its own. */
+.generate-dialog .campaign-dialog-form .generate-recipes { padding-block-start: 0; }
+.recipe-picker { display: grid; gap: 8px; min-inline-size: 0; }
+.recipe-picker-bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 8px;
+  margin-inline: -12px;
+  padding: 10px 12px 8px;
+  border-block-end: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+.generate-dialog .campaign-dialog-form .recipe-picker-search {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.recipe-picker-count { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.recipe-picker-chosen, .recipe-picker-chips { display: flex; flex-wrap: wrap; gap: 4px; min-inline-size: 0; }
+.recipe-picker-chosen { grid-column: 1 / -1; }
+.recipe-picker-filters { grid-column: 1 / -1; display: grid; gap: 6px; max-block-size: 40vh; overflow: auto; }
+.recipe-picker-facet { display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: start; gap: 6px; }
+.recipe-picker-facet > span { padding-block-start: 5px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.recipe-picker-filters > .ui-button { justify-self: end; }
+.recipe-picker-key { color: var(--muted); font-size: 11px; }
+
+/* Cards stand picture over words, two across, so twice as many fit and each
+   description gets the column's width rather than what is left beside a
+   picture. Three lines of help, then it stops; the name carries the rest. */
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-options {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 8px;
+}
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-option {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 6px;
+  padding: 6px 6px 8px;
+}
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-media {
+  grid-column: 1;
+  grid-row: 1;
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+}
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-option > span:not(.ui-choice-media) {
+  grid-column: 1;
+  grid-row: 2;
+  padding-inline-end: 18px;
+}
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-option small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* What the recipe has already made: up to three of its files, then a count. */
+.ui-choice-meta { display: block; margin-block-start: 4px; }
+.recipe-made { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.recipe-made-thumbs { display: flex; gap: 3px; }
+.recipe-made-thumbs > * {
+  flex: none;
+  inline-size: 30px;
+  block-size: 30px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+.recipe-made-thumbs img, .recipe-made-thumbs video { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.recipe-made > small { color: var(--green); font-size: 10px; font-weight: 650; }
+
+@media (max-width: 860px) {
+  .generate-dialog .campaign-dialog-form .generate-recipes { max-block-size: 460px; }
 }

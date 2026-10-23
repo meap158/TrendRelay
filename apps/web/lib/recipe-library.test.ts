@@ -7,7 +7,9 @@ import {
   humanizeRecipeId,
   libraryRecipeLabel,
   localized,
+  recipeMakes,
   rememberLibrary,
+  searchRecipes,
   type LibraryRecipe,
 } from "./recipe-library.ts";
 
@@ -60,6 +62,23 @@ test("chips count what would remain, skip dead ends, and keep the chosen one", (
   // Vocabulary order, not discovery order.
   const all = facetChips(RECIPES, "pose", {}, WORDS, "en", "Any").map((c) => c.key);
   assert.deepEqual(all, ["", "leaning", "seated", "walking", "floor"]);
+});
+
+test("search needs every word somewhere in the name or description", () => {
+  const text = (r: LibraryRecipe) => ({ cafe: "Cafe and street magazine", floral: "Floral bow set", street: "Night city lookbook" })[r.id as "cafe"];
+  assert.deepEqual(searchRecipes(RECIPES, "street CAFE", text).map((r) => r.id), ["cafe"]);
+  assert.deepEqual(searchRecipes(RECIPES, "  ", text).length, 3);
+  assert.deepEqual(searchRecipes(RECIPES, "bow lookbook", text), []);
+});
+
+test("a hand-written recipe can make several kinds", () => {
+  const both = { ...recipe("bed", {}), builtin: true, kind: "image" as const, kinds: ["image", "carousel"] as ("image" | "carousel")[] };
+  assert.equal(recipeMakes(both, "carousel"), true);
+  assert.equal(recipeMakes(both, "video"), false);
+  assert.equal(recipeMakes(recipe("one", {}), "carousel"), true);
+  // A built-in recipe is named by the dialog's strings, never by the catalogue.
+  rememberLibrary([{ ...both, label: { en: "wrong" } }], "en");
+  assert.equal(libraryRecipeLabel("bed"), null);
 });
 
 test("labels fall back to English, and a stored id still reads as words", () => {

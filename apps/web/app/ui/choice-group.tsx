@@ -10,6 +10,9 @@ export type ChoiceOption<T extends string> = {
   /** A picture of what the option produces. Decorative: the label and
    *  description carry the meaning, so it is hidden from assistive tech. */
   media?: ReactNode;
+  /** A line under the description that is part of the option's meaning -
+   *  such as what a recipe has already made - so it stays readable. */
+  meta?: ReactNode;
 };
 
 /**
@@ -69,6 +72,7 @@ export function ChoiceGroup<T extends string>({
               <span>
                 <strong>{option.label}</strong>
                 {option.description && <small id={descriptionId}>{option.description}</small>}
+                {option.meta && <span className="ui-choice-meta">{option.meta}</span>}
               </span>
             </label>
           );
