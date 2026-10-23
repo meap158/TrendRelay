@@ -18,6 +18,8 @@ import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import type { ReadableTranscript } from "./transcript-reader";
 import { TaggedProducts, type TaggedProduct } from "./tagged-products";
+import { creativeRecipe } from "../../lib/recipe-library";
+import { useRecipeLibrary } from "../ui/use-recipe-library";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, ButtonPair, buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
@@ -758,6 +760,11 @@ function displaySize(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
+/** The recipe that made this file, read from its product links, if any. */
+function recipeOf(asset: Asset): string | null {
+  return asset.attribution_products?.find((product) => product.recipe)?.recipe ?? null;
+}
+
 function displayDuration(milliseconds?: number | null): string {
   if (!milliseconds) return "Still image";
   const totalSeconds = Math.round(milliseconds / 1000);
@@ -1321,6 +1328,8 @@ function LibraryContent() {
   const searchParams = useSearchParams();
   const { loading, user, apiFetch } = useAuth();
   const { workspaces, workspaceId } = useWorkspace();
+  // Loaded so mined recipes are named, not shown by id, in the filter and cards.
+  useRecipeLibrary(workspaceId, apiFetch);
   const { refresh: refreshGlobalJobs } = useJobs();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -2228,7 +2237,7 @@ function LibraryContent() {
         <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} mediaActivity={mediaActivity} />
         <span>
           <strong>{asset.title}</strong>
-          <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
+          <small>{asset.creator ? `${asset.creator} · ` : ""}{recipeOf(asset) ? creativeRecipe(t, recipeOf(asset)!) : asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
           {/* Marked for any rendered cut, not only a blurred one. An asset with
               a crop and a sticker on it has been edited just as much, and the
               row was the only place that said so at a glance. */}
@@ -2685,7 +2694,7 @@ function LibraryContent() {
           <AssetFilters
             values={filters}
             facets={facets}
-            fields={["channel", "platform", "character", "effect", "processing", "campaign", "downloaded"]}
+            fields={["channel", "platform", "character", "recipe", "effect", "processing", "campaign", "downloaded"]}
             onChange={setFilters}
           />
           </section>

@@ -11,6 +11,8 @@ export type TaggedProduct = {
   name: string;
   image_url?: string | null;
   draft_id: string | null;
+  /** The recipe of the draft that made this file; none for a hand-made link. */
+  recipe?: string | null;
 };
 
 /** How many rows show before the rest fold behind "Show more". */

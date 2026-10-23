@@ -53,6 +53,8 @@ export type AssetFilterValues = {
   hasProducts?: boolean;
   /** Narrow to assets belonging to or featuring a specific character (PM-153). */
   character?: string;
+  /** Narrow to what one Generate recipe made, by recipe id. */
+  recipe?: string;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -64,6 +66,8 @@ export type AssetFacets = {
   processing: Facet[];
   campaigns?: Facet[];
   characters?: Facet[];
+  /** Recipes that made files in view; the label is the id, named by the page. */
+  recipes?: Facet[];
   /** Number of unique media assets attached to one or more products. */
   product_assets?: number;
   /** Number of character reference assets in the Library. */
@@ -78,6 +82,7 @@ export const EMPTY_FACETS: AssetFacets = {
   processing: [],
   campaigns: [],
   characters: [],
+  recipes: [],
   product_assets: 0,
   character_assets: 0,
 };
@@ -102,6 +107,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   if (values.source) params.set("source_type", values.source);
   if (values.hasProducts) params.set("has_products", "true");
   if (values.character) params.set("character_id", values.character);
+  if (values.recipe) params.set("recipe", values.recipe);
   return params;
 }
 
@@ -112,6 +118,7 @@ export function activeFilterCount(
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
     "downloadedWithinDays", "notInCampaign", "inCampaign", "source", "hasProducts", "character",
+    "recipe",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];

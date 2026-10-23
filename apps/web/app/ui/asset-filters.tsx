@@ -4,6 +4,7 @@ import { Button } from "./button";
 import { useT } from "../i18n-provider";
 import { SearchSelect } from "./search-select";
 import { Select } from "./select";
+import { creativeRecipe } from "../../lib/recipe-library";
 import {
   EMPTY_FACETS,
   activeFilterCount,
@@ -43,6 +44,8 @@ export type FilterField =
   | "campaign"
   /** Narrow to assets belonging to or featuring one character (PM-153). */
   | "character"
+  /** Narrow to what one Generate recipe made. */
+  | "recipe"
   /** Hide what the open campaign already queued; needs `campaignId`. */
   | "notInCampaign";
 
@@ -282,6 +285,23 @@ export function AssetFilters({
             <option value="">All characters</option>
             {(facets.characters ?? []).map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, "Character")}</option>
+            ))}
+          </Select>
+        </label>
+      )}
+
+      {shown.has("recipe") && ((facets.recipes ?? []).length > 0 || Boolean(values.recipe)) && (
+        <label>{t("attribution.generate.recipe")}
+          <Select
+            aria-label={t("attribution.generate.recipe")}
+            value={values.recipe ?? ""}
+            onChange={(event) => set({ recipe: event.target.value || undefined })}
+          >
+            <option value="">{t("attribution.generate.recipeFilterAll")}</option>
+            {(facets.recipes ?? []).map((facet) => (
+              <option key={facet.value} value={facet.value}>
+                {`${creativeRecipe(t, facet.value)} (${facet.count})`}
+              </option>
             ))}
           </Select>
         </label>
