@@ -1,5 +1,7 @@
-﻿---
+---
 id: creations.create-character
+action: creations.create-character
+summary: Create or revise a distinct adult photorealistic character with a consistent appearance brief.
 title: Create or revise a photorealistic character
 version: 1
 ---
