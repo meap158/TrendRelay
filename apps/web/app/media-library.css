@@ -383,7 +383,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .library-page { width: min(100% - 20px, 1480px); padding-top: 4px; }
   .library-heading { margin-bottom: 8px; padding: 12px; }
   .library-browser { gap: 6px; padding: 10px; }
-  .library-browser-sticky-controls { top: 112px; margin-inline: -4px; padding-inline: 4px; padding-top: 2px; gap: 4px; }
+  /* Under the measured heading rather than a typed 112px: once the toolbar
+     retracts on the way down the heading rides to the top, and a fixed offset
+     left a band of scrolling media between the two. */
+  .library-browser-sticky-controls { top: var(--page-heading-offset, 112px); margin-inline: -4px; padding-inline: 4px; padding-top: 2px; gap: 4px; }
   .library-category-tabs { gap: 4px; }
   .library-category-tabs button { min-height: 34px; border-radius: var(--radius); padding-inline: 6px; }
   .library-category-bar label { min-height: 34px; }

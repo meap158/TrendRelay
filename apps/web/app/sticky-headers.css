@@ -162,9 +162,12 @@
     max-height: calc(100vh - var(--page-heading-offset, 152px) - 28px);
   }
 
+  /* The measured heading plus the 10px the Library's sticky header keeps below
+     itself - its resting position, so the panel neither drops on the first
+     scroll nor leaves a gap when the toolbar retracts below 1100px. */
   .library-page .library-browser {
-    top: 105px;
-    max-height: calc(100vh - 121px);
+    top: calc(var(--page-heading-offset, 95px) + 10px);
+    max-height: calc(100vh - var(--page-heading-offset, 95px) - 26px);
   }
 
   .opportunity-page .offer-import-panel,
