@@ -1203,6 +1203,7 @@ export const ja: Messages = {
       recipeSearch: "レシピを検索",
       recipeCount: "{count}件のレシピ",
       recipeMade: "{count}件作成済み",
+      recipePreviewMade: "「{name}」で作成したものを見る",
       recipeFilterAll: "すべてのレシピ",
       recipeFilters: "レシピを絞り込む",
       recipeFilterAny: "すべて",

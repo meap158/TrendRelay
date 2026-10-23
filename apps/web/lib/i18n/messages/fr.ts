@@ -1215,6 +1215,7 @@ export const fr: Messages = {
       recipeSearch: "Rechercher une recette",
       recipeCount: "{count, plural, one {# recette} other {# recettes}}",
       recipeMade: "{count, plural, one {# réalisé} other {# réalisés}}",
+      recipePreviewMade: "Voir ce que {name} a produit",
       recipeFilterAll: "Toutes les recettes",
       recipeFilters: "Filtrer les recettes",
       recipeFilterAny: "Tous",

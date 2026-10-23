@@ -13,6 +13,10 @@ export type ChoiceOption<T extends string> = {
   /** A line under the description that is part of the option's meaning -
    *  such as what a recipe has already made - so it stays readable. */
   meta?: ReactNode;
+  /** A control laid over the picture, such as opening it full size. Kept
+   *  out of the decorative `media` wrapper so it stays reachable, and a
+   *  button inside the label does not choose the option when pressed. */
+  mediaAction?: ReactNode;
 };
 
 /**
@@ -50,9 +54,15 @@ export function ChoiceGroup<T extends string>({
             ? `${name}-${option.value}-description`
             : undefined;
           const off = disabled || option.disabled;
+          // Tied to its radio by id. A label with no `for` forwards a click on
+          // its text to its first focusable descendant, and with a
+          // `mediaAction` that is a button, not the radio: pressing the name
+          // would open the picture instead of choosing the option.
+          const inputId = `${name}-${option.value}`;
           return (
             <label
               key={option.value}
+              htmlFor={inputId}
               className="ui-choice-option"
               data-selected={value === option.value || undefined}
               data-disabled={off || undefined}
@@ -60,7 +70,9 @@ export function ChoiceGroup<T extends string>({
               {option.media && (
                 <span className="ui-choice-media" aria-hidden="true">{option.media}</span>
               )}
+              {option.mediaAction}
               <input
+                id={inputId}
                 type="radio"
                 name={name}
                 value={option.value}

@@ -177,7 +177,7 @@ export function useVideoProviders(enabled: boolean): Provider[] {
  * endpoint the Library player uses. Empty while loading, which the lightbox
  * shows as a steady dark stage rather than a broken image.
  */
-function useCreativeSource(assetId: string | null, video: boolean): string {
+export function useCreativeSource(assetId: string | null, video: boolean): string {
   const { apiFetch } = useAuth();
   const { workspaceId } = useWorkspace();
   const [loaded, setLoaded] = useState<{ id: string; url: string } | null>(null);

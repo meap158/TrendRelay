@@ -6,6 +6,8 @@ import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail, type LibraryAsset } from "../publish/composer";
 import { Button } from "../ui/button";
 import { ChoiceGroup } from "../ui/choice-group";
+import { Lightbox, useLightboxSet } from "../ui/lightbox";
+import { useCreativeSource } from "./product-creatives";
 import { RecipePreview } from "./recipe-previews";
 import {
   facetChips,
@@ -126,6 +128,15 @@ export function RecipePicker({
     return [{ facet, key, label: localized(vocabulary[facet]?.[key], locale) || key }];
   });
 
+  // What one recipe has made, opened in the shared lightbox and walked with its
+  // arrows, the way every other strip of pictures in the app is looked at.
+  const [previewing, setPreviewing] = useState("");
+  const previewAssets = previewing ? examples[previewing]?.assets ?? [] : [];
+  const lightbox = useLightboxSet(previewAssets.length);
+  const previewAsset = lightbox.openAt === null ? null : previewAssets[lightbox.openAt] ?? null;
+  const previewVideo = previewAsset?.media_kind === "video";
+  const previewSource = useCreativeSource(previewAsset?.id ?? null, previewVideo);
+
   return (
     <div className="recipe-picker">
       {!locked && ofKind.length > 0 && (
@@ -211,15 +222,34 @@ export function RecipePicker({
             description: helpOf(option),
             // What the recipe has really made is the better picture of it; the
             // drawing stands in until it has made something here.
-            media: made && made.assets.length > 0 && workspaceId ? (
-              <span className="recipe-cover" data-count={Math.min(made.assets.length, 3)}>
-                {made.assets.slice(0, 3).map((asset) => (
-                  <AssetThumbnail key={asset.id} asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+            media: made && made.assets.length > 0 && workspaceId
+              ? undefined
+              : <RecipePreview recipe={option} mined={row?.builtin ? null : row} />,
+            // The real results are buttons, one per tile: hovering one floats
+            // that whole picture, pressing it opens that picture in the
+            // lightbox, and the arrows walk the rest. Only the pictures do this;
+            // the name and text still choose the card.
+            mediaAction: made && made.assets.length > 0 && workspaceId ? (
+              <span className="recipe-cover recipe-cover-open" data-count={Math.min(made.assets.length, 3)}>
+                {made.assets.slice(0, 3).map((asset, index) => (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    aria-label={`${t("attribution.generate.recipePreviewMade", { name: labelOf(option) })} · ${t("attribution.generate.previewFile", { index: index + 1, count: made.assets.length })}`}
+                    title={t("attribution.generate.previewFile", { index: index + 1, count: made.assets.length })}
+                    onClick={(event) => {
+                      // Looking is not choosing: the card's radio stays as it was.
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPreviewing(option);
+                      lightbox.open(index);
+                    }}
+                  >
+                    <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
+                  </button>
                 ))}
               </span>
-            ) : (
-              <RecipePreview recipe={option} mined={row?.builtin ? null : row} />
-            ),
+            ) : undefined,
             meta: made && made.count > 0 ? (
               <span className="recipe-made">{t("attribution.generate.recipeMade", { count: made.count })}</span>
             ) : undefined,
@@ -228,6 +258,20 @@ export function RecipePicker({
         onChange={onChange}
       />
       <small className="recipe-picker-key">{t("attribution.generate.recipePreviewKey")}</small>
+      {lightbox.openAt !== null && previewAsset && (
+        <Lightbox
+          open
+          src={previewSource}
+          kind={previewVideo ? "video" : "image"}
+          alt={t("attribution.generate.previewFile", { index: lightbox.openAt + 1, count: previewAssets.length })}
+          onClose={() => {
+            lightbox.close();
+            setPreviewing("");
+          }}
+          onPrevious={lightbox.previous}
+          onNext={lightbox.next}
+        />
+      )}
     </div>
   );
 }

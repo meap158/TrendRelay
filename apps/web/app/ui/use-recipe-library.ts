@@ -82,7 +82,7 @@ export function useRecipeExamples(
   useEffect(() => {
     if (!workspaceId || !active) return;
     let cancelled = false;
-    void apiFetch(`/api/workspaces/${workspaceId}/attribution/creative-recipes/examples`)
+    void apiFetch(`/api/workspaces/${workspaceId}/attribution/creative-recipes/examples?per_recipe=6`)
       .then(async (response) => (response.ok
         ? (await response.json() as { examples?: RecipeExamples<LibraryAsset> }).examples ?? {}
         : {}))

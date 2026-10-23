@@ -1205,6 +1205,7 @@ export const ar: Messages = {
       recipeSearch: "ابحث في الوصفات",
       recipeCount: "{count} وصفة",
       recipeMade: "تم إنشاء {count}",
+      recipePreviewMade: "عرض ما أنتجته {name}",
       recipeFilterAll: "كل الوصفات",
       recipeFilters: "تصفية الوصفات",
       recipeFilterAny: "الكل",

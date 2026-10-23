@@ -1516,3 +1516,41 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* A recipe's real results open full size: the button lies over the card's
+   picture, in the same grid cell, and pressing it does not choose the card. */
+/* `span.` outranks the card's "text spans go in row 2" rule, which this span
+   also matches and which put the buttons under the picture instead of on it. */
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-option > span.recipe-cover-open {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  padding: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+}
+/* One picture fills the cover and two share it evenly. Written at the base
+   rule's strength: lighter, they lost to it, and a single result filled only
+   the two-thirds column meant for the first of three. */
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-option > span.recipe-cover-open[data-count="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-option > span.recipe-cover-open[data-count="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.generate-dialog .recipe-cover-open > :first-child { grid-row: 1 / -1; }
+.generate-dialog .recipe-cover-open > button {
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.generate-dialog .recipe-cover-open > button { display: block; overflow: hidden; }
+.generate-dialog .recipe-cover-open > button:hover { filter: brightness(0.94); }
+.generate-dialog .recipe-cover-open > button:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
