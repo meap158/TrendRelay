@@ -131,7 +131,8 @@ A pattern becomes a recipe only when it passes all three:
 1. **It recurs**: several strong posts show it, ideally in two or more accounts.
    A pattern from one post is a copy of that post, not a recipe.
 2. **It is distinct**: no existing recipe, hand-written or mined, has the same
-   kind, the same setting, the same pose family and the same card structure.
+   kind, the same setting, the same pose family, the same framing and the same
+   card structure.
    `services/api/tests/test_product_creative_library.py` enforces this.
 3. **It is safe to generate**: an adult, the garment opaque and modestly framed
    (no chest close-ups), no text or logos, no real place's signage, the

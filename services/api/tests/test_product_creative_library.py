@@ -88,10 +88,12 @@ def test_a_product_only_recipe_carries_its_cast_so_a_character_is_refused() -> N
 
 
 def test_no_two_recipes_are_the_same_recipe_twice() -> None:
-    """Distinct means a different kind, set, pose family or card structure.
+    """Distinct means a different kind, set, pose family, framing or card structure.
 
-    Two entries with the same kind, the same settings, the same poses and the
-    same number of beats are one recipe written twice, whatever their names."""
+    Two entries with the same kind, settings, poses, framings and number of
+    beats are one recipe written twice, whatever their names. Framing counts
+    because a product-only picture has no poses: a macro detail and a whole
+    catalogue front on the same set are different pictures."""
     seen: dict[tuple, str] = {}
     for recipe in MINED:
         entry = library()[recipe]
@@ -99,6 +101,7 @@ def test_no_two_recipes_are_the_same_recipe_twice() -> None:
             entry["kinds"][0],
             frozenset(entry["facets"].get("setting", [])),
             frozenset(entry["facets"].get("pose", [])),
+            frozenset(entry["facets"].get("framing", [])),
             len(entry["beats"]),
         )
         assert key not in seen, f"{recipe} repeats {seen.get(key)}"

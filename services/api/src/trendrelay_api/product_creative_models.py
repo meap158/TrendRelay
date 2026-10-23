@@ -56,7 +56,14 @@ class ProductCreativeDraft(Base):
             "'catalogue_colourway_card','dress_form_arch_duo',"
             "'draped_garment_still_life','profile_grid_checkerboard',"
             "'seamless_swipe_triptych','window_knit_portrait_series',"
-            "'studio_turn_showcase')",
+            "'studio_turn_showcase',"
+            # Second pass, batch 2026-10-23b (migration 20261024_0100).
+            "'arched_door_coat_story','frilled_cushion_sleep_set',"
+            "'workroom_parcel_set','card_then_try_on','same_set_zoom_out',"
+            "'pastel_seamless_pose_ladder','heart_balloon_gift_set',"
+            "'ivy_garden_door_series','retro_prop_corner',"
+            "'chair_display_colourway_run','profile_grid_split_scene',"
+            "'grid_detail_tile','pouf_stool_seamless_series')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(
