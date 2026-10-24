@@ -1177,3 +1177,25 @@ def test_a_due_time_read_back_without_its_zone_is_still_utc() -> None:
     assert "11:00" not in said
     item["at"] = aware
     assert approval_notices.card_text("Storytelling", item, zone="Asia/Bangkok") == said
+
+
+def test_autonomous_campaign_sends_approved_card_to_telegram(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """An autonomous campaign with Telegram sends cards marked as already approved."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="autonomous", approvals_telegram=True)
+    result = run_campaign(session, pilot, now=NOW)
+
+    [execution] = session.scalars(select(PublicationExecution)).all()
+    assert execution.state == "queued"
+    assert "Announced 1 post on Telegram." in result["note"]
+
+    [card] = chat["sent"]
+    assert "✅ Approved automatically: this campaign runs on Autonomous." in card["text"]
+    labels = [[button["label"] for button in row] for row in card["buttons"]]
+    assert labels == [["↗ Open in app"]]
+
+    [notice] = session.scalars(select(CampaignApprovalNotice)).all()
+    assert notice.settled_at is not None
+

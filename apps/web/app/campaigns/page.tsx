@@ -260,8 +260,8 @@ function TelegramApprovalsField({
           Decide held posts on Telegram
           <span className="campaign-dialog-hint">
             Each post waiting for approval also goes to the chat as a card with
-            Approve and Dismiss buttons. A press there decides it here, and is
-            recorded as your decision.
+            Approve and Dismiss buttons. Under Autonomous mode, posts are sent
+            to Telegram already marked as approved.
           </span>
           {link?.connected ? (
             <span className="campaign-dialog-connected">

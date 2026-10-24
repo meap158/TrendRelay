@@ -361,3 +361,27 @@ def test_the_post_whose_time_has_passed_wears_the_clock(session, chat, grouped) 
         session, grouped["pilot"], now=between
     ) == ""
     assert chat["edited"] == []
+
+
+def test_autonomous_grouped_campaign_sends_approved_card(
+    session, tmp_path, engine_stub, chat,
+) -> None:
+    """An autonomous campaign with grouped cards sends them with approved lines and no decision buttons."""
+    two_accounts_two_slots(session, tmp_path)
+    pilot = autopilot(
+        session, authority="autonomous", approvals_telegram=True, approvals_grouped=True,
+    )
+    result = run_campaign(session, pilot, now=NOW)
+    session.commit()
+
+    assert "2 posts on Telegram, on 1 card" in result["note"]
+    [card] = chat["sent"]
+    assert "2 posts approved automatically" in card["text"]
+    assert "<b>1.</b>" in card["text"] and "— <i>✅ Approved</i>" in card["text"]
+    assert "<b>2.</b>" in card["text"] and "— <i>✅ Approved</i>" in card["text"]
+    assert "✅ Approved automatically: this campaign runs on Autonomous." in card["text"]
+
+    labels = [[button["label"] for button in row] for row in card["buttons"]]
+    assert labels == [["↗ Open in app"]]
+    assert all(row.settled_at is not None for row in notices(session))
+

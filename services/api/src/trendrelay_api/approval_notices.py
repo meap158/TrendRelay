@@ -253,7 +253,7 @@ def card_buttons(
 
 def group_card_text(
     campaign_name: str, items: list[dict[str, Any]], *, zone: str | None = None,
-    language: str = "en", pictures: int = 0,
+    language: str = "en", pictures: int = 0, auto_approved: bool = False,
 ) -> str:
     """The posts one pass is holding, as one message.
 
@@ -278,9 +278,14 @@ def group_card_text(
     # at once.
     shared = times.pop() if len(times) == 1 else ""
     waiting = [item for item in items if not item.get("decided")]
-    heading = words.say(
-        language, "group_waiting", count=len(waiting) or len(items),
-    )
+    if auto_approved or not waiting:
+        heading = words.say(
+            language, "group_auto_approved", count=len(items),
+        )
+    else:
+        heading = words.say(
+            language, "group_waiting", count=len(waiting) or len(items),
+        )
     lines: list[str] = [
         f"<b>{html.escape(campaign_name)}</b> · {html.escape(heading)}"
         + (f" · {html.escape(shared)}" if shared else ""),
@@ -306,14 +311,17 @@ def group_card_text(
     # One reason, when the posts share it, which they nearly always do: they
     # were frozen by the same pass under the same authority. Said once at the
     # bottom rather than six times in the middle.
-    reasons = {
-        words.say(language, str(item.get("reason_code") or ""))
-        if str(item.get("reason_code") or "") in words.WORDS["en"]
-        else str(item.get("reason") or "").strip()
-        for item in items
-    } - {""}
-    if len(reasons) == 1:
-        lines.append(f"<i>{html.escape(reasons.pop())}</i>")
+    if auto_approved:
+        lines.append(f"<i>{html.escape(words.say(language, 'auto_approved'))}</i>")
+    else:
+        reasons = {
+            words.say(language, str(item.get("reason_code") or ""))
+            if str(item.get("reason_code") or "") in words.WORDS["en"]
+            else str(item.get("reason") or "").strip()
+            for item in items
+        } - {""}
+        if len(reasons) == 1:
+            lines.append(f"<i>{html.escape(reasons.pop())}</i>")
     if pictures:
         lines.append(html.escape(words.say(language, "group_pictures")))
     return "\n".join(lines).rstrip()
@@ -580,6 +588,7 @@ def _repoint(
 
 def announce_held(
     session: Session, autopilot: CampaignAutopilot, held: list[dict[str, Any]],
+    *, auto_approved: bool = False,
 ) -> str:
     """Send each held post to the campaign's approver on Telegram, as a card.
 
@@ -622,6 +631,8 @@ def announce_held(
             continue
         known += 1
         _repoint(session, notice, item, autopilot, language=language, regroup=regroup)
+        if auto_approved and notice.settled_at is None:
+            notice.settled_at = datetime.now(UTC)
     # The grouped cards whose rows moved, rewritten once each now that every
     # row on them has been aimed at the post that is actually held.
     for group_id in sorted(regroup):
@@ -687,6 +698,7 @@ def announce_held(
                     queue_item_id=pairing[0],
                     destination_id=pairing[1],
                     execution_id=str(item["execution_id"]),
+                    settled_at=datetime.now(UTC) if auto_approved else None,
                 )
                 try:
                     # In a savepoint because the worker's tick and a request
@@ -718,6 +730,7 @@ def announce_held(
             # on one post has to rewrite. Only for a card that carries more
             # than one: a single post's card is exactly what it was.
             group_id = token_hex(8) if len(claimed) > 1 else None
+            link = app_link(autopilot.campaign_id)
             if group_id:
                 for _item, notice in claimed:
                     notice.group_id = group_id
@@ -729,19 +742,35 @@ def announce_held(
                     if item.get("image_paths")
                 ]
                 video = None
-                text = group_card_text(
-                    name, items, zone=zone, language=language, pictures=len(images),
-                )
-                buttons = group_buttons(
-                    items, autopilot.campaign_id, group_id, language=language,
-                )
+                if auto_approved:
+                    for item in items:
+                        item["decided"] = words.say(language, "was_approved")
+                    text = group_card_text(
+                        name, items, zone=zone, language=language, pictures=len(images),
+                        auto_approved=True,
+                    )
+                    buttons = [[{"label": words.say(language, "open_app"), "url": link}]] if link else None
+                else:
+                    text = group_card_text(
+                        name, items, zone=zone, language=language, pictures=len(images),
+                    )
+                    buttons = group_buttons(
+                        items, autopilot.campaign_id, group_id, language=language,
+                    )
             else:
                 images, video = _media_of(items[0])
-                text = card_text(name, items[0], zone=zone, language=language)
-                buttons = card_buttons(
-                    str(items[0]["execution_id"]), autopilot.campaign_id,
-                    language=language,
-                )
+                if auto_approved:
+                    text = card_text(
+                        name, items[0], zone=zone, language=language,
+                        decided=words.say(language, "auto_approved"),
+                    )
+                    buttons = [[{"label": words.say(language, "open_app"), "url": link}]] if link else None
+                else:
+                    text = card_text(name, items[0], zone=zone, language=language)
+                    buttons = card_buttons(
+                        str(items[0]["execution_id"]), autopilot.campaign_id,
+                        language=language,
+                    )
             try:
                 outcome = telegram.send_card(
                     text, buttons=buttons, images=images, video=video,
@@ -778,9 +807,10 @@ def announce_held(
         rest = max(0, len(fresh) - sum(len(card) for card in cards))
         if rest > 0:
             link = app_link(autopilot.campaign_id)
+            msg_key = "more_auto_approved" if auto_approved else "more_waiting"
             telegram.send_message(
                 f"<b>{html.escape(name)}</b> · "
-                + html.escape(words.say(language, "more_waiting", count=rest)),
+                + html.escape(words.say(language, msg_key, count=rest)),
                 buttons=(
                     [[{"label": words.say(language, "open_app"), "url": link}]]
                     if link else None
@@ -821,8 +851,16 @@ def announce_held(
     return note
 
 
+def announce_auto_approved(
+    session: Session, autopilot: CampaignAutopilot, items: list[dict[str, Any]],
+) -> str:
+    """Send posts queued under autonomous authority to Telegram as approved cards."""
+    return announce_held(session, autopilot, items, auto_approved=True)
+
+
 def announce_executions(
     session: Session, autopilot: CampaignAutopilot, executions: list[PublicationExecution],
+    *, auto_approved: bool = False,
 ) -> str:
     """Send posts already held - the inbox as it stands - as cards.
 
@@ -830,6 +868,7 @@ def announce_executions(
     moment, so the switch is not "from the next pass on" while three posts sit
     unannounced. Same cards, from the execution's own record.
     """
+    valid_state = "queued" if auto_approved else "proposed"
     held = [
         {
             "execution_id": execution.id,
@@ -847,9 +886,9 @@ def announce_executions(
             "queue_item_id": execution.queue_item_id,
         }
         for execution in executions
-        if execution.state == "proposed"
+        if execution.state == valid_state
     ]
-    return announce_held(session, autopilot, held)
+    return announce_held(session, autopilot, held, auto_approved=auto_approved)
 
 
 def announce_unannounced(
@@ -1066,6 +1105,12 @@ def _what_became_of(
         .order_by(AuditEvent.created_at.desc())
     )
     if event is None:
+        if execution.campaign_id:
+            pilot = session.scalar(
+                select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == execution.campaign_id)
+            )
+            if pilot is not None and pilot.authority == "autonomous" and execution.state in ("queued", "published", "measured"):
+                return words.say(language, "auto_approved")
         # Nobody decided it; it simply got on with itself.
         return words.say(language, f"became_{_shape_of(execution.state)}")
     detail = event.detail or {}

@@ -954,6 +954,9 @@ def _release_autonomous_holds(
             execution.scheduled_at = delivery_at
             execution.queued_at = now
             execution.updated_at = now
+            from trendrelay_api.approval_notices import settle_notice
+
+            settle_notice(session, execution)
             created.append({
                 "job_id": job["id"],
                 "execution_id": execution.id,
@@ -1040,6 +1043,7 @@ def run_campaign(
     deferred: list[str] = []
     held: list[dict[str, Any]] = []
     reserved: list[ScheduledPost] = []
+    auto_approved: list[dict[str, Any]] = []
 
     # Plan first so the rows being released still reserve their original slot
     # during this tick. That prevents a second post being planned into it before
@@ -1163,6 +1167,20 @@ def run_campaign(
                 "products": list(post.product_names),
                 "reason": post.reason,
             })
+            if autopilot.authority == "autonomous":
+                auto_approved.append({
+                    "execution_id": execution.id,
+                    "destination_id": destination.id,
+                    "destination": destination.label,
+                    "platform": destination.platform,
+                    "caption": post.caption,
+                    "image_paths": list(post.image_paths or ()),
+                    "video_path": post.video_path or None,
+                    "queue_item_id": post.queue_item_id,
+                    "at": post.at,
+                    "reason": None,
+                    "reason_code": None,
+                })
         except Exception as error:
             # Recorded, not raised. One destination that an engine refuses must
             # not stop the others, and a run that half-succeeded needs to say so
@@ -1190,6 +1208,10 @@ def run_campaign(
             from trendrelay_api.approval_notices import announce_held
 
             note = f"{note} {announce_held(session, autopilot, held)}"
+    if auto_approved and autopilot.approvals_telegram:
+        from trendrelay_api.approval_notices import announce_auto_approved
+
+        note = f"{note} {announce_auto_approved(session, autopilot, auto_approved)}"
     if autopilot.approvals_telegram:
         # Asked every tick, not only one that held something new: the posts
         # this looks for are the opposite of new - they were frozen and
@@ -1226,6 +1248,7 @@ def run_campaign(
         "note": note,
         "posts": created,
         "held": held,
+        "auto_approved": auto_approved,
         "failures": failures,
         "deferred": deferred,
         "released_holds": released["released"],

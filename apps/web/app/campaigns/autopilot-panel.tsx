@@ -3930,10 +3930,13 @@ export function AutopilotPanel({
   const telegramLanguage = LOCALES.find((item) => item.code === (
     autopilot.approvals_telegram_language ?? autopilot.post_language
   ))?.label;
-  const telegramNote = "Every post waiting for approval also goes to the "
-    + "Telegram chat as a card with Approve and Dismiss on it. A press there "
-    + "decides it here, and is recorded as your decision"
-    + (telegramLanguage ? `. The cards are written in ${telegramLanguage}.` : ".");
+  const telegramNote = autopilot.authority === "autonomous"
+    ? "Every post scheduled automatically also goes to the Telegram chat as an approved card."
+      + (telegramLanguage ? ` The cards are written in ${telegramLanguage}.` : "")
+    : "Every post waiting for approval also goes to the "
+      + "Telegram chat as a card with Approve and Dismiss on it. A press there "
+      + "decides it here, and is recorded as your decision"
+      + (telegramLanguage ? `. The cards are written in ${telegramLanguage}.` : ".");
 
   /**
    * Open a work area, fetching whatever that area needs to be worth looking at.
@@ -5006,7 +5009,9 @@ export function AutopilotPanel({
               inbox is. */}
           {autopilot.approvals_telegram && (
             <p className="autopilot-lede">
-              These are also on Telegram as cards. A press there decides them here.
+              {autopilot.authority === "autonomous"
+                ? "Posts are also sent to Telegram as approved cards."
+                : "These are also on Telegram as cards. A press there decides them here."}
             </p>
           )}
           {/* One line that reconciles the scattered counts into the operator's

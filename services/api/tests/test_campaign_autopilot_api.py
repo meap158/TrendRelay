@@ -561,6 +561,44 @@ def test_switching_telegram_on_sends_what_is_already_waiting(workspace, monkeypa
     assert len(announced) == 1
 
 
+def test_switching_telegram_on_for_autonomous_campaign_announces_queued_executions(workspace, monkeypatch) -> None:
+    from datetime import UTC, datetime
+    from sqlalchemy import select
+    from trendrelay_api import approval_notices
+    from trendrelay_api.autopilot_models import CampaignAutopilot
+    from trendrelay_api.publication_models import PublicationExecution
+
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        pilot = session.scalar(select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id))
+        if pilot:
+            pilot.authority = "autonomous"
+        session.add(PublicationExecution(
+            id="exec-queued-1", workspace_id=workspace, campaign_id=campaign_id,
+            state="queued", scheduled_at=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+            media_path="clip.mp4",
+        ))
+
+    announced: list = []
+    monkeypatch.setattr(
+        approval_notices, "announce_executions",
+        lambda session, autopilot, executions, **kwargs: announced.append((list(executions), kwargs))
+        or "Announced 1 post on Telegram.",
+    )
+    body = {
+        "enabled": False, "min_recycle_days": 14, "daily_cap_per_account": 3,
+        "delivery": "schedule", "approvals_telegram": True, "confirm_external_action": True,
+        "authority": "autonomous",
+    }
+    asked = request("PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot", json=body)
+    assert asked.status_code == 200, asked.text
+    assert len(announced) == 1
+    executions_list, kwargs = announced[0]
+    assert len(executions_list) == 1
+    assert executions_list[0].id == "exec-queued-1"
+    assert kwargs.get("auto_approved") is True
+
+
 def test_the_cards_language_is_a_choice_among_the_languages_the_cards_can_be_written_in(workspace) -> None:
     campaign_id = campaign(workspace)
     base = {

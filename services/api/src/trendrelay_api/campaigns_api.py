@@ -879,14 +879,20 @@ def update_campaign(
         from trendrelay_api.approval_notices import announce_executions
         from trendrelay_api.publication_models import PublicationExecution
 
+        is_auto = autopilot.authority == "autonomous"
+        state = "queued" if is_auto else "proposed"
         waiting = session.scalars(
             select(PublicationExecution).where(
                 PublicationExecution.workspace_id == workspace_id,
                 PublicationExecution.campaign_id == campaign_id,
-                PublicationExecution.state == "proposed",
+                PublicationExecution.state == state,
             ).order_by(PublicationExecution.scheduled_at.asc())
         ).all()
-        telegram_note = announce_executions(session, autopilot, list(waiting))
+        telegram_note = (
+            announce_executions(session, autopilot, list(waiting), auto_approved=True)
+            if is_auto
+            else announce_executions(session, autopilot, list(waiting))
+        )
     audit(
         session,
         request,
