@@ -78,8 +78,9 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 GEMINI_WEB_BRIDGE = "http://127.0.0.1:4981"
 #: The bridge refuses a longer prompt.
 GEMINI_WEB_PROMPT_BYTES = 8000
-#: What the bridge reads: the cookie and account slot saved in Tools, as an env file.
-BRIDGE_ENV_PATH = DATA_ROOT / "gemini-web" / "bridge.env"
+#: What the bridge reads: it loads `.env` from the folder it is started in, and exits
+#: unless the cookie holds both session cookies.
+BRIDGE_ENV_PATH = DATA_ROOT / "gemini-web" / ".env"
 
 Transport = Callable[[str, str, dict[str, str], bytes | None, int], tuple[int, bytes]]
 Sleep = Callable[[float], None]
@@ -245,10 +246,11 @@ def _clean_cookie(value: str) -> str:
         text = text[1:-1].strip()
     if "\n" in text or "\r" in text or len(text) > 12000:
         raise SettingsError("Paste the Cookie header as one line.")
-    if "__Secure-1PSID" not in text:
+    # The bridge refuses to start without both, and one name is a prefix of the other.
+    if "__Secure-1PSID=" not in text or "__Secure-1PSIDTS=" not in text:
         raise SettingsError(
-            "That is not a Gemini cookie: it has no __Secure-1PSID. Copy the whole Cookie "
-            "request header from a signed-in gemini.google.com tab."
+            "That is not a full Gemini cookie: it needs __Secure-1PSID and __Secure-1PSIDTS. "
+            "Copy the whole Cookie request header from a signed-in gemini.google.com tab."
         )
     return text
 
@@ -270,18 +272,21 @@ def _clean_text_setting(provider: VideoProvider, key: str, value: str) -> str:
 
 
 def write_bridge_env() -> Path | None:
-    """The env file the bridge is started with: this card's cookie and account slot.
+    """The `.env` the bridge reads: this card's cookie and account slot.
 
     Written whenever the card saves, so the bridge never needs the cookie typed a
-    second time. It holds the cookie, so it lives under the project's data folder
-    and is never read back by the API. The bridge reads it when it starts.
+    second time. The bridge loads `.env` from the folder it is started in, so it is
+    started from this file's folder. It holds the cookie, so it lives under the
+    project's data folder and is never read back by the API.
     """
     provider = PROVIDERS["gemini_web"]
     cookie = _key(provider)
     if not cookie:
         return None
     port = urllib.parse.urlsplit(bridge_url(provider)).port or 4981
-    lines = [f"PORT={port}", f"GEMINI_COOKIES={cookie}"]
+    # Single quotes: the bridge's dotenv reader would expand `$` and cut at ` #` otherwise.
+    quoted = cookie.replace("'", "") if "'" in cookie else cookie
+    lines = [f"PORT={port}", f"GEMINI_COOKIES='{quoted}'"]
     account = effective_value(provider.account_env).strip()
     if account:
         lines.append(f"GEMINI_AUTH_USER={account}")
@@ -558,6 +563,15 @@ def check_provider(provider_id: str, *, transport: Transport | None = None) -> d
     return outcome
 
 
+def _bridge_models(body: bytes) -> list[Any]:
+    try:
+        loaded = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return []
+    data = loaded.get("data") if isinstance(loaded, dict) else None
+    return data if isinstance(data, list) else []
+
+
 def _check_bridge(provider: VideoProvider, call: Transport) -> dict[str, Any]:
     """Ask the local bridge for its model list. Starts no video."""
     url = f"{bridge_url(provider)}/openai/v1/models"
@@ -569,16 +583,25 @@ def _check_bridge(provider: VideoProvider, call: Transport) -> dict[str, Any]:
             "message": (
                 f"The {provider.label} bridge is not answering at "
                 f"{bridge_url(provider)} ({error}). "
-                f"Start it with the env file this card wrote ({BRIDGE_ENV_PATH}), then check again."
+                f"Start it from {BRIDGE_ENV_PATH.parent} (it reads the .env there), "
+                "then check again."
             ),
         }
     else:
-        if 200 <= status < 300:
+        models = _bridge_models(body) if 200 <= status < 300 else []
+        if models:
             outcome = {
                 "ok": True,
+                "message": f"The {provider.label} bridge is signed in ({len(models)} models).",
+            }
+        elif 200 <= status < 300:
+            # The bridge answers with an empty list when Gemini turned its cookie down.
+            outcome = {
+                "ok": False,
                 "message": (
-                    f"The {provider.label} bridge answered. Whether the cookie is still "
-                    "signed in shows on the first clip."
+                    f"The {provider.label} bridge is running but is not signed in: the cookie "
+                    "is invalid or expired. Copy a fresh Cookie header, save it here, and "
+                    "restart the bridge."
                 ),
             }
         else:
@@ -623,10 +646,11 @@ def setup_report() -> dict[str, Any]:
                 "label": f"{provider.label} bridge",
                 "status": "ready" if row["check_ok"] else "setup-required",
                 "detail": (
-                    f"Run gemini-web-to-api on this machine at {bridge_url(provider)} with the "
-                    f"env file this card writes when it saves ({BRIDGE_ENV_PATH}). The bridge "
-                    "reads the cookie when it starts, so restart it after a new cookie. "
-                    "This screen does not start it."
+                    f"Run gemini-web-to-api on this machine at {bridge_url(provider)}, "
+                    "started from "
+                    f"{BRIDGE_ENV_PATH.parent} where this card writes the .env it reads when "
+                    "it saves. It reads the cookie when it starts, so restart it after a new "
+                    "cookie. This screen does not start it."
                 ),
             })
         requirements.append({

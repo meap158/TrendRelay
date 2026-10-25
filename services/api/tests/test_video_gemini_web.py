@@ -22,7 +22,7 @@ def values(monkeypatch, tmp_path):
     store: dict[str, str] = {}
     monkeypatch.setattr(video, "effective_value", lambda key: store.get(key, ""))
     monkeypatch.setattr(video, "CHECKS_PATH", tmp_path / "checks.json")
-    monkeypatch.setattr(video, "BRIDGE_ENV_PATH", tmp_path / "gemini-web" / "bridge.env")
+    monkeypatch.setattr(video, "BRIDGE_ENV_PATH", tmp_path / "gemini-web" / ".env")
 
     def write(values: dict[str, str]) -> list[str]:
         store.update(values)
@@ -70,8 +70,11 @@ def test_it_is_offered_on_the_card_as_a_cookie_not_an_api_key(values) -> None:
 def test_a_pasted_cookie_header_is_cleaned_and_a_wrong_paste_is_refused(values) -> None:
     video.save_settings({"GEMINI_WEB_COOKIES": f"Cookie: {COOKIE}"})
     assert values["GEMINI_WEB_COOKIES"] == COOKIE
-    with pytest.raises(video.SettingsError, match="__Secure-1PSID"):
+    with pytest.raises(video.SettingsError, match="__Secure-1PSIDTS"):
         video.save_settings({"GEMINI_WEB_COOKIES": "just some words that are not a cookie"})
+    # PSIDTS alone is not enough: the bridge exits without PSID as well.
+    with pytest.raises(video.SettingsError, match="__Secure-1PSID"):
+        video.save_settings({"GEMINI_WEB_COOKIES": "a=b; __Secure-1PSIDTS=x"})
     with pytest.raises(video.SettingsError, match="one line"):
         video.save_settings({"GEMINI_WEB_COOKIES": COOKIE + "\nsecond"})
 
@@ -95,15 +98,25 @@ def test_saving_writes_the_env_file_the_bridge_starts_with(values) -> None:
         "GEMINI_WEB_AUTH_USER": "2",
     })
     lines = video.BRIDGE_ENV_PATH.read_text(encoding="utf-8").splitlines()
-    assert lines == ["PORT=5000", f"GEMINI_COOKIES={COOKIE}", "GEMINI_AUTH_USER=2"]
+    assert lines == ["PORT=5000", f"GEMINI_COOKIES='{COOKIE}'", "GEMINI_AUTH_USER=2"]
 
 
 def test_check_asks_the_bridge_for_models_and_never_for_a_video(values) -> None:
     video.save_settings({"GEMINI_WEB_COOKIES": COOKIE})
-    transport, seen = _bridge([(200, b'{"data":[]}')])
+    transport, seen = _bridge([(200, b'{"object":"list","data":[{"id":"gemini-2.5-flash"}]}')])
     outcome = video.check_provider("gemini_web", transport=transport)
     assert outcome["ok"] is True
     assert seen == [("GET", "http://127.0.0.1:4981/openai/v1/models", None)]
+
+
+@pytest.mark.parametrize("body", [b'{"object":"list","data":null}', b'{"data":[]}', b"not json"])
+def test_a_bridge_with_a_rejected_cookie_fails_check(values, body) -> None:
+    """The bridge answers 200 with no models when Gemini refuses its cookie."""
+    video.save_settings({"GEMINI_WEB_COOKIES": COOKIE})
+    transport, _seen = _bridge([(200, body)])
+    outcome = video.check_provider("gemini_web", transport=transport)
+    assert outcome["ok"] is False
+    assert "cookie" in outcome["message"]
 
 
 def test_check_says_where_to_start_the_bridge_when_it_is_down(values) -> None:
@@ -111,7 +124,7 @@ def test_check_says_where_to_start_the_bridge_when_it_is_down(values) -> None:
     transport, _seen = _bridge([ConnectionRefusedError("refused")])
     outcome = video.check_provider("gemini_web", transport=transport)
     assert outcome["ok"] is False
-    assert "bridge.env" in outcome["message"]
+    assert str(video.BRIDGE_ENV_PATH.parent) in outcome["message"]
     # Nothing saved yet: the card asks for the cookie first.
     values.pop("GEMINI_WEB_COOKIES")
     assert "cookie" in video.check_provider("gemini_web", transport=transport)["message"]
