@@ -14,9 +14,11 @@ documents chat, tools and images but no video, so nothing is built on it.
 
 ## Setting it up
 
-1. Run the bridge on this machine (Docker image or `go run`), started from `.data/gemini-web/`, where Tools writes the `.env` the bridge loads (`PORT`, `GEMINI_COOKIES`,
+1. Run `python scripts/gemini_web_bridge.py`. It clones and builds the bridge once (Go is needed; every cache stays under
+   `.data`) and runs it from `.data/gemini-web/`, where Tools writes the `.env` the bridge loads (`PORT`, `GEMINI_COOKIES`,
    `GEMINI_AUTH_USER`). The bridge reads `.env` from its working directory only, and exits unless the cookie holds both
-   `__Secure-1PSID` and `__Secure-1PSIDTS`. Restart it after saving a new cookie. The API does not start it.
+   `__Secure-1PSID` and `__Secure-1PSIDTS`. Restart it after saving a new cookie. The API does not start it. The script passes `PORT` explicitly because the bridge
+   never lets `.env` override a variable the shell already sets, and this machine's shell sets `PORT`.
 2. In Tools, Video providers, Gemini Web: paste the cookie (the full `Cookie` request header of a `batchexecute` request
    in a signed-in gemini.google.com tab, with `GEMINI_AUTH_USER` set if that address has `/u/N/`), turn the switch on, and
    run Check. Check asks the bridge for its model list and starts no video.
