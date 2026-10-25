@@ -7,7 +7,8 @@ import { useLocale, useT } from "../i18n-provider";
 import { useAuth } from "../auth-provider";
 import { useWorkspace } from "../workspace-provider";
 import { useRecipeExamples, useRecipeLibrary } from "../ui/use-recipe-library";
-import { AssetThumbnail } from "../publish/composer";
+import { AssetThumbnail, type LibraryAsset } from "../publish/composer";
+import { useAssetsById } from "./use-assets-by-id";
 import { creativeRecipeHelp, localized } from "../../lib/recipe-library";
 import { RecipePreview } from "./recipe-previews";
 import { RecipeGallery } from "./recipe-gallery";
@@ -36,6 +37,8 @@ export type SectionProduct = { id: string; name: string; image_url?: string | nu
 export type SectionEntry<P extends SectionProduct = SectionProduct> = {
   draft: CreativeDraftRow;
   products: P[];
+  /** The files this entry already made; when present the card shows them instead of the recipe. */
+  assetIds?: string[];
 };
 
 type Preview = { src: string; name: string };
@@ -46,7 +49,9 @@ type CardContext = {
   examples: ReturnType<typeof useRecipeExamples>;
   workspaceId: string | null;
   apiFetch: ReturnType<typeof useAuth>["apiFetch"];
-  openRecipe: (recipe: string) => void;
+  /** The media an entry made, as far as it has loaded. */
+  batchOf: (entry: SectionEntry) => LibraryAsset[];
+  openGallery: (recipe: string, batch?: LibraryAsset[]) => void;
   openProduct: (preview: Preview) => void;
 };
 
@@ -89,7 +94,10 @@ export function DraftCard({
   const { recipes, examples, workspaceId, apiFetch } = context;
   const together = (draft.product_count ?? featured.length) > 1;
   const recipe = recipes.find((item) => item.id === draft.recipe);
-  const made = examples[draft.recipe]?.assets ?? [];
+  const own = Boolean(entry.assetIds);
+  // A card for finished work shows what was made; a draft has made nothing, so it shows the recipe's examples.
+  const batch = own ? context.batchOf(entry) : [];
+  const made = own ? batch : examples[draft.recipe]?.assets ?? [];
   const help = creativeRecipeHelp(t, draft.recipe) || localized(recipe?.help, locale);
   const first = featured[0];
   return (
@@ -117,13 +125,13 @@ export function DraftCard({
             ratio={1.5}
             media={<span className="pending-draft-schematic-popover"><RecipePreview recipe={draft.recipe} mined={recipe?.builtin ? null : recipe} /></span>}
             caption={creativeRecipe(t, draft.recipe)}
-            onActivate={made.length ? () => context.openRecipe(draft.recipe) : undefined}
+            onActivate={made.length ? () => context.openGallery(draft.recipe, own ? batch : undefined) : undefined}
           >
             {made.length && workspaceId ? <AssetThumbnail asset={made[0]} workspaceId={workspaceId} apiFetch={apiFetch} />
               : recipe || ["bed_flat_lay", "sleepwear_lookbook", "character_editorial_carousel"].includes(draft.recipe) ? <RecipePreview recipe={draft.recipe} mined={recipe?.builtin ? null : recipe} />
               : <DraftThumbnail kind={draft.kind} size="compact" />}
           </HoverPreview>
-          <span className="pending-draft-preview-label">Recipe</span>
+          <span className="pending-draft-preview-label">{own ? t("attribution.libraryItems.mediaLabel") : "Recipe"}</span>
         </div>
       </div>
       <div className="pending-draft-content">
@@ -187,7 +195,7 @@ export function DraftSection<P extends SectionProduct>({
   const { workspaceId } = useWorkspace();
   const { recipes } = useRecipeLibrary(workspaceId, apiFetch);
   const examples = useRecipeExamples(workspaceId, apiFetch, true);
-  const [previewing, setPreviewing] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<{ recipe: string; batch?: LibraryAsset[] } | null>(null);
   const [productPreview, setProductPreview] = useState<Preview | null>(null);
   const [stored, setFilters] = useDraftFilters();
   // A filter this view hides must not keep narrowing it from a shared address.
@@ -210,12 +218,14 @@ export function DraftSection<P extends SectionProduct>({
   const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const visible = matching.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const byId = useAssetsById(workspaceId, apiFetch, visible.flatMap((entry) => entry.assetIds ?? []));
   const context: CardContext = {
     recipes,
     examples,
     workspaceId,
     apiFetch,
-    openRecipe: setPreviewing,
+    batchOf: (entry) => (entry.assetIds ?? []).flatMap((id) => byId.get(id) ?? []),
+    openGallery: (recipe, batch) => setPreviewing({ recipe, batch }),
     openProduct: setProductPreview,
   };
   if (entries.length === 0) {
@@ -278,10 +288,11 @@ export function DraftSection<P extends SectionProduct>({
       </footer>
       {previewing && workspaceId && (
         <RecipeGallery
-          recipe={previewing}
-          name={creativeRecipe(t, previewing)}
-          initial={examples[previewing]?.assets ?? []}
-          selected={examples[previewing]?.assets[0]?.id ?? ""}
+          recipe={previewing.recipe}
+          name={creativeRecipe(t, previewing.recipe)}
+          initial={examples[previewing.recipe]?.assets ?? []}
+          selected={previewing.batch?.[0]?.id ?? examples[previewing.recipe]?.assets[0]?.id ?? ""}
+          batch={previewing.batch}
           workspaceId={workspaceId}
           apiFetch={apiFetch}
           onClose={() => setPreviewing(null)}

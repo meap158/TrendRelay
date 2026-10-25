@@ -484,6 +484,7 @@ a.ui-button { text-decoration: none; }
 .ui-lightbox-sidebar h2 { font-size: 13px; margin: 0 0 8px; }
 .ui-lightbox-sidebar a { display: block; margin-block: 8px; text-decoration: underline; color: inherit; opacity: .8; }
 .ui-lightbox-sidebar a:hover, .ui-lightbox-sidebar a:focus-visible { opacity: 1; }
+.recipe-gallery-heading { margin: 10px 0 4px; font-size: 11px; font-weight: 650; letter-spacing: .04em; }
 .recipe-gallery-thumbnails { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .recipe-gallery-thumbnails button { padding: 2px; border: 2px solid transparent; border-radius: 5px; background: transparent; aspect-ratio: 1; overflow: hidden; cursor: pointer; }
 .recipe-gallery-thumbnails button[aria-pressed="true"] { border-color: var(--green); }
