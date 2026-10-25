@@ -1262,16 +1262,16 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 .product-group-view-toggle { display: inline-flex; gap: 4px; }
 
 /* The pending drafts themselves, above the products they feature. */
-.pending-drafts { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--warn-line); border-radius: var(--radius); background: var(--warn-bg); }
+.pending-drafts { margin: 0 0 20px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .pending-drafts > header h3 { margin: 0; color: var(--text); font-size: 14px; }
 .pending-drafts > header p, .pending-drafts-empty { margin: 4px 0 0; color: var(--muted); font-size: 12px; max-inline-size: 70ch; }
-.pending-drafts > ul { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
-.pending-draft { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.pending-drafts > ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.pending-draft { display: grid; grid-template-columns: 172px minmax(0, 1fr); align-items: start; gap: 10px 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 .pending-draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; }
 .pending-draft-head > .product-group-chip { margin-inline-start: 0; }
 .pending-draft-single { padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; font-weight: 650; }
 .pending-draft-what { color: var(--text); font-size: 12px; }
-.pending-draft-owed { margin-inline-start: auto; color: var(--warn); font-size: 12px; font-weight: 600; }
+.pending-draft-owed { color: var(--muted); font-size: 11px; font-weight: 500; }
 .pending-draft-products { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
 .pending-draft-products > li { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
 .pending-draft-products img, .pending-draft-products li > span { flex: none; inline-size: 28px; block-size: 28px; border-radius: var(--radius-sm); object-fit: cover; background: var(--panel-raised); display: grid; place-items: center; color: var(--muted); font-size: 11px; }
@@ -1279,6 +1279,71 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 .pending-draft-products > li.pending-draft-more { color: var(--muted); font-size: 11px; }
 .pending-draft-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pending-draft-actions .product-draft-discard { margin-inline-start: auto; }
+
+.pending-drafts-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-block-end: 20px; }
+.pending-drafts-eyebrow { display: block; margin-block-end: 8px; font-size: 10px; font-weight: 650; letter-spacing: .1em; color: var(--muted); }
+.pending-drafts > .pending-drafts-header h3 { display: flex; align-items: center; gap: 10px; font-size: 20px; line-height: 1.3; }
+.pending-drafts > .pending-drafts-header p { margin-block-start: 6px; line-height: 1.5; max-inline-size: none; }
+.pending-drafts-count { padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--panel-raised); color: var(--muted); }
+.pending-drafts-summary { flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--muted); font-size: 11px; }
+.pending-drafts-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block-end: 16px; border-block-end: 1px solid var(--line); }
+.pending-drafts-search { display: flex; align-items: center; flex: 1 1 240px; gap: 8px; max-inline-size: 420px; min-inline-size: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--muted); background: var(--panel); }
+.pending-drafts-search input { border: 0; outline: 0; inline-size: 100%; min-inline-size: 0; padding: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
+.pending-drafts-search:focus-within { outline: 2px solid var(--link); outline-offset: 2px; }
+.pending-drafts-format { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 11px; }
+.pending-drafts-format .ui-select { inline-size: 156px; }
+.pending-draft-preview { position: relative; inline-size: 96px; block-size: 96px; padding: 0; border: 0; overflow: hidden; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--link); cursor: pointer; }
+.pending-draft-preview:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+.pending-draft-preview:hover { box-shadow: 0 0 0 1px var(--link); }
+.pending-draft-preview > svg { inline-size: 100%; block-size: 100%; padding: 4px; }
+.pending-draft-preview .picker-thumb { display: block; inline-size: 100%; block-size: 100%; }
+.pending-draft-preview img, .pending-draft-preview video { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.pending-draft-preview-group { display: grid; justify-items: center; gap: 5px; }
+.pending-draft-preview-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; grid-row: span 2; }
+.pending-draft-preview-pair .pending-draft-preview { inline-size: 82px; block-size: 100px; }
+.pending-draft-preview-pair .pending-draft-preview img { object-fit: contain; }
+.pending-draft-preview:disabled { cursor: default; }
+.pending-draft-preview:disabled:hover { box-shadow: none; }
+.pending-draft-schematic-popover { display: grid; place-items: center; inline-size: 100%; block-size: 100%; padding: 12px; background: var(--panel-raised); color: var(--link); }
+.pending-draft-schematic-popover > svg { inline-size: 100%; block-size: 100%; }
+.pending-draft-preview-label { padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 9px; line-height: 1.4; }
+.pending-draft-preview > img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
+.pending-draft-preview > .draft-thumbnail { inline-size: 100%; block-size: 100%; min-block-size: 0; }
+.pending-draft-content { min-inline-size: 0; }
+.pending-draft-head h4 { margin: 0; color: var(--text); font-size: 13px; font-weight: 650; line-height: 1.5; }
+.pending-draft-description { display: flex; align-items: center; gap: 6px; margin: 6px 0; min-inline-size: 0; color: var(--muted); font-size: 11px; }
+.pending-draft-description > img { flex: none; inline-size: 22px; block-size: 26px; border-radius: 3px; object-fit: cover; }
+.pending-draft-description > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pending-draft-recipe-help { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.pending-draft-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.pending-draft-meta > span + span::before { content: "·"; margin-inline-end: 8px; color: var(--muted); }
+.pending-draft-content > .pending-draft-products { margin-block-start: 10px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.pending-draft-actions { grid-column: 2; justify-content: flex-start; max-inline-size: none; gap: 6px; }
+.pending-draft-actions .product-draft-discard { margin-inline-start: 0; }
+.pending-draft-actions > .product-draft-discard { display: flex; flex-wrap: wrap; justify-content: flex-end; max-inline-size: 220px; }
+.pending-draft-actions > .product-draft-discard small { flex-basis: 100%; line-height: 1.4; }
+.pending-drafts-footer, .pending-drafts-footer > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pending-drafts-footer { padding-block-start: 16px; color: var(--muted); font-size: 11px; }
+.pending-drafts-no-results { display: grid; justify-items: center; gap: 10px; padding: 40px 16px; color: var(--muted); text-align: center; }
+.pending-drafts-no-results p { margin: 0; font-size: 12px; }
+@media (max-width: 760px) {
+  .pending-drafts > ul { grid-template-columns: minmax(0, 1fr); }
+  .pending-drafts { padding: 16px; }
+  .pending-drafts-header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .pending-draft { grid-template-columns: 140px minmax(0, 1fr); gap: 8px 10px; }
+  .pending-draft-preview-pair .pending-draft-preview { inline-size: 66px; block-size: 86px; }
+  .pending-draft-preview { inline-size: 80px; block-size: 96px; }
+  .pending-draft-actions { grid-column: 2; justify-content: flex-start; max-inline-size: none; }
+  .pending-draft-actions .product-draft-discard { margin-inline-start: 0; }
+  .pending-drafts-footer { flex-wrap: wrap; }
+  .pending-drafts-footer > div { flex-wrap: wrap; gap: 6px; }
+}
+@media (max-width: 420px) {
+  .pending-draft { grid-template-columns: minmax(0, 1fr); }
+  .pending-draft-preview-pair { grid-row: auto; justify-content: start; grid-template-columns: repeat(2, 82px); }
+  .pending-draft-preview-pair .pending-draft-preview { inline-size: 82px; block-size: 100px; }
+  .pending-draft-actions { grid-column: 1; }
+}
 
 /* Recipe cards in the Generate rail: picture, then the words aligned to the
    picture's top edge, with the radio pinned to the card's corner. The radio
