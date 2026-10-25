@@ -59,6 +59,8 @@ export type ProductRow = {
   name: string;
   brand: string | null;
   category: string | null;
+  /** What a recipe may promise about it: apparel, accessory, beauty, goods, food, service or unknown. */
+  product_type?: string;
   marketplace: string;
   identifier: string | null;
   product_url: string | null;

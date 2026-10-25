@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail, type LibraryAsset } from "../publish/composer";
@@ -12,6 +12,7 @@ import {
   facetChips,
   filterRecipes,
   localized,
+  recipeFits,
   recipeMakes,
   searchRecipes,
   type FacetSelection,
@@ -59,6 +60,7 @@ export function RecipePicker({
   examples,
   labelOf,
   helpOf,
+  productTypes = [],
   workspaceId,
   apiFetch,
 }: {
@@ -74,6 +76,8 @@ export function RecipePicker({
   examples: RecipeExamples<LibraryAsset>;
   labelOf: (recipe: string) => string;
   helpOf: (recipe: string) => string;
+  /** Each product's type; only recipes written for all of them are offered. */
+  productTypes?: readonly string[];
   workspaceId: string | null;
   apiFetch: Fetcher;
 }) {
@@ -91,15 +95,32 @@ export function RecipePicker({
   }
 
   const ofKind = useMemo(
-    () => recipes.filter((recipe) => recipeMakes(recipe, kind)),
-    [recipes, kind],
+    () => recipes.filter((recipe) => recipeMakes(recipe, kind) && recipeFits(recipe.fits, productTypes)),
+    [recipes, kind, productTypes],
   );
   const textOf = (recipe: LibraryRecipe) => `${labelOf(recipe.id)} ${helpOf(recipe.id)}`;
   const shownFor = (nextQuery: string, nextChoice: FacetSelection) => {
-    if (ofKind.length === 0) return nextQuery || Object.values(nextChoice).some(Boolean) ? [] : [...fallback];
+    if (ofKind.length === 0) {
+      // The hand-written ids stand in before the catalogue arrives, and
+      // they are all written for clothing.
+      if (recipes.length > 0 || !recipeFits(undefined, productTypes)) return [];
+      return nextQuery || Object.values(nextChoice).some(Boolean) ? [] : [...fallback];
+    }
     return filterRecipes(searchRecipes(ofKind, nextQuery, textOf), nextChoice).map((recipe) => recipe.id);
   };
   const shown = shownFor(query, choice);
+  const noneFit = !locked && shown.length === 0 && ofKind.length === 0
+    && (recipes.length > 0 || !recipeFits(undefined, productTypes));
+  // The products rule recipes out as well as the filters do, and the
+  // chosen recipe follows: one the picker no longer shows is not queued.
+  const firstShown = shown[0];
+  const valueShown = shown.includes(value);
+  // Only once the catalogue is in: before it, the hand-written stand-ins
+  // would push out a library recipe that is about to appear.
+  const loaded = recipes.length > 0;
+  useEffect(() => {
+    if (!locked && loaded && firstShown && !valueShown) onChange(firstShown);
+  }, [locked, loaded, firstShown, valueShown, onChange]);
   const active = Object.values(choice).filter(Boolean).length;
 
   function narrow(nextQuery: string, nextChoice: FacetSelection) {
@@ -199,7 +220,7 @@ export function RecipePicker({
         </div>
       )}
       {!locked && shown.length === 0 && (
-        <p className="generate-blocker">{t("attribution.generate.recipeFilterNone")}</p>
+        <p className="generate-blocker">{t(noneFit ? "attribution.generate.recipeNoneFit" : "attribution.generate.recipeFilterNone")}</p>
       )}
       <ChoiceGroup
         name="generate-recipe"

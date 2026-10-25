@@ -1248,6 +1248,7 @@ export const zh: Messages = {
       recipeFilterAll: "全部方案",
       recipeFilters: "筛选方案",
       recipeFilterAny: "全部",
+      recipeNoneFit: "还没有适用于这类商品的方案。",
       recipeFilterNone: "没有符合筛选条件的方案。",
       recipeFilterClear: "清除筛选",
       recipeFacetCast: "模特",

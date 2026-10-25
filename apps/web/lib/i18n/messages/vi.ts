@@ -1261,6 +1261,7 @@ export const vi: Messages = {
       recipeFilterAll: "Tất cả công thức",
       recipeFilters: "Lọc công thức",
       recipeFilterAny: "Tất cả",
+      recipeNoneFit: "Chưa có công thức nào cho loại sản phẩm này.",
       recipeFilterNone: "Không có công thức nào khớp bộ lọc.",
       recipeFilterClear: "Xóa bộ lọc",
       recipeFacetCast: "Người mẫu",

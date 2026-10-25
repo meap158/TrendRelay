@@ -34,6 +34,8 @@ export type LibraryRecipe = {
   cast: "person" | "none";
   together: "card" | "frame";
   requires_character: boolean;
+  /** The product types it is written for; absent means clothing. */
+  fits?: string[];
   facets: Record<RecipeFacet, string[]>;
   label: LocalizedText;
   help: LocalizedText;
@@ -51,6 +53,16 @@ export type RecipeExamples<Asset> = Record<string, { count: number; assets: Asse
 /** Whether a recipe can make this kind. */
 export function recipeMakes(recipe: LibraryRecipe, kind: string): boolean {
   return (recipe.kinds ?? [recipe.kind]).includes(kind as LibraryRecipe["kind"]);
+}
+
+/**
+ * Whether a recipe written for `fits` suits every product, by each product's
+ * type. A product of unknown type rules nothing out, as on the server; a
+ * recipe without `fits` is written for clothing.
+ */
+export function recipeFits(fits: readonly string[] | undefined, productTypes: readonly string[]): boolean {
+  const written = fits && fits.length > 0 ? fits : ["apparel"];
+  return productTypes.every((type) => !type || type === "unknown" || written.includes(type));
 }
 
 /**

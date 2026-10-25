@@ -1274,6 +1274,7 @@ export const ru: Messages = {
       recipeFilterAll: "Все рецепты",
       recipeFilters: "Фильтр рецептов",
       recipeFilterAny: "Любой",
+      recipeNoneFit: "Для товаров такого типа рецептов пока нет.",
       recipeFilterNone: "Нет рецептов по этим фильтрам.",
       recipeFilterClear: "Сбросить фильтры",
       recipeFacetCast: "Модель",

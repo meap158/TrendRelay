@@ -1273,6 +1273,7 @@ export const fr: Messages = {
       recipeFilterAll: "Toutes les recettes",
       recipeFilters: "Filtrer les recettes",
       recipeFilterAny: "Tous",
+      recipeNoneFit: "Aucune recette n'est encore prévue pour ce type de produit.",
       recipeFilterNone: "Aucune recette ne correspond à ces filtres.",
       recipeFilterClear: "Effacer les filtres",
       recipeFacetCast: "Mannequin",

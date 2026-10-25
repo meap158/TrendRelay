@@ -1265,6 +1265,7 @@ export const en = {
       recipeFilterAll: "All recipes",
       recipeFilters: "Filter recipes",
       recipeFilterAny: "Any",
+      recipeNoneFit: "No recipe is written for this kind of product yet.",
       recipeFilterNone: "No recipe matches these filters.",
       recipeFilterClear: "Clear filters",
       recipeFacetCast: "Cast",

@@ -1261,6 +1261,7 @@ export const ja: Messages = {
       recipeFilterAll: "すべてのレシピ",
       recipeFilters: "レシピを絞り込む",
       recipeFilterAny: "すべて",
+      recipeNoneFit: "この種類の商品向けのレシピはまだありません。",
       recipeFilterNone: "条件に合うレシピはありません。",
       recipeFilterClear: "絞り込みを解除",
       recipeFacetCast: "モデル",

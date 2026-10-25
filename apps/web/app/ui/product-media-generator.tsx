@@ -286,6 +286,8 @@ export function ProductMediaGenerator({
   products: {
     id: string;
     name: string;
+    /** What kind of product it is (`product_type` on the product read), for the recipe picker. */
+    product_type?: string;
     /** What each product already has, so a duplicate can be named before it is queued. */
     creative_drafts?: ExistingDraft[] | null;
   }[];
@@ -378,6 +380,7 @@ export function ProductMediaGenerator({
   const backgroundReady = !backgroundOn || backgroundValid;
   const locked = draft !== null || reviewing;
   const many = products.length > 1;
+  const productTypes = useMemo(() => products.map((item) => item.product_type ?? ""), [products]);
   const mined = useMemo(
     () => library.find((item) => item.id === recipe && !item.builtin) ?? null,
     [library, recipe],
@@ -1693,6 +1696,7 @@ export function ProductMediaGenerator({
             kind={kind}
             value={recipe}
             onChange={chooseRecipe}
+            productTypes={productTypes}
             locked={locked}
             recipes={library}
             fallback={RECIPES_BY_KIND[kind]}

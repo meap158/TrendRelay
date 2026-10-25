@@ -7,6 +7,7 @@ import {
   humanizeRecipeId,
   libraryRecipeLabel,
   localized,
+  recipeFits,
   recipeMakes,
   rememberLibrary,
   searchRecipes,
@@ -88,4 +89,14 @@ test("labels fall back to English, and a stored id still reads as words", () => 
   assert.equal(libraryRecipeLabel("cafe"), "vi cafe");
   assert.equal(libraryRecipeLabel("missing"), null);
   assert.equal(humanizeRecipeId("sunlit_window_lookbook"), "Sunlit window lookbook");
+});
+
+test("a recipe is offered only for the product types it is written for", () => {
+  assert.equal(recipeFits(undefined, ["apparel", "apparel"]), true);
+  assert.equal(recipeFits(undefined, ["beauty"]), false);
+  assert.equal(recipeFits(["beauty", "goods"], ["beauty", "goods"]), true);
+  assert.equal(recipeFits(["beauty", "goods"], ["beauty", "food"]), false);
+  // Unknown, or a product row read before the type existed, rules nothing out.
+  assert.equal(recipeFits(["beauty"], ["unknown", ""]), true);
+  assert.equal(recipeFits(["goods"], ["service"]), false);
 });

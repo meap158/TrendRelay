@@ -1263,6 +1263,7 @@ export const ar: Messages = {
       recipeFilterAll: "كل الوصفات",
       recipeFilters: "تصفية الوصفات",
       recipeFilterAny: "الكل",
+      recipeNoneFit: "لا توجد وصفة لهذا النوع من المنتجات بعد.",
       recipeFilterNone: "لا توجد وصفة تطابق هذه المرشحات.",
       recipeFilterClear: "مسح المرشحات",
       recipeFacetCast: "العارضة",
