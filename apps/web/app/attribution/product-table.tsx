@@ -37,6 +37,7 @@ import {
   type CreativeFilter,
 } from "./creative-filter";
 import { PendingDrafts } from "./pending-drafts";
+import { draftFiltersActive, readDraftFilters } from "../../lib/draft-filters";
 import { groupShownDrafts } from "./draft-groups";
 import {
   creativeKind,
@@ -223,8 +224,16 @@ export function ProductTable({
   const [filterSubId, setFilterSubId] = useState("");
   /** Whether a product's listing has been read: this table's own kind axis. */
   const [listingFilter, setListingFilter] = useState<"all" | "with" | "without">("all");
-  /** Pending creative drafts, or creatives already in the Library. */
-  const [creativeFilter, setCreativeFilter] = useState<CreativeFilter>("all");
+  /**
+   * Pending creative drafts, or creatives already in the Library. An address that carries Drafts
+   * panel filters (?character=&product=...) opens the Pending view, so a shared link shows the
+   * view it was made from. Read once; this table only renders after its data has loaded.
+   */
+  const [creativeFilter, setCreativeFilter] = useState<CreativeFilter>(() =>
+    typeof window !== "undefined" && draftFiltersActive(readDraftFilters(window.location.search))
+      ? "pending"
+      : "all",
+  );
   /**
    * The products a notification arrived on, while that arrival still stands.
    *

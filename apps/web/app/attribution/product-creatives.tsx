@@ -40,6 +40,9 @@ export type CreativeDraftRow = {
   product_count?: number;
   /** A group shot's number, oldest first, the same on every view. */
   group_number?: number | null;
+  /** The character it features, for the Drafts panel's filter (PM-266). */
+  character_id?: string | null;
+  character_name?: string | null;
 };
 
 export type CreativeAssetRow = { asset_id: string; draft_id: string | null; position: number; media_kind?: string };

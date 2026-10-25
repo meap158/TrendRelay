@@ -1,0 +1,75 @@
+/* The Drafts panel's filter strip (PM-266): one wrapping row, no full-width chrome of its own. */
+.draft-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+  margin: 0 0 14px;
+}
+.draft-filter-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  gap: 8px;
+  min-inline-size: 0;
+  max-inline-size: 360px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--muted);
+}
+.draft-filter-search input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+.draft-filter-search:focus-within {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+.draft-filter {
+  display: grid;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.draft-filter > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.draft-filter .ui-select {
+  inline-size: 148px;
+}
+.draft-filter-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  padding-block: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  /* Two controls to a row on a phone; the search takes the whole first row. */
+  .draft-filter-search {
+    flex-basis: 100%;
+    max-inline-size: none;
+  }
+  .draft-filter {
+    flex: 1 1 calc(50% - 6px);
+  }
+  .draft-filter .ui-select {
+    inline-size: 100%;
+  }
+  .draft-filter-result {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+    justify-content: space-between;
+  }
+}

@@ -1,9 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
 import { DraftThumbnail } from "../ui/draft-thumbnail";
 import { useT } from "../i18n-provider";
 import { Button } from "../ui/button";
 import { pendingDrafts } from "./creative-filter";
+import { DraftFilterStrip, useDraftFilters } from "./draft-filter-strip";
+import { filterDrafts } from "../../lib/draft-filters";
 import {
   creativeKind,
   creativeRecipe,
@@ -49,7 +52,16 @@ export function PendingDrafts<P extends DraftProduct>({
   onDiscarded?: () => void;
 }) {
   const t = useT();
-  const drafts = pendingDrafts(products);
+  const [filters, setFilters] = useDraftFilters();
+  const drafts = useMemo(() => pendingDrafts(products), [products]);
+  const labels = useMemo(
+    () => ({
+      recipe: (id: string) => creativeRecipe(t, id),
+      kind: (value: string) => creativeKind(t, value),
+    }),
+    [t],
+  );
+  const matching = useMemo(() => filterDrafts(drafts, filters, labels), [drafts, filters, labels]);
   if (drafts.length === 0) {
     return (
       <section className="pending-drafts" aria-label={t("attribution.pendingDrafts.title", { count: 0 })}>
@@ -63,8 +75,21 @@ export function PendingDrafts<P extends DraftProduct>({
         <h3 id="pending-drafts-title">{t("attribution.pendingDrafts.title", { count: drafts.length })}</h3>
         <p>{t("attribution.pendingDrafts.help")}</p>
       </header>
+      <DraftFilterStrip
+        entries={drafts}
+        filters={filters}
+        labels={labels}
+        shown={matching.length}
+        onChange={setFilters}
+      />
+      {matching.length === 0 && (
+        <div className="pending-drafts-no-results">
+          <strong>{t("attribution.pendingDrafts.filters.emptyTitle")}</strong>
+          <p>{t("attribution.pendingDrafts.filters.emptyHint")}</p>
+        </div>
+      )}
       <ul>
-        {drafts.map(({ draft, products: featured }) => {
+        {matching.map(({ draft, products: featured }) => {
           const together = (draft.product_count ?? featured.length) > 1;
           const focused = activeGroup === draft.id;
           return (
