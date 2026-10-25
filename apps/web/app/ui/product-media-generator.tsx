@@ -310,6 +310,10 @@ export function ProductMediaGenerator({
   const examples = useRecipeExamples(workspaceId, apiFetch, open);
   const [kind, setKind] = useState<Kind>("image");
   const [recipe, setRecipe] = useState<Recipe>("bed_flat_lay");
+  // No recipe is written for these products in this kind. The picker says so;
+  // asking for a prompt anyway previews the fallback recipe and answers with
+  // the server's refusal, shown as an error under the picker's own message.
+  const [noRecipeFits, setNoRecipeFits] = useState(false);
   const savedKind = useSyncExternalStore(
     subscribeKindPreference,
     () => preferredKind(workspaceId),
@@ -600,6 +604,10 @@ export function ProductMediaGenerator({
 
   useEffect(() => {
     // Not ready is part of the shape, so the prompt was already cleared.
+    if (noRecipeFits) {
+      setError("");
+      return;
+    }
     if (!open || reviewing || products.length === 0 || !workspaceId || draft || !backgroundReady || !characterReady || tooManyTogether) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -653,7 +661,7 @@ export function ProductMediaGenerator({
   }, [
     open, reviewing, leadId, products, workspaceId, draft, kind, recipe, variant,
     backgroundEnabled, backgroundReference, cardCount, backgroundReady, fieldsKey,
-    together, characterSent, characterReady, tooManyTogether, apiFetch, t,
+    together, characterSent, characterReady, tooManyTogether, noRecipeFits, apiFetch, t,
   ]);
 
   function chooseKind(next: Kind) {
@@ -1696,6 +1704,7 @@ export function ProductMediaGenerator({
             kind={kind}
             value={recipe}
             onChange={chooseRecipe}
+            onNoneFit={setNoRecipeFits}
             productTypes={productTypes}
             locked={locked}
             recipes={library}

@@ -63,6 +63,7 @@ export function RecipePicker({
   productTypes = [],
   workspaceId,
   apiFetch,
+  onNoneFit,
 }: {
   kind: string;
   value: string;
@@ -80,6 +81,8 @@ export function RecipePicker({
   productTypes?: readonly string[];
   workspaceId: string | null;
   apiFetch: Fetcher;
+  /** Told when no recipe is written for these products, so the caller stops asking for a prompt. */
+  onNoneFit?: (noneFit: boolean) => void;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -121,6 +124,9 @@ export function RecipePicker({
   useEffect(() => {
     if (!locked && loaded && firstShown && !valueShown) onChange(firstShown);
   }, [locked, loaded, firstShown, valueShown, onChange]);
+  useEffect(() => {
+    onNoneFit?.(noneFit);
+  }, [noneFit, onNoneFit]);
   const active = Object.values(choice).filter(Boolean).length;
 
   function narrow(nextQuery: string, nextChoice: FacetSelection) {
