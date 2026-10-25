@@ -90,8 +90,8 @@ def test_every_wording_keeps_the_product_and_the_rules(recipe: str) -> None:
 
 
 def test_a_recipe_for_other_products_never_reads_as_clothing() -> None:
-    """A type a recipe does not fit - unknown, or a mixed group - still reads
-    as a plain product, never as a garment to wear."""
+    """A type a recipe does not fit - unknown, or a mixed group - reads as one
+    the recipe was written for, never as a garment to wear."""
     others = [r for r in MINED if "apparel" not in RECIPES[r]["fits"]]
     assert others
     for recipe in others:
@@ -101,7 +101,10 @@ def test_a_recipe_for_other_products_never_reads_as_clothing() -> None:
                 product_type=product_type,
             )
             assert "clothing from the attached product image" not in prompt
-            assert KEEP_PRODUCT in prompt
+            assert KEEP not in prompt and COVERED not in prompt
+            fits = RECIPES[recipe]["fits"]
+            fallback = "goods" if "goods" in fits else fits[0]
+            assert PROMISES[fallback][0] in prompt
 
 
 def test_the_card_count_and_product_ceiling_follow_the_entry() -> None:

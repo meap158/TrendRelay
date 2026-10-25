@@ -281,13 +281,15 @@ def resolve(
 
     `product_type` picks the promises among the types the entry fits. A type
     it does not fit - `unknown`, or a group of several types - reads as
-    clothing on a clothing recipe and as a plain product on any other."""
+    clothing on a clothing recipe, as a plain product on one that fits goods,
+    and otherwise as the first type the entry fits."""
     entry = library()[recipe]
     kind = entry["kinds"][0]
     person = entry["cast"] == "person"
     fits = tuple(entry.get("fits") or ("apparel",))
     type_ = (product_type if product_type in fits
-             else "apparel" if "apparel" in fits else "goods")
+             else "apparel" if "apparel" in fits
+             else "goods" if "goods" in fits else fits[0])
     worn = type_ == "apparel"
     beats = entry["beats"]
     parts: list[str] = []
