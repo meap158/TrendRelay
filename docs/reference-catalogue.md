@@ -65,15 +65,13 @@ local viewing; they are never stored in the catalogue entry. For videos the expo
 Convert an export into skeletons (facts filled, annotations empty; image URLs are not copied):
 `python scripts/catalogue_from_socialminer.py export.json --source hemell_official --out catalogue-hemell.json`
 
-## From catalogue to original assets
-1. Aggregate: which `structure`, `framing` and `productsPerFrame` patterns recur in the higher-engagement posts. Engagement is
-   not controlled for follower count, so use it only to rank posts within the same page.
-2. Original characters: three, each with our own look sheet (face, hair, body type, signature outfit, palette). Poses come from
-   a pose library written in words and drawn fresh.
-3. Templates: a single-product template (cover, detail, colour ways, call to action) and two "together" templates for 2-4 of our
-   products. Each template is a data entry in FrameMotion's carousel style registry (`src/lib/carousel-styles.ts`, PM-208) plus
-   a slot layout.
-4. Acceptance (PM-233): catalogue for 3 pages with 20+ posts each, 3 original characters, 3 templates.
+## From references to recipes
+`SOP/attribution/mine-reference-recipes.md` is the one procedure for turning reference media into recipes, whether a whole
+export is mined or the operator shares single posts. Its annotation format (`scripts/reference_annotation_vocab.json`) is the
+one recipe work uses; the per-post entry above predates it.
+
+PM-233 first planned three original characters and three FrameMotion carousel templates from this catalogue; the recipe
+library replaced the templates.
 
 ## Open items
 - Continue future extraction from the existing batch annotations, aggregates,
