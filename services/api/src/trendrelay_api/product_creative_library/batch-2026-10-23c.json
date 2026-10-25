@@ -1,0 +1,432 @@
+{
+  "batch": "2026-10-23c",
+  "about": "Third pass over the 2026-10-23 export, split finer: a recurring set, prop or garment-specific structure seen in at least three strong posts becomes its own recipe when it differs from every earlier one in format, set, pose family, framing or card structure. Videos only where carousels show the motion frame by frame. Evidence in References/brand-pages/2026-10-23/recipes-evidence.md.",
+  "recipes": [
+    {
+      "id": "autumn_leaf_coat_walk",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A tree-lined city avenue in autumn: golden and rust leaves on the trees and the pavement, a low stone wall, warm afternoon light.",
+      "camera": "Warm low sun, soft backlight in the hair, gentle film-like grade, a portrait lens.",
+      "beats": [
+        "full length, walking along the leafy pavement toward the camera, the coat moving slightly.",
+        "three-quarter, leaning one shoulder on a tree trunk, hands in the coat pockets.",
+        "half body, holding the coat collar closed with one hand, falling leaves blurred in front.",
+        "an extreme close-up of the coat's buttons, collar or texture with a fallen leaf resting on the shoulder; no face."
+      ],
+      "facets": {"pose": ["walking", "leaning", "holding_prop"], "framing": ["full_length", "half_body", "detail"], "setting": ["nature", "street_day"], "mood": ["seasonal", "elegant"], "layout": ["story_sequence", "detail_to_full"]},
+      "label": {"en": "Autumn leaf coat walk", "vi": "Áo khoác dạo phố mùa thu", "ja": "紅葉道のコート", "zh": "秋叶大衣漫步", "ru": "Пальто на осенней аллее", "fr": "Manteau sur l'allée d'automne", "ar": "معطف في ممشى الخريف"},
+      "help": {"en": "Outerwear on an autumn avenue: walking, leaning on a tree, collar held close, then a leaf-on-the-shoulder detail.", "vi": "Áo khoác trên đại lộ mùa thu: bước đi, tựa cây, giữ cổ áo, rồi cận chiếc lá trên vai.", "ja": "秋の並木道でアウター：歩き、木にもたれ、襟を押さえ、肩の落ち葉のアップ。", "zh": "秋日林荫道上的外套：漫步、倚树、拢领，最后是肩头落叶特写。", "ru": "Верхняя одежда на осенней аллее: шаг, у дерева, рука у воротника, лист на плече крупно.", "fr": "Un manteau sur une allée d'automne : marche, appui contre un arbre, col tenu, feuille sur l'épaule.", "ar": "ملابس خارجية في ممشى خريفي: مشي، اتكاء على شجرة، إمساك الياقة، ثم ورقة على الكتف."}
+    },
+    {
+      "id": "two_location_top_day",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "Two places on one easy day: a sunny cafe terrace with a marble table, then a pastel shopping street with shuttered windows.",
+      "camera": "Bright daylight, casual phone-camera look, natural colour.",
+      "beats": [
+        "half body, seated at the cafe terrace, one elbow on the table, the top fully visible.",
+        "an arm-length front-camera selfie at the cafe, an easy smile, the top visible to the waist.",
+        "full length on the pastel street, leaning on a shuttered window, one foot crossed.",
+        "half body on the street, mid-laugh, glancing away from the camera."
+      ],
+      "facets": {"pose": ["seated", "selfie", "leaning"], "framing": ["half_body", "full_length"], "setting": ["cafe", "street_day"], "mood": ["candid", "playful"], "layout": ["story_sequence"]},
+      "label": {"en": "One top, two places", "vi": "Một chiếc áo, hai nơi", "ja": "ひとつのトップス、二つの場所", "zh": "一件上衣两个场景", "ru": "Один топ, два места", "fr": "Un haut, deux lieux", "ar": "قطعة علوية في مكانين"},
+      "help": {"en": "The same top at a cafe terrace and on a pastel street: seated, a selfie, leaning, laughing.", "vi": "Cùng chiếc áo ở quán cà phê và trên phố pastel: ngồi, tự chụp, tựa tường, cười.", "ja": "同じトップスでカフェのテラスとパステルの通り：座り、自撮り、もたれ、笑顔。", "zh": "同一件上衣在咖啡露台和粉彩街道：坐、自拍、倚靠、大笑。", "ru": "Один топ на террасе кафе и на пастельной улице: сидя, селфи, у окна, со смехом.", "fr": "Le même haut en terrasse puis dans une rue pastel : assise, selfie, appuyée, en riant.", "ar": "القطعة نفسها في شرفة مقهى وفي شارع باستيل: جلوس، سيلفي، اتكاء، ضحك."}
+    },
+    {
+      "id": "bright_room_outfit_roundup",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A bright, pale living room with a large window, sheer curtains, a pale wood floor and a simple cream armchair.",
+      "camera": "Soft window light, identical framing and colour on every card so the looks compare at a swipe.",
+      "beats": [
+        "full length by the window, standing with weight on one leg.",
+        "full length, seated on the armchair arm, hands in the lap.",
+        "full length, a small turn caught in motion, the hem swinging.",
+        "full length, standing beside the curtain, one hand lightly holding it.",
+        "full length, seated on the floor by the window with legs to one side."
+      ],
+      "layout_note": "One look per card, the person the same size and height in every card so the cards read as one round-up.",
+      "facets": {"pose": ["standing", "seated", "motion"], "framing": ["full_length"], "setting": ["window_room"], "mood": ["soft_feminine", "clean_minimal"], "layout": ["multi_outfit"]},
+      "label": {"en": "Bright room outfit round-up", "vi": "Tổng hợp set đồ trong phòng sáng", "ja": "明るい部屋のコーデまとめ", "zh": "明亮房间穿搭合集", "ru": "Подборка образов в светлой комнате", "fr": "Tenues dans une pièce lumineuse", "ar": "تشكيلة إطلالات في غرفة مشرقة"},
+      "help": {"en": "One look per card in the same bright room and light, for several outfits at a swipe.", "vi": "Mỗi thẻ một set trong cùng căn phòng sáng, xem nhiều set chỉ với một lần vuốt.", "ja": "同じ明るい部屋と光で1枚1コーデ。スワイプで複数のコーデを見せる。", "zh": "同一明亮房间同一光线，每张一套，一划看多套。", "ru": "По образу на карточку в одной светлой комнате — несколько нарядов одним свайпом.", "fr": "Une tenue par carte, même pièce, même lumière : plusieurs looks d'un glissement.", "ar": "إطلالة لكل بطاقة في الغرفة المشرقة نفسها، لعدة إطلالات بتمريرة."}
+    },
+    {
+      "id": "flowering_garden_dress",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A flowering garden in late spring: white and pink blossoms, a gravel path, a wrought-iron bench and soft hedges.",
+      "camera": "Soft morning light, fresh green and blossom tones, a portrait lens with gentle background blur.",
+      "beats": [
+        "full length on the gravel path, holding the skirt out slightly with one hand.",
+        "full length, a gentle twirl caught mid-motion, the skirt flaring.",
+        "full length, seated on the iron bench, hands folded on the knee.",
+        "half body among the blossoms, one hand touching a branch near the face.",
+        "a close detail of the dress's neckline, sleeve or hem against the blossoms; no face."
+      ],
+      "facets": {"pose": ["standing", "motion", "seated", "hands_to_face"], "framing": ["full_length", "half_body", "detail"], "setting": ["nature"], "mood": ["romantic", "soft_feminine"], "layout": ["story_sequence", "detail_to_full"]},
+      "label": {"en": "Flowering garden dress", "vi": "Váy trong vườn hoa", "ja": "花咲く庭のドレス", "zh": "花园连衣裙", "ru": "Платье в цветущем саду", "fr": "Robe au jardin en fleurs", "ar": "فستان في حديقة مزهرة"},
+      "help": {"en": "A dress in a blossoming garden: holding the skirt, a twirl, the bench, a branch by the face, a detail.", "vi": "Váy trong vườn hoa nở: cầm váy, xoay, ngồi ghế, cành hoa bên má, cận chi tiết.", "ja": "花咲く庭でドレス：裾を持ち、ターン、ベンチ、顔のそばの枝、ディテール。", "zh": "花开的园中穿连衣裙：提裙、旋转、长椅、脸旁花枝、细节。", "ru": "Платье в цветущем саду: подол в руке, поворот, скамейка, ветка у лица, деталь.", "fr": "Une robe au jardin fleuri : jupe tenue, tour, banc, branche près du visage, détail.", "ar": "فستان في حديقة مزهرة: إمساك التنورة، دوران، المقعد، غصن قرب الوجه، تفصيل."}
+    },
+    {
+      "id": "hotel_interior_walkthrough",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A grand old hotel interior: a long corridor with arched doorways, a marble staircase with a brass handrail, a lounge with velvet seats and a tall mirror.",
+      "camera": "Warm interior light, rich but soft colour, a 35mm lens for space and a portrait lens for the closer cards.",
+      "beats": [
+        "full length, walking down the arched corridor toward the camera.",
+        "full length, standing on the marble staircase, one hand on the brass rail.",
+        "full length, back view on the staircase, looking over the shoulder.",
+        "three-quarter, leaning beside the tall mirror in the lounge, the reflection soft behind.",
+        "a close detail of the garment's fabric and trim against the velvet seat; no face."
+      ],
+      "facets": {"pose": ["walking", "standing", "over_shoulder", "leaning"], "framing": ["full_length", "half_body", "detail"], "setting": ["architecture", "corridor"], "mood": ["elegant", "cinematic"], "layout": ["story_sequence"]},
+      "label": {"en": "Hotel interior walkthrough", "vi": "Dạo quanh khách sạn cổ", "ja": "ホテル館内ウォーク", "zh": "酒店内景漫游", "ru": "Прогулка по отелю", "fr": "Promenade dans l'hôtel", "ar": "جولة داخل الفندق"},
+      "help": {"en": "One outfit through a grand hotel: corridor walk, staircase front and back, the mirror, a fabric detail.", "vi": "Một set đồ trong khách sạn cổ: hành lang, cầu thang trước và sau, gương, chi tiết vải.", "ja": "クラシックなホテルで1コーデ：廊下、階段の前後、鏡、生地のアップ。", "zh": "一套穿搭走过老派酒店：走廊、楼梯正背面、镜前、面料细节。", "ru": "Один образ в старом отеле: коридор, лестница спереди и сзади, зеркало, ткань.", "fr": "Une tenue dans un grand hôtel : couloir, escalier de face et de dos, miroir, détail.", "ar": "إطلالة داخل فندق فخم: الممر، الدرج من الأمام والخلف، المرآة، تفصيل القماش."}
+    },
+    {
+      "id": "colour_wall_pop",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A single painted wall in one bold, saturated colour that complements the garment, with a matching floor.",
+      "camera": "Bright, flat, even light; a graphic colour-block look.",
+      "beats": [
+        "full length, leaning back against the coloured wall, one knee bent.",
+        "full length, a playful step with one leg kicked, arms loose.",
+        "a close portrait framed from the shoulders up against the colour, the neckline sharp."
+      ],
+      "facets": {"pose": ["leaning", "motion", "standing"], "framing": ["full_length", "close_up"], "setting": ["studio"], "mood": ["playful", "clean_minimal"], "layout": ["story_sequence", "colour_story"]},
+      "label": {"en": "Colour wall pop", "vi": "Tường màu nổi bật", "ja": "カラーウォール", "zh": "撞色墙", "ru": "Яркая цветная стена", "fr": "Mur de couleur", "ar": "جدار بلون جريء"},
+      "help": {"en": "Three quick cards against one bold colour wall: a lean, a playful kick, a close finish.", "vi": "Ba ảnh nhanh trước bức tường màu đậm: tựa, đá chân tinh nghịch, cận kết.", "ja": "鮮やかな色の壁で3枚：もたれ、キック、アップで締め。", "zh": "一面亮色墙前三张：倚靠、俏皮踢腿、近景收尾。", "ru": "Три кадра у яркой стены: у стены, игривый мах ногой, крупный план.", "fr": "Trois cartes devant un mur coloré : appuyée, jambe levée, gros plan.", "ar": "ثلاث بطاقات أمام جدار بلون جريء: اتكاء، ركلة مرحة، لقطة قريبة."}
+    },
+    {
+      "id": "floor_curl_series",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A pale cream seamless studio floor with a soft shadow, nothing else in the set.",
+      "camera": "Soft top light, gentle shadows, a slightly high camera.",
+      "beats": [
+        "full length, curled sideways on the floor, knees drawn up, cheek resting on one hand.",
+        "full length, lying on one side propped on an elbow, legs softly bent.",
+        "half body, sitting hugging the knees, chin resting on them.",
+        "full length, seated with legs folded to the side, leaning back on both hands."
+      ],
+      "facets": {"pose": ["floor", "reclining", "hands_to_face"], "framing": ["full_length", "half_body"], "setting": ["studio"], "mood": ["soft_feminine", "cozy"], "layout": ["story_sequence"]},
+      "label": {"en": "Floor curl series", "vi": "Chuỗi dáng ngồi sàn", "ja": "床に丸まるポーズ連作", "zh": "席地蜷坐组图", "ru": "Позы на полу", "fr": "Série au sol", "ar": "سلسلة وضعيات على الأرض"},
+      "help": {"en": "Four soft floor poses on a plain studio floor: curled, lying on one side, hugging the knees, leaning back.", "vi": "Bốn dáng mềm trên sàn studio: cuộn người, nằm nghiêng, ôm gối, ngả ra sau.", "ja": "無地のスタジオの床で4ポーズ：丸まり、横向き、膝抱え、後ろに手をつく。", "zh": "素色影棚地面四个柔和姿势：蜷坐、侧躺、抱膝、后仰。", "ru": "Четыре мягкие позы на полу студии: свернувшись, на боку, обняв колени, откинувшись.", "fr": "Quatre poses douces au sol : recroquevillée, sur le côté, genoux serrés, en arrière.", "ar": "أربع وضعيات ناعمة على أرضية الاستوديو: متكورة، على الجانب، تحتضن الركبتين، مائلة للخلف."}
+    },
+    {
+      "id": "editorial_cover_then_poses",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A pale studio with a soft grey backdrop, one velvet stool and controlled fashion lighting.",
+      "camera": "Crisp fashion light with a soft key and gentle fill, magazine colour grade.",
+      "beats": [
+        "a cover-style portrait: half body, centred, looking straight into the camera, with a clear empty band across the top third left for a title to be added later; do not write anything in it.",
+        "full length, standing with one hand on the hip.",
+        "full length, seated on the velvet stool, legs crossed.",
+        "half body, a three-quarter turn with one hand lightly at the collar."
+      ],
+      "facets": {"pose": ["standing", "seated"], "framing": ["half_body", "full_length"], "setting": ["studio"], "mood": ["elegant", "clean_minimal"], "layout": ["single_hero", "story_sequence"]},
+      "label": {"en": "Editorial cover, then poses", "vi": "Ảnh bìa rồi các dáng", "ja": "表紙風カットからポーズへ", "zh": "杂志封面式开场", "ru": "Обложка, затем позы", "fr": "Couverture, puis poses", "ar": "غلاف مجلة ثم وضعيات"},
+      "help": {"en": "Opens on a cover-style portrait with room for a title, then three studio poses.", "vi": "Mở bằng ảnh kiểu bìa tạp chí có chỗ cho tiêu đề, rồi ba dáng studio.", "ja": "タイトル用の余白がある表紙風ポートレートから、スタジオの3ポーズへ。", "zh": "以留出标题位置的封面式人像开场，再接三个影棚姿势。", "ru": "Сначала портрет как обложка с местом под заголовок, затем три позы в студии.", "fr": "S'ouvre sur un portrait façon couverture avec place pour un titre, puis trois poses.", "ar": "تبدأ بصورة بأسلوب الغلاف مع مساحة لعنوان، ثم ثلاث وضعيات في الاستوديو."}
+    },
+    {
+      "id": "vintage_sideboard_scarf",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A vintage room corner: a carved cream sideboard with a lace runner, a porcelain vase of roses, a small oval mirror, and a lace scarf tied softly over the hair as styling.",
+      "camera": "Warm, soft window light, nostalgic grade, a portrait lens.",
+      "beats": [
+        "half body, seated on a chair beside the sideboard, one hand resting on the lace runner.",
+        "a close portrait framed from the shoulders up, adjusting the lace scarf with both hands.",
+        "half body, standing and leaning toward the oval mirror, the face partly reflected."
+      ],
+      "facets": {"pose": ["seated", "hands_to_face", "leaning"], "framing": ["half_body", "close_up"], "setting": ["living_room"], "mood": ["romantic", "elegant"], "layout": ["story_sequence"]},
+      "label": {"en": "Vintage sideboard and lace scarf", "vi": "Tủ cổ và khăn ren", "ja": "アンティーク棚とレーススカーフ", "zh": "复古边柜与蕾丝头巾", "ru": "Старинный буфет и кружевной платок", "fr": "Buffet ancien et foulard en dentelle", "ar": "خزانة عتيقة ووشاح من الدانتيل"},
+      "help": {"en": "A nostalgic corner with a carved sideboard, roses and a lace scarf over the hair, in three close cards.", "vi": "Góc hoài cổ với tủ chạm, hoa hồng và khăn ren trên tóc, ba ảnh cận.", "ja": "彫刻の棚、バラ、髪のレーススカーフ。ノスタルジックな3枚。", "zh": "雕花边柜、玫瑰与发间蕾丝头巾的怀旧角落，三张近景。", "ru": "Ностальгический уголок: резной буфет, розы, кружевной платок на волосах — три кадра.", "fr": "Un coin nostalgique, buffet sculpté, roses et foulard de dentelle, en trois cartes.", "ar": "ركن حنيني بخزانة منحوتة وورود ووشاح دانتيل على الشعر في ثلاث بطاقات قريبة."}
+    },
+    {
+      "id": "pink_tile_salon_chair",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A pink salon set: a wall of glossy pale-pink square tiles, a plush rose-pink velvet tub chair and a small brass side table.",
+      "camera": "Soft, even, rosy light; candy pastel grade; a portrait lens.",
+      "beats": [
+        "full length, seated sideways in the pink velvet chair, legs crossed.",
+        "full length, leaning one shoulder on the tiled wall beside the chair.",
+        "full length, standing behind the chair with both hands resting on its back.",
+        "half body, seated, leaning forward with chin propped on one hand."
+      ],
+      "facets": {"pose": ["seated", "leaning", "standing"], "framing": ["full_length", "half_body"], "setting": ["studio", "living_room"], "mood": ["playful", "soft_feminine"], "layout": ["story_sequence"]},
+      "label": {"en": "Pink tile salon chair", "vi": "Ghế nhung và tường gạch hồng", "ja": "ピンクタイルとベルベットチェア", "zh": "粉色瓷砖丝绒椅", "ru": "Розовая плитка и бархатное кресло", "fr": "Carrelage rose et fauteuil velours", "ar": "بلاط وردي وكرسي مخملي"},
+      "help": {"en": "A candy-pink salon of glossy tiles and a velvet tub chair: seated, leaning, behind the chair, close.", "vi": "Phòng màu hồng với gạch bóng và ghế nhung: ngồi, tựa tường, đứng sau ghế, cận.", "ja": "光沢タイルとベルベットチェアのピンクのサロン：座り、もたれ、椅子の後ろ、アップ。", "zh": "亮面粉砖与丝绒圆椅：坐、倚墙、站椅后、近景。", "ru": "Розовый салон с глянцевой плиткой и бархатным креслом: сидя, у стены, за креслом, крупно.", "fr": "Un salon rose, carrelage brillant et fauteuil velours : assise, appuyée, derrière, de près.", "ar": "صالون وردي ببلاط لامع وكرسي مخملي: جلوس، اتكاء، خلف الكرسي، لقطة قريبة."}
+    },
+    {
+      "id": "curtain_corner_quiet_poses",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A quiet studio corner hung with one tinted floor-length curtain in a soft colour that suits the garment, a pale floor.",
+      "camera": "One soft light and one camera position for every card; only the pose changes, slightly.",
+      "beats": [
+        "full length, standing straight, hands relaxed at the sides.",
+        "full length, a small weight shift with one hand at the waist.",
+        "full length, a side profile, one hand touching the curtain.",
+        "full length, back view looking over the shoulder.",
+        "half body, both hands lightly at the collar.",
+        "a close portrait framed from the shoulders up, a calm expression."
+      ],
+      "facets": {"pose": ["standing", "over_shoulder", "hands_to_face"], "framing": ["full_length", "half_body", "close_up"], "setting": ["studio", "window_room"], "mood": ["clean_minimal", "soft_feminine"], "layout": ["story_sequence"]},
+      "label": {"en": "Curtain corner, quiet poses", "vi": "Góc rèm, dáng nhẹ nhàng", "ja": "カーテンの角で静かなポーズ", "zh": "窗帘角落安静姿势", "ru": "Угол со шторой, спокойные позы", "fr": "Coin rideau, poses calmes", "ar": "ركن الستارة ووضعيات هادئة"},
+      "help": {"en": "Six near-identical frames in one tinted curtain corner, only the pose shifting, ending on a close portrait.", "vi": "Sáu khung gần giống nhau ở góc rèm màu, chỉ đổi dáng nhẹ, kết bằng ảnh cận.", "ja": "色付きカーテンの角で6枚、ポーズだけ少しずつ変え、アップで締める。", "zh": "同一彩色窗帘角落六张，只微调姿势，以近景收尾。", "ru": "Шесть почти одинаковых кадров у цветной шторы, меняется только поза, в конце крупно.", "fr": "Six cadres presque identiques devant un rideau teinté, seule la pose change, puis un portrait.", "ar": "ست لقطات متقاربة في ركن ستارة ملونة، تتغير الوضعية فقط، وتنتهي بلقطة قريبة."}
+    },
+    {
+      "id": "panelled_corner_sporty",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A white wood-panelled studio corner with a pale floor and one white cube box to sit or crouch beside.",
+      "camera": "Bright clean light, crisp casual-sport look, a slightly low camera.",
+      "beats": [
+        "full length, crouching in the corner with forearms on the knees, looking up at the camera.",
+        "full length, leaning one shoulder into the panelled corner, one hand in a pocket.",
+        "half body, pulling up a hood or adjusting the collar with both hands.",
+        "full length, seated on the cube box, one leg stretched out."
+      ],
+      "facets": {"pose": ["floor", "leaning", "hands_to_face", "seated"], "framing": ["full_length", "half_body"], "setting": ["studio"], "mood": ["playful", "candid"], "layout": ["story_sequence"]},
+      "label": {"en": "Panelled corner sporty set", "vi": "Đồ thể thao ở góc ốp gỗ", "ja": "白パネルの角でスポーティ", "zh": "白墙板角落运动套装", "ru": "Спортивный образ у панелей", "fr": "Ensemble sport dans l'angle", "ar": "طقم رياضي في ركن الألواح"},
+      "help": {"en": "Co-ords and zip tops in a white panelled corner: crouch, lean, hood up, seated on a box.", "vi": "Đồ bộ, áo khoác khóa kéo ở góc ốp gỗ trắng: ngồi xổm, tựa, kéo mũ, ngồi hộp.", "ja": "白パネルの角でセットアップ：しゃがみ、もたれ、フードを被り、箱に座る。", "zh": "白墙板角落穿套装与拉链上衣：蹲、倚、戴帽、坐方盒。", "ru": "Костюмы и толстовки в белом углу: присед, у стены, капюшон, на кубе.", "fr": "Ensembles et sweats zippés dans un angle lambrissé : accroupie, appuyée, capuche, assise.", "ar": "أطقم وسترات بسحاب في ركن ألواح أبيض: قرفصاء، اتكاء، رفع القلنسوة، جلوس على صندوق."}
+    },
+    {
+      "id": "studio_cafe_table_knit",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A minimal studio set built as a cafe corner: one small round bistro table, a bentwood chair, a cup and saucer, against a plain warm-white wall.",
+      "camera": "Soft daylight-balanced studio light, warm neutral grade.",
+      "beats": [
+        "full length, back view seated on the bentwood chair, turning to look over the shoulder.",
+        "full length, standing beside the table, one hand resting on it.",
+        "half body, seated at the table holding the cup with both hands."
+      ],
+      "facets": {"pose": ["over_shoulder", "standing", "seated"], "framing": ["full_length", "half_body"], "setting": ["studio", "cafe"], "mood": ["candid", "clean_minimal"], "layout": ["story_sequence"]},
+      "label": {"en": "Studio cafe table", "vi": "Bàn cà phê trong studio", "ja": "スタジオのカフェテーブル", "zh": "影棚咖啡桌", "ru": "Столик кафе в студии", "fr": "Table de café en studio", "ar": "طاولة مقهى في الاستوديو"},
+      "help": {"en": "Knitwear and casual looks at a bistro table built in the studio: look-back, standing, cup in hand.", "vi": "Đồ len, đồ thường ngày bên bàn cà phê dựng trong studio: ngoái lại, đứng, cầm cốc.", "ja": "スタジオのビストロテーブルでニット：振り返り、立ち、カップを持つ。", "zh": "影棚搭建的小圆桌前穿针织：回眸、站立、捧杯。", "ru": "Трикотаж за столиком в студии: взгляд через плечо, стоя, с чашкой.", "fr": "Maille à une table de bistrot en studio : regard en arrière, debout, tasse en main.", "ar": "ملابس محبوكة عند طاولة مقهى في الاستوديو: التفاتة، وقوف، فنجان في اليد."}
+    },
+    {
+      "id": "pastel_corner_back_detail",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A pale-blue studio corner with a matching floor, a low upholstered bench and a vase of white hydrangeas.",
+      "camera": "Soft, airy light, cool pastel grade, a portrait lens.",
+      "beats": [
+        "full length, reclining along the low bench, propped on one elbow.",
+        "full length, standing beside the hydrangeas, facing the camera.",
+        "full length, side profile, one hand at the waist.",
+        "a close detail of the back of the garment - its lacing, straps, bow or fastening - with the head turned away; no face."
+      ],
+      "facets": {"pose": ["reclining", "standing", "over_shoulder"], "framing": ["full_length", "detail"], "setting": ["studio"], "mood": ["soft_feminine", "romantic"], "layout": ["story_sequence", "detail_to_full"]},
+      "label": {"en": "Pastel corner, back detail", "vi": "Góc pastel, chi tiết lưng áo", "ja": "パステルの角と背中のディテール", "zh": "粉彩角落背部细节", "ru": "Пастельный угол и спинка", "fr": "Coin pastel, détail du dos", "ar": "ركن باستيل وتفصيل الظهر"},
+      "help": {"en": "A pale-blue corner with hydrangeas: reclining, front, profile, ending on the lacing or straps at the back.", "vi": "Góc xanh nhạt với cẩm tú cầu: nằm tựa, chính diện, nghiêng, kết bằng dây buộc sau lưng.", "ja": "紫陽花のある淡いブルーの角：寝そべり、正面、横顔、最後は背中の編み上げ。", "zh": "绣球花淡蓝角落：斜躺、正面、侧面，以背部系带收尾。", "ru": "Голубой угол с гортензиями: полулёжа, анфас, профиль, в конце шнуровка на спине.", "fr": "Un coin bleu pâle aux hortensias : allongée, de face, de profil, puis le laçage du dos.", "ar": "ركن أزرق فاتح بالكوبية: استلقاء، أمامي، جانبي، وينتهي بأربطة الظهر."}
+    },
+    {
+      "id": "collection_card_then_looks",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "Card 1 on a warm off-white catalogue background; the other cards in a soft cream studio with a single linen-covered stool.",
+      "camera": "Even catalogue light for card 1; soft studio light with the same warm grade for the rest.",
+      "beats": [
+        "a collection card with no person: every attached garment laid side by side at the same size in the order given, with an empty band across the top for a title added later; do not write anything in it.",
+        "full length, wearing the first product, standing beside the stool.",
+        "full length, wearing the second product, seated on the stool.",
+        "full length, wearing the third product, standing in a three-quarter turn.",
+        "full length, wearing the fourth product, standing with hands at the waist."
+      ],
+      "layout_note": "When fewer products are attached than cards, show the attached ones in order and use the remaining cards for new poses of the same products. Each card is its own picture, never a collage.",
+      "facets": {"pose": ["standing", "seated"], "framing": ["flat_lay", "full_length"], "setting": ["studio"], "mood": ["clean_minimal", "elegant"], "layout": ["multi_outfit", "colour_story"]},
+      "label": {"en": "Collection card, then each look", "vi": "Thẻ bộ sưu tập rồi từng set", "ja": "コレクション画像から各コーデへ", "zh": "系列卡片再逐套展示", "ru": "Карточка коллекции, затем образы", "fr": "Carte collection, puis chaque look", "ar": "بطاقة التشكيلة ثم كل إطلالة"},
+      "help": {"en": "Opens on all products side by side on one card, then gives each product its own worn card.", "vi": "Mở bằng tất cả sản phẩm trên một thẻ, rồi mỗi sản phẩm một thẻ mặc lên người.", "ja": "全商品を並べた1枚から始め、各商品を1枚ずつ着用で見せる。", "zh": "先在一张卡上并排展示全部商品，再逐件上身展示。", "ru": "Сначала все товары на одной карточке, затем каждый на модели отдельно.", "fr": "S'ouvre sur tous les produits côte à côte, puis chacun porté sur sa carte.", "ar": "تبدأ بكل المنتجات على بطاقة واحدة، ثم بطاقة لكل منتج مرتدى."}
+    },
+    {
+      "id": "sheer_drape_floor_props",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A studio floor draped with layers of sheer ivory fabric, with a few small props: a stack of old books, a retro telephone and a small quilted handbag.",
+      "camera": "Soft diffused light through the sheer fabric, dreamy pale grade, a slightly high camera.",
+      "beats": [
+        "full length, kneeling on the draped floor, both hands resting on the stack of books.",
+        "full length, seated with legs to one side, holding the retro telephone receiver.",
+        "full length, reclining across the sheer fabric, the small handbag beside one hand.",
+        "a close detail of the garment's hem and fabric lying over the sheer drape; no face."
+      ],
+      "facets": {"pose": ["floor", "holding_prop", "reclining"], "framing": ["full_length", "detail"], "setting": ["studio"], "mood": ["romantic", "soft_feminine"], "layout": ["story_sequence", "detail_to_full"]},
+      "label": {"en": "Sheer drape floor and props", "vi": "Sàn voan và đạo cụ", "ja": "シアー布の床と小物", "zh": "纱布地面与道具", "ru": "Пол в прозрачной ткани и реквизит", "fr": "Sol drapé de voile et accessoires", "ar": "أرضية مكسوة بالشيفون وأغراض صغيرة"},
+      "help": {"en": "Floor poses on layers of sheer fabric with books, a retro phone and a little bag, then a hem detail.", "vi": "Dáng ngồi sàn trên lớp voan với sách, điện thoại cổ, túi nhỏ, rồi cận gấu váy.", "ja": "シアー布の床で本、レトロ電話、小さなバッグと。最後は裾のアップ。", "zh": "铺满纱布的地面上，配书、复古电话、小包，最后是下摆细节。", "ru": "Позы на полу в прозрачной ткани с книгами, ретро-телефоном и сумочкой, затем подол.", "fr": "Poses au sol sur des voiles avec livres, téléphone rétro et petit sac, puis l'ourlet.", "ar": "وضعيات على أرضية من الشيفون مع كتب وهاتف قديم وحقيبة صغيرة، ثم تفصيل الحافة."}
+    },
+    {
+      "id": "two_look_alternating",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A soft beige studio with a single arched mirror leaning on the wall and a wooden stool.",
+      "camera": "Soft even light, one warm grade for every card.",
+      "beats": [
+        "full length, the first look, standing beside the arched mirror.",
+        "full length, the second look, seated on the stool.",
+        "half body, the first look, leaning on the mirror frame.",
+        "half body, the second look, hands loosely at the collar.",
+        "full length, the first look, a three-quarter turn.",
+        "full length, the second look, leaning back on the wall."
+      ],
+      "layout_note": "Two products alternate card by card; with one product attached, alternate two stylings of it instead. Each card is its own picture.",
+      "facets": {"pose": ["standing", "seated", "leaning"], "framing": ["full_length", "half_body"], "setting": ["studio"], "mood": ["clean_minimal", "candid"], "layout": ["multi_outfit", "story_sequence"]},
+      "label": {"en": "Two looks, alternating", "vi": "Hai set xen kẽ", "ja": "2コーデを交互に", "zh": "两套交替展示", "ru": "Два образа поочерёдно", "fr": "Deux looks en alternance", "ar": "إطلالتان بالتناوب"},
+      "help": {"en": "Two looks swapping card by card in one beige studio, so both read in a single swipe.", "vi": "Hai set đổi qua lại từng thẻ trong cùng studio màu be, xem cả hai trong một lần vuốt.", "ja": "ベージュのスタジオで2コーデを1枚ずつ交互に。ひとスワイプで両方見せる。", "zh": "米色影棚里两套逐张交替，一划看全两套。", "ru": "Два образа сменяют друг друга в бежевой студии — оба за один свайп.", "fr": "Deux looks qui alternent carte après carte dans un studio beige.", "ar": "إطلالتان تتبادلان بطاقة بعد أخرى في استوديو بيج."}
+    },
+    {
+      "id": "winter_knit_window",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A cosy room in winter: a frosted window with soft daylight, a chunky knit throw on a window seat, fairy lights out of focus and a steaming mug.",
+      "camera": "Soft cool window light balanced with warm fairy-light glow, cosy grade.",
+      "beats": [
+        "half body, seated in the window seat holding the steaming mug in both hands.",
+        "full length, standing by the frosted window, pulling the sleeves over the hands.",
+        "half body, both hands at the cheeks in the knit sleeves, eyes toward the window.",
+        "a close detail of the knit texture and sleeve cuff against the chunky throw; no face."
+      ],
+      "facets": {"pose": ["holding_prop", "standing", "hands_to_face"], "framing": ["half_body", "full_length", "detail"], "setting": ["window_room", "living_room"], "mood": ["cozy", "seasonal"], "layout": ["story_sequence", "detail_to_full"]},
+      "label": {"en": "Winter knit by the window", "vi": "Áo len mùa đông bên cửa sổ", "ja": "冬の窓辺のニット", "zh": "冬日窗边针织", "ru": "Зимний трикотаж у окна", "fr": "Maille d'hiver à la fenêtre", "ar": "ملابس محبوكة شتوية عند النافذة"},
+      "help": {"en": "Cosy knitwear at a frosted window: mug in hand, sleeves pulled down, hands at the cheeks, a knit detail.", "vi": "Áo len ấm bên cửa sổ đóng băng: cầm cốc, kéo tay áo, tay áp má, cận sợi len.", "ja": "霜の窓辺でニット：マグを持ち、袖を引き、頬に手、編み目のアップ。", "zh": "结霜窗边的针织：捧杯、拉袖、双手托腮、毛线细节。", "ru": "Уютный трикотаж у морозного окна: кружка, рукава на ладонях, руки у щёк, вязка крупно.", "fr": "Maille douillette à une fenêtre givrée : tasse, manches tirées, mains aux joues, détail.", "ar": "ملابس محبوكة دافئة عند نافذة مغطاة بالصقيع: كوب، أكمام مسحوبة، يدان على الوجنتين، تفصيل."}
+    },
+    {
+      "id": "collection_sheet_card",
+      "kinds": ["image"],
+      "cast": "none",
+      "together": "frame",
+      "scene": "A soft tinted catalogue page in a pale colour that suits the products, with a faint paper texture.",
+      "camera": "Even, shadowless light; straight top-down; crisp edges; accurate colour.",
+      "beats": [
+        "Every attached garment is laid flat in a tidy grid of equal cells, in the order given, each shaped neatly and the same size, with a small close-up crop of one garment's best detail - a trim, button or texture - placed in one cell of its own. With one product, show it whole in the centre and two detail crops beside it. Leave an empty band across the top for a title to be added later; do not write anything in it."
+      ],
+      "facets": {"framing": ["flat_lay", "detail"], "setting": ["studio"], "mood": ["clean_minimal"], "layout": ["multi_outfit", "colour_story"]},
+      "label": {"en": "Collection sheet with detail", "vi": "Bảng bộ sưu tập kèm chi tiết", "ja": "ディテール付きコレクション一覧", "zh": "带细节的系列平铺图", "ru": "Лист коллекции с деталью", "fr": "Planche collection avec détail", "ar": "لوحة تشكيلة مع تفصيل"},
+      "help": {"en": "All products flat in a neat grid on a tinted page, with one close detail cell; for the profile grid.", "vi": "Tất cả sản phẩm xếp phẳng thành lưới trên nền màu nhạt, kèm một ô chi tiết; hợp lưới trang cá nhân.", "ja": "淡い色の紙面に全商品を格子状に平置きし、ディテールの1枠を添える。", "zh": "所有商品整齐平铺成网格，配一格细节特写，适合主页网格。", "ru": "Все товары ровной сеткой на цветном листе плюс одна ячейка с деталью; для сетки профиля.", "fr": "Tous les produits à plat en grille sur une page teintée, avec une case détail.", "ar": "كل المنتجات مسطحة في شبكة مرتبة على صفحة ملونة مع خانة تفصيل واحدة."}
+    },
+    {
+      "id": "cake_stand_colourways",
+      "kinds": ["image"],
+      "cast": "none",
+      "together": "frame",
+      "scene": "A pale pink tea table with an ivory faux-fur cloth, a tiered white porcelain cake stand, a few macarons and a teacup.",
+      "camera": "Soft, airy daylight, sweet pastel grade, a three-quarter angle from slightly above.",
+      "beats": [
+        "The garment is folded neatly and set on a tier of the cake stand like a treat, its colour and trim clearly visible. With several products, each colourway is folded on its own tier or plate, in the order given, every one clearly its own garment and never merged."
+      ],
+      "facets": {"framing": ["close_up"], "setting": ["living_room"], "mood": ["playful", "soft_feminine"], "layout": ["single_hero", "colour_story"]},
+      "label": {"en": "Colourways on a cake stand", "vi": "Các màu trên kệ bánh", "ja": "ケーキスタンドのカラバリ", "zh": "蛋糕架上的配色", "ru": "Расцветки на подставке для торта", "fr": "Coloris sur un présentoir à gâteaux", "ar": "الألوان على حامل الكيك"},
+      "help": {"en": "Products folded on the tiers of a porcelain cake stand at a pastel tea table, like sweets.", "vi": "Sản phẩm gấp gọn trên các tầng kệ bánh sứ bên bàn trà pastel, như bánh ngọt.", "ja": "パステルのティーテーブルで、磁器のケーキスタンドに商品をお菓子のように。", "zh": "商品像甜点一样叠放在粉彩茶桌的瓷蛋糕架上。", "ru": "Товары сложены на ярусах фарфоровой подставки, как сладости.", "fr": "Produits pliés sur les étages d'un présentoir en porcelaine, comme des douceurs.", "ar": "منتجات مطوية على طبقات حامل كيك خزفي كالحلوى."}
+    },
+    {
+      "id": "prop_still_life_tile",
+      "kinds": ["image"],
+      "cast": "none",
+      "together": "frame",
+      "scene": "A soft ivory velvet surface with a small vintage still life: a glass cloche over a string of pearls, a porcelain teacup, a ribbon and a sprig of dried flowers.",
+      "camera": "Soft window light from one side, shallow depth of field, gentle pastel grade, a close camera.",
+      "beats": [
+        "The garment lies folded at one edge of the still life, its fabric and trim crisp and in focus, the props arranged around it and softly blurred, so the tile reads as a calm pause between full looks in the profile grid. With several products, they are folded in a small overlapping stack, each clearly its own garment."
+      ],
+      "facets": {"framing": ["close_up", "detail"], "setting": ["studio"], "mood": ["romantic", "elegant"], "layout": ["single_hero", "profile_mosaic"]},
+      "label": {"en": "Prop still life tile", "vi": "Ô tĩnh vật đạo cụ", "ja": "小物の静物タイル", "zh": "道具静物图", "ru": "Натюрморт с реквизитом", "fr": "Nature morte d'accessoires", "ar": "طبيعة صامتة بالأغراض"},
+      "help": {"en": "A vintage still life of pearls, a teacup and ribbon with the garment folded at its edge, to pace the profile grid.", "vi": "Tĩnh vật cổ điển với ngọc trai, tách trà, ruy băng và sản phẩm gấp bên cạnh, để xen trong lưới.", "ja": "真珠、ティーカップ、リボンの静物に畳んだ服を添えて。グリッドの間に。", "zh": "珍珠、茶杯与丝带的复古静物，边上叠放衣物，用于点缀主页网格。", "ru": "Винтажный натюрморт с жемчугом, чашкой и лентой, рядом сложенная вещь — для ритма сетки.", "fr": "Une nature morte vintage, perles, tasse et ruban, le vêtement plié au bord, pour rythmer la grille.", "ar": "طبيعة صامتة عتيقة بلآلئ وفنجان وشريط مع القطعة مطوية بجانبها لتنويع الشبكة."}
+    },
+    {
+      "id": "garden_twirl_video",
+      "kinds": ["video"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A flowering garden path in soft morning light, blossoms on both sides.",
+      "camera": "A steady camera at waist height, a gentle slow push-in, soft natural light, no cuts.",
+      "beats": [
+        "The person walks slowly along the path toward the camera, stops, holds the skirt lightly and does one easy twirl so the skirt flares, then settles facing the camera with a relaxed smile and smooths the skirt with one hand. When several products are attached, the clip cuts between short twirls in order, one product per twirl."
+      ],
+      "facets": {"pose": ["walking", "motion"], "framing": ["full_length"], "setting": ["nature"], "mood": ["romantic", "playful"], "layout": ["single_hero"]},
+      "label": {"en": "Garden twirl video", "vi": "Video xoay váy trong vườn", "ja": "庭でくるりと回る動画", "zh": "花园旋转视频", "ru": "Видео: поворот в саду", "fr": "Vidéo tour au jardin", "ar": "فيديو دوران في الحديقة"},
+      "help": {"en": "A walk down a blossoming path into one easy twirl that shows how the skirt moves.", "vi": "Bước trên lối đi hoa nở rồi xoay một vòng để thấy váy bay.", "ja": "花咲く小道を歩き、くるりと一回転してスカートの動きを見せる。", "zh": "沿花开小径走来，轻轻一转，展示裙摆的动感。", "ru": "Прогулка по цветущей дорожке и лёгкий поворот, чтобы показать движение юбки.", "fr": "Une marche sur un chemin fleuri jusqu'à un tour qui montre le mouvement de la jupe.", "ar": "مشي في ممر مزهر ثم دوران خفيف يُظهر حركة التنورة."}
+    },
+    {
+      "id": "door_coat_reveal_video",
+      "kinds": ["video"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A white townhouse entrance with arched glass doors and stone steps on an overcast day.",
+      "camera": "A steady camera, a slow arc from the side to the front, soft overcast light, no cuts until the end.",
+      "beats": [
+        "The person steps out through the glass doors onto the top step, buttons the coat or closes the collar with one hand, walks down two steps, pauses and glances back over the shoulder at the doors, then faces the camera. The clip ends on a brief close view of the coat's collar or buttons. When several products are attached, the clip cuts between short reveals in order, one product per reveal."
+      ],
+      "facets": {"pose": ["walking", "motion", "over_shoulder"], "framing": ["full_length", "detail"], "setting": ["architecture"], "mood": ["elegant", "seasonal"], "layout": ["single_hero", "detail_to_full"]},
+      "label": {"en": "Coat reveal at the door", "vi": "Video áo khoác trước cửa", "ja": "扉の前でコートを見せる動画", "zh": "门前大衣展示视频", "ru": "Видео: пальто у двери", "fr": "Vidéo manteau à la porte", "ar": "فيديو المعطف عند الباب"},
+      "help": {"en": "Stepping out through arched glass doors, closing the coat, a look back, then the collar up close.", "vi": "Bước ra từ cửa kính vòm, cài áo, ngoái lại, rồi cận cổ áo.", "ja": "アーチのガラス扉から出て、コートを留め、振り返り、襟のアップへ。", "zh": "从拱形玻璃门走出，扣好大衣，回眸，再特写领口。", "ru": "Выход из арочных дверей, пальто застёгнуто, взгляд назад, воротник крупно.", "fr": "Sortie par une porte vitrée cintrée, manteau fermé, regard en arrière, col en gros plan.", "ar": "الخروج من باب زجاجي مقوس، إغلاق المعطف، التفاتة، ثم الياقة عن قرب."}
+    },
+    {
+      "id": "bed_lounge_settle_video",
+      "kinds": ["video"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A bright bedroom in the morning: white linen bedding, soft pillows, sheer curtains glowing with daylight.",
+      "camera": "A steady camera at bed height, slow and smooth, soft morning light, no cuts.",
+      "beats": [
+        "The person sits on the edge of the bed, stretches the arms up as if waking, then turns and settles back against the pillows, drawing one knee up and resting a hand on it, finishing with a relaxed smile toward the window. When several products are attached, the clip cuts between short settles in order, one product per settle."
+      ],
+      "facets": {"pose": ["seated", "reclining", "motion"], "framing": ["full_length", "half_body"], "setting": ["bedroom"], "mood": ["cozy", "soft_feminine"], "layout": ["single_hero"]},
+      "label": {"en": "Morning bed lounge video", "vi": "Video thư giãn trên giường buổi sáng", "ja": "朝のベッドでくつろぐ動画", "zh": "清晨床上慵懒视频", "ru": "Видео: утро в постели", "fr": "Vidéo détente au lit", "ar": "فيديو استرخاء صباحي في السرير"},
+      "help": {"en": "Sleepwear in motion: a waking stretch on the edge of the bed, then settling back into the pillows.", "vi": "Đồ ngủ chuyển động: vươn vai bên mép giường rồi ngả vào gối.", "ja": "ルームウェアの動き：ベッドの端で伸びをして、枕にもたれる。", "zh": "睡衣动态：床边伸懒腰，再靠回枕头。", "ru": "Пижама в движении: потягивание на краю кровати, затем к подушкам.", "fr": "Pyjama en mouvement : étirement au bord du lit, puis retour contre les oreillers.", "ar": "ملابس النوم في حركة: تمدد على حافة السرير ثم الاستلقاء على الوسائد."}
+    },
+    {
+      "id": "fabric_touch_pullback_video",
+      "kinds": ["video"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A warm studio with a backdrop of pale oak slats, a linen pouf at one side and a soft glow from a paper floor lamp.",
+      "camera": "Opens as an extreme close-up, then a slow continuous pull-back to full length, soft warm light, no cuts.",
+      "beats": [
+        "The clip opens on fingertips brushing slowly across the garment's fabric, showing its texture and trim. The camera pulls back steadily to reveal the person standing in front of the wood slats, who shifts weight onto one leg and looks up at the camera with a soft smile. When several products are attached, the clip cuts between short pull-backs in order, one product each."
+      ],
+      "facets": {"pose": ["standing", "motion"], "framing": ["detail", "full_length"], "setting": ["studio"], "mood": ["cozy", "clean_minimal"], "layout": ["single_hero", "detail_to_full"]},
+      "label": {"en": "Fabric touch to pull-back", "vi": "Video chạm vải rồi lùi xa", "ja": "生地に触れてから引きの動画", "zh": "触摸面料再拉远视频", "ru": "Видео: ткань крупно и отъезд", "fr": "Vidéo du tissu au plan large", "ar": "فيديو لمس القماش ثم الابتعاد"},
+      "help": {"en": "Starts on fingertips across the fabric, then one slow pull-back to the full look against wood slats.", "vi": "Bắt đầu với đầu ngón tay trên vải, rồi lùi chậm ra toàn thân trước vách gỗ.", "ja": "生地をなぞる指先から始まり、木のスラット壁の前の全身へゆっくり引く。", "zh": "从指尖拂过面料开始，缓缓拉远到木条墙前的全身。", "ru": "Начинается с пальцев на ткани, затем плавный отъезд к образу у деревянных реек.", "fr": "Commence sur des doigts qui effleurent le tissu, puis un lent recul jusqu'à la silhouette.", "ar": "يبدأ بأطراف الأصابع على القماش، ثم ابتعاد بطيء حتى الإطلالة كاملة."}
+    },
+    {
+      "id": "corridor_walk_toward_video",
+      "kinds": ["video"],
+      "cast": "person",
+      "together": "card",
+      "scene": "A long, elegant hotel corridor with arched doorways, warm wall lamps and a patterned runner carpet.",
+      "camera": "A steady camera at chest height, slowly backing away as the person approaches, warm light, no cuts.",
+      "beats": [
+        "The person walks down the corridor toward the camera with an easy stride, passes under a wall lamp, slows, turns half away to glance back over the shoulder, then turns to face the camera and stops with one hand resting lightly at the waist. When several products are attached, the clip cuts between short walks in order, one product per walk."
+      ],
+      "facets": {"pose": ["walking", "over_shoulder"], "framing": ["full_length"], "setting": ["corridor"], "mood": ["elegant", "cinematic"], "layout": ["single_hero"]},
+      "label": {"en": "Corridor walk video", "vi": "Video đi dọc hành lang", "ja": "廊下を歩く動画", "zh": "走廊漫步视频", "ru": "Видео: прогулка по коридору", "fr": "Vidéo marche dans le couloir", "ar": "فيديو المشي في الممر"},
+      "help": {"en": "An easy walk down a lamp-lit hotel corridor toward the camera, a look back, then a still finish.", "vi": "Bước thong thả dọc hành lang khách sạn tiến về máy quay, ngoái lại, rồi dừng.", "ja": "ランプの灯るホテルの廊下をカメラへ歩き、振り返って止まる。", "zh": "沿灯光走廊从容走向镜头，回眸，再定格。", "ru": "Неспешная прогулка по коридору отеля к камере, взгляд назад, остановка.", "fr": "Une marche tranquille vers la caméra dans un couloir d'hôtel, un regard en arrière, puis l'arrêt.", "ar": "مشي هادئ في ممر فندق مضاء نحو الكاميرا، التفاتة، ثم توقف."}
+    }
+  ]
+}

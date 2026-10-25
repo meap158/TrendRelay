@@ -63,7 +63,17 @@ class ProductCreativeDraft(Base):
             "'pastel_seamless_pose_ladder','heart_balloon_gift_set',"
             "'ivy_garden_door_series','retro_prop_corner',"
             "'chair_display_colourway_run','profile_grid_split_scene',"
-            "'grid_detail_tile','pouf_stool_seamless_series')",
+            "'grid_detail_tile','pouf_stool_seamless_series',"
+            # Third, finer pass, batch 2026-10-23c (migration 20261025_0101).
+            "'autumn_leaf_coat_walk','two_location_top_day','bright_room_outfit_roundup',"
+            "'flowering_garden_dress','hotel_interior_walkthrough','colour_wall_pop',"
+            "'floor_curl_series','editorial_cover_then_poses','vintage_sideboard_scarf',"
+            "'pink_tile_salon_chair','curtain_corner_quiet_poses','panelled_corner_sporty',"
+            "'studio_cafe_table_knit','pastel_corner_back_detail','collection_card_then_looks',"
+            "'sheer_drape_floor_props','two_look_alternating','winter_knit_window',"
+            "'collection_sheet_card','cake_stand_colourways','prop_still_life_tile',"
+            "'garden_twirl_video','door_coat_reveal_video','bed_lounge_settle_video',"
+            "'fabric_touch_pullback_video','corridor_walk_toward_video')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(
