@@ -207,6 +207,30 @@ export function ProductTable({
   const [focusGroup, setFocusGroup] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // The toolbar's height, published on the card, so the table region below a
+  // pinned toolbar fits what is left of the viewport (attribution.css). It
+  // wraps to more or fewer rows with the language, the filters and the width.
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const hasProducts = products.length > 0;
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+    const publish = () => {
+      const card = toolbar.parentElement;
+      if (!card) return;
+      card.style.setProperty("--product-toolbar-height", `${Math.round(toolbar.getBoundingClientRect().height)}px`);
+      // On a phone the selection bar leaves for the bottom edge once rows are
+      // chosen; its height in place is what holds the slot open behind it.
+      const bulk = toolbar.querySelector<HTMLElement>(".product-bulk");
+      if (bulk && getComputedStyle(bulk).position !== "fixed") {
+        card.style.setProperty("--product-bulk-height", `${Math.round(bulk.getBoundingClientRect().height)}px`);
+      }
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [hasProducts]);
   const [sort, setSort] = useState<ProductSort>({ key: "product", direction: "asc" });
   /** Which campaign the tag controls are pointed at, for a batch. */
   const [tagCampaign, setTagCampaign] = useState("");
@@ -573,7 +597,7 @@ export function ProductTable({
       {/* Search and selection are one stable toolbar. Selecting a row changes
           state inside this slot instead of inserting another row and pushing
           the whole table down. */}
-      <div className="product-toolbar">
+      <div className="product-toolbar" ref={toolbarRef}>
         <div className="product-search-bar">
           <div className="product-search-input-wrap">
             <span className="product-search-icon"><ActionIcon name="search" size={14} /></span>

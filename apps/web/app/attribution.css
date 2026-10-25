@@ -270,6 +270,59 @@
    value never alters the wrapping of a neighbouring tier. */
 .product-toolbar { display: grid; gap: 8px; margin-block-end: 12px; }
 .product-toolbar + .product-table-scroll { margin-top: 0; }
+/* The search, filters and selection hold beneath the page heading while the
+   drafts or rows below them scroll, so a filter or a bulk action is never a
+   scroll back up. It hangs from the heading's measured bottom
+   (`StickyOffsets`), and spans the card's padding so rows passing beneath it
+   do not show at its sides. Only where the viewport is tall enough: on a short
+   screen this tier and the heading would leave the list a strip. */
+@media (min-width: 901px) and (min-height: 700px) {
+  .product-toolbar {
+    position: sticky;
+    top: var(--page-heading-offset, calc(var(--app-toolbar-offset, 52px) + 66px));
+    z-index: 70;
+    margin-inline: calc(-1 * var(--ui-card-padding, 14px));
+    margin-block-start: calc(-1 * var(--ui-card-padding, 14px));
+    padding: var(--ui-card-padding, 14px) var(--ui-card-padding, 14px) 10px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--panel);
+    box-shadow: 0 12px 18px -20px rgba(17, 24, 39, 0.75);
+  }
+  /* The rows scroll in their own region; sized to what the pinned heading and
+     toolbar leave, measured, so its column headers never slide beneath them. */
+  .attribution-page .product-card .product-table-scroll {
+    max-height: calc(100vh - var(--page-heading-offset, 118px) - var(--product-toolbar-height, 180px) - 28px);
+  }
+}
+/* A phone has no height to pin eight rows of filters in. The heading and the
+   filters scroll away, and what matters once rows are chosen - the count and
+   what to do with them - comes up as a bar along the bottom edge, in reach of
+   the thumb, until the selection is cleared. */
+@media (max-width: 900px) {
+  .attribution-page > .attribution-heading { position: static; top: auto; }
+  .product-bulk[data-active] {
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 85;
+    max-block-size: 45vh;
+    overflow-y: auto;
+    margin: 0;
+    border-block-start: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: var(--panel);
+    box-shadow: 0 -10px 24px -18px rgba(17, 24, 39, 0.6);
+  }
+  /* Its slot stays open at the height it had, so choosing a row does not pull
+     the list up under the finger that chose it. */
+  .product-toolbar:has(> .product-bulk[data-active])::after {
+    content: "";
+    block-size: var(--product-bulk-height, 36px);
+  }
+  /* Room for that bar, so the last rows can still be scrolled clear of it. */
+  .attribution-page:has(.product-bulk[data-active]) { padding-block-end: 200px; }
+}
 .product-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-block-size: 36px; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--panel-raised); font-size: 12px; }
 .product-bulk > .ui-button { flex: none; }
 .product-bulk-selection { display: inline-flex; flex: none; align-items: center; gap: 8px; }
