@@ -60,6 +60,15 @@ def test_cues_are_in_order_and_the_style_follows_the_look_and_position() -> None
     assert hook.style_for(draft(hook.HookLine("x y", 100, 2500))).alignment == "top"
 
 
+def test_every_look_stays_inside_the_tiktok_safe_area_and_mid_frame_clears_the_button_column() -> None:
+    for name, style in hook.PRESETS.items():
+        assert style.margin_v >= 240, name  # Top clearance of the in-feed template.
+        assert style.margin_h >= 120, name  # Side clearance.
+        assert style.alignment == "top", name
+    middle = hook.style_for(draft(hook.HookLine("x y", 100, 2500), anchor="middle"))
+    assert middle.margin_h >= hook.MIDDLE_MARGIN_H
+
+
 def test_a_draft_is_not_rendered_until_approved(tmp_path: Path) -> None:
     d = draft(hook.HookLine("Stop scrolling", 200, 2000))
     with pytest.raises(PermissionError):

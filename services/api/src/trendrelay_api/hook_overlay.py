@@ -15,8 +15,10 @@ one says so instead of silently rendering badly:
   screen at once, so it can be read at a glance with the sound off;
 * each line stays up long enough to read (`MIN_READ_MS` plus time per word), and
   lines never overlap, so two ideas are never competing;
-* large, high-contrast text (outline or box) kept off the platform UI: away from
-  the top bar and, more importantly, the right rail and caption area below.
+* large, high-contrast text (outline or box) kept off the platform UI, inside the
+  TikTok in-feed safe area of a 1080x1920 frame: 240 px clear at the top, 660 px at the
+  bottom, 120 px at each side, and clear of the button column on the right when mid-frame
+  (see docs/hook-overlays.md for the sources and where they disagree).
 
 Nothing is rendered from a draft until it is approved: `render` refuses a draft
 that is not.
@@ -53,19 +55,19 @@ PRESETS: dict[str, fmt.Style] = {
     "stroke": fmt.Style(
         name="HookStroke", size=84, bold=True, colour="#FFFFFF",
         outline_colour="#000000", outline=6.0, shadow=2.0, alignment="top",
-        margin_h=90, margin_v=300, uppercase=False,
+        margin_h=130, margin_v=300, uppercase=False,
     ),
     # Black text on an opaque white box: the classic "label" hook.
     "box": fmt.Style(
         name="HookBox", size=76, bold=True, colour="#111111",
         outline_colour="#FFFFFF", outline=18.0, border=fmt.BORDER_BOX,
-        alignment="top", margin_h=110, margin_v=320,
+        alignment="top", margin_h=130, margin_v=320,
     ),
     # Yellow, heavy outline: draws the eye on busy footage.
     "pop": fmt.Style(
         name="HookPop", size=88, bold=True, colour="#FFE600",
         outline_colour="#000000", outline=7.0, shadow=3.0, alignment="top",
-        margin_h=90, margin_v=300, uppercase=True,
+        margin_h=130, margin_v=300, uppercase=True,
     ),
 }
 DEFAULT_PRESET = "stroke"
@@ -154,9 +156,16 @@ def to_cues(draft: HookDraft) -> list[Cue]:
     ]
 
 
+#: The widest side margin used when a hook sits mid-frame: the platforms' button column (like, comment,
+#: share) runs down the right side from about 840 px of 1920, so centred text there keeps clear of it.
+MIDDLE_MARGIN_H = 300
+
+
 def style_for(draft: HookDraft) -> fmt.Style:
     base = PRESETS.get(draft.preset, PRESETS[DEFAULT_PRESET])
-    return replace(base, alignment=draft.anchor if draft.anchor in ANCHORS else base.alignment)
+    anchor = draft.anchor if draft.anchor in ANCHORS else base.alignment
+    margin_h = max(base.margin_h, MIDDLE_MARGIN_H) if anchor == "middle" else base.margin_h
+    return replace(base, alignment=anchor, margin_h=margin_h)
 
 
 def approve(draft: HookDraft) -> HookDraft:
