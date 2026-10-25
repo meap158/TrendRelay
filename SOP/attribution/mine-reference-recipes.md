@@ -3,7 +3,7 @@ id: attribution.mine-reference-recipes
 action: attribution.mine-reference-recipes
 title: Turn reference media into Attribution recipes
 summary: Make original Generate media recipes from reference posts - a whole SocialMiner export mined for recurring patterns, or single posts the operator shares - written as library entries with a migration, checks and a preview.
-version: 2
+version: 3
 tags: [attribution, recipes, references]
 aliases: [reference-to-recipe, media-to-recipe, create-recipe-from-reference]
 ---
@@ -94,8 +94,9 @@ value, add it to the vocabulary in its own commit first.
 
 - `slides`: one entry per slide, in order. `outfitCount`: distinct outfits.
   `togetherInFrame`: one picture shows two or more garments side by side.
-- `apparelUsable`: could this pattern sell a garment of ours? Food-only,
-  text-only, stage and group shots are false.
+- `apparelUsable`: could this pattern sell a product of ours - a garment, an
+  accessory, a beauty product, everyday goods or food? Text-only, stage and
+  group shots are false. Note the product kind in `recipeIdea`.
 - `reuse` 1-5: how well the pattern would carry our products with our
   character. 5 = a clear, repeatable recipe; 1 = nothing to take.
 - Free-text fields are in our own words: no names, handles, brands, logos or
@@ -175,6 +176,7 @@ once it loads.
 | `kinds` | exactly one of `image`, `carousel`, `video` |
 | `cast` | `person` (a model or the chosen Library character) or `none` |
 | `together` | with several products: `card` = one product per card or shot, `frame` = all in each picture |
+| `fits` | the product types it is written for: `["apparel"]`, or any of `accessory`, `beauty`, `goods`, `food` (never clothing and others together). Required on new entries; an entry without it is clothing |
 | `scene` | the set when no background image is attached, in one or two sentences |
 | `camera` | optional: lens, height, light, colour grade |
 | `beats` | carousel: 2-10 card descriptions, in order. Image or video: exactly one shot or motion description |
@@ -189,6 +191,10 @@ Writing the wording:
   sentence, the covered and silent lines, the no-text and no-other-people
   line, the cast or character, the expression line, the background switch and
   the group wording. Do not repeat them in an entry.
+- Write the scene and beats for the types in `fits`. A clothing recipe says
+  "the garment"; any other says "the product" (or "the accessory") and
+  describes how it is held, used, worn or set down, label to the camera. The
+  assembly picks the matching promises from the product's type.
 - No `she`, `her`, `he` or `his` anywhere in the file: a chosen character
   records no gender, so beats say "they" or name no one. Only the cast line
   describes the person.

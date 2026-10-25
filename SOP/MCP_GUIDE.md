@@ -255,6 +255,14 @@ carousel, and `mannequin_walkaround`, `flat_lay_reveal`, `held_up_garment`,
 `hanger_rail_reveal`, `hikaru_walk`, and `ceiling_fan_transition` are videos;
 each may take an optional background. No recipe requires a background.
 
+Each recipe is written for some product types (`fits` in
+`/attribution/creative-recipes`), and each product has a `product_type` in
+the products read: `apparel`, `accessory`, `beauty`, `goods`, `food`,
+`service`, or `unknown`. Every hand-written recipe fits `apparel` only.
+Preview and confirm refuse a recipe written for another type, and refuse a
+`service` product outright; choose a recipe whose `fits` holds the product's
+type. An `unknown` product can use any recipe.
+
 Any recipe can feature a ready Library character through `character_id`.
 `hikaru_lookbook` and `hikaru_walk` show Hikaru only when no character is
 chosen; with one, the character takes her place. `mirror_selfie` and

@@ -3,7 +3,7 @@ id: attribution.fill-product-creatives
 action: attribution.fill-product-creatives
 title: Fill pending Attribution product creatives
 summary: Work the pending product-creative queue one draft at a time. Read the stored prompt and the product's image references, generate that file outside TrendRelay, and submit it to the Library before the task is done. A carousel stays unlinked until every card has landed. Nothing is published.
-version: 6
+version: 7
 tags: [attribution, media, creatives, library]
 aliases: [fill-product-creatives, attribution.needs-creatives, generate-product-creative]
 ---
@@ -127,8 +127,10 @@ subject, and a product with no image cannot be queued. `listing_fields` is a
 snapshot from confirm. Use a key only when it is present: `title`, `price`,
 `description`, `gallery`, `variations`. An empty object means none of those
 were attached. Do not read the live listing to fill in a missing key. One
-draft is one garment: the product's own piece, not a collage of unrelated
-tops. A draft can instead feature up to eight products in one shot. Read
+draft is the product's own item - one garment, accessory, bottle or pack -
+not a collage of unrelated ones. A product that is not clothing keeps its
+label and printed text exactly as in its pictures: never retype, translate,
+or invent lettering on it, and add none beside it. A draft can instead feature up to eight products in one shot. Read
 `products`. Each product's `product_images` stay the subject, and
 `subject_assets` are extra when present. `product_images` is the set the
 operator kept. When that choice was left unset, it is the full listing
@@ -219,8 +221,8 @@ several. The command runs them one after another.
 python scripts/fill_creative_videos.py fill --product <product_id> --subject-asset <asset_id> --recipe <recipe>
 ```
 
-The subject is one clean Library photograph of the garment. Pass a photograph
-of the garment itself. A listing card that carries a text panel, a logo, or a
+The subject is one clean Library photograph of the product. Pass a photograph
+of the product itself. A listing card that carries a text panel, a logo, or a
 second inset photo is copied into the clip, lettering included.
 
 What the command does:

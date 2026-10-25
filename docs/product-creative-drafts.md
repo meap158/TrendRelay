@@ -42,6 +42,27 @@ product the blade does not cross until late in the clip, and the outfit
 does not change again.
 `docs/third-party/video-generation.md` has the run notes.
 
+## Product types
+
+A recipe promises different things for different products, so a product has
+a type and a recipe lists the types it fits (`product_types.py`). The type is
+read at request time from the category path the product's own listing
+carries: `apparel` for anything worn on the body, whatever aisle it sits in;
+`accessory` for anything else worn; `beauty` for what goes on skin, hair or
+teeth; `food`; `service` for vouchers; and `goods` for every other physical
+thing, children's items included, so no recipe casts a child. A listing with
+no category path is `unknown`.
+
+Every hand-written recipe and every mined recipe before batch 2026-10-26 fits
+`apparel` only, and its wording is unchanged: `test_recipe_prompts_unchanged`
+pins a hash of every wording. A library entry can fit other types instead
+(never clothing and other types at once). Its wording then keeps the
+product's shape, finish, packaging and label, never invents printed text,
+bans only added text, and dresses a person plainly in place of the
+opaque-garment line. Preview and confirm refuse a recipe written for another
+type and a `service` product; `unknown` passes. The picker offers only the
+recipes that fit every selected product.
+
 ## Shape
 
 - **`product_creative_recipes.py`** — the only prompt resolver. `bed_flat_lay`

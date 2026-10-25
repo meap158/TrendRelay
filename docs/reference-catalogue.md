@@ -12,8 +12,11 @@ produced 58 mined recipes; evidence and deferred patterns are recorded in
 `2026-10-25` adds two image recipes written from single reference posts the operator
 picked, each kept to its pattern in our own words.
 
-The current catalogue has 73 distinct recipes: 13 built-ins and 60 from
-references. The picker filters by type: 12 support Image, 50 Carousel, and 14 Video;
+Batch `2026-10-26` adds eight hand-written starter recipes for products that
+are not clothing; they are not mined.
+
+The current catalogue has 81 distinct recipes: 13 built-ins, 60 from
+references and 8 starters. The picker filters by type: 16 support Image, 52 Carousel, and 16 Video;
 some built-ins support several types, so those counts overlap. These are
 implemented reusable patterns, not an estimate of every pattern the export
 could support. Further extraction must establish recurrence and a distinct
