@@ -2715,6 +2715,9 @@ function LibraryContent() {
                   ? `${characterGroups.length} ${characterGroups.length === 1 ? "character" : "characters"} · ${total} ${total === 1 ? "image" : "images"}`
                   : `${total} ${total === 1 ? "item" : "items"}`}
             </strong>
+            {/* A thin animated bar under the count while the filters refresh; the count text already
+                says "Filtering…" for assistive tech, so the bar is decoration only. */}
+            {loadingAssets && <span className="library-loading-bar" aria-hidden="true" />}
             <div className="library-collection-actions">
               {charactersView && canImport && (
                 <Button

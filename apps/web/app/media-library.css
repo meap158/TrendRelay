@@ -290,6 +290,14 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-arrange-controls .ui-select { min-width: 0; }
 .library-collection-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
 .library-collection-toolbar > strong { color: var(--muted); font-size: 11px; font-weight: 600; }
+.library-collection-toolbar { position: relative; }
+/* Indeterminate progress under the toolbar while a filter change is loading (PM-180). It takes no
+   layout space, so nothing jumps when it appears. */
+.library-loading-bar { position: absolute; left: 0; right: 0; bottom: -4px; height: 2px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--link) 18%, transparent); pointer-events: none; }
+.library-loading-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; border-radius: 2px; background: var(--link); animation: library-loading-slide 1.1s ease-in-out infinite; }
+@keyframes library-loading-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+/* Slowed, not stopped, like the button spinner: a still bar reads as a hung request. */
+@media (prefers-reduced-motion: reduce) { .library-loading-bar::after { animation-duration: 3s; } }
 .library-collection-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
 .library-collection { width: 100%; min-width: 0; box-sizing: border-box; }
 /* The Drafts view: unfinished creation videos and Attribution generate-media
