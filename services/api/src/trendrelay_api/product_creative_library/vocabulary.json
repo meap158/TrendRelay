@@ -14,6 +14,13 @@
       "card": {"en": "One product per card", "vi": "Mỗi thẻ một sản phẩm", "ja": "1枚に1商品", "zh": "每张一件商品", "ru": "Один товар на кадр", "fr": "Un produit par carte", "ar": "منتج واحد لكل بطاقة"},
       "frame": {"en": "Products together", "vi": "Sản phẩm chung khung", "ja": "商品を一緒に", "zh": "商品同框", "ru": "Товары вместе", "fr": "Produits ensemble", "ar": "المنتجات معًا"}
     },
+    "product_type": {
+      "apparel": {"en": "Clothing", "vi": "Quần áo", "ja": "衣類", "zh": "服装", "ru": "Одежда", "fr": "Vêtements", "ar": "ملابس"},
+      "accessory": {"en": "Accessories", "vi": "Phụ kiện", "ja": "アクセサリー", "zh": "配饰", "ru": "Аксессуары", "fr": "Accessoires", "ar": "إكسسوارات"},
+      "beauty": {"en": "Beauty & care", "vi": "Làm đẹp & chăm sóc", "ja": "美容・ケア", "zh": "美妆个护", "ru": "Красота и уход", "fr": "Beauté et soin", "ar": "تجميل وعناية"},
+      "goods": {"en": "Everyday goods", "vi": "Đồ dùng", "ja": "日用品", "zh": "日用品", "ru": "Товары для дома и жизни", "fr": "Articles du quotidien", "ar": "سلع يومية"},
+      "food": {"en": "Food & drink", "vi": "Đồ ăn & uống", "ja": "食品・飲料", "zh": "食品饮料", "ru": "Еда и напитки", "fr": "Alimentation", "ar": "طعام ومشروبات"}
+    },
     "pose": {
       "standing": {"en": "Standing", "vi": "Đứng", "ja": "立ちポーズ", "zh": "站姿", "ru": "Стоя", "fr": "Debout", "ar": "وقوف"},
       "leaning": {"en": "Leaning", "vi": "Tựa tường", "ja": "もたれる", "zh": "倚靠", "ru": "Опираясь", "fr": "Appuyée", "ar": "اتكاء"},

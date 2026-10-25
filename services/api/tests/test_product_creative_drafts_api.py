@@ -638,6 +638,36 @@ def test_library_images_are_the_subject_and_stay_the_subject() -> None:
     assert again.json()["draft"]["listing_fields"] == {}
 
 
+def test_a_recipe_written_for_clothing_refuses_another_kind_of_product() -> None:
+    workspace_id = make_workspace()
+    lipstick = add_product(workspace_id, image=True, name="Lip tint")
+    voucher = add_product(workspace_id, image=True, name="Gym pass")
+    for product_id, path in (
+        (lipstick, ["Sắc Đẹp", "Trang điểm", "Trang điểm môi"]),
+        (voucher, ["Voucher & Dịch vụ", "Sức khỏe & Làm đẹp", "Gym & Yoga"]),
+    ):
+        with TestingSession.begin() as session:
+            product = session.get(Product, product_id)
+            assert product is not None
+            product.listing = {**(product.listing or {}), "categories": path}
+    url = f"/api/workspaces/{workspace_id}/attribution/creative-drafts/preview"
+    refused = request("POST", url, json=draft_body(lipstick))
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == (
+        "bed_flat_lay is written for clothing, and Lip tint is beauty and "
+        "personal care. Choose a recipe made for beauty and personal care."
+    )
+    service = request("POST", url, json=draft_body(voucher))
+    assert service.status_code == 422
+    assert "nothing to photograph" in service.json()["detail"]
+    # A listing that names no category is unknown, not wrong: it keeps
+    # every recipe it had.
+    unknown = add_product(workspace_id, image=True, name="Plain set")
+    shown = request("POST", url, json=draft_body(unknown))
+    assert shown.status_code == 200, shown.text
+    assert shown.json()["draft"]["products"][0]["product_type"] == "unknown"
+
+
 def test_selected_listing_fields_are_snapshotted_and_leave_the_prompt_alone() -> None:
     workspace_id = make_workspace()
     product_id = add_product(workspace_id, image=True, name="Gym gloves")

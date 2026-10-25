@@ -31,6 +31,7 @@ from trendrelay_api.product_creative_models import (
     ProductCreativeLink,
 )
 from trendrelay_api.product_creative_recipes import RECIPES, _SILENT, resolve_prompt
+from trendrelay_api.product_types import LABELS, UNKNOWN, product_type
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 DEFAULT_PAGE = 50
@@ -370,6 +371,30 @@ def _background(recipe: str, enabled: bool, reference: str | None) -> tuple[bool
     return False, None
 
 
+def _check_fit(
+    recipe: str, spec: dict[str, Any], products: list[Product], types: list[str]
+) -> None:
+    """Refuse a recipe written for a different kind of product.
+
+    A product whose listing names no category passes: its type is unknown,
+    not wrong, and every recipe it could use before still works for it."""
+    fits = spec.get("fits") or ("apparel",)
+    for product, kind in zip(products, types, strict=True):
+        if kind == UNKNOWN or kind in fits:
+            continue
+        name = product.name or product.id
+        if kind == "service":
+            raise ValueError(
+                f"{name} is a voucher or service, so there is nothing to "
+                "photograph and no recipe fits it."
+            )
+        written = " or ".join(LABELS[fit] for fit in fits)
+        raise ValueError(
+            f"{recipe} is written for {written}, and {name} is "
+            f"{LABELS[kind]}. Choose a recipe made for {LABELS[kind]}."
+        )
+
+
 def _card_count(kind: str, requested: int | None) -> int:
     if kind == "carousel":
         if requested is None:
@@ -426,6 +451,8 @@ def _prepare(
             f"{recipe} supports at most {spec['max_products']} products "
             "so every product fits the carousel."
         )
+    types = [product_type(product.listing) for product in products]
+    _check_fit(recipe, spec, products, types)
     cards = _card_count(kind, card_count)
     if spec.get("card_count") is not None and cards != spec["card_count"]:
         raise ValueError(f"{recipe} uses exactly {spec['card_count']} cards.")
@@ -475,6 +502,7 @@ def _prepare(
         variant=variant if spec["variants"] else None,
         together=group,
         character=character is not None,
+        product_type=types[0] if len(set(types)) == 1 else UNKNOWN,
     )
     if character is not None:
         # Appended, never woven in: the recipe's own wording stays byte for
@@ -510,6 +538,7 @@ def _prepare(
             {
                 "product_id": product.id,
                 "name": product.name,
+                "product_type": types[index],
                 "position": index,
                 "product_images": kept[index],
                 "listing_fields": snapshots[index],

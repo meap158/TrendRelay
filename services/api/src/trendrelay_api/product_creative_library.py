@@ -25,11 +25,13 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+from trendrelay_api.product_types import PRODUCT_TYPES
+
 LIBRARY_DIR = Path(__file__).with_name("product_creative_library")
 
 #: The facets the recipe picker filters by, in the order its chips show. The
 #: first three follow from the entry's own fields; an entry writes the rest.
-DERIVED_FACETS = ("format", "cast", "products")
+DERIVED_FACETS = ("format", "cast", "products", "product_type")
 FACETS = ("pose", "framing", "setting", "mood", "layout")
 LOCALES = ("en", "vi", "ja", "zh", "ru", "fr", "ar")
 KINDS = ("image", "carousel", "video")
@@ -55,6 +57,43 @@ SILENT = (
 CLEAN = (
     "There is no text, price, logo, watermark, or caption on screen, and no "
     "other people in the picture."
+)
+#: The same promises for a product that is not clothing (`product_types`),
+#: by type. Clothing keeps the wording above, unchanged.
+SHOWN = {
+    "accessory": ("They wear the exact accessory", "It shows the exact accessory"),
+    "beauty": ("They hold or use the exact product", "It shows the exact product"),
+    "goods": ("They hold or use the exact product", "It shows the exact product"),
+    "food": ("They hold or serve the exact food or drink", "It shows the exact food or drink"),
+}
+KEEP_ACCESSORY = (
+    "The accessory keeps its exact color, material, finish, shape, size, and "
+    "details from the attached product image."
+)
+KEEP_ACCESSORY_EACH = (
+    "Each accessory keeps its own color, material, finish, shape, size, and "
+    "details exactly as in its own product image."
+)
+KEEP_PRODUCT = (
+    "The product keeps its exact shape, size, color, finish, packaging, and "
+    "label artwork from the attached product image; text printed on it is "
+    "never invented, rewritten, or removed."
+)
+KEEP_PRODUCT_EACH = (
+    "Each product keeps its own shape, size, color, finish, packaging, and "
+    "label artwork exactly as in its own product image; text printed on it "
+    "is never invented, rewritten, or removed."
+)
+#: A product's own label is part of the product, so only added text is banned.
+CLEAN_LABELLED = (
+    "There is no added text, price, logo, watermark, or caption on screen "
+    "beyond what is printed on the product itself, and no other people in "
+    "the picture."
+)
+#: In place of `COVERED` when the person is not wearing the product.
+MODEST = (
+    "Their own clothing is plain, opaque, and modest, and does not draw the "
+    "eye from the product."
 )
 REAL = (
     "They look like a real person on camera, with natural skin texture, "
@@ -140,6 +179,16 @@ def _validate(entry: dict[str, Any], where: str) -> dict[str, Any]:
         missing = [code for code in LOCALES if not str(texts.get(code) or "").strip()]
         if missing:
             raise LibraryError(f"{where}: {field} lacks {', '.join(missing)}.")
+    fits = entry.get("fits", ["apparel"])
+    if (not isinstance(fits, list) or not fits
+            or any(kind not in PRODUCT_TYPES or kind == "service" for kind in fits)):
+        # A voucher has nothing to photograph, so no recipe fits it.
+        raise LibraryError(f"{where}: fits lists product types from "
+                           f"{[k for k in PRODUCT_TYPES if k != 'service']}.")
+    if "apparel" in fits and len(fits) > 1:
+        # Clothing is worn and promised opaque; a wording that also suits a
+        # bottle would have to drop that promise or make it about a bottle.
+        raise LibraryError(f"{where}: a recipe fits clothing alone or other types alone.")
     facets = _require(entry, "facets", dict, where)
     unknown = [name for name in facets if name not in FACETS]
     if unknown:
@@ -202,6 +251,9 @@ def spec(entry: dict[str, Any]) -> dict[str, Any]:
         # "none" has no person to cast, so a chosen character is refused
         # rather than appended after "no other people in the picture".
         "cast": entry["cast"],
+        # An entry written before recipes knew other products is about a
+        # garment: it fits clothing.
+        "fits": tuple(entry.get("fits") or ("apparel",)),
     }
     if kind == "carousel":
         shaped["card_count"] = len(entry["beats"])
@@ -222,12 +274,21 @@ def _subject(entry: dict[str, Any], character: bool) -> str:
 
 
 def resolve(
-    recipe: str, *, background: bool, together: bool, character: bool
+    recipe: str, *, background: bool, together: bool, character: bool,
+    product_type: str = "apparel",
 ) -> str:
-    """The wording for one mined recipe. Raises KeyError for an unknown id."""
+    """The wording for one mined recipe. Raises KeyError for an unknown id.
+
+    `product_type` picks the promises among the types the entry fits. A type
+    it does not fit - `unknown`, or a group of several types - reads as
+    clothing on a clothing recipe and as a plain product on any other."""
     entry = library()[recipe]
     kind = entry["kinds"][0]
     person = entry["cast"] == "person"
+    fits = tuple(entry.get("fits") or ("apparel",))
+    type_ = (product_type if product_type in fits
+             else "apparel" if "apparel" in fits else "goods")
+    worn = type_ == "apparel"
     beats = entry["beats"]
     parts: list[str] = []
     if kind == "carousel":
@@ -251,24 +312,36 @@ def resolve(
             f"Every card that shows a person shows {subject[0].lower() + subject[1:]}, "
             f"the same face, hair, and build in each. {REAL}"
         )
+    if worn:
+        keep, keep_each, clean = KEEP, KEEP_EACH, CLEAN
+    elif type_ == "accessory":
+        keep, keep_each, clean = KEEP_ACCESSORY, KEEP_ACCESSORY_EACH, CLEAN_LABELLED
+    else:
+        keep, keep_each, clean = KEEP_PRODUCT, KEEP_PRODUCT_EACH, CLEAN_LABELLED
     if together:
         if entry["together"] == "card":
             parts.append(
                 "This set features every attached product: each card or shot "
-                "takes one product in the order provided, a person never wears "
-                "two attached products at once, and when there are more cards "
+                "takes one product in the order provided, a person never "
+                + ("wears" if worn else "holds")
+                + " two attached products at once, and when there are more cards "
                 "than products the later cards return to the first product in "
-                "the same sequence. " + KEEP_EACH
+                "the same sequence. " + keep_each
             )
         else:
             parts.append(
                 "Every attached product appears together in each picture, side "
-                "by side, never merged into one garment. " + KEEP_EACH
+                "by side, never merged into one "
+                + ("garment" if worn else "product") + ". " + keep_each
             )
-    else:
+    elif worn:
         parts.append(
             ("They wear" if person else "It shows")
             + " the exact clothing from the attached product image. " + KEEP
+        )
+    else:
+        parts.append(
+            SHOWN[type_][0 if person else 1] + " from the attached product image. " + keep
         )
     parts.append(BACKGROUND_SET if background else entry["scene"])
     if entry.get("camera"):
@@ -280,9 +353,9 @@ def resolve(
         )
     else:
         parts.append(beats[0])
-    parts.append(CLEAN)
+    parts.append(clean)
     if person:
-        parts.append(COVERED)
+        parts.append(COVERED if worn else MODEST)
         parts.append(expression_direction(entry["facets"].get("mood", []), kind=kind))
     if kind == "video":
         parts.append(SILENT)
@@ -304,10 +377,12 @@ def catalogue() -> list[dict[str, Any]]:
             "cast": entry["cast"],
             "together": entry["together"],
             "requires_character": bool(entry.get("requires_character")),
+            "fits": list(shaped["fits"]),
             "facets": {
                 "format": [entry["kinds"][0]],
                 "cast": [entry["cast"]],
                 "products": [entry["together"]],
+                "product_type": list(shaped["fits"]),
                 **{name: list(entry["facets"].get(name) or []) for name in FACETS},
             },
             "label": dict(entry["label"]),

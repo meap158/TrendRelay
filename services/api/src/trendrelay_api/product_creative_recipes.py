@@ -1006,6 +1006,12 @@ RECIPES: dict[str, dict[str, Any]] = {
 #: The hand-written recipes above. Everything after them in RECIPES is mined.
 HAND_WRITTEN: tuple[str, ...] = tuple(RECIPES)
 
+# Every hand-written wording is about a garment, so each fits clothing only
+# (`product_types`).
+for _spec in RECIPES.values():
+    _spec["fits"] = ("apparel",)
+del _spec
+
 #: Filter-chip tags for the hand-written recipes, from the same vocabulary the
 #: mined ones use, so a chip narrows every recipe rather than hiding these.
 #: Their names stay the dialog's own translated strings.
@@ -1043,10 +1049,12 @@ def builtin_catalogue() -> list[dict[str, Any]]:
             "cast": tags["cast"],
             "together": tags["together"],
             "requires_character": bool(spec.get("requires_character")),
+            "fits": list(spec["fits"]),
             "facets": {
                 "format": list(spec["kinds"]),
                 "cast": [tags["cast"]],
                 "products": [tags["together"]],
+                "product_type": list(spec["fits"]),
                 **{name: list(tags.get(name) or []) for name in FACETS},
             },
             "label": {},
@@ -1137,6 +1145,7 @@ def resolve_prompt(
     variant: str | None = None,
     together: bool = False,
     character: bool = False,
+    product_type: str = "apparel",
 ) -> str:
     """The prompt a person reviews, for this recipe and this background switch.
 
@@ -1144,7 +1153,9 @@ def resolve_prompt(
     script unchanged. `character` says a Library character is featured: the
     recipes that describe a person of their own then describe that character
     instead (`_CAST_WORDINGS`); every other recipe's wording is unchanged and
-    the caller appends the character's line. Raises ValueError when the
+    the caller appends the character's line. `product_type` picks the
+    promises a recipe that fits several types makes (`product_types`); every
+    wording for clothing is the one it always was. Raises ValueError when the
     combination is not one of the wordings.
     """
     spec = RECIPES.get(recipe)
@@ -1165,7 +1176,7 @@ def resolve_prompt(
 
         return resolve(
             recipe, background=bool(background), together=bool(together),
-            character=bool(character),
+            character=bool(character), product_type=product_type,
         )
     if character:
         cast = _CAST_WORDINGS.get((recipe, bool(background), bool(together)))

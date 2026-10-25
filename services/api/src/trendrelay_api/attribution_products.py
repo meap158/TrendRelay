@@ -50,6 +50,7 @@ from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLi
 from trendrelay_api.catalog_models import WorkEdition
 from trendrelay_api.catalog_works import work_economics
 from trendrelay_api.opportunity_models import Product, ProductOffer
+from trendrelay_api.product_types import product_type
 
 #: Only settled money. A pending conversion is a claim the network has not
 #: agreed to, and a reversal is one it took back; counting either as earnings
@@ -233,6 +234,9 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
             "name": product.name,
             "brand": product.brand,
             "category": product.category,
+            # What a recipe may promise about it (`product_types`): Generate
+            # offers only the recipes written for this type.
+            "product_type": product_type(product.listing),
             "marketplace": product.marketplace,
             "identifier": product.identifier,
             "product_url": product.product_url,
