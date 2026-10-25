@@ -26,13 +26,15 @@ documents chat, tools and images but no video, so nothing is built on it.
 
 ## Limits to know
 
-- **The account needs video on its Gemini plan.** First live run (2026-10-26, a free-tier account): Check passed
-  ("signed in"), the job was created, then Gemini answered the submit with "If you upgrade your subscription I can create
-  that video for you today." and no video followed. The bridge keeps the job `in_progress` (progress creeping to 95) until
-  its own 10-minute timeout and does not put Gemini's reply in the API response, only in its log, so the clip's wait ends
-  with "did not finish in time". If a job sits at 95, read the bridge's log (`.data/gemini-web/bridge.log` when started
-  from a terminal redirect) for that sentence. Use an account whose plan includes Veo (Google AI Pro or Ultra).
-
+- **The account slot must be the one with video.** The cookie header holds every account signed in to that browser, and
+  without `GEMINI_AUTH_USER` the bridge uses the first, which can be a free account. On a free account Check passes
+  ("signed in") and the job is created, but Gemini answers the submit with "If you upgrade your subscription I can create
+  that video for you today." and no video follows; the bridge keeps the job `in_progress` (progress creeping to 95) until
+  its own timeout and shows the reply only in its log. Compare slots without spending anything: start the bridge with
+  `GEMINI_AUTH_USER` set to 0, 1, 2 and read `/openai/v1/models`. A free account lists only `gemini-auto`; a Pro account
+  lists the Pro models. Set the winning number in Tools (Gemini Web account slot).
+- **Verified live (2026-10-26).** Slot 1 (Pro): a pending draft's stored prompt produced a 10-second 720x1280 H.264/AAC clip in
+  about 70 seconds through `generate_gemini_web`, and it matched the prompt.
 - **Text-to-video only.** The bridge takes no image, so the product picture is not sent; the stored prompt carries the
   garment. A character's pictures are not sent either.
 - **Fixed output.** About 10 seconds with audio, 9:16 (720x1280). Duration is Gemini's choice.
@@ -41,6 +43,6 @@ documents chat, tools and images but no video, so nothing is built on it.
 - **Terms and risk.** This is a consumer session used as a credential. It is against Google's terms, can expire, and can
   get the account limited. Use a spare account. The cookie is stored in the local `.env` and in the bridge env file, shown
   masked in Tools, and never logged.
-- **Unverified here.** Nothing has been run against a real account. Check proves only that the bridge answers; whether the
-  cookie still works shows on the first clip. The bridge's own env-file loading (quoting of a cookie containing `;`) was
-  not read from its source.
+- **Still unverified.** The cookie's lifetime (the bridge rotates `__Secure-1PSIDTS` itself, but a Google sign-out or
+  security check ends the session), and the worker path: the clip above went through the adapter directly, not through a
+  queued draft, so filing it onto a draft from the Attribution screen is the next thing to try.

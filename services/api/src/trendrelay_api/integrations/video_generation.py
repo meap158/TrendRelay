@@ -425,8 +425,10 @@ def describe_fields() -> list[dict[str, Any]]:
              "Where the Gemini Web bridge listens. Leave the default unless you changed its port.",
              GEMINI_WEB_BRIDGE),
             (provider.account_env, "account slot",
-             "The number after /u/ in the address of the tab the cookie came from. Leave empty "
-             "when there is none.",
+             "The number after /u/ in the address of the Gemini tab signed in to the account "
+             "that has video (Google AI Pro or Ultra). The cookie carries every signed-in "
+             "account, and without a number the first one is used, which may be a free account "
+             "that cannot make video. Leave empty when there is none.",
              ""),
         ):
             if not env:
