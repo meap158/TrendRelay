@@ -712,15 +712,17 @@
 .generate-dialog .generate-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-rows: max-content 1fr;
   grid-template-areas:
     "kind recipes"
     "main recipes";
   gap: 16px 20px;
   align-items: start;
+  align-content: start;
   min-inline-size: 0;
 }
-.generate-dialog .generate-kind { grid-area: kind; min-inline-size: 0; }
-.generate-dialog .generate-main { grid-area: main; display: grid; gap: 12px; min-inline-size: 0; align-content: start; }
+.generate-dialog .generate-kind { grid-area: kind; min-inline-size: 0; align-self: start; }
+.generate-dialog .generate-main { grid-area: main; display: grid; gap: 12px; min-inline-size: 0; align-content: start; align-self: start; }
 .generate-dialog .campaign-dialog-form .generate-recipes {
   position: sticky;
   inset-block-start: 0;
@@ -756,6 +758,7 @@
 @media (max-width: 860px) {
   .generate-dialog .generate-columns {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
     grid-template-areas:
       "kind"
       "recipes"
@@ -1402,10 +1405,10 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 
 /* --- Generate dialog, roomier and calmer --------------------------------
    The dialog is a workspace, not a confirm box: it takes nearly the whole
-   viewport, the recipe rail gets the larger share and runs the dialog's full
+   viewport, the compact recipe rail runs the dialog's full
    height, and the head stays one line however long the product's name. */
 .ui-dialog.ui-dialog-wide.generate-dialog {
-  width: min(1680px, calc(100vw - 32px));
+  width: min(1440px, calc(100vw - 32px));
   height: calc(100vh - 32px);
   max-height: calc(100vh - 32px);
 }
@@ -1423,7 +1426,8 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
    let the rail fill the whole view above the form. */
 @media (min-width: 861px) {
   .generate-dialog .generate-columns {
-    grid-template-columns: minmax(360px, 1fr) minmax(480px, 1.35fr);
+    grid-template-columns: minmax(320px, 1fr) minmax(0, 660px);
+    grid-template-rows: max-content 1fr;
     gap: 14px 22px;
   }
   .generate-dialog .campaign-dialog-form .generate-recipes {
@@ -1434,9 +1438,10 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
 .generate-dialog .generate-kind { display: flex; align-items: center; gap: 10px; }
 .generate-dialog .generate-kind > span { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 
-/* Three cards across once the rail is wide enough. */
+/* One to three cards as the recipe rail grows; never squeeze in a fourth. */
 .generate-dialog .recipe-picker .ui-choice-group[data-layout="cards"] .ui-choice-options {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  /* auto-fill, so one search hit keeps a card's width instead of the row's. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(190px, calc((100% - 16px) / 3))), 1fr));
 }
 .generate-dialog .recipe-picker .ui-choice-group > legend { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
