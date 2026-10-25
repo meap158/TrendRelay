@@ -758,6 +758,9 @@ def list_drafts(
     status: str | None = "pending",
     kind: str | None = None,
     product_id: str | None = None,
+    character_id: str | None = None,
+    recipe: str | None = None,
+    q: str | None = None,
     limit: int = DEFAULT_PAGE,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -765,11 +768,19 @@ def list_drafts(
 
     No status means every live draft. A discarded draft is listed only when
     asked for by name: it is not work, and it is not a result.
+
+    `character_id` narrows to one character's drafts ("none" is the drafts
+    with no character), `recipe` to one recipe, and `q` to drafts featuring a
+    product whose name contains the text. Members and characters are read with
+    uncorrelated IN subqueries: a correlated EXISTS per draft took seconds
+    on the Library's filters where this takes a fraction of one.
     """
     if status not in (None, "pending", "succeeded", "discarded"):
         raise ValueError("Status must be pending, succeeded, or discarded.")
     if kind is not None and kind not in _KINDS:
         raise ValueError("Kind must be image, carousel, or video.")
+    if recipe is not None and recipe not in RECIPES:
+        raise ValueError("That recipe does not exist.")
     limit = min(max(int(limit), 1), MAX_PAGE)
     offset = max(int(offset), 0)
     conditions = [ProductCreativeDraft.workspace_id == workspace_id]
@@ -787,6 +798,27 @@ def list_drafts(
         conditions.append(or_(
             ProductCreativeDraft.product_id == product_id,
             ProductCreativeDraft.id.in_(member_of),
+        ))
+    if character_id == "none":
+        conditions.append(ProductCreativeDraft.character_id.is_(None))
+    elif character_id:
+        conditions.append(ProductCreativeDraft.character_id == character_id)
+    if recipe:
+        conditions.append(ProductCreativeDraft.recipe == recipe)
+    needle = (q or "").strip().lower()
+    if needle:
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        named = select(Product.id).where(
+            Product.workspace_id == workspace_id,
+            func.lower(Product.name).like(f"%{escaped}%", escape="\\"),
+        )
+        featuring = select(ProductCreativeDraftProduct.draft_id).where(
+            ProductCreativeDraftProduct.workspace_id == workspace_id,
+            ProductCreativeDraftProduct.product_id.in_(named),
+        )
+        conditions.append(or_(
+            ProductCreativeDraft.product_id.in_(named),
+            ProductCreativeDraft.id.in_(featuring),
         ))
     total = session.scalar(
         select(func.count()).select_from(ProductCreativeDraft).where(*conditions)
@@ -1153,6 +1185,16 @@ def creative_drafts_by_product(
         if member.product_id not in bucket:
             bucket.append(member.product_id)
     group_numbers = _group_numbers(session, workspace_id)
+    # The panel filters by character, so each row names its character (one read, not one per draft).
+    from trendrelay_api.character_models import Character
+
+    character_ids = {draft.character_id for draft in rows if draft.character_id}
+    character_names = (
+        dict(session.execute(
+            select(Character.id, Character.name).where(Character.id.in_(character_ids))
+        ).all())
+        if character_ids else {}
+    )
     found: dict[str, list[dict[str, Any]]] = {}
     for draft in rows:
         product_ids = membership.get(draft.id) or [draft.product_id]
@@ -1165,6 +1207,8 @@ def creative_drafts_by_product(
             "owed": _owed(draft),
             "product_count": len(product_ids),
             "group_number": group_numbers.get(draft.id),
+            "character_id": draft.character_id,
+            "character_name": character_names.get(draft.character_id) if draft.character_id else None,
         }
         for product_id in product_ids:
             found.setdefault(product_id, []).append(summary)

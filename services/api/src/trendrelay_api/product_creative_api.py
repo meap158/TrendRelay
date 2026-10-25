@@ -313,13 +313,17 @@ def list_creative_drafts(
     status: Annotated[str | None, Query()] = "pending",
     kind: Annotated[str | None, Query()] = None,
     product_id: Annotated[str | None, Query()] = None,
+    character_id: Annotated[str | None, Query()] = None,
+    recipe: Annotated[str | None, Query()] = None,
+    q: Annotated[str | None, Query(max_length=120)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
     return _call(lambda: list_drafts(
         session, workspace_id,
-        status=status, kind=kind, product_id=product_id, limit=limit, offset=offset,
+        status=status, kind=kind, product_id=product_id,
+        character_id=character_id, recipe=recipe, q=q, limit=limit, offset=offset,
     ))
 
 
