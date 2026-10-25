@@ -73,7 +73,9 @@ class ProductCreativeDraft(Base):
             "'sheer_drape_floor_props','two_look_alternating','winter_knit_window',"
             "'collection_sheet_card','cake_stand_colourways','prop_still_life_tile',"
             "'garden_twirl_video','door_coat_reveal_video','bed_lounge_settle_video',"
-            "'fabric_touch_pullback_video','corridor_walk_toward_video')",
+            "'fabric_touch_pullback_video','corridor_walk_toward_video',"
+            # Single reference posts, batch 2026-10-25 (migration 20261025_0102).
+            "'sunlit_floor_shadow_heap','night_window_chair_mirror_selfie')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(

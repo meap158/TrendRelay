@@ -8,10 +8,12 @@ posts across five accounts. Validation reports zero invalid or missing
 annotations. Its aggregate includes 425 apparel-usable posts in the top 30%
 of their own account with reuse scores of at least 3. Three extraction passes
 produced 58 mined recipes; evidence and deferred patterns are recorded in
-`References/brand-pages/2026-10-23/recipes-evidence.md` (local only).
+`References/brand-pages/2026-10-23/recipes-evidence.md` (local only). Batch
+`2026-10-25` adds two image recipes written from single reference posts the operator
+picked, each kept to its pattern in our own words.
 
-The current catalogue has 71 distinct recipes: 13 built-ins and 58 mined.
-The picker filters by type: 10 support Image, 47 Carousel, and 14 Video;
+The current catalogue has 73 distinct recipes: 13 built-ins and 60 from
+references. The picker filters by type: 12 support Image, 50 Carousel, and 14 Video;
 some built-ins support several types, so those counts overlap. These are
 implemented reusable patterns, not an estimate of every pattern the export
 could support. Further extraction must establish recurrence and a distinct

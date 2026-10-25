@@ -1,0 +1,77 @@
+{
+  "batch": "2026-10-25",
+  "about": "Two single reference posts the operator picked, not a mined export: each is written as its pattern in our own words, with nothing of the post's costume, account or props copied. Evidence in References/brand-pages/2026-10-25/recipes-evidence.md.",
+  "recipes": [
+    {
+      "id": "sunlit_floor_shadow_heap",
+      "kinds": ["image"],
+      "cast": "none",
+      "together": "frame",
+      "scene": "A bare floor of large pale cream tiles in strong, low afternoon sun from a window out of frame, with a hard-edged band of light and deep, clean shadow.",
+      "camera": "Looking almost straight down from standing height, a phone-camera feel, a warm natural grade and crisp hard shadows.",
+      "beats": [
+        "The garment lies in a loose, just-dropped heap near the top of the frame, fully in the sun, so its fabric, trim and print read clearly. Across the floor below it falls the long, hard shadow of an adult woman standing just outside the frame with the sun behind, a slender silhouette from head to calves with one hand relaxed at the thigh. The shadow is a plain, featureless dark shape, and no part of the person appears in the picture. With several products, they share the heap, each still recognisable as its own garment."
+      ],
+      "facets": {
+        "framing": ["flat_lay"],
+        "setting": ["window_room"],
+        "mood": ["cinematic", "soft_feminine"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Sunlit floor shadow",
+        "vi": "Bóng nắng trên sàn",
+        "ja": "陽だまりの床と影",
+        "zh": "阳光地板与身影",
+        "ru": "Тень на солнечном полу",
+        "fr": "Ombre sur sol ensoleillé",
+        "ar": "ظل على أرضية مشمسة"
+      },
+      "help": {
+        "en": "The garment in a dropped heap on a sunlit tile floor, with the long shadow of someone standing out of frame.",
+        "vi": "Sản phẩm buông thành đống trên sàn gạch đầy nắng, cạnh bóng dài của một người đứng ngoài khung hình.",
+        "ja": "日の当たるタイルの床に脱ぎ置いた服と、画面の外に立つ人の長い影。",
+        "zh": "衣物随意堆在洒满阳光的瓷砖地上，旁边是画面外站立者的长影。",
+        "ru": "Вещь брошена на залитый солнцем плиточный пол, рядом длинная тень человека за кадром.",
+        "fr": "Le vêtement laissé en tas sur un carrelage ensoleillé, avec la longue ombre d'une personne hors cadre.",
+        "ar": "القطعة مكوّمة على أرضية بلاط مشمسة بجانب ظل طويل لشخص يقف خارج الإطار."
+      }
+    },
+    {
+      "id": "night_window_chair_mirror_selfie",
+      "kinds": ["image"],
+      "cast": "person",
+      "together": "frame",
+      "scene": "A dim high-rise study at night: floor-to-ceiling windows onto a city of lit towers, a long dark desk, black office chairs, a pale grey sofa and low warm lamplight, with a full-length mirror facing the chair.",
+      "camera": "Seen in the mirror at seated height through a slightly wide phone lens, a cool night ambience with soft warm interior light and fine grain.",
+      "beats": [
+        "Seated sideways on a black office chair, legs extended long toward the mirror and crossed at the ankles, one hand holds the phone up so it hides the face, the other rests in the lap. The whole outfit is in frame from head to shoes, styled with plain shoes that suit the garment, and the city lights stay soft behind. With several products, the extra pieces lie folded over the arm of the sofa, each clearly its own garment."
+      ],
+      "facets": {
+        "pose": ["seated", "selfie"],
+        "framing": ["full_length"],
+        "setting": ["window_room"],
+        "mood": ["cinematic", "candid"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Night window chair selfie",
+        "vi": "Selfie ghế bên cửa đêm",
+        "ja": "夜景の窓辺で椅子ミラーセルフィー",
+        "zh": "夜景窗边椅上对镜自拍",
+        "ru": "Селфи на стуле у ночного окна",
+        "fr": "Selfie assis face à la ville la nuit",
+        "ar": "سيلفي على كرسي أمام نافذة ليلية"
+      },
+      "help": {
+        "en": "A seated full-length mirror selfie in a dim high-rise room, the phone hiding the face and the city lit behind.",
+        "vi": "Selfie qua gương toàn thân khi ngồi trong phòng cao tầng tối, điện thoại che mặt, phố đêm sáng đèn phía sau.",
+        "ja": "薄暗い高層の部屋で座って撮る全身ミラーセルフィー。スマホで顔を隠し、背景に夜景。",
+        "zh": "在昏暗的高层房间坐着拍全身对镜自拍，手机遮住脸，身后是城市夜景。",
+        "ru": "Селфи в зеркало сидя в полный рост в тёмной комнате высотки: телефон закрывает лицо, за окном огни города.",
+        "fr": "Un selfie miroir assis en pied dans une pièce sombre en hauteur, le téléphone cachant le visage, la ville illuminée derrière.",
+        "ar": "سيلفي كامل في المرآة جلوسًا في غرفة مرتفعة خافتة، الهاتف يخفي الوجه والمدينة مضاءة خلفه."
+      }
+    }
+  ]
+}
