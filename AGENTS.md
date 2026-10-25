@@ -77,6 +77,7 @@ delete, restore it and say so - do not commit over it.
   The **Owner desk** lists work only a person can do: accounts, credentials, approvals, real-device checks and
   decisions. Its data is `References/owner-pages/owner-desk.json`; edit the JSON, rebuild, and never edit the
   generated HTML. `--init` starts an empty desk, `--check` validates without writing.
+- **Owner pages and roadmap audit (PM-289):** the Owner Pages index links `ROADMAP.md`, and the generator fails (build and `--check`) when the project has no `ROADMAP.md`. Whenever you change the project's state (a phase starts or ends, scope changes, a task only the owner can do appears or is completed), update `ROADMAP.md` and `owner-desk.json` in the same unit of work so both match reality, rebuild the pages, and match the project's own design (tokens and DESIGN.md where it has one). Do not leave a draft roadmap unmarked: say "Draft" until the owner has confirmed it.
 - Do the work yourself first. Add or update a task only when a human really has to act, with exact steps and what
   you can continue with meanwhile. Mark a task Completed only with `evidence` or the owner's confirmation (the
   generator refuses a Completed task without it). Never put secrets in it.

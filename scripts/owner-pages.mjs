@@ -190,6 +190,7 @@ export function renderIndex({ updated = '', counts } = {}) {
     body: `<h1>Owner pages</h1>
 <p class="lede">What TrendRelay needs from you, in one place. Local only: this folder is git-ignored.${updated ? ` Built ${esc(updated)}.` : ''}</p>
 <a class="card" href="owner-desk.html"><b>Owner desk</b><br>Every action only you can take, with exact steps and what done looks like.${esc(open)}</a>
+<a class="card" href="../../ROADMAP.md"><b>Roadmap</b><br>Vision, scope, phases with exit criteria, and risks (ROADMAP.md in the project root).</a>
 <p class="na">QA scorecard and Feature parity pages are not built for this project.</p>
 <p class="note">Rebuild with <code>node scripts/owner-pages.mjs</code>. The agent edits <code>owner-desk.json</code>; ticks you make on the desk are kept in this browser only.</p>`,
   });
@@ -296,6 +297,10 @@ export function run(argv = process.argv.slice(2), rootDir = root, log = console.
     data = JSON.parse(readFileSync(dataFile, 'utf8'));
   } catch (error) {
     log(`owner-desk.json is not valid JSON: ${error.message}`);
+    return 1;
+  }
+  if (!existsSync(join(rootDir, 'ROADMAP.md'))) {
+    log('ROADMAP.md is missing from the project root. The roadmap is part of the owner pages (standard, PM-289).');
     return 1;
   }
   const problems = validateDesk(data);
