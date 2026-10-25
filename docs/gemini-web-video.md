@@ -35,8 +35,9 @@ documents chat, tools and images but no video, so nothing is built on it.
   lists the Pro models. Set the winning number in Tools (Gemini Web account slot).
 - **Verified live (2026-10-26).** Slot 1 (Pro): a pending draft's stored prompt produced a 10-second 720x1280 H.264/AAC clip in
   about 70 seconds through `generate_gemini_web`, and it matched the prompt.
-- **Text-to-video only.** The bridge takes no image, so the product picture is not sent; the stored prompt carries the
-  garment. A character's pictures are not sent either.
+- **Text-to-video only.** The bridge refuses a reference image, so the product picture is not sent, and neither are a
+  character's. The product is described in words ahead of the stored prompt (name, listing description, character name; see
+  `prompt_context`). The full operating procedure is `docs/sop-video-generation.md`.
 - **Fixed output.** About 10 seconds with audio, 9:16 (720x1280). Duration is Gemini's choice.
 - **Quota.** Each clip uses one unit of the account's daily Gemini video quota. The bridge runs one video at a time and
   answers 429 when busy; the job reports that and does not queue a second clip.
