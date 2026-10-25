@@ -1127,6 +1127,14 @@ export const fr: Messages = {
       heading: "Brouillons",
       subhead: "Reprenez où vous en étiez. Ouvrez un brouillon pour ajouter les fichiers manquants.",
     },
+    libraryItems: {
+      eyebrow: "ESPACE CRÉATIF",
+      heading: "Dans la bibliothèque",
+      subhead: "Médias terminés déjà dans votre bibliothèque. Ouvrez-les là-bas ou limitez le tableau aux produits concernés.",
+      none: "Aucun média terminé dans la bibliothèque pour ces produits.",
+      open: "Ouvrir dans la bibliothèque",
+      filesInLibrary: "{count, plural, one {# file} other {# files}}",
+    },
     groupView: {
       label: "Affichage des produits",
       count: "{count, plural, one {# photo de groupe} other {# photos de groupe}}",

@@ -61,6 +61,43 @@ export function pendingDrafts<
     || b.products.length - a.products.length);
 }
 
+/** A draft with files already in the Library, each once, with its products and those files. */
+export type LibraryItem<P, D> = { draft: D; products: P[]; assetIds: string[] };
+
+/**
+ * The finished drafts whose files are in the Library: the Drafts panel's
+ * counterpart for the In Library filter, built from the same draft rows.
+ *
+ * An item is a draft with at least one linked file. A group shot is one item
+ * however many products carry it, and its files are counted once. A draft
+ * that is still owed cards is both pending and in the Library, so it appears
+ * in each view. Files linked without a draft have no card; the table lists
+ * them.
+ */
+export function libraryItems<
+  P extends {
+    creative_drafts?: readonly (Draft & { id: string; group_number?: number | null })[] | null;
+    creative_assets?: readonly { asset_id: string; draft_id: string | null; position?: number }[] | null;
+  },
+>(products: readonly P[]): LibraryItem<P, DraftOf<P>>[] {
+  const found = new Map<string, LibraryItem<P, DraftOf<P>>>();
+  for (const product of products) {
+    for (const draft of product.creative_drafts ?? []) {
+      if (draft.status === "discarded") continue;
+      const files = (product.creative_assets ?? []).filter((asset) => asset.draft_id === draft.id);
+      if (files.length === 0) continue;
+      const entry: LibraryItem<P, DraftOf<P>> =
+        found.get(draft.id) ?? { draft, products: [], assetIds: [] };
+      entry.products.push(product);
+      for (const file of files) if (!entry.assetIds.includes(file.asset_id)) entry.assetIds.push(file.asset_id);
+      found.set(draft.id, entry);
+    }
+  }
+  return [...found.values()].sort((a, b) =>
+    (b.draft.group_number ?? 0) - (a.draft.group_number ?? 0)
+    || b.products.length - a.products.length);
+}
+
 /**
  * Files this draft still plans to produce.
  *

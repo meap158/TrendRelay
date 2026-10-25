@@ -1117,6 +1117,14 @@ export const ar: Messages = {
       heading: "المسودات",
       subhead: "تابع من حيث توقفت. راجع المسودة لإضافة بقية الملفات.",
     },
+    libraryItems: {
+      eyebrow: "مساحة الإبداع",
+      heading: "في المكتبة",
+      subhead: "وسائط مكتملة موجودة بالفعل في مكتبتك. افتحها هناك أو اعرض منتجاتها فقط.",
+      none: "لا توجد وسائط مكتملة في المكتبة لهذه المنتجات.",
+      open: "فتح في المكتبة",
+      filesInLibrary: "{count, plural, one {# file} other {# files}}",
+    },
     groupView: {
       label: "طريقة عرض المنتجات",
       count: "{count, plural, one {صورة جماعية واحدة} other {# صور جماعية}}",

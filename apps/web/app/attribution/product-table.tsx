@@ -37,6 +37,7 @@ import {
   type CreativeFilter,
 } from "./creative-filter";
 import { PendingDrafts } from "./pending-drafts";
+import { LibraryItems } from "./library-items";
 import { draftFiltersActive, readDraftFilters } from "../../lib/draft-filters";
 import { groupShownDrafts } from "./draft-groups";
 import {
@@ -895,6 +896,13 @@ export function ProductTable({
           }}
           onShowProducts={(draftId) => setFilterGroup((current) => (current === draftId ? "" : draftId))}
           onDiscarded={onCreativesChanged}
+        />
+      )}
+      {creativeFilter === "library" && (
+        <LibraryItems
+          products={narrowed}
+          activeGroup={activeGroup}
+          onShowProducts={(draftId) => setFilterGroup((current) => (current === draftId ? "" : draftId))}
         />
       )}
       <div className="product-table-scroll">

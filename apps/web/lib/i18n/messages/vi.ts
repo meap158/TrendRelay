@@ -1115,6 +1115,14 @@ export const vi: Messages = {
       heading: "Bản nháp",
       subhead: "Tiếp tục từ chỗ bạn dừng. Xem lại bản nháp để thêm các tệp còn thiếu.",
     },
+    libraryItems: {
+      eyebrow: "KHÔNG GIAN SÁNG TẠO",
+      heading: "Trong thư viện",
+      subhead: "Nội dung đã hoàn thành có sẵn trong thư viện. Mở trong thư viện hoặc chỉ hiện các sản phẩm liên quan.",
+      none: "Thư viện chưa có nội dung hoàn thành cho các sản phẩm này.",
+      open: "Mở trong thư viện",
+      filesInLibrary: "{count, plural, one {# file} other {# files}}",
+    },
     groupView: {
       label: "Cách liệt kê sản phẩm",
       count: "{count} ảnh nhóm",

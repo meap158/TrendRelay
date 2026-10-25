@@ -4,10 +4,12 @@ import { test } from "node:test";
 import {
   hasLibraryCreative,
   hasPendingCreative,
+  libraryItems,
   matchesCreativeFilter,
   pendingDrafts,
   pendingMediaCount,
 } from "../app/attribution/creative-filter.ts";
+import { filterDrafts, NO_DRAFT_FILTERS } from "./draft-filters.ts";
 
 /** Both fields the predicates read, so every fixture fits each of them. */
 type Row = { creative_drafts?: { status: string; owed: number }[]; creative_assets?: unknown[] };
@@ -92,4 +94,54 @@ test("pending drafts are listed once each, with every product they feature", () 
   assert.deepEqual(found.map((entry) => entry.draft.id), ["group-31", "group-2"]);
   assert.deepEqual(found[0].products.map((row) => row.id), ["a", "b"]);
   assert.deepEqual(found[1].products.map((row) => row.id), ["b"]);
+});
+
+const draft = (id: string, extra: object = {}) =>
+  ({ id, kind: "image", recipe: "bed_flat_lay", status: "succeeded", owed: 0, ...extra });
+const asset = (asset_id: string, draft_id: string | null, position = 0) => ({ asset_id, draft_id, position });
+
+test("a library item is a draft with linked files, a group shot counted once", () => {
+  const group = draft("g1", { group_number: 2, product_count: 2 });
+  const a = { id: "a", name: "A", creative_drafts: [group, draft("s1")], creative_assets: [asset("f1", "g1"), asset("f2", "s1")] };
+  const b = { id: "b", name: "B", creative_drafts: [group], creative_assets: [asset("f1", "g1"), asset("f3", "g1", 1)] };
+  const items = libraryItems([a, b]);
+  assert.deepEqual(items.map((item) => item.draft.id), ["g1", "s1"]);
+  assert.deepEqual(items[0].products.map((product) => product.id), ["a", "b"]);
+  assert.deepEqual(items[0].assetIds, ["f1", "f3"]);
+});
+
+test("a library item leaves out discarded drafts, drafts with no files and loose files", () => {
+  const product = {
+    id: "a",
+    name: "A",
+    creative_drafts: [draft("gone", { status: "discarded" }), draft("empty"), draft("kept")],
+    creative_assets: [asset("f1", "gone"), asset("f2", null), asset("f3", "kept")],
+  };
+  assert.deepEqual(libraryItems([product]).map((item) => item.draft.id), ["kept"]);
+  assert.deepEqual(libraryItems([{}]), []);
+});
+
+test("a draft still owed cards is both pending and a library item", () => {
+  const product = {
+    id: "a",
+    name: "A",
+    creative_drafts: [draft("c1", { owed: 1 })],
+    creative_assets: [asset("f1", "c1")],
+  };
+  assert.equal(pendingDrafts([product]).length, 1);
+  assert.equal(libraryItems([product]).length, 1);
+});
+
+test("library items go through the same draft filters as pending drafts", () => {
+  const product = {
+    id: "a",
+    name: "Silk robe",
+    creative_drafts: [draft("d1"), draft("d2", { recipe: "sleepwear_lookbook" })],
+    creative_assets: [asset("f1", "d1"), asset("f2", "d2")],
+  };
+  const labels = { recipe: (id: string) => id, kind: (kind: string) => kind };
+  const items = libraryItems([product]);
+  assert.equal(filterDrafts(items, NO_DRAFT_FILTERS, labels).length, 2);
+  assert.deepEqual(filterDrafts(items, { ...NO_DRAFT_FILTERS, recipe: "sleepwear_lookbook" }, labels).map((i) => i.draft.id), ["d2"]);
+  assert.equal(filterDrafts(items, { ...NO_DRAFT_FILTERS, q: "robe" }, labels).length, 2);
 });

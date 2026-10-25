@@ -1119,6 +1119,14 @@ export const en = {
       heading: "Drafts",
       subhead: "Pick up where you left off. Review a draft to add its remaining media.",
     },
+    libraryItems: {
+      eyebrow: "CREATIVE WORKSPACE",
+      heading: "In Library",
+      subhead: "Finished media already in your Library. Open it there, or narrow the table to the products it features.",
+      none: "No finished media is in the Library for these products.",
+      open: "Open in Library",
+      filesInLibrary: "{count, plural, one {# file in Library} other {# files in Library}}",
+    },
     groupView: {
       label: "How to list products",
       count: "{count, plural, one {# group shot} other {# group shots}}",

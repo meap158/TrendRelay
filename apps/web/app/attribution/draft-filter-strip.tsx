@@ -95,6 +95,7 @@ export function DraftFilterStrip({
   filters,
   labels,
   shown,
+  hide = [],
   onChange,
 }: {
   /** Every pending draft, before any filter. */
@@ -103,6 +104,8 @@ export function DraftFilterStrip({
   labels: DraftLabels;
   /** How many drafts the filters leave. */
   shown: number;
+  /** Filters that mean nothing for this view; their dropdowns are left out. */
+  hide?: (keyof DraftFilters)[];
   onChange: (next: DraftFilters) => void;
 }) {
   const t = useT();
@@ -153,15 +156,17 @@ export function DraftFilterStrip({
         searchable={false}
         onChange={(kind) => set({ kind })}
       />
-      <FacetSelect
-        label={t(`${p}.status`)}
-        any={t(`${p}.anyStatus`)}
-        options={facets.status}
-        value={filters.status}
-        text={(option) => (option.value === "partial" ? t(`${p}.partial`) : t(`${p}.waiting`))}
-        searchable={false}
-        onChange={(status) => set({ status })}
-      />
+      {!hide.includes("status") && (
+        <FacetSelect
+          label={t(`${p}.status`)}
+          any={t(`${p}.anyStatus`)}
+          options={facets.status}
+          value={filters.status}
+          text={(option) => (option.value === "partial" ? t(`${p}.partial`) : t(`${p}.waiting`))}
+          searchable={false}
+          onChange={(status) => set({ status })}
+        />
+      )}
       <FacetSelect
         label={t(`${p}.shape`)}
         any={t(`${p}.anyShape`)}

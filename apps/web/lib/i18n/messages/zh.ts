@@ -1102,6 +1102,14 @@ export const zh: Messages = {
       heading: "草稿",
       subhead: "从上次停下的地方继续。打开草稿即可补充其余素材。",
     },
+    libraryItems: {
+      eyebrow: "创意工作区",
+      heading: "已在素材库",
+      subhead: "已在素材库中的成品媒体。可在素材库中打开,或只显示相关商品。",
+      none: "这些商品在素材库中还没有成品媒体。",
+      open: "在素材库中打开",
+      filesInLibrary: "{count, plural, one {# file} other {# files}}",
+    },
     groupView: {
       label: "商品列表方式",
       count: "{count} 张合影",

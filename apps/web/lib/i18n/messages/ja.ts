@@ -1115,6 +1115,14 @@ export const ja: Messages = {
       heading: "下書き",
       subhead: "続きから再開できます。下書きを開いて残りのメディアを追加します。",
     },
+    libraryItems: {
+      eyebrow: "クリエイティブワークスペース",
+      heading: "ライブラリ内",
+      subhead: "すでにライブラリにある完成済みのメディアです。ライブラリで開くか、対象の商品だけに絞り込めます。",
+      none: "これらの商品には、ライブラリに完成済みのメディアがありません。",
+      open: "ライブラリで開く",
+      filesInLibrary: "{count, plural, one {# file} other {# files}}",
+    },
     groupView: {
       label: "商品の表示方法",
       count: "グループ写真 {count} 件",
