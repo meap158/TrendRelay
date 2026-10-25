@@ -198,3 +198,55 @@ def test_a_prompt_the_bridge_would_refuse_never_leaves(values) -> None:
     with pytest.raises(video.VideoError):
         _run(transport, prompt="x" * (video.GEMINI_WEB_PROMPT_BYTES + 1))
     assert seen == []
+
+
+def test_a_clip_is_tagged_by_provider_model_family_and_recipe() -> None:
+    assert video.clip_tags("gemini_web", "hanger_rail_reveal") == [
+        "ai-video", "veo", "gemini-web", "hanger_rail_reveal",
+    ]
+    assert video.clip_tags("xai") == ["ai-video", "grok"]
+    assert video.clip_tags("gemini", "HANGER") == ["ai-video", "veo", "gemini", "HANGER"]
+    # A provider added later still gets its own id as a tag.
+    assert video.clip_tags("newcomer") == ["ai-video", "newcomer"]
+    # No tag twice, whatever its case.
+    assert video.clip_tags("gemini", "Veo") == ["ai-video", "veo", "gemini"]
+
+
+VIEW = {
+    "prompt": "A hand lifts the set from the rail, the exact set in the attached product image.",
+    "products": [
+        {
+            "name": "Silk cami set",
+            "listing_fields": {"description": "Satin  cami and shorts\nin cream."},
+        },
+        {"name": "Lace robe"},
+    ],
+    "character": {"name": "Mai", "archived": False},
+}
+
+
+def test_a_provider_with_no_picture_is_told_about_the_product_in_words() -> None:
+    sent = video.prompt_for(_provider(), VIEW)
+    assert sent.endswith(VIEW["prompt"])
+    assert "Product: Silk cami set." in sent
+    assert "together with: Lace robe" in sent
+    assert "Listing description: Satin cami and shorts in cream." in sent
+    assert "The person in the video is Mai." in sent
+    assert len(sent.encode("utf-8")) < video.GEMINI_WEB_PROMPT_BYTES
+
+
+def test_a_provider_that_takes_the_picture_gets_the_prompt_untouched() -> None:
+    for provider_id in ("xai", "gemini"):
+        assert video.PROVIDERS[provider_id].takes_image is True
+        assert video.prompt_for(video.PROVIDERS[provider_id], VIEW) == VIEW["prompt"]
+    assert _provider().takes_image is False
+
+
+def test_context_is_left_out_when_the_draft_names_nothing() -> None:
+    bare = {"prompt": "Only the prompt.", "products": []}
+    assert video.prompt_for(_provider(), bare) == "Only the prompt."
+    long = {**VIEW, "products": [{"name": "Set", "listing_fields": {"description": "word " * 900}}]}
+    assert len(video.prompt_context(long)) <= video._CONTEXT_BUDGET
+    # An archived character is not named as being in the video.
+    archived = {**VIEW, "character": {"name": "Mai", "archived": True}}
+    assert "Mai" not in video.prompt_context(archived)

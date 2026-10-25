@@ -148,6 +148,9 @@ class VideoProvider:
     #: Cookie header, a clip goes through a bridge on this machine, and the
     #: two settings below say where it listens and which Google account slot.
     session: bool = False
+    #: Whether the provider is sent the product picture (and a character's pictures). One that
+    #: is not gets the product described in words instead, so the clip is not invented blind.
+    takes_image: bool = True
     bridge_env: str = ""
     account_env: str = ""
 
@@ -204,6 +207,7 @@ PROVIDERS: dict[str, VideoProvider] = {
         check_url="",
         requires_bucket=False,
         session=True,
+        takes_image=False,
         bridge_env="GEMINI_WEB_BRIDGE_URL",
         account_env="GEMINI_WEB_AUTH_USER",
     ),
@@ -1473,6 +1477,91 @@ def library_generation_status(
     return {"status": "none"}
 
 
+#: What a clip is called in the Library, by the provider that made it. Hashtags are what the
+#: Library search reads, so these are how a clip is found as "veo", "grok" or "ai-video".
+_PROVIDER_TAGS = {
+    "xai": ("grok",),
+    "gemini": ("veo", "gemini"),
+    "gemini_web": ("veo", "gemini-web"),
+}
+
+
+def clip_tags(provider_id: str, recipe: str = "") -> list[str]:
+    """The hashtags a generated clip is filed with: kind, provider, model family and recipe."""
+    tags = ["ai-video", *_PROVIDER_TAGS.get(provider_id, (provider_id,))]
+    if recipe:
+        tags.append(recipe)
+    seen: set[str] = set()
+    return [tag for tag in tags if not (tag.casefold() in seen or seen.add(tag.casefold()))]
+
+
+_CONTEXT_DESCRIPTION = 700
+_CONTEXT_BUDGET = 1800
+
+
+def prompt_context(view: dict[str, Any]) -> str:
+    """What a provider that cannot be sent the picture is told about the product.
+
+    The stored prompt says "the product in the attached image", and for these providers
+    nothing is attached. So the picture's job is done in words: what the product is called,
+    what its listing says, how many there are, and who is in it. Only what the draft holds
+    is used; nothing is guessed.
+    """
+    members = [item for item in (view.get("products") or []) if item.get("name")]
+    lead = members[0] if members else {}
+    name = str(lead.get("name") or "").strip()
+    if not name:
+        return ""
+    lines = [
+        "No product picture can be attached to this request. Use this description of the product "
+        "wherever the instructions below refer to the attached product image, and keep the "
+        "product's colour, material and shape faithful to it.",
+        f"Product: {name}.",
+    ]
+    if len(members) > 1:
+        others = ", ".join(str(item["name"]).strip() for item in members[1:4])
+        lines.append(f"It is shown together with: {others}.")
+    listing = lead.get("listing_fields") or view.get("listing_fields") or {}
+    description = " ".join(str(listing.get("description") or "").split())
+    if description:
+        lines.append(f"Listing description: {description[:_CONTEXT_DESCRIPTION]}")
+    character = view.get("character") or {}
+    if character.get("name") and not character.get("archived"):
+        lines.append(f"The person in the video is {character['name']}.")
+    return "\n".join(lines)[:_CONTEXT_BUDGET]
+
+
+def prompt_for(provider: VideoProvider, view: dict[str, Any]) -> str:
+    """The stored prompt, with the product context ahead of it for a provider with no picture."""
+    prompt = str(view["prompt"])
+    if provider.takes_image:
+        return prompt
+    context = prompt_context(view)
+    return f"{context}\n\n{prompt}" if context else prompt
+
+
+def _tag_clip(workspace_id: str, asset_id: str, tags: list[str]) -> None:
+    """Add these tags to a filed clip, keeping any it already has.
+
+    The clip is already in the Library and paid for, so a failure here is logged and
+    never fails the job.
+    """
+    from trendrelay_api.media_library import JOB_SESSION_FACTORY
+    from trendrelay_api.media_models import MediaAsset
+
+    try:
+        with JOB_SESSION_FACTORY() as session:
+            asset = session.get(MediaAsset, asset_id)
+            if asset is None or asset.workspace_id != workspace_id:
+                return
+            current = [str(tag) for tag in (asset.hashtags or [])]
+            known = {tag.casefold() for tag in current}
+            asset.hashtags = current + [tag for tag in tags if tag.casefold() not in known]
+            session.commit()
+    except Exception:  # noqa: BLE001 - tagging is a convenience, the clip is already filed
+        logger.warning("Could not tag clip %s", asset_id, exc_info=True)
+
+
 def _file_library_clip(
     workspace_id: str,
     actor_user_id: str,
@@ -1658,6 +1747,7 @@ def run_job(
             filed_id = _file_library_clip(
                 workspace_id, actor_user_id, data, f"{provider.label} video",
             )
+            _tag_clip(workspace_id, filed_id, clip_tags(provider.id))
             complete_job(
                 job_id,
                 worker_id,
@@ -1676,7 +1766,7 @@ def run_job(
                     "This draft no longer needs a file. Nothing was sent to the provider.",
                 )
             image, mime = _subject_bytes(session, workspace_id, payload["subject_asset_id"])
-            prompt = str(view["prompt"])
+            prompt = prompt_for(provider, view)
             references = _character_references(session, workspace_id, view)
         object_key = f"product-clips/{draft_id}/{job_id}.mp4"
         data = _run_adapter(
@@ -1690,6 +1780,7 @@ def run_job(
             kept_id = _file_library_clip(
                 workspace_id, actor_user_id, data, f"{provider.label} video",
             )
+            _tag_clip(workspace_id, kept_id, clip_tags(provider.id, str(view.get("recipe") or "")))
             raise VideoError(
                 "unavailable",
                 "This draft was filled while the video was generated. The video is "
@@ -1704,6 +1795,11 @@ def run_job(
                 draft_id,
                 media_base64=encoded,
                 filename=f"{provider.id}-clip.mp4",
+            )
+        if filed.get("asset_id"):
+            _tag_clip(
+                workspace_id, str(filed["asset_id"]),
+                clip_tags(provider.id, str(view.get("recipe") or "")),
             )
         complete_job(
             job_id,
