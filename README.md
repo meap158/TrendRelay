@@ -251,3 +251,8 @@ See [DESIGN.md](DESIGN.md) for interaction principles, [CONTRIBUTING.md](CONTRIB
 Only download, retain, and reuse media you are authorized to access. Douyin integrations may rely on browser-facing or reverse-engineered interfaces that can change without notice and may be restricted by platform terms. Review the [third-party notices](docs/third-party/README.md) before redistribution.
 
 No project-level software license has been selected yet. Until one is added, TrendRelay-authored code remains under default copyright while incorporated dependencies retain their respective licenses.
+
+## For AI coding agents
+
+Read [`AGENTS.md`](AGENTS.md): it is the canonical source of agent instructions for this project
+(`CLAUDE.md` only points to it). Local session notes live in `AGENT_HANDOVER.md`, which is git-ignored.
