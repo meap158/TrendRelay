@@ -1337,7 +1337,13 @@ function LibraryContent() {
   const [status, setStatus] = useState<Status | null>(null);
   // One object rather than four separate states, so the list, the select-all
   // and the Publish picker all describe a filter the same way.
-  const [filters, setFilters] = useState<AssetFilterValues>({});
+  const [filters, setFilters] = useState<AssetFilterValues>(() => ({ recipe: searchParams.get("recipe") || undefined }));
+  const recipeQuery = searchParams.get("recipe") ?? "";
+  const [appliedRecipeQuery, setAppliedRecipeQuery] = useState(recipeQuery);
+  if (appliedRecipeQuery !== recipeQuery) {
+    setAppliedRecipeQuery(recipeQuery);
+    setFilters((current) => ({ ...current, recipe: recipeQuery || undefined }));
+  }
   const notificationAssetQuery = searchParams.get("assets") ?? "";
   const notificationTitle = notificationActionTitle(searchParams.get("notice") ?? "");
   const downloadJobQuery = searchParams.get("downloads") ?? searchParams.get("download") ?? "";

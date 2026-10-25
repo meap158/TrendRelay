@@ -2,7 +2,7 @@
 
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useT } from "../i18n-provider";
 
@@ -69,6 +69,7 @@ export function Lightbox({
   onPrevious,
   onNext,
   kind = "image",
+  sidebar,
 }: {
   open: boolean;
   /** The image itself. An object URL, the same bytes the preview is showing. */
@@ -102,6 +103,7 @@ export function Lightbox({
    * way to be opened at all while this only knew about pictures.
    */
   kind?: "image" | "video";
+  sidebar?: ReactNode;
 }) {
   const t = useT();
 
@@ -128,7 +130,7 @@ export function Lightbox({
     <RadixDialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="ui-lightbox-overlay" />
-        <RadixDialog.Content className="ui-lightbox" onClick={onClose}>
+        <RadixDialog.Content className={`ui-lightbox${sidebar ? " ui-lightbox-with-sidebar" : ""}`} onClick={onClose}>
           <RadixDialog.Title className="sr-only">{alt}</RadixDialog.Title>
           {/* No src while the next picture's bytes are still arriving - the
               dark stage holds steady and the image joins it, rather than a
@@ -166,6 +168,7 @@ export function Lightbox({
               onClick={(event) => { event.stopPropagation(); onNext(); }}
             ><ChevronRight size={22} aria-hidden="true" /></button>
           )}
+          {sidebar && <aside className="ui-lightbox-sidebar" onClick={(event) => event.stopPropagation()}>{sidebar}</aside>}
           <RadixDialog.Close asChild>
             <button type="button" className="ui-lightbox-close" aria-label={t("common.close")}>
               <X size={18} aria-hidden="true" />

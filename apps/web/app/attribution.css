@@ -1474,6 +1474,9 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
   font-size: 10px;
   font-weight: 650;
 }
+button.recipe-made { background: transparent; font-family: inherit; line-height: inherit; cursor: pointer; }
+button.recipe-made:hover:not(:disabled) { background: var(--green-dark); }
+button.recipe-made:disabled { cursor: default; opacity: .6; }
 
 /* Compact chips: smaller, counts muted, rows tight, the panel short. */
 .recipe-picker-filters { max-block-size: 30vh; gap: 4px; }

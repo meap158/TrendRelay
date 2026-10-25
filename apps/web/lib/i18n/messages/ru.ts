@@ -1216,6 +1216,8 @@ export const ru: Messages = {
       recipeSearch: "Поиск рецептов",
       recipeCount: "{count, plural, one {# рецепт} few {# рецепта} many {# рецептов} other {# рецепта}}",
       recipeMade: "Создано: {count}",
+      recipeLibraryAll: "Все результаты в библиотеке",
+      recipeLibraryItem: "Найти этот файл в библиотеке",
       recipePreviewMade: "Посмотреть, что создано по рецепту «{name}»",
       recipeFilterAll: "Все рецепты",
       recipeFilters: "Фильтр рецептов",

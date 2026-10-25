@@ -1207,6 +1207,8 @@ export const en = {
       recipeSearch: "Search recipes",
       recipeCount: "{count, plural, one {# recipe} other {# recipes}}",
       recipeMade: "{count, plural, one {# made} other {# made}}",
+      recipeLibraryAll: "View all in Library",
+      recipeLibraryItem: "Find this item in Library",
       recipePreviewMade: "View what {name} has made",
       recipeFilterAll: "All recipes",
       recipeFilters: "Filter recipes",

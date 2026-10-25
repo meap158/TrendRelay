@@ -6,8 +6,7 @@ import { useLocale, useT } from "../i18n-provider";
 import { AssetThumbnail, type LibraryAsset } from "../publish/composer";
 import { Button } from "../ui/button";
 import { ChoiceGroup } from "../ui/choice-group";
-import { Lightbox, useLightboxSet } from "../ui/lightbox";
-import { useCreativeSource } from "./product-creatives";
+import { RecipeGallery } from "./recipe-gallery";
 import { RecipePreview } from "./recipe-previews";
 import {
   facetChips,
@@ -130,12 +129,7 @@ export function RecipePicker({
 
   // What one recipe has made, opened in the shared lightbox and walked with its
   // arrows, the way every other strip of pictures in the app is looked at.
-  const [previewing, setPreviewing] = useState("");
-  const previewAssets = previewing ? examples[previewing]?.assets ?? [] : [];
-  const lightbox = useLightboxSet(previewAssets.length);
-  const previewAsset = lightbox.openAt === null ? null : previewAssets[lightbox.openAt] ?? null;
-  const previewVideo = previewAsset?.media_kind === "video";
-  const previewSource = useCreativeSource(previewAsset?.id ?? null, previewVideo);
+  const [previewing, setPreviewing] = useState<{ recipe: string; asset: string } | null>(null);
 
   return (
     <div className="recipe-picker">
@@ -241,8 +235,7 @@ export function RecipePicker({
                       // Looking is not choosing: the card's radio stays as it was.
                       event.preventDefault();
                       event.stopPropagation();
-                      setPreviewing(option);
-                      lightbox.open(index);
+                      setPreviewing({ recipe: option, asset: asset.id });
                     }}
                   >
                     <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} hoverPreview />
@@ -251,26 +244,25 @@ export function RecipePicker({
               </span>
             ) : undefined,
             meta: made && made.count > 0 ? (
-              <span className="recipe-made">{t("attribution.generate.recipeMade", { count: made.count })}</span>
+              <button type="button" className="recipe-made"
+                aria-label={t("attribution.generate.recipePreviewMade", { name: labelOf(option) })}
+                disabled={!workspaceId || !made.assets.length}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setPreviewing({ recipe: option, asset: made.assets[0].id });
+                }}>{t("attribution.generate.recipeMade", { count: made.count })}</button>
             ) : undefined,
           };
         })}
         onChange={onChange}
       />
       <small className="recipe-picker-key">{t("attribution.generate.recipePreviewKey")}</small>
-      {lightbox.openAt !== null && previewAsset && (
-        <Lightbox
-          open
-          src={previewSource}
-          kind={previewVideo ? "video" : "image"}
-          alt={t("attribution.generate.previewFile", { index: lightbox.openAt + 1, count: previewAssets.length })}
-          onClose={() => {
-            lightbox.close();
-            setPreviewing("");
-          }}
-          onPrevious={lightbox.previous}
-          onNext={lightbox.next}
-        />
+      {previewing && workspaceId && (
+        <RecipeGallery key={`${workspaceId}:${previewing.recipe}`}
+          recipe={previewing.recipe} name={labelOf(previewing.recipe)}
+          initial={examples[previewing.recipe]?.assets ?? []} selected={previewing.asset}
+          workspaceId={workspaceId} apiFetch={apiFetch} onClose={() => setPreviewing(null)} />
       )}
     </div>
   );

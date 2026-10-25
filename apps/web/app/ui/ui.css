@@ -474,6 +474,31 @@ a.ui-button { text-decoration: none; }
 .ui-lightbox-step:focus-visible { outline: 2px solid var(--on-media); outline-offset: 2px; }
 .ui-lightbox-previous { inset-inline-start: 14px; }
 .ui-lightbox-next { inset-inline-end: 14px; }
+.ui-lightbox-with-sidebar { grid-template-columns: 180px minmax(0, 1fr) 180px; gap: 16px; }
+/* Equal outer tracks keep the hero centered in the viewport, independent of
+   the thumbnail rail. The rail stays secondary rather than becoming a pane. */
+.ui-lightbox-with-sidebar > img, .ui-lightbox-with-sidebar > video { grid-area: 1 / 2; }
+.ui-lightbox-with-sidebar .ui-lightbox-next { inset-inline-end: 224px; }
+.ui-lightbox-with-sidebar .ui-lightbox-previous { inset-inline-start: 224px; }
+.ui-lightbox-sidebar { grid-area: 1 / 3; align-self: center; box-sizing: border-box; width: 100%; max-height: 70vh; min-height: 0; overflow-y: auto; padding: 10px; background: rgb(255 255 255 / 5%); color: var(--on-media); border-radius: 8px; cursor: default; font-size: 12px; scrollbar-width: thin; }
+.ui-lightbox-sidebar h2 { font-size: 13px; margin: 0 0 8px; }
+.ui-lightbox-sidebar a { display: block; margin-block: 8px; text-decoration: underline; color: inherit; opacity: .8; }
+.ui-lightbox-sidebar a:hover, .ui-lightbox-sidebar a:focus-visible { opacity: 1; }
+.recipe-gallery-thumbnails { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.recipe-gallery-thumbnails button { padding: 2px; border: 2px solid transparent; border-radius: 5px; background: transparent; aspect-ratio: 1; overflow: hidden; cursor: pointer; }
+.recipe-gallery-thumbnails button[aria-pressed="true"] { border-color: var(--green); }
+.recipe-gallery-thumbnails .picker-thumb { width: 100%; height: 100%; }
+.recipe-gallery-thumbnails button:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+.recipe-gallery-thumbnails img, .recipe-gallery-thumbnails video { width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 700px) {
+  .ui-lightbox-with-sidebar { grid-template: minmax(0, 1fr) minmax(0, 22vh) / minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .ui-lightbox-with-sidebar > img, .ui-lightbox-with-sidebar > video { grid-area: 1 / 1; }
+  .ui-lightbox-sidebar { grid-area: 2 / 1; padding: 8px; max-height: 22vh; }
+  .ui-lightbox-with-sidebar .ui-lightbox-next { inset-inline-end: 14px; }
+  .ui-lightbox-with-sidebar .ui-lightbox-previous { inset-inline-start: 14px; }
+  .ui-lightbox-with-sidebar .ui-lightbox-step { inset-block-start: 32%; }
+  .recipe-gallery-thumbnails { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+}
 
 /* --- dialog ---------------------------------------------------------------- */
 .ui-dialog-overlay {

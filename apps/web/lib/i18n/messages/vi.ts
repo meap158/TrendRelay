@@ -1203,6 +1203,8 @@ export const vi: Messages = {
       recipeSearch: "Tìm công thức",
       recipeCount: "{count} công thức",
       recipeMade: "Đã tạo {count}",
+      recipeLibraryAll: "Xem tất cả trong Thư viện",
+      recipeLibraryItem: "Tìm mục này trong Thư viện",
       recipePreviewMade: "Xem những gì {name} đã tạo",
       recipeFilterAll: "Tất cả công thức",
       recipeFilters: "Lọc công thức",

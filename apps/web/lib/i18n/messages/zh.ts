@@ -1190,6 +1190,8 @@ export const zh: Messages = {
       recipeSearch: "搜索方案",
       recipeCount: "{count} 个方案",
       recipeMade: "已生成 {count} 个",
+      recipeLibraryAll: "在素材库中查看全部",
+      recipeLibraryItem: "在素材库中查找此项",
       recipePreviewMade: "查看「{name}」已生成的作品",
       recipeFilterAll: "全部方案",
       recipeFilters: "筛选方案",
