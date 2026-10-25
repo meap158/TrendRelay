@@ -1138,7 +1138,6 @@ export const ru: Messages = {
       mediaLabel: "Медиа",
       batchHeading: "Эта партия · файлов: {count}",
       recipeHeading: "Ещё по этому рецепту",
-      showRecipeMedia: "Показать ещё по этому рецепту",
       openBatch: "Открыть эту партию в библиотеке",
       open: "Открыть в библиотеке",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

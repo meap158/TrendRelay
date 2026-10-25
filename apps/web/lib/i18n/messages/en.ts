@@ -1130,7 +1130,6 @@ export const en = {
       mediaLabel: "Media",
       batchHeading: "This batch · {count, plural, one {# file} other {# files}}",
       recipeHeading: "More from this recipe",
-      showRecipeMedia: "Show more from this recipe",
       openBatch: "Open this batch in Library",
       open: "Open in Library",
       filesInLibrary: "{count, plural, one {# file in Library} other {# files in Library}}",

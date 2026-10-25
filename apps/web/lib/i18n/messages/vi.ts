@@ -1126,7 +1126,6 @@ export const vi: Messages = {
       mediaLabel: "Phương tiện",
       batchHeading: "Lô này · {count} tệp",
       recipeHeading: "Thêm từ công thức này",
-      showRecipeMedia: "Xem thêm từ công thức này",
       openBatch: "Mở lô này trong thư viện",
       open: "Mở trong thư viện",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

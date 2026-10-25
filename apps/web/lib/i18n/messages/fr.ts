@@ -1138,7 +1138,6 @@ export const fr: Messages = {
       mediaLabel: "Média",
       batchHeading: "Ce lot · {count, plural, one {# fichier} other {# fichiers}}",
       recipeHeading: "Plus de cette recette",
-      showRecipeMedia: "Afficher plus de cette recette",
       openBatch: "Ouvrir ce lot dans la bibliothèque",
       open: "Ouvrir dans la bibliothèque",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

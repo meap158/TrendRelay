@@ -1126,7 +1126,6 @@ export const ja: Messages = {
       mediaLabel: "メディア",
       batchHeading: "このバッチ · {count}件",
       recipeHeading: "このレシピの他のメディア",
-      showRecipeMedia: "このレシピの他のメディアを表示",
       openBatch: "このバッチをライブラリで開く",
       open: "ライブラリで開く",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

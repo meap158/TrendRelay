@@ -1113,7 +1113,6 @@ export const zh: Messages = {
       mediaLabel: "媒体",
       batchHeading: "本批 · {count} 个文件",
       recipeHeading: "此配方的更多媒体",
-      showRecipeMedia: "显示此配方的更多媒体",
       openBatch: "在素材库中打开本批",
       open: "在素材库中打开",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

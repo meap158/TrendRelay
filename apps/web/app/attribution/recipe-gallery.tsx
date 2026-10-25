@@ -12,7 +12,7 @@ import { useCreativeSource } from "./product-creatives";
  *
  * With `batch` (the files one draft made) the viewer is about that batch: it opens on the batch,
  * arrows and the counter stay inside it, and the recipe's other media sit in a second, labelled
- * section that is only fetched when asked for. Without it, the recipe's examples are the list.
+ * section that loads after it. Without it, the recipe's examples are the list.
  */
 export function RecipeGallery({ recipe, name, initial, selected, workspaceId, apiFetch, onClose, batch }: {
   recipe: string; name: string; initial: LibraryAsset[]; selected: string;
@@ -24,11 +24,10 @@ export function RecipeGallery({ recipe, name, initial, selected, workspaceId, ap
 }) {
   const t = useT();
   const [assets, setAssets] = useState(batch ? [] : initial);
-  const [showRecipe, setShowRecipe] = useState(!batch);
   const [selectedId, setSelectedId] = useState(selected);
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState({ loaded: 0, total: 0 });
-  const [loading, setLoading] = useState(!batch);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const thumbnails = useRef<HTMLDivElement>(null);
@@ -36,7 +35,6 @@ export function RecipeGallery({ recipe, name, initial, selected, workspaceId, ap
     thumbnails.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
   useEffect(() => {
-    if (!showRecipe) return;
     const controller = new AbortController();
     const params = new URLSearchParams({ recipe, limit: "60", offset: String(offset), sort: "newest" });
     void apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`, { signal: controller.signal })
@@ -52,7 +50,7 @@ export function RecipeGallery({ recipe, name, initial, selected, workspaceId, ap
       .catch(() => { if (!controller.signal.aborted) setError(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [recipe, workspaceId, apiFetch, offset, attempt, showRecipe]);
+  }, [recipe, workspaceId, apiFetch, offset, attempt]);
   // The viewer steps through whichever list holds the picked file: the batch first, else the recipe's.
   const inBatch = Boolean(batch?.some((item) => item.id === selectedId));
   const list = batch && (inBatch || !assets.some((item) => item.id === selectedId)) ? batch : assets;
@@ -84,15 +82,14 @@ export function RecipeGallery({ recipe, name, initial, selected, workspaceId, ap
       {asset && <p aria-live="polite">{index + 1} / {total}</p>}
       {batch && <h3 className="recipe-gallery-heading">{t("attribution.libraryItems.batchHeading", { count: batch.length })}</h3>}
       <div className="recipe-gallery-thumbnails" ref={thumbnails}>{thumbs(batch ?? assets, batch ? batch.length : Math.max(page.total, assets.length))}</div>
-      {batch && !showRecipe && <Button size="sm" onClick={() => { setLoading(true); setShowRecipe(true); }}>{t("attribution.libraryItems.showRecipeMedia")}</Button>}
-      {batch && showRecipe && <>
+      {batch && <>
         <h3 className="recipe-gallery-heading">{t("attribution.libraryItems.recipeHeading")}</h3>
         <a href={`/library?recipe=${encodeURIComponent(recipe)}`} target="_blank" rel="noopener noreferrer">{t("attribution.generate.recipeLibraryAll")}</a>
         <div className="recipe-gallery-thumbnails">{thumbs(recipeMedia, recipeMedia.length)}</div>
       </>}
       {loading && <p role="status">{t("common.loading")}</p>}
       {error && <div role="alert"><p>{t("common.unavailable")}</p><Button size="sm" onClick={() => { setError(false); setLoading(true); setAttempt((value) => value + 1); }}>{t("common.retry")}</Button></div>}
-      {!loading && !error && showRecipe && more && <Button size="sm" onClick={loadMore}>{t("common.loadMore")}</Button>}
+      {!loading && !error && more && <Button size="sm" onClick={loadMore}>{t("common.loadMore")}</Button>}
     </>}
   />;
 }

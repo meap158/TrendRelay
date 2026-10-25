@@ -1128,7 +1128,6 @@ export const ar: Messages = {
       mediaLabel: "الوسائط",
       batchHeading: "هذه الدفعة · {count} ملفات",
       recipeHeading: "المزيد من هذه الوصفة",
-      showRecipeMedia: "عرض المزيد من هذه الوصفة",
       openBatch: "فتح هذه الدفعة في المكتبة",
       open: "فتح في المكتبة",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",
