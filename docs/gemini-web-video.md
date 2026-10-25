@@ -26,6 +26,13 @@ documents chat, tools and images but no video, so nothing is built on it.
 
 ## Limits to know
 
+- **The account needs video on its Gemini plan.** First live run (2026-10-26, a free-tier account): Check passed
+  ("signed in"), the job was created, then Gemini answered the submit with "If you upgrade your subscription I can create
+  that video for you today." and no video followed. The bridge keeps the job `in_progress` (progress creeping to 95) until
+  its own 10-minute timeout and does not put Gemini's reply in the API response, only in its log, so the clip's wait ends
+  with "did not finish in time". If a job sits at 95, read the bridge's log (`.data/gemini-web/bridge.log` when started
+  from a terminal redirect) for that sentence. Use an account whose plan includes Veo (Google AI Pro or Ultra).
+
 - **Text-to-video only.** The bridge takes no image, so the product picture is not sent; the stored prompt carries the
   garment. A character's pictures are not sent either.
 - **Fixed output.** About 10 seconds with audio, 9:16 (720x1280). Duration is Gemini's choice.
