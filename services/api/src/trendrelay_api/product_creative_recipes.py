@@ -1170,9 +1170,20 @@ def resolve_prompt(
     if character:
         cast = _CAST_WORDINGS.get((recipe, bool(background), bool(together)))
         if cast is not None:
-            return cast
+            return _with_expression(cast, recipe, spec)
     key = (recipe, bool(background), variant if spec["variants"] else None)
     prompt = (_TOGETHER if together else _PROMPTS).get(key)
     if prompt is None:
         raise ValueError("That recipe has no wording for this background choice.")
+    if _BUILTIN_FACETS[recipe]["cast"] == "person":
+        return _with_expression(prompt, recipe, spec)
     return prompt
+
+
+def _with_expression(prompt: str, recipe: str, spec: dict[str, Any]) -> str:
+    """Append the acting line the mined recipes carry, so built-ins match them."""
+    from trendrelay_api.product_creative_library import expression_direction
+
+    kinds = spec["kinds"]
+    kind = "carousel" if "carousel" in kinds else kinds[0]
+    return prompt + " " + expression_direction(_BUILTIN_FACETS[recipe].get("mood", []), kind=kind)

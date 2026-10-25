@@ -212,7 +212,8 @@ def test_queueing_stores_the_reviewed_prompt_and_flips_it_with_the_background() 
         json=draft_body(product_id, kind="video", recipe="mannequin_transition"),
     )
     assert hallway.status_code == 201, hallway.text
-    assert hallway.json()["draft"]["prompt"] == MANNEQUIN_OFF
+    assert hallway.json()["draft"]["prompt"] == resolve_prompt("mannequin_transition", background=False)
+    assert hallway.json()["draft"]["prompt"].startswith(MANNEQUIN_OFF)
     assert "hallway" in hallway.json()["draft"]["prompt"]
 
     room = request(
@@ -224,7 +225,8 @@ def test_queueing_stores_the_reviewed_prompt_and_flips_it_with_the_background() 
         ),
     )
     assert room.status_code == 201, room.text
-    assert room.json()["draft"]["prompt"] == MANNEQUIN_ON
+    assert room.json()["draft"]["prompt"] == resolve_prompt("mannequin_transition", background=True)
+    assert room.json()["draft"]["prompt"].startswith(MANNEQUIN_ON)
     assert "hallway" not in room.json()["draft"]["prompt"]
 
 

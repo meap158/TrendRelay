@@ -22,6 +22,23 @@ from trendrelay_api.product_creative_recipes import (
 _BED = re.compile(r"\bbed\b", re.IGNORECASE)
 
 
+@pytest.mark.parametrize("recipe", ["character_editorial_carousel", "plush_armchair_lounge", "hikaru_walk"])
+def test_character_acting_direction_preserves_identity_and_product_views(recipe: str) -> None:
+    prompt = resolve_prompt(recipe, background=False, character=True)
+    assert "same facial identity" in prompt
+    assert "eyes, brows, cheeks and mouth" in prompt
+    assert "views facing away" in prompt
+    assert "expression explicitly required by the scene" in prompt
+    assert len(prompt) <= 4000
+    if "carousel" in RECIPES[recipe]["kinds"]:
+        assert "Across cards with a visible face" in prompt
+
+
+@pytest.mark.parametrize("recipe", ["bed_flat_lay", "styled_flat_lay", "draped_garment_still_life"])
+def test_product_only_recipes_do_not_gain_facial_acting(recipe: str) -> None:
+    assert "same facial identity" not in resolve_prompt(recipe, background=False)
+
+
 def test_the_bed_wording_names_a_bed_only_when_the_background_is_off() -> None:
     off = resolve_prompt("bed_flat_lay", background=False)
     on = resolve_prompt("bed_flat_lay", background=True)
@@ -35,15 +52,15 @@ def test_the_bed_wording_names_a_bed_only_when_the_background_is_off() -> None:
 def test_the_hallway_is_only_the_mannequin_without_a_background() -> None:
     off = resolve_prompt("mannequin_transition", background=False)
     on = resolve_prompt("mannequin_transition", background=True)
-    assert off == MANNEQUIN_OFF and "hallway" in off
-    assert on == MANNEQUIN_ON and "hallway" not in on
+    assert off.startswith(MANNEQUIN_OFF) and "hallway" in off
+    assert on.startswith(MANNEQUIN_ON) and "hallway" not in on
     assert "attached product image" in on
 
 
 def test_mirror_selfie_keeps_both_genders_with_and_without_a_background() -> None:
     female = resolve_prompt("mirror_selfie", background=True, variant="female")
     male = resolve_prompt("mirror_selfie", background=True, variant="male")
-    assert female == MIRROR_FEMALE and male == MIRROR_MALE
+    assert female.startswith(MIRROR_FEMALE) and male.startswith(MIRROR_MALE)
     assert female != male
     assert "completely obscure" in female and "completely obscure" in male
     assert "background reference" in female and "background reference" in male
@@ -118,8 +135,8 @@ def test_a_variant_on_the_bed_recipe_is_refused() -> None:
 def test_together_is_a_sibling_and_leaves_the_single_product_scripts_alone() -> None:
     assert resolve_prompt("bed_flat_lay", background=False, together=False) == BED_FLAT_LAY_OFF
     assert resolve_prompt("bed_flat_lay", background=True, together=False) == BED_FLAT_LAY_ON
-    assert resolve_prompt("mannequin_transition", background=False, together=False) == MANNEQUIN_OFF
-    assert resolve_prompt("mannequin_transition", background=True, together=False) == MANNEQUIN_ON
+    assert resolve_prompt("mannequin_transition", background=False, together=False).startswith(MANNEQUIN_OFF)
+    assert resolve_prompt("mannequin_transition", background=True, together=False).startswith(MANNEQUIN_ON)
 
     bed_off = resolve_prompt("bed_flat_lay", background=False, together=True)
     bed_on = resolve_prompt("bed_flat_lay", background=True, together=True)

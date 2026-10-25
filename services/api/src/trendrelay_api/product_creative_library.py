@@ -61,6 +61,34 @@ REAL = (
     "pores, slight facial asymmetry, and ordinary camera detail, not a doll, "
     "a plastic render, or a beauty filter."
 )
+
+
+def expression_direction(moods: list[str], *, kind: str) -> str:
+    """Acting for a visible face. The cast or character line keeps the identity.
+
+    Kept short on purpose: it rides on every wording with a person, and the
+    longest of those must still fit the stored prompt beside a character.
+    """
+    if "playful" in moods:
+        arc = "an amused side glance, a small laugh, then a warm direct smile"
+    elif any(mood in moods for mood in ("cozy", "candid")):
+        arc = "a contented soft smile, an off-camera glance, then a quietly amused look"
+    else:
+        arc = "a relaxed attentive gaze, a thoughtful off-camera glance, then a subtle smile"
+    if kind == "carousel":
+        lead = f"Across cards with a visible face, let the expression follow the action: {arc}."
+    elif kind == "video":
+        lead = "Where the face is visible, let it change gently with the action: relaxed attentive eyes, then a subtle natural smile."
+    else:
+        lead = "Where the face is visible, give it an expression the action motivates: relaxed attentive eyes and a subtle natural smile."
+    return (
+        f"{lead} Keep the same facial identity and natural asymmetry, changing only the "
+        "eyes, brows, cheeks and mouth; no frozen smile or exaggerated surprise. Keep any "
+        "expression explicitly required by the scene, and never turn views facing away "
+        "toward the camera to show one."
+    )
+
+
 #: Who a recipe with a person shows when no Library character is chosen.
 #: Deliberately plain: an entry's own scene and poses carry the look, and a
 #: character chosen in the dialog replaces this line entirely.
@@ -255,6 +283,7 @@ def resolve(
     parts.append(CLEAN)
     if person:
         parts.append(COVERED)
+        parts.append(expression_direction(entry["facets"].get("mood", []), kind=kind))
     if kind == "video":
         parts.append(SILENT)
     return " ".join(part.strip() for part in parts if part.strip())

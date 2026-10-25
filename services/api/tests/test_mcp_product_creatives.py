@@ -26,7 +26,7 @@ from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base, UserProfile, Workspace, utc_now
 from trendrelay_api.opportunity_models import Product
 from trendrelay_api.product_creative_models import ProductCreativeDraft, ProductCreativeLink
-from trendrelay_api.product_creative_recipes import BED_FLAT_LAY_OFF, MANNEQUIN_OFF
+from trendrelay_api.product_creative_recipes import BED_FLAT_LAY_OFF, MANNEQUIN_OFF, resolve_prompt
 
 engine = create_engine(
     "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -245,7 +245,8 @@ def test_submit_links_the_library_asset_both_ways(session, monkeypatch, tmp_path
         session, "ws-1",
         product_id="product-1", kind="video", recipe="mannequin_transition",
     )
-    assert made["prompt"] == MANNEQUIN_OFF
+    assert made["prompt"] == resolve_prompt("mannequin_transition", background=False)
+    assert made["prompt"].startswith(MANNEQUIN_OFF)
     # A video draft refuses an image, so this fill is an image draft.
     image = product_creatives.create_draft(
         session, "ws-1",
