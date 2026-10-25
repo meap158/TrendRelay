@@ -9,12 +9,13 @@ Background and limits: `docs/gemini-web-video.md`. Providers are listed in Tools
 | --- | --- | --- | --- | --- |
 | Grok (xAI) | yes, as a reference | yes | no | 10 s, 9:16, bucket-delivered |
 | Gemini (official API) | yes, as the first frame input | no | no | 8 s, 9:16 |
-| **Gemini Web** | **no** (the bridge refuses `input_reference`) | no | **yes** (`prompt_for`) | about 10 s, 720x1280, audio |
+| **Gemini Web** | **yes**, attached as `input_reference` (patched bridge) | yes, portrait and sheet | no | about 10 s, 720x1280, audio |
 
-For a provider that cannot take the picture, the stored prompt is sent with a context block ahead of it: the lead
-product's name, up to three others it is shown with, its listing description (700 characters), and the character's name
-(`prompt_context`). Nothing else is guessed. The stored prompt itself, including its "attached product image" wording, is
-never edited. The draft still needs a Library image selected before it can be queued; that image just is not sent.
+Gemini Web takes at most three pictures per request: the product picture first, then the character's. The stored prompt is
+sent unedited; its "attached product image" wording is true because the picture is attached. A provider that cannot take
+pictures (none today) gets a context block ahead of the prompt instead: the lead product's name, up to three others it is
+shown with, its listing description (700 characters) and the character's name (`prompt_context`, used when a provider
+has `takes_image` off). The draft needs a Library image selected before it can be queued.
 
 ## 1. One-time setup
 
@@ -43,8 +44,9 @@ Set the slot that lists the Pro models in Tools (**Gemini Web account slot**). O
 
 ## 3. Gate B: the bridge
 
-1. `python scripts/gemini_web_bridge.py` (clones and builds once; Go needed; everything stays under `.data`). It prints
-   the address. It passes `PORT` explicitly because this machine's shell sets `PORT`, which the bridge would otherwise
+1. `python scripts/gemini_web_bridge.py` (clones the pinned release, applies `scripts/gemini_web_bridge.patch` so a video
+   can carry pictures, and builds; Go needed; everything stays under `.data`). It rebuilds when the patch was not yet
+   applied. It prints the address. It passes `PORT` explicitly because this machine's shell sets `PORT`, which the bridge would otherwise
    obey over its `.env`.
 2. Restart the bridge after every cookie or slot change. It reads `.env` only at start.
 3. Tools > Gemini Web > **Check**. The only passing answer is "The Gemini Web bridge is signed in (N models)". Anything else:
@@ -71,8 +73,9 @@ All of these must hold. The first is the app, the rest are the file and the Libr
    the batch viewer all find it).
 3. Probe the file: `ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,duration -of compact <file>`
    should show an H.264 video stream of 720x1280, an AAC audio stream, and a duration near 10 s.
-4. Look at a frame (`ffmpeg -ss 4 -i <file> -frames:v 1 frame.jpg`). It must show the product and scene the prompt
-   describes. A different garment means the context block was thin: check the product's name and listing description.
+4. Look at a frame (`ffmpeg -ss 4 -i <file> -frames:v 1 frame.jpg`) beside the product picture. It must show that product
+   in the scene the prompt describes. A different garment means the picture did not reach Gemini: check that the bridge
+   log line "Video generation submitted" came from a patched build, and that the draft's Library image is the right one.
 
 ## 6. When it goes wrong
 
@@ -82,6 +85,8 @@ All of these must hold. The first is the app, the rest are the file and the Libr
 | "limit reached" / `quota` | the account's daily video quota is spent | wait for the reset or use another account's cookie |
 | "already making a video" | another clip is running on the bridge | wait; do not retry in a loop |
 | `moderation` | Gemini refused the prompt | change the draft's recipe or wording; it is not retried |
+| "bridge is the unpatched one" | the bridge was built without the picture patch | run `scripts/gemini_web_bridge.py` again; nothing was spent |
+| Connection dropped while sending | pictures larger than the bridge's body limit (unpatched default is 4 MB) | the patch raises it to 40 MB; rebuild |
 | Check says "not signed in" | cookie expired or signed out | fresh cookie, restart the bridge |
 | Bridge exits at start | cookie missing `__Secure-1PSID` or `__Secure-1PSIDTS` | copy the whole Cookie header |
 | Bridge on port 5180, Check cannot reach it | the shell's `PORT` overrode `.env` | start it with the script, not by hand |
