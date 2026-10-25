@@ -1070,6 +1070,7 @@ export const vi: Messages = {
     creativeAll: "Tất cả",
     creativePending: "Bản nháp đang chờ",
     creativeLibrary: "Trong Thư viện",
+    creativeLibraryProducts: "{count} sản phẩm có nội dung trong thư viện",
     pendingDrafts: {
       title: "{count} bản nháp đang chờ tệp",
       help: "Bản nháp là yêu cầu tạo nội dung chưa nhận được tệp. Xem lại, hoàn thành hoặc xoá nếu lỡ thêm nhầm. Xoá bản nháp vẫn giữ sản phẩm và mọi tệp đã lưu.",
@@ -1118,7 +1119,9 @@ export const vi: Messages = {
     libraryItems: {
       eyebrow: "KHÔNG GIAN SÁNG TẠO",
       heading: "Trong thư viện",
-      subhead: "Nội dung đã hoàn thành có sẵn trong thư viện. Mở trong thư viện hoặc chỉ hiện các sản phẩm liên quan.",
+      subhead: "Nội dung hoàn thành của {products} sản phẩm, mỗi mục một thẻ. Mở trong thư viện hoặc chỉ hiện các sản phẩm liên quan.",
+      count: "{shown} / {total} mục",
+      range: "{from}–{to} trong {total} mục",
       none: "Thư viện chưa có nội dung hoàn thành cho các sản phẩm này.",
       open: "Mở trong thư viện",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

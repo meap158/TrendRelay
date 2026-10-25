@@ -1072,6 +1072,7 @@ export const ar: Messages = {
     creativeAll: "الكل",
     creativePending: "مسودة معلّقة",
     creativeLibrary: "في المكتبة",
+    creativeLibraryProducts: "{count} منتجًا لديه وسائط في المكتبة",
     pendingDrafts: {
       title: "{count, plural, one {مسودة واحدة تنتظر الوسائط} other {# مسودات تنتظر الوسائط}}",
       help: "المسودة طلب إنشاء وسائط لم يستلم ملفه بعد. راجعها أو أكملها أو أزلها إذا أُضيفت بالخطأ. إزالتها تُبقي المنتجات وأي وسائط محفوظة.",
@@ -1120,7 +1121,9 @@ export const ar: Messages = {
     libraryItems: {
       eyebrow: "مساحة الإبداع",
       heading: "في المكتبة",
-      subhead: "وسائط مكتملة موجودة بالفعل في مكتبتك. افتحها هناك أو اعرض منتجاتها فقط.",
+      subhead: "وسائط مكتملة من {products} منتجًا، بطاقة لكل عنصر. افتحها في المكتبة أو اعرض منتجاتها فقط.",
+      count: "{shown} من {total} عنصرًا",
+      range: "{from}–{to} من {total} عنصرًا",
       none: "لا توجد وسائط مكتملة في المكتبة لهذه المنتجات.",
       open: "فتح في المكتبة",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

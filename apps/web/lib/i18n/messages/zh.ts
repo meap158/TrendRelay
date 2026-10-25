@@ -1057,6 +1057,7 @@ export const zh: Messages = {
     creativeAll: "全部",
     creativePending: "待处理草稿",
     creativeLibrary: "已在资料库",
+    creativeLibraryProducts: "{count} 个商品在素材库中有媒体",
     pendingDrafts: {
       title: "{count} 个草稿在等待媒体",
       help: "草稿是尚未收到文件的生成请求。可以查看、补齐，或在误加时删除。删除草稿会保留商品和已保存的媒体。",
@@ -1105,7 +1106,9 @@ export const zh: Messages = {
     libraryItems: {
       eyebrow: "创意工作区",
       heading: "已在素材库",
-      subhead: "已在素材库中的成品媒体。可在素材库中打开,或只显示相关商品。",
+      subhead: "{products} 个商品的成品媒体,每项一张卡片。可在素材库中打开,或只显示相关商品。",
+      count: "{shown} / {total} 项",
+      range: "第 {from}–{to} 项,共 {total} 项",
       none: "这些商品在素材库中还没有成品媒体。",
       open: "在素材库中打开",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

@@ -634,6 +634,7 @@ export function ProductTable({
                   type="button"
                   className={creativeFilter === value ? "selected" : ""}
                   aria-pressed={creativeFilter === value}
+                  title={value === "library" ? t("attribution.creativeLibraryProducts", { count }) : undefined}
                   onClick={() => setCreativeFilter(value)}
                 ><span>{label}</span><b>{count}</b></button>
               ))}

@@ -1074,6 +1074,7 @@ export const en = {
     creativeAll: "All",
     creativePending: "Pending drafts",
     creativeLibrary: "In Library",
+    creativeLibraryProducts: "{count, plural, one {# product has} other {# products have}} media in the Library",
     pendingDrafts: {
       title: "{count, plural, one {# draft waiting for media} other {# drafts waiting for media}}",
       help: "A draft is a request to generate media that has not received its file yet. Review it, fill it, or remove it if it was queued by mistake. Removing it keeps the products and any saved media.",
@@ -1122,7 +1123,9 @@ export const en = {
     libraryItems: {
       eyebrow: "CREATIVE WORKSPACE",
       heading: "In Library",
-      subhead: "Finished media already in your Library. Open it there, or narrow the table to the products it features.",
+      subhead: "Finished media from {products, plural, one {# product} other {# products}}, one card per item. Open it in the Library, or narrow the table to the products it features.",
+      count: "{shown} of {total, plural, one {# item} other {# items}}",
+      range: "{from}–{to} of {total} items",
       none: "No finished media is in the Library for these products.",
       open: "Open in Library",
       filesInLibrary: "{count, plural, one {# file in Library} other {# files in Library}}",

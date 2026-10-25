@@ -1070,6 +1070,7 @@ export const ja: Messages = {
     creativeAll: "すべて",
     creativePending: "保留中の下書き",
     creativeLibrary: "ライブラリ内",
+    creativeLibraryProducts: "{count}件の商品のメディアがライブラリにあります",
     pendingDrafts: {
       title: "メディア待ちの下書き {count} 件",
       help: "下書きは、まだファイルを受け取っていない生成リクエストです。確認・作成するか、誤って追加した場合は削除してください。削除しても商品と保存済みのメディアは残ります。",
@@ -1118,7 +1119,9 @@ export const ja: Messages = {
     libraryItems: {
       eyebrow: "クリエイティブワークスペース",
       heading: "ライブラリ内",
-      subhead: "すでにライブラリにある完成済みのメディアです。ライブラリで開くか、対象の商品だけに絞り込めます。",
+      subhead: "{products}件の商品の完成済みメディアです。1件につき1枚のカードで表示します。ライブラリで開くか、対象の商品だけに絞り込めます。",
+      count: "{shown} / {total} 件",
+      range: "{total} 件中 {from}–{to} 件",
       none: "これらの商品には、ライブラリに完成済みのメディアがありません。",
       open: "ライブラリで開く",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",

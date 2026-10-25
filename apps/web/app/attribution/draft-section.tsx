@@ -165,7 +165,16 @@ export function DraftSection<P extends SectionProduct>({
   id: string;
   variant: string;
   entries: readonly SectionEntry<P>[];
-  copy: { eyebrow: string; heading: string; subhead: string; none: string; label: string };
+  copy: {
+    eyebrow: string;
+    heading: string;
+    subhead: string;
+    none: string;
+    label: string;
+    /** Messages for "N of M" and the pager range, when the entries are not drafts. */
+    countKey?: string;
+    rangeKey?: string;
+  };
   /** The header's right-hand pill, from the entries the filters leave. */
   summary: (matching: readonly SectionEntry<P>[]) => string;
   /** Filters that mean nothing for this view (a library item has no progress). */
@@ -233,6 +242,7 @@ export function DraftSection<P extends SectionProduct>({
         labels={labels}
         shown={matching.length}
         hide={hideFilters}
+        countKey={copy.countKey}
         onChange={(next) => {
           setFilters(next);
           setPage(0);
@@ -253,8 +263,8 @@ export function DraftSection<P extends SectionProduct>({
       <footer className="pending-drafts-footer">
         <span aria-live="polite">
           {matching.length
-            ? t(`${p}.pager.range`, { from: currentPage * PAGE_SIZE + 1, to: Math.min((currentPage + 1) * PAGE_SIZE, matching.length), total: matching.length })
-            : t(`${p}.filters.count`, { shown: 0, total: entries.length })}
+            ? t(copy.rangeKey ?? `${p}.pager.range`, { from: currentPage * PAGE_SIZE + 1, to: Math.min((currentPage + 1) * PAGE_SIZE, matching.length), total: matching.length })
+            : t(copy.countKey ?? `${p}.filters.count`, { shown: 0, total: entries.length })}
         </span>
         <div>
           <Button variant="quiet" size="sm" aria-label={t(`${p}.pager.previousLabel`)} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>

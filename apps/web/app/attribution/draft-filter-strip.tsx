@@ -96,6 +96,7 @@ export function DraftFilterStrip({
   labels,
   shown,
   hide = [],
+  countKey,
   onChange,
 }: {
   /** Every pending draft, before any filter. */
@@ -106,6 +107,8 @@ export function DraftFilterStrip({
   shown: number;
   /** Filters that mean nothing for this view; their dropdowns are left out. */
   hide?: (keyof DraftFilters)[];
+  /** The message for "N of M", when the entries are not drafts. */
+  countKey?: string;
   onChange: (next: DraftFilters) => void;
 }) {
   const t = useT();
@@ -179,7 +182,7 @@ export function DraftFilterStrip({
         onChange={(shape) => set({ shape })}
       />
       <span className="draft-filter-result">
-        <span aria-live="polite">{t(`${p}.count`, { shown, total: entries.length })}</span>
+        <span aria-live="polite">{t(countKey ?? `${p}.count`, { shown, total: entries.length })}</span>
         {active && (
           <Button variant="quiet" size="sm" onClick={() => onChange(NO_DRAFT_FILTERS)}>
             <X size={14} aria-hidden="true" />

@@ -50,9 +50,11 @@ export function LibraryItems<P extends LibraryProduct>({
       copy={{
         eyebrow: t("attribution.libraryItems.eyebrow"),
         heading: t("attribution.libraryItems.heading"),
-        subhead: t("attribution.libraryItems.subhead"),
+        subhead: t("attribution.libraryItems.subhead", { products: new Set(items.flatMap((item) => item.products.map((product) => product.id))).size }),
         none: t("attribution.libraryItems.none"),
         label: t("attribution.libraryItems.heading"),
+        countKey: "attribution.libraryItems.count",
+        rangeKey: "attribution.libraryItems.range",
       }}
       summary={(matching) =>
         t("attribution.libraryItems.filesInLibrary", { count: new Set(matching.flatMap(({ draft }) => filesOf(draft.id))).size })}

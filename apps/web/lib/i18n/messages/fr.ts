@@ -1082,6 +1082,7 @@ export const fr: Messages = {
     creativeAll: "Tous",
     creativePending: "Brouillon en attente",
     creativeLibrary: "Dans la Bibliothèque",
+    creativeLibraryProducts: "{count, plural, one {# produit a} other {# produits ont}} des médias dans la bibliothèque",
     pendingDrafts: {
       title: "{count, plural, one {# brouillon attend son média} other {# brouillons attendent leur média}}",
       help: "Un brouillon est une demande de génération qui n'a pas encore reçu son fichier. Vérifiez-le, complétez-le ou supprimez-le s'il a été ajouté par erreur. Le supprimer conserve les produits et les médias enregistrés.",
@@ -1130,7 +1131,9 @@ export const fr: Messages = {
     libraryItems: {
       eyebrow: "ESPACE CRÉATIF",
       heading: "Dans la bibliothèque",
-      subhead: "Médias terminés déjà dans votre bibliothèque. Ouvrez-les là-bas ou limitez le tableau aux produits concernés.",
+      subhead: "Médias terminés de {products, plural, one {# produit} other {# produits}}, une carte par élément. Ouvrez-les dans la bibliothèque ou limitez le tableau aux produits concernés.",
+      count: "{shown} sur {total, plural, one {# élément} other {# éléments}}",
+      range: "{from}–{to} sur {total} éléments",
       none: "Aucun média terminé dans la bibliothèque pour ces produits.",
       open: "Ouvrir dans la bibliothèque",
       filesInLibrary: "{count, plural, one {# file} other {# files}}",
