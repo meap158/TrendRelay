@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 
 import { useAuth } from "../auth-provider";
@@ -149,6 +149,24 @@ function TriCheckbox({
 
 type Kind = "image" | "carousel" | "video";
 
+function preferredKind(workspaceId: string | null): Kind {
+  try {
+    const saved = window.localStorage.getItem(`trendrelay.generate.kind.${workspaceId ?? "default"}`);
+    return saved === "carousel" || saved === "video" ? saved : "image";
+  } catch {
+    return "image";
+  }
+}
+
+function subscribeKindPreference(notify: () => void): () => void {
+  window.addEventListener("storage", notify);
+  window.addEventListener("trendrelay:generate-kind", notify);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener("trendrelay:generate-kind", notify);
+  };
+}
+
 type ExistingDraft = {
   id: string;
   kind: string;
@@ -290,6 +308,20 @@ export function ProductMediaGenerator({
   const examples = useRecipeExamples(workspaceId, apiFetch, open);
   const [kind, setKind] = useState<Kind>("image");
   const [recipe, setRecipe] = useState<Recipe>("bed_flat_lay");
+  const savedKind = useSyncExternalStore(
+    subscribeKindPreference,
+    () => preferredKind(workspaceId),
+    (): Kind => "image",
+  );
+  const preferenceScope = `${workspaceId}|${open}|${draftId ?? "new"}|${savedKind}`;
+  const [appliedPreference, setAppliedPreference] = useState("");
+  if (appliedPreference !== preferenceScope) {
+    setAppliedPreference(preferenceScope);
+    if (open && !draftId) {
+      setKind(savedKind);
+      setRecipe(RECIPES_BY_KIND[savedKind][0]);
+    }
+  }
   const [variant, setVariant] = useState<"female" | "male">("female");
   const [backgroundEnabled, setBackgroundEnabled] = useState(false);
   const [backgroundReference, setBackgroundReference] = useState("");
@@ -622,6 +654,12 @@ export function ProductMediaGenerator({
   ]);
 
   function chooseKind(next: Kind) {
+    try {
+      window.localStorage.setItem(`trendrelay.generate.kind.${workspaceId ?? "default"}`, next);
+      window.dispatchEvent(new Event("trendrelay:generate-kind"));
+    } catch {
+      // The selection still works when browser storage is unavailable.
+    }
     setKind(next);
     setRecipe(RECIPES_BY_KIND[next][0]);
     setBackgroundEnabled(false);
@@ -1044,8 +1082,9 @@ export function ProductMediaGenerator({
     // A stored draft remains intact. New media is a fresh ask for its products.
     setActiveDraftId(null);
     setDraft(null);
-    setKind("image");
-    setRecipe("bed_flat_lay");
+    const nextKind = preferredKind(workspaceId);
+    setKind(nextKind);
+    setRecipe(RECIPES_BY_KIND[nextKind][0]);
     setVariant("female");
     setBackgroundEnabled(false);
     setBackgroundReference("");
