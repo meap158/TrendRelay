@@ -388,7 +388,11 @@ def _check_fit(
                 f"{name} is a voucher or service, so there is nothing to "
                 "photograph and no recipe fits it."
             )
-        written = " or ".join(LABELS[fit] for fit in fits)
+        labels = [LABELS[fit] for fit in fits]
+        written = (
+            labels[0] if len(labels) == 1
+            else ", ".join(labels[:-1]) + " or " + labels[-1]
+        )
         raise ValueError(
             f"{recipe} is written for {written}, and {name} is "
             f"{LABELS[kind]}. Choose a recipe made for {LABELS[kind]}."
