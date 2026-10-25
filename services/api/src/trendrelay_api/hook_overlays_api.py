@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from trendrelay_api import hook_jobs
 from trendrelay_api import hook_overlay as hook
+from trendrelay_api import hook_overlay_ai as hook_ai
 from trendrelay_api import subtitle_formats as fmt
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
@@ -50,6 +51,17 @@ class DraftBody(BaseModel):
 
 class AutotimeBody(BaseModel):
     texts: list[str] = Field(max_length=10)
+
+
+class ProposeBody(BaseModel):
+    asset_id: str = Field(default="", max_length=64)
+    topic: str = Field(min_length=1, max_length=300)
+    language: str = Field(default="en", max_length=16)
+    options: int = Field(default=3, ge=1, le=5)
+    preset: str = Field(default=hook.DEFAULT_PRESET, max_length=20)
+    anchor: str = Field(default="top", max_length=20)
+    existing: DraftBody | None = None
+    instruction: str = Field(default="", max_length=300)
 
 
 class BatchBody(BaseModel):
@@ -103,6 +115,30 @@ def autotime(workspace_id: str, body: AutotimeBody, user: AuthenticatedUser, ses
     membership(session, workspace_id, user.id)
     lines = hook.auto_timed(body.texts)
     return {"lines": [{"text": l.text, "start_ms": l.start_ms, "end_ms": l.end_ms} for l in lines]}
+
+
+@router.post("/propose")
+def propose_hooks(
+    workspace_id: str,
+    body: ProposeBody,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Propose or revise unapproved hook options that pass all short-form rules."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    existing = hook_jobs.draft_from_spec(_spec(body.existing)) if body.existing is not None else None
+    drafts = hook_ai.propose(
+        body.asset_id,
+        body.topic,
+        hook_ai.default_complete,
+        language=body.language,
+        options=body.options,
+        preset=body.preset,
+        anchor=body.anchor,
+        existing=existing,
+        instruction=body.instruction,
+    )
+    return {"options": [_view(d) for d in drafts]}
 
 
 @router.post("/batch")

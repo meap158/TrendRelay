@@ -121,3 +121,39 @@ def test_rendering_a_batch_skips_the_unapproved_and_reports_each(tmp_path: Path,
     assert results["ok.mp4"] == tmp_path / "ok-hook.mp4"
     assert results["fail.mp4"].startswith("failed: encoder gone")
     assert results["wait.mp4"] == "skipped: not approved"
+
+
+def test_renders_an_approved_hook_onto_a_real_video_clip(tmp_path: Path) -> None:
+    if not subtitle_render.FFMPEG.is_file():
+        pytest.skip("Pinned FFmpeg binary is not installed")
+    import subprocess
+
+    source = tmp_path / "source.mp4"
+    gen = subprocess.run(
+        [
+            str(subtitle_render.FFMPEG),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=360x640:d=2",
+            "-pix_fmt",
+            "yuv420p",
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert gen.returncode == 0 and source.is_file()
+    approved = hook.approve(
+        hook.HookDraft(
+            str(source),
+            (hook.HookLine("Stop scrolling", 150, 1800),),
+            preset="stroke",
+            anchor="top",
+        )
+    )
+    out = hook.render(approved, tmp_path / "burned.mp4")
+    assert out.is_file() and out.stat().st_size > 1000
+    assert subtitle_render.probe_size(out) == (360, 640)

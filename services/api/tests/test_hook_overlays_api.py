@@ -112,3 +112,33 @@ def test_render_refuses_an_unapproved_or_foreign_hook_and_queues_an_approved_one
     ((args, _kw),) = created
     assert args[0] == queued.json()["id"] and args[1] == ws and args[2] == hook_jobs.JOB_KIND
     assert request("GET", f"/api/workspaces/{ws}/hook-overlays/jobs/missing").status_code == 404
+
+
+def test_propose_returns_rule_checked_unapproved_options_and_revises_existing() -> None:
+    ws = make_workspace()
+    res = request(
+        "POST",
+        f"/api/workspaces/{ws}/hook-overlays/propose",
+        json={"asset_id": "vid1", "topic": "linen summer dress styling", "options": 3},
+    )
+    assert res.status_code == 200
+    options = res.json()["options"]
+    assert len(options) == 3
+    for opt in options:
+        assert opt["approved"] is False
+        assert opt["source"] == "ai"
+        assert opt["problems"] == []
+        assert len(opt["lines"]) >= 1
+    revised = request(
+        "POST",
+        f"/api/workspaces/{ws}/hook-overlays/propose",
+        json={
+            "asset_id": "vid1",
+            "topic": "linen summer dress styling",
+            "existing": options[0],
+            "instruction": "Try one big question first",
+        },
+    )
+    assert revised.status_code == 200
+    assert len(revised.json()["options"]) >= 1
+    assert all(o["problems"] == [] and o["approved"] is False for o in revised.json()["options"])

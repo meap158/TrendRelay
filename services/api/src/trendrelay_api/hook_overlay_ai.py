@@ -12,13 +12,87 @@ shipped. The result is always a draft; approval stays with the person.
 from __future__ import annotations
 
 import json
+import os
 import re
+import urllib.request
 from collections.abc import Callable
 from dataclasses import replace
 
 from trendrelay_api import hook_overlay as hook
 
 Complete = Callable[[str], str]
+
+
+def _trim_words(text: str, max_words: int = 5, max_chars: int = 34) -> str:
+    words = [w for w in re.split(r"\s+", text.strip()) if w][:max_words]
+    out = " ".join(words)
+    return out[:max_chars].rstrip(" ,.;:-") if len(out) > max_chars else out
+
+
+def _fallback_options(prompt: str) -> str:
+    """Rule-compliant UGC hook options when no external LLM key is configured."""
+    m = re.search(r"short vertical video about:\s*(.+)", prompt)
+    raw_topic = m.group(1).strip() if m else "this workflow"
+    short_topic = _trim_words(raw_topic, max_words=3, max_chars=22) or "this"
+    rev = re.search(r"Change it as asked:\s*(.+)", prompt)
+    instruction = rev.group(1).strip().rstrip(".") if rev else ""
+    if instruction:
+        lead = _trim_words(instruction, max_words=4, max_chars=28) or short_topic
+        options = [
+            [lead, f"Watch {short_topic}"],
+            [f"Stop scrolling: {short_topic}", lead],
+            [f"Why {short_topic} works", "See the difference"],
+        ]
+    else:
+        options = [
+            [f"Stop scrolling: {short_topic}", "Watch what changes"],
+            [f"Wait on {short_topic}", "Try this quick fix"],
+            [f"Why {short_topic} works", "Do this step first"],
+        ]
+    payload = {
+        "options": [
+            {
+                "lines": [
+                    {"text": line.text, "start_ms": line.start_ms, "end_ms": line.end_ms}
+                    for line in hook.auto_timed(lines)
+                ]
+            }
+            for lines in options
+        ]
+    }
+    return json.dumps(payload)
+
+
+def default_complete(prompt: str) -> str:
+    """Complete a hook prompt via configured OpenAI-compatible API, or local templates."""
+    api_key = os.environ.get("TRENDRELAY_AI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if api_key:
+        base_url = (
+            os.environ.get("TRENDRELAY_AI_BASE_URL") or "https://api.openai.com/v1"
+        ).rstrip("/")
+        model = os.environ.get("TRENDRELAY_AI_MODEL") or "gpt-4o-mini"
+        body = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base_url}/chat/completions",
+            data=body,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                data = json.loads(resp.read().decode("utf-8"))
+                content = data["choices"][0]["message"]["content"]
+                if isinstance(content, str) and content.strip():
+                    return content
+        except Exception:
+            pass
+    return _fallback_options(prompt)
 
 
 def build_prompt(
