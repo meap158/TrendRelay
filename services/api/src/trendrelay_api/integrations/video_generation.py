@@ -23,10 +23,12 @@ import logging
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -72,6 +74,12 @@ MAX_SUBJECT_BYTES = 8_000_000
 CHECKS_PATH = DATA_ROOT / "video-generation" / "checks.json"
 XAI_BASE = "https://api.x.ai/v1"
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+#: Where the local Gemini Web bridge listens unless Tools says otherwise.
+GEMINI_WEB_BRIDGE = "http://127.0.0.1:4981"
+#: The bridge refuses a longer prompt.
+GEMINI_WEB_PROMPT_BYTES = 8000
+#: What the bridge reads: the cookie and account slot saved in Tools, as an env file.
+BRIDGE_ENV_PATH = DATA_ROOT / "gemini-web" / "bridge.env"
 
 Transport = Callable[[str, str, dict[str, str], bytes | None, int], tuple[int, bytes]]
 Sleep = Callable[[float], None]
@@ -135,6 +143,12 @@ class VideoProvider:
     #: value can never send an unknown model name to a paid endpoint.
     model_env: str = ""
     model_options: tuple[str, ...] = ()
+    #: A signed-in browser session instead of an API key. The "key" is the
+    #: Cookie header, a clip goes through a bridge on this machine, and the
+    #: two settings below say where it listens and which Google account slot.
+    session: bool = False
+    bridge_env: str = ""
+    account_env: str = ""
 
 
 PROVIDERS: dict[str, VideoProvider] = {
@@ -170,6 +184,28 @@ PROVIDERS: dict[str, VideoProvider] = {
         model_env="VIDEO_PROVIDER_GEMINI_MODEL",
         model_options=("veo-3.1-generate-preview", "veo-3.1-fast-generate-preview"),
     ),
+    "gemini_web": VideoProvider(
+        id="gemini_web",
+        label="Gemini Web",
+        key_env="GEMINI_WEB_COOKIES",
+        enabled_env="VIDEO_PROVIDER_GEMINI_WEB_ENABLED",
+        dashboard_url="https://github.com/ntthanh2603/gemini-web-to-api",
+        key_help=(
+            "The Cookie header of a signed-in gemini.google.com tab: open DevTools, Network, "
+            "pick a request whose address contains batchexecute, and copy its Cookie request "
+            "header. This uses a Google account's web session, not an API key, so it is "
+            "against Google's terms and can expire or get the account limited. Use a spare "
+            "account. The clip is text-to-video only (the product image is not sent) and "
+            "counts against that account's daily video quota."
+        ),
+        model="veo-3",
+        duration_seconds=10,
+        check_url="",
+        requires_bucket=False,
+        session=True,
+        bridge_env="GEMINI_WEB_BRIDGE_URL",
+        account_env="GEMINI_WEB_AUTH_USER",
+    ),
 }
 
 
@@ -187,6 +223,73 @@ def model_for(provider: VideoProvider) -> str:
 
 def _key(provider: VideoProvider) -> str:
     return effective_value(provider.key_env).strip()
+
+
+def _credential(provider: VideoProvider) -> str:
+    """What the saved secret is called on screen."""
+    return "cookie" if provider.session else "API key"
+
+
+def bridge_url(provider: VideoProvider) -> str:
+    """Where this provider's bridge listens: the saved address, else the default."""
+    saved = effective_value(provider.bridge_env).strip().rstrip("/") if provider.bridge_env else ""
+    return saved or GEMINI_WEB_BRIDGE
+
+
+def _clean_cookie(value: str) -> str:
+    """The Cookie header as pasted, minus the name a copy sometimes carries."""
+    text = value.strip()
+    if text.lower().startswith("cookie:"):
+        text = text[len("cookie:"):].strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1].strip()
+    if "\n" in text or "\r" in text or len(text) > 12000:
+        raise SettingsError("Paste the Cookie header as one line.")
+    if "__Secure-1PSID" not in text:
+        raise SettingsError(
+            "That is not a Gemini cookie: it has no __Secure-1PSID. Copy the whole Cookie "
+            "request header from a signed-in gemini.google.com tab."
+        )
+    return text
+
+
+def _clean_text_setting(provider: VideoProvider, key: str, value: str) -> str:
+    if key == provider.account_env:
+        if value and not (value.isdigit() and len(value) <= 2):
+            raise SettingsError(
+                "The account slot is the number after /u/ in the address, or empty."
+            )
+        return value
+    parsed = urllib.parse.urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"} or not parsed.hostname
+        or parsed.username or parsed.query or parsed.fragment
+    ):
+        raise SettingsError("The bridge address looks like http://127.0.0.1:4981.")
+    return value.rstrip("/")
+
+
+def write_bridge_env() -> Path | None:
+    """The env file the bridge is started with: this card's cookie and account slot.
+
+    Written whenever the card saves, so the bridge never needs the cookie typed a
+    second time. It holds the cookie, so it lives under the project's data folder
+    and is never read back by the API. The bridge reads it when it starts.
+    """
+    provider = PROVIDERS["gemini_web"]
+    cookie = _key(provider)
+    if not cookie:
+        return None
+    port = urllib.parse.urlsplit(bridge_url(provider)).port or 4981
+    lines = [f"PORT={port}", f"GEMINI_COOKIES={cookie}"]
+    account = effective_value(provider.account_env).strip()
+    if account:
+        lines.append(f"GEMINI_AUTH_USER={account}")
+    BRIDGE_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = BRIDGE_ENV_PATH.with_suffix(".env.tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temporary.replace(BRIDGE_ENV_PATH)
+    return BRIDGE_ENV_PATH
 
 
 def _read_checks() -> dict[str, Any]:
@@ -286,7 +389,7 @@ def describe_fields() -> list[dict[str, Any]]:
         switch = effective_value(provider.enabled_env).strip().lower()
         described.append({
             "key": provider.key_env,
-            "label": f"{provider.label} API key",
+            "label": f"{provider.label} {_credential(provider)}",
             "kind": "text",
             "secret": True,
             "required": False,
@@ -312,6 +415,30 @@ def describe_fields() -> list[dict[str, Any]]:
             "value": switch if switch in {"on", "off"} else "off",
             "preview": None,
         })
+        for env, label, help_text, default in (
+            (provider.bridge_env, "bridge address",
+             "Where the Gemini Web bridge listens. Leave the default unless you changed its port.",
+             GEMINI_WEB_BRIDGE),
+            (provider.account_env, "account slot",
+             "The number after /u/ in the address of the tab the cookie came from. Leave empty "
+             "when there is none.",
+             ""),
+        ):
+            if not env:
+                continue
+            current = effective_value(env).strip()
+            described.append({
+                "key": env,
+                "label": f"{provider.label} {label}",
+                "kind": "text",
+                "secret": False,
+                "required": False,
+                "default": default,
+                "help": help_text,
+                "configured": bool(current),
+                "value": current or default,
+                "preview": None,
+            })
         if provider.model_env:
             described.append({
                 "key": provider.model_env,
@@ -348,16 +475,24 @@ def save_settings(values: dict[str, str]) -> list[str]:
             # the form submits a switch change without retyping the key.
             if not value:
                 continue
-            if len(value) < 10 or any(character.isspace() for character in value):
+            if key == PROVIDERS["gemini_web"].key_env:
+                value = _clean_cookie(value)
+            elif len(value) < 10 or any(character.isspace() for character in value):
                 raise SettingsError(
                     f"That does not look like an API key for {field['label']}."
                 )
+        elif field["kind"] == "text":
+            value = _clean_text_setting(PROVIDERS["gemini_web"], key, value)
         elif value not in field["options"]:
             raise SettingsError(f"Choose one of the listed values for {field['label']}.")
         cleaned[key] = value
     if not cleaned:
         return []
-    return write_env_values(cleaned)
+    written = write_env_values(cleaned)
+    session = PROVIDERS["gemini_web"]
+    if {session.key_env, session.bridge_env, session.account_env} & set(cleaned):
+        write_bridge_env()
+    return written
 
 
 def reveal_setting(key: str) -> str:
@@ -392,12 +527,17 @@ def check_provider(provider_id: str, *, transport: Transport | None = None) -> d
         raise KeyError(provider_id)
     key = _key(provider)
     if not key:
-        outcome = {"ok": False, "message": f"Save a {provider.label} API key first."}
+        outcome = {
+            "ok": False,
+            "message": f"Save a {provider.label} {_credential(provider)} first.",
+        }
         _store_check(provider_id, **outcome)
         return outcome
     if "/videos" in provider.check_url or "predict" in provider.check_url:
         raise RuntimeError(f"{provider.label} check is pointed at a video endpoint.")
     call = transport or _transport
+    if provider.session:
+        return _check_bridge(provider, call)
     headers = {"Accept": "application/json"}
     if provider.id == "gemini":
         headers["x-goog-api-key"] = key
@@ -415,6 +555,36 @@ def check_provider(provider_id: str, *, transport: Transport | None = None) -> d
         detail = body.decode("utf-8", "replace").strip()[:300] or f"HTTP {status}"
         outcome = {"ok": False, "message": f"{provider.label} refused the key: {detail}"}
     _store_check(provider_id, **outcome)
+    return outcome
+
+
+def _check_bridge(provider: VideoProvider, call: Transport) -> dict[str, Any]:
+    """Ask the local bridge for its model list. Starts no video."""
+    url = f"{bridge_url(provider)}/openai/v1/models"
+    try:
+        status, body = call("GET", url, {"Accept": "application/json"}, None, 20)
+    except (OSError, urllib.error.URLError) as error:
+        outcome = {
+            "ok": False,
+            "message": (
+                f"The {provider.label} bridge is not answering at "
+                f"{bridge_url(provider)} ({error}). "
+                f"Start it with the env file this card wrote ({BRIDGE_ENV_PATH}), then check again."
+            ),
+        }
+    else:
+        if 200 <= status < 300:
+            outcome = {
+                "ok": True,
+                "message": (
+                    f"The {provider.label} bridge answered. Whether the cookie is still "
+                    "signed in shows on the first clip."
+                ),
+            }
+        else:
+            detail = _redact(body.decode("utf-8", "replace"), 300) or f"HTTP {status}"
+            outcome = {"ok": False, "message": f"The {provider.label} bridge refused: {detail}"}
+    _store_check(provider.id, **outcome)
     return outcome
 
 
@@ -439,7 +609,7 @@ def setup_report() -> dict[str, Any]:
         row = _row(provider)
         requirements.append({
             "id": f"{provider.id}-key",
-            "label": f"{provider.label} API key",
+            "label": f"{provider.label} {_credential(provider)}",
             "status": "ready" if row["configured"] else "setup-required",
             "detail": (
                 f"{provider.key_env} is set. Its value never leaves the API process."
@@ -447,6 +617,18 @@ def setup_report() -> dict[str, Any]:
                 else provider.key_help
             ),
         })
+        if provider.session:
+            requirements.append({
+                "id": f"{provider.id}-bridge",
+                "label": f"{provider.label} bridge",
+                "status": "ready" if row["check_ok"] else "setup-required",
+                "detail": (
+                    f"Run gemini-web-to-api on this machine at {bridge_url(provider)} with the "
+                    f"env file this card writes when it saves ({BRIDGE_ENV_PATH}). The bridge "
+                    "reads the cookie when it starts, so restart it after a new cookie. "
+                    "This screen does not start it."
+                ),
+            })
         requirements.append({
             "id": f"{provider.id}-switch",
             "label": f"Offer {provider.label}",
@@ -484,6 +666,9 @@ def setup_report() -> dict[str, Any]:
             "kind": "local-launch",
             "requires_confirmation": True,
             "confirm": (
+                f"Check the {provider.label} bridge? This asks the local bridge for its model "
+                "list. It does not generate a video."
+                if provider.session else
                 f"Check the {provider.label} key? This asks the service whether "
                 "the key is accepted. It does not generate a video."
             ),
@@ -890,7 +1075,97 @@ def generate_gemini(
     return _fetch_with_retries(download, sleep=sleep, alive=progress.alive)
 
 
+#: How the bridge's job errors map onto this module's codes.
+_BRIDGE_ERRORS = {
+    "quota_exceeded": "quota",
+    "refused": "moderation",
+}
+
+
+def generate_gemini_web(
+    provider: VideoProvider,
+    prompt: str,
+    image: bytes,
+    mime: str,
+    object_key: str = "",
+    *,
+    transport: Transport | None = None,
+    sleep: Sleep = time.sleep,
+    now: Clock = time.monotonic,
+    progress: Progress | None = None,
+    references: tuple[tuple[bytes, str], ...] = (),
+) -> bytes:
+    """Text-to-video through the local Gemini Web bridge, using the saved session.
+
+    The bridge takes no image, so the subject picture is not sent; the stored
+    prompt carries the garment. It runs one job at a time and counts each clip
+    against the account's daily video quota, so a busy answer is reported, not
+    retried into a second clip.
+    """
+    del image, mime, object_key, references
+    base = f"{bridge_url(provider)}/openai/v1"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    progress = progress or Progress()
+    call = transport or _transport
+    job = progress.resume
+    if not job:
+        if len(prompt.encode("utf-8")) > GEMINI_WEB_PROMPT_BYTES:
+            raise VideoError(
+                "unavailable", "The prompt is longer than the Gemini Web bridge accepts.",
+            )
+        payload = {"model": model_for(provider), "prompt": prompt, "aspect_ratio": "9:16"}
+        progress.posting()
+        status, body = call(
+            "POST", f"{base}/videos", headers, json.dumps(payload).encode("utf-8"), 60,
+        )
+        if status == 429:
+            raise VideoError(
+                "quota",
+                "The Gemini Web bridge is already making a video. Try again when it finishes.",
+            )
+        failed = _classify(status, body)
+        if failed is not None:
+            raise failed
+        job = str(_json_body(body).get("id") or "").strip()
+        if not job:
+            raise VideoError("unavailable", "The bridge did not return a video to follow.")
+        progress.sent(job)
+
+    def done(polled: dict[str, Any]) -> dict[str, Any] | None:
+        state = str(polled.get("status") or "")
+        if state == "completed":
+            return polled
+        if state in {"", "queued", "in_progress"}:
+            return None
+        error = polled.get("error") if isinstance(polled.get("error"), dict) else {}
+        code = _BRIDGE_ERRORS.get(str(error.get("code") or ""))
+        if code:
+            raise VideoError(
+                code, _provider_message(json.dumps(polled), "The bridge stopped the video."),
+            )
+        raise _failure_text(polled)
+
+    _poll(
+        call, "GET", f"{base}/videos/{job}", headers,
+        done=done, sleep=sleep, now=now, alive=progress.alive,
+    )
+
+    def download() -> bytes:
+        status, body = call(
+            "GET", f"{base}/videos/{job}/content", {"Accept": "video/mp4"}, None, 120,
+        )
+        if status in _TRANSIENT_STATUSES or status == 409:
+            raise VideoError("transient", f"The download answered HTTP {status}.")
+        failed = _classify(status, body)
+        if failed is not None:
+            raise failed
+        return body
+
+    return _fetch_with_retries(download, sleep=sleep, alive=progress.alive)
+
+
 ADAPTERS: dict[str, Callable[..., bytes]] = {
+    "gemini_web": generate_gemini_web,
     "xai": generate_xai,
     "gemini": generate_gemini,
 }
