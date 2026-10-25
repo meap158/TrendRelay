@@ -181,3 +181,9 @@ export function creativeRecipe(t: (path: string) => string, recipe: string): str
   // it this session, and otherwise the id itself reads well enough.
   return libraryRecipeLabel(recipe) ?? humanizeRecipeId(recipe);
 }
+
+/** Reuse the generator's translated descriptions on compact recipe surfaces. */
+export function creativeRecipeHelp(t: (path: string) => string, recipe: string): string {
+  const key = RECIPE_LABELS[recipe];
+  return key ? t(`${key}Help`) : "";
+}
