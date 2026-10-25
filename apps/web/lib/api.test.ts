@@ -86,3 +86,22 @@ test("a host that merely starts the same is not the API", () => {
   const lookalike = "http://127.0.0.1:80110/api/thing";
   assert.equal(path(lookalike), lookalike);
 });
+
+test("a page on a public https name asks its own origin, which forwards to the API", () => {
+  process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:8011";
+  (globalThis as { window?: unknown }).window = {
+    location: { hostname: "pm.example.com", protocol: "https:", origin: "https://pm.example.com" },
+  };
+  assert.equal(apiBaseUrl(), "https://pm.example.com");
+  assert.equal(apiPath("https://pm.example.com/api/campaigns"), "/api/campaigns");
+  // Loopback over https (a local TLS proxy) and plain-http LAN addresses keep the direct route.
+  (globalThis as { window?: unknown }).window = {
+    location: { hostname: "localhost", protocol: "https:", origin: "https://localhost" },
+  };
+  assert.equal(apiBaseUrl(), "http://127.0.0.1:8011");
+  (globalThis as { window?: unknown }).window = {
+    location: { hostname: "192.168.1.40", protocol: "http:", origin: "http://192.168.1.40:3001" },
+  };
+  assert.equal(apiBaseUrl(), "http://192.168.1.40:8011");
+  delete (globalThis as { window?: unknown }).window;
+});

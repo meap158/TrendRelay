@@ -41,6 +41,12 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "@radix-ui/react-dialog"],
   },
+  // The browser reaches the API through this server when the page is on a public https name (see
+  // `apiBaseUrl`): the API's port is only open on this machine, so a remote visitor cannot call it.
+  async rewrites() {
+    const api = new URL(process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8011");
+    return [{ source: "/api/:path*", destination: `${api.origin}/api/:path*` }];
+  },
   allowedDevOrigins: [
     "localhost",
     "127.0.0.1",

@@ -39,6 +39,16 @@ const LOOPBACK = ["localhost", "127.0.0.1", "0.0.0.0"];
  */
 export function apiBaseUrl(): string {
   const url = new URL(configuredApiUrl());
+  // A page served over https from a public name (a tunnel such as pm.example.com) cannot reach the
+  // API's own port, which exists only on the developer's machine. It asks its own origin instead,
+  // and the web server forwards /api/* to the API (rewrites in next.config.ts).
+  if (
+    typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
+    !LOOPBACK.includes(window.location.hostname)
+  ) {
+    return window.location.origin;
+  }
   if (typeof window !== "undefined" && LOOPBACK.includes(url.hostname)) {
     const pageHost = window.location.hostname;
     url.hostname = pageHost === "localhost" ? "127.0.0.1" : pageHost;
