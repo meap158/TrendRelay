@@ -108,6 +108,19 @@ h1 { max-width: none; margin: 8px 0; font-size: 24px; line-height: 1.2; letter-s
 nav { margin-bottom: 24px; }
 
 button, input, select, textarea { font: inherit; font-size: 12px; }
+/* iOS zooms the whole page into any text field, select or textarea it
+   focuses when its text is under 16px, and does not zoom back out - every
+   dropdown with a search box opened as a page zoomed past its edges. iOS
+   only (desktop browsers and Android do not do this, and the compact sizes
+   stay there). Important, because many surfaces size their own fields; a
+   viewport maximum-scale would block pinch zoom on Android instead. */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="file"], [type="color"], [type="image"]),
+  select,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable=""] { font-size: max(16px, 1em) !important; }
+}
 button, a { -webkit-tap-highlight-color: transparent; }
 
 .console-page { padding-top: 0; }
