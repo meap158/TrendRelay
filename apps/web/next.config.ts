@@ -57,6 +57,8 @@ const nextConfig: NextConfig = {
     // computer names (NetBIOS) cannot be listed here because they differ per
     // machine; the API's CORS layer is what has to accept those origins.
     "*.local",
+    // The owner's tunnel hostnames (Cloudflare Tunnel with Access in front); see apiBaseUrl.
+    "*.meap.pro",
   ],
 };
 
