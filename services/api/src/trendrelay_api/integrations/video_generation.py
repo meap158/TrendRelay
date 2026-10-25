@@ -25,6 +25,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -150,6 +151,7 @@ class VideoProvider:
     session: bool = False
     #: Whether the provider is sent the product picture (and a character's pictures). One that
     #: is not gets the product described in words instead, so the clip is not invented blind.
+    #: Every provider here takes it; the Gemini Web one does so through the patched bridge.
     takes_image: bool = True
     bridge_env: str = ""
     account_env: str = ""
@@ -207,7 +209,6 @@ PROVIDERS: dict[str, VideoProvider] = {
         check_url="",
         requires_bucket=False,
         session=True,
-        takes_image=False,
         bridge_env="GEMINI_WEB_BRIDGE_URL",
         account_env="GEMINI_WEB_AUTH_USER",
     ),
@@ -1112,6 +1113,30 @@ _BRIDGE_ERRORS = {
 }
 
 
+#: The bridge takes at most this many reference images with one request.
+GEMINI_WEB_REFERENCES = 3
+_IMAGE_SUFFIX = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def _multipart(fields: dict[str, str], files: list[tuple[str, bytes, str]]) -> tuple[bytes, str]:
+    """A multipart/form-data body: text fields, then (field, bytes, mime) files."""
+    boundary = uuid.uuid4().hex
+    out = bytearray()
+    for name, value in fields.items():
+        out += (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'
+        ).encode("utf-8")
+    for index, (name, data, kind) in enumerate(files, start=1):
+        filename = f"reference-{index}.{_IMAGE_SUFFIX.get(kind, 'jpg')}"
+        out += (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; '
+            f'filename="{filename}"\r\nContent-Type: {kind}\r\n\r\n'
+        ).encode("utf-8")
+        out += data + b"\r\n"
+    out += f"--{boundary}--\r\n".encode("ascii")
+    return bytes(out), f"multipart/form-data; boundary={boundary}"
+
+
 def generate_gemini_web(
     provider: VideoProvider,
     prompt: str,
@@ -1125,14 +1150,17 @@ def generate_gemini_web(
     progress: Progress | None = None,
     references: tuple[tuple[bytes, str], ...] = (),
 ) -> bytes:
-    """Text-to-video through the local Gemini Web bridge, using the saved session.
+    """Image-to-video through the local Gemini Web bridge, using the saved session.
 
-    The bridge takes no image, so the subject picture is not sent; the stored
-    prompt carries the garment. It runs one job at a time and counts each clip
-    against the account's daily video quota, so a busy answer is reported, not
-    retried into a second clip.
+    The product picture, and a character's pictures when the draft features one,
+    are attached to the request the way the Gemini app attaches a picture to a
+    Videos prompt, so the stored prompt's "attached product image" is true. The
+    bridge needs the patch in `scripts/gemini_web_bridge.patch`; an unpatched one
+    refuses the picture before anything is made. It runs one job at a time and
+    counts each clip against the account's daily video quota, so a busy answer
+    is reported, not retried into a second clip.
     """
-    del image, mime, object_key, references
+    del object_key
     base = f"{bridge_url(provider)}/openai/v1"
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     progress = progress or Progress()
@@ -1143,11 +1171,26 @@ def generate_gemini_web(
             raise VideoError(
                 "unavailable", "The prompt is longer than the Gemini Web bridge accepts.",
             )
-        payload = {"model": model_for(provider), "prompt": prompt, "aspect_ratio": "9:16"}
+        fields = {"model": model_for(provider), "prompt": prompt, "aspect_ratio": "9:16"}
+        pictures = [
+            ("input_reference", data, kind)
+            for data, kind in ((image, mime), *references)
+            if data
+        ][:GEMINI_WEB_REFERENCES]
+        if pictures:
+            request_body, content_type = _multipart(fields, pictures)
+        else:
+            request_body, content_type = json.dumps(fields).encode("utf-8"), "application/json"
         progress.posting()
         status, body = call(
-            "POST", f"{base}/videos", headers, json.dumps(payload).encode("utf-8"), 60,
+            "POST", f"{base}/videos", {**headers, "Content-Type": content_type}, request_body, 60,
         )
+        if status == 400 and b"input_reference is not supported" in body:
+            raise VideoError(
+                "unavailable",
+                "The Gemini Web bridge is the unpatched one and cannot take a picture. "
+                "Run scripts/gemini_web_bridge.py again, then try this draft again.",
+            )
         if status == 429:
             raise VideoError(
                 "quota",

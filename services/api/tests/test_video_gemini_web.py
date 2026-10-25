@@ -7,13 +7,16 @@ is one request to the bridge, and a resumed one is polled, not sent again.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import re
 
 import pytest
 
 from trendrelay_api.integrations import video_generation as video
 
 COOKIE = "SID=abc; __Secure-1PSID=g.a000xyz; __Secure-1PSIDTS=sidts-123"
+REFUSED = b'{"status":"failed","error":{"code":"refused","message":"No."}}'
 MP4 = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 16
 
 
@@ -138,7 +141,17 @@ def test_it_is_not_offered_until_on_and_checked(values) -> None:
     assert {"id": "gemini_web", "label": "Gemini Web"} in video.ready_providers()
 
 
-def test_one_request_one_clip_and_no_image_is_sent(values) -> None:
+def _parts(body: bytes) -> list[tuple[str, bytes]]:
+    """(disposition header, content) for each part of a multipart body."""
+    boundary = body.split(b"\r\n", 1)[0]
+    parts = []
+    for chunk in body.split(boundary)[1:-1]:
+        head, _, content = chunk.partition(b"\r\n\r\n")
+        parts.append((head.decode("utf-8", "replace"), content.removesuffix(b"\r\n")))
+    return parts
+
+
+def test_one_request_one_clip_with_the_product_picture_attached(values) -> None:
     transport, seen = _bridge([
         (200, b'{"id":"video_1","status":"queued"}'),
         (200, b'{"id":"video_1","status":"in_progress","progress":40}'),
@@ -149,10 +162,51 @@ def test_one_request_one_clip_and_no_image_is_sent(values) -> None:
     assert data == MP4
     method, url, body = seen[0]
     assert (method, url) == ("POST", "http://127.0.0.1:4981/openai/v1/videos")
-    sent = json.loads(body or b"{}")
-    assert sent == {"model": "veo-3", "prompt": "A silent hallway.", "aspect_ratio": "9:16"}
+    parts = _parts(body or b"")
+    fields = {
+        re.search(r'name="(\w+)"', head).group(1): content
+        for head, content in parts if "filename=" not in head
+    }
+    assert fields == {
+        "model": b"veo-3", "prompt": b"A silent hallway.", "aspect_ratio": b"9:16",
+    }
+    pictures = [(head, content) for head, content in parts if "filename=" in head]
+    assert len(pictures) == 1
+    assert 'name="input_reference"' in pictures[0][0]
+    assert "Content-Type: image/jpeg" in pictures[0][0]
+    assert pictures[0][1] == b"\xff\xd8\xff\x00"
     assert [call[0] for call in seen].count("POST") == 1
     assert seen[-1][1].endswith("/videos/video_1/content")
+
+
+def test_a_characters_pictures_follow_the_product_and_stop_at_three(values) -> None:
+    transport, seen = _bridge([(200, b'{"id":"video_1","status":"queued"}'), (200, REFUSED)])
+    references = tuple((bytes([n]) * 4, "image/png") for n in range(1, 5))
+    with pytest.raises(video.VideoError):
+        video.generate_gemini_web(
+            _provider(), "p", b"\xff\xd8\xff\x00", "image/jpeg", references=references,
+            transport=transport, sleep=lambda _s: None, now=lambda: 0,
+        )
+    sent = [c for head, c in _parts(seen[0][2] or b"") if "filename=" in head]
+    assert sent == [b"\xff\xd8\xff\x00", b"\x01" * 4, b"\x02" * 4]
+
+
+def test_a_draft_with_no_picture_is_sent_as_plain_json(values) -> None:
+    transport, seen = _bridge([(200, b'{"id":"video_1","status":"queued"}'), (200, REFUSED)])
+    with pytest.raises(video.VideoError):
+        video.generate_gemini_web(
+            _provider(), "p", b"", "image/jpeg", transport=transport,
+            sleep=lambda _s: None, now=lambda: 0,
+        )
+    assert json.loads(seen[0][2] or b"{}")["prompt"] == "p"
+
+
+def test_an_unpatched_bridge_is_named_before_anything_is_made(values) -> None:
+    refusal = b'{"error":{"message":"input_reference is not supported; only text-to-video"}}'
+    transport, seen = _bridge([(400, refusal)])
+    with pytest.raises(video.VideoError, match="unpatched"):
+        _run(transport)
+    assert len(seen) == 1
 
 
 def test_a_resumed_clip_is_polled_and_never_sent_again(values) -> None:
@@ -225,8 +279,13 @@ VIEW = {
 }
 
 
+def _blind() -> video.VideoProvider:
+    """A provider that cannot be sent the picture, such as one added later."""
+    return dataclasses.replace(_provider(), takes_image=False)
+
+
 def test_a_provider_with_no_picture_is_told_about_the_product_in_words() -> None:
-    sent = video.prompt_for(_provider(), VIEW)
+    sent = video.prompt_for(_blind(), VIEW)
     assert sent.endswith(VIEW["prompt"])
     assert "Product: Silk cami set." in sent
     assert "together with: Lace robe" in sent
@@ -236,15 +295,14 @@ def test_a_provider_with_no_picture_is_told_about_the_product_in_words() -> None
 
 
 def test_a_provider_that_takes_the_picture_gets_the_prompt_untouched() -> None:
-    for provider_id in ("xai", "gemini"):
+    for provider_id in ("xai", "gemini", "gemini_web"):
         assert video.PROVIDERS[provider_id].takes_image is True
         assert video.prompt_for(video.PROVIDERS[provider_id], VIEW) == VIEW["prompt"]
-    assert _provider().takes_image is False
 
 
 def test_context_is_left_out_when_the_draft_names_nothing() -> None:
     bare = {"prompt": "Only the prompt.", "products": []}
-    assert video.prompt_for(_provider(), bare) == "Only the prompt."
+    assert video.prompt_for(_blind(), bare) == "Only the prompt."
     long = {**VIEW, "products": [{"name": "Set", "listing_fields": {"description": "word " * 900}}]}
     assert len(video.prompt_context(long)) <= video._CONTEXT_BUDGET
     # An archived character is not named as being in the video.

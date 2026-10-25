@@ -1,0 +1,215 @@
+diff --git a/internal/modules/openai/openai_controller.go b/internal/modules/openai/openai_controller.go
+index a0dbc92..46a876e 100644
+--- a/internal/modules/openai/openai_controller.go
++++ b/internal/modules/openai/openai_controller.go
+@@ -5,6 +5,10 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"io"
++	"mime/multipart"
++	"net/http"
++	"strings"
+ 	"time"
+ 
+ 	models "gemini-web-to-api/internal/commons/models"
+@@ -219,7 +223,33 @@ func videoRequestError(c fiber.Ctx, err error) error {
+ 	return openAIRequestError(c, err)
+ }
+ 
+-// HandleCreateVideo starts a text-to-video job
++const (
++	maxVideoReferences    = 3
++	maxVideoReferenceSize = 10 << 20
++)
++
++// readVideoReference reads one uploaded reference image for a video request.
++func readVideoReference(header *multipart.FileHeader) (providers.InputFile, error) {
++	if header.Size > maxVideoReferenceSize {
++		return providers.InputFile{}, fmt.Errorf("input_reference %q is larger than %d bytes", header.Filename, maxVideoReferenceSize)
++	}
++	opened, err := header.Open()
++	if err != nil {
++		return providers.InputFile{}, fmt.Errorf("read input_reference: %w", err)
++	}
++	defer opened.Close()
++	data, err := io.ReadAll(io.LimitReader(opened, maxVideoReferenceSize+1))
++	if err != nil || len(data) == 0 || len(data) > maxVideoReferenceSize {
++		return providers.InputFile{}, errors.New("input_reference must be a non-empty image of at most 10 MB")
++	}
++	mimeType := http.DetectContentType(data)
++	if !strings.HasPrefix(mimeType, "image/") {
++		return providers.InputFile{}, fmt.Errorf("input_reference %q is not an image", header.Filename)
++	}
++	return providers.InputFile{Name: header.Filename, MimeType: mimeType, Data: data}, nil
++}
++
++// HandleCreateVideo starts a video job, from text alone or with reference images
+ // @Summary Create video (OpenAI Videos API)
+ // @Description Starts an asynchronous text-to-video job using Gemini Web's Videos tool. Accepts JSON or multipart/form-data. Poll the job, then download its content.
+ // @Tags OpenAI
+@@ -236,10 +266,21 @@ func (h *OpenAIController) HandleCreateVideo(c fiber.Ctx) error {
+ 	if err := c.Bind().Body(&req); err != nil {
+ 		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(fmt.Errorf("invalid request body: %w", err), "invalid_request_error"))
+ 	}
+-	if form, err := c.MultipartForm(); err == nil && len(form.File["input_reference"]) > 0 {
+-		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(errors.New("input_reference is not supported; only text-to-video is available"), "invalid_request_error"))
++	var files []providers.InputFile
++	if form, err := c.MultipartForm(); err == nil {
++		headers := form.File["input_reference"]
++		if len(headers) > maxVideoReferences {
++			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(fmt.Errorf("at most %d input_reference images are accepted", maxVideoReferences), "invalid_request_error"))
++		}
++		for _, header := range headers {
++			file, err := readVideoReference(header)
++			if err != nil {
++				return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(err, "invalid_request_error"))
++			}
++			files = append(files, file)
++		}
+ 	}
+-	video, err := h.service.CreateVideo(req)
++	video, err := h.service.CreateVideo(req, files...)
+ 	if err != nil {
+ 		h.log.Warn("CreateVideo failed", zap.Error(err), zap.String("model", req.Model))
+ 		return videoRequestError(c, err)
+diff --git a/internal/modules/openai/openai_service.go b/internal/modules/openai/openai_service.go
+index 8629779..d422ff9 100644
+--- a/internal/modules/openai/openai_service.go
++++ b/internal/modules/openai/openai_service.go
+@@ -264,12 +264,12 @@ const openAIVideoIDPrefix = "video_"
+ const expectedVideoSeconds = 90
+ 
+ // CreateVideo starts a background video job (OpenAI Videos API).
+-func (s *OpenAIService) CreateVideo(req dto.VideoGenerationRequest) (*dto.Video, error) {
++func (s *OpenAIService) CreateVideo(req dto.VideoGenerationRequest, files ...providers.InputFile) (*dto.Video, error) {
+ 	aspect, err := providers.ParseVideoAspect(req.Size, req.AspectRatio)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	job, err := s.client.StartVideoJob(req.Prompt, req.Model, aspect)
++	job, err := s.client.StartVideoJob(req.Prompt, req.Model, aspect, files...)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/internal/modules/providers/gemini_video.go b/internal/modules/providers/gemini_video.go
+index 0e3a191..a6cf8a6 100644
+--- a/internal/modules/providers/gemini_video.go
++++ b/internal/modules/providers/gemini_video.go
+@@ -45,6 +45,17 @@ const (
+ 	generatedVideoDownloadTime = 5 * time.Minute
+ )
+ 
++type videoFilesKey struct{}
++
++// WithVideoInputFiles attaches images to the video request that runs under ctx,
++// the way the Gemini Web app attaches a picture to a Videos prompt.
++func WithVideoInputFiles(ctx context.Context, files []InputFile) context.Context {
++	if len(files) == 0 {
++		return ctx
++	}
++	return context.WithValue(ctx, videoFilesKey{}, files)
++}
++
+ // VideoConfig selects Gemini Web's native video-generation tool.
+ type VideoConfig struct {
+ 	AspectRatio VideoAspectRatio
+@@ -311,7 +322,11 @@ func (c *Client) GenerateVideo(ctx context.Context, prompt, model string, aspect
+ 	if pollInterval <= 0 {
+ 		pollInterval = defaultVideoPollInterval
+ 	}
+-	response, err := c.GenerateContent(ctx, prompt, WithModel(model), WithVideoGeneration(aspect))
++	options := []GenerateOption{WithModel(model), WithVideoGeneration(aspect)}
++	if files, _ := ctx.Value(videoFilesKey{}).([]InputFile); len(files) > 0 {
++		options = append(options, WithInputFiles(files))
++	}
++	response, err := c.GenerateContent(ctx, prompt, options...)
+ 	if err != nil {
+ 		var modelErr *ModelSelectionError
+ 		if errors.As(err, &modelErr) {
+@@ -797,7 +812,7 @@ func ParseVideoAspect(size, aspectRatio string) (VideoAspectRatio, error) {
+ }
+ 
+ // StartVideoJob validates the request and generates the video in the background.
+-func (c *Client) StartVideoJob(prompt, model string, aspect VideoAspectRatio) (VideoJob, error) {
++func (c *Client) StartVideoJob(prompt, model string, aspect VideoAspectRatio, files ...InputFile) (VideoJob, error) {
+ 	prompt = strings.TrimSpace(prompt)
+ 	if prompt == "" {
+ 		return VideoJob{}, &VideoValidationError{Message: "prompt is required"}
+@@ -817,7 +832,7 @@ func (c *Client) StartVideoJob(prompt, model string, aspect VideoAspectRatio) (V
+ 	if err != nil {
+ 		return VideoJob{}, err
+ 	}
+-	return c.videoJobStore().start(prompt, resolved.ID, aspect)
++	return c.videoJobStore().start(prompt, resolved.ID, aspect, files)
+ }
+ 
+ // GetVideoJob returns the current state of a job.
+@@ -840,7 +855,7 @@ func (c *Client) DeleteVideoJob(id string) error {
+ 	return c.videoJobStore().delete(id)
+ }
+ 
+-func (s *videoJobStore) start(prompt, model string, aspect VideoAspectRatio) (VideoJob, error) {
++func (s *videoJobStore) start(prompt, model string, aspect VideoAspectRatio, files []InputFile) (VideoJob, error) {
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 	s.pruneLocked(time.Now())
+@@ -856,14 +871,15 @@ func (s *videoJobStore) start(prompt, model string, aspect VideoAspectRatio) (Vi
+ 	s.jobs[id] = entry
+ 	s.active++
+ 	s.wg.Add(1)
+-	go s.run(id, prompt, model, aspect)
++	go s.run(id, prompt, model, aspect, files)
+ 	return entry.job, nil
+ }
+ 
+-func (s *videoJobStore) run(id, prompt, model string, aspect VideoAspectRatio) {
++func (s *videoJobStore) run(id, prompt, model string, aspect VideoAspectRatio, files []InputFile) {
+ 	defer s.wg.Done()
+ 	ctx, cancel := context.WithTimeout(s.root, s.timeout)
+ 	defer cancel()
++	ctx = WithVideoInputFiles(ctx, files)
+ 
+ 	var result *VideoResult
+ 	var err error
+diff --git a/internal/modules/providers/gemini_video_test.go b/internal/modules/providers/gemini_video_test.go
+index 275dce1..f5889ae 100644
+--- a/internal/modules/providers/gemini_video_test.go
++++ b/internal/modules/providers/gemini_video_test.go
+@@ -352,3 +352,23 @@ func TestMP4DurationReadsMovieHeader(t *testing.T) {
+ 		t.Fatalf("truncated file duration = %v, want 0", got)
+ 	}
+ }
++
++func TestVideoJobCarriesReferenceImages(t *testing.T) {
++	seen := make(chan []InputFile, 1)
++	c := NewVideoTestClient([]ModelInfo{{ID: "gemini-flash"}}, func(ctx context.Context, prompt, model string, aspect VideoAspectRatio) (*VideoResult, error) {
++		files, _ := ctx.Value(videoFilesKey{}).([]InputFile)
++		seen <- files
++		return &VideoResult{Data: []byte("mp4"), ConversationID: "c_test"}, nil
++	})
++	defer c.videoJobStore().close()
++
++	picture := InputFile{Name: "product.jpg", MimeType: "image/jpeg", Data: []byte{0xff, 0xd8}}
++	job, err := c.StartVideoJob("A cat", "", VideoAspectPortrait, picture)
++	if err != nil {
++		t.Fatal(err)
++	}
++	waitForVideoJob(t, c, job.ID, VideoJobCompleted)
++	if files := <-seen; len(files) != 1 || files[0].Name != "product.jpg" {
++		t.Fatalf("the generator must receive the attached picture, got %#v", files)
++	}
++}
+diff --git a/internal/server/server.go b/internal/server/server.go
+index 5ac1c0a..1f5a1e1 100644
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -19,6 +19,8 @@ import (
+ func NewGeminiWebToAPI(log *zap.Logger, cfg *configs.Config) *fiber.App {
+ 	app := fiber.New(fiber.Config{
+ 		AppName: "Gemini Web To API",
++		// A video request can carry up to three reference images of 10 MB each.
++		BodyLimit: 40 << 20,
+ 	})
+ 
+ 	app.Use(cors.New(cors.Config{

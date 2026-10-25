@@ -24,6 +24,10 @@ HOME = ROOT / ".data" / "gemini-web"
 SOURCE = HOME / "src" / "bridge"
 BINARY = HOME / ("bridge.exe" if os.name == "nt" else "bridge")
 REPO = "https://github.com/ntthanh2603/gemini-web-to-api.git"
+#: The release the patch was written against. The patch lets a video request carry the
+#: product picture, which the bridge refuses without it.
+PINNED = "cb40694"
+PATCH = Path(__file__).with_name("gemini_web_bridge.patch")
 
 
 def _port() -> str:
@@ -49,6 +53,15 @@ def _go_env() -> dict[str, str]:
     }
 
 
+def _patched() -> bool:
+    """Whether the source already carries the video-reference patch."""
+    done = subprocess.run(
+        ["git", "apply", "--reverse", "--check", str(PATCH)],
+        cwd=SOURCE, capture_output=True, check=False,
+    )
+    return done.returncode == 0
+
+
 def main() -> int:
     if not (HOME / ".env").is_file():
         print("No .env yet: save the cookie in Tools > Video providers > Gemini Web first.")
@@ -57,10 +70,14 @@ def main() -> int:
         print("Go is needed to build the bridge (https://go.dev/dl/).")
         return 1
     env = _go_env()
+    if SOURCE.is_dir() and not _patched():
+        subprocess.run(["git", "apply", str(PATCH)], cwd=SOURCE, check=True)
+        BINARY.unlink(missing_ok=True)
     if not BINARY.is_file():
         if not SOURCE.is_dir():
             SOURCE.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["git", "clone", "--depth", "1", REPO, str(SOURCE)], check=True)
+            subprocess.run(["git", "clone", REPO, str(SOURCE)], check=True)
+            subprocess.run(["git", "checkout", "-q", PINNED], cwd=SOURCE, check=True)
         subprocess.run(
             ["go", "build", "-o", str(BINARY), "./cmd/server"], cwd=SOURCE, env=env, check=True,
         )
