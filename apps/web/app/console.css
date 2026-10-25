@@ -113,10 +113,12 @@ button, input, select, textarea { font: inherit; font-size: 12px; }
    dropdown with a search box opened as a page zoomed past its edges. iOS
    only (desktop browsers and Android do not do this, and the compact sizes
    stay there). Important, because many surfaces size their own fields; a
-   viewport maximum-scale would block pinch zoom on Android instead. */
+   viewport maximum-scale would block pinch zoom on Android instead.
+   No bare `select`: the shared Select's native one is hidden and never takes
+   focus (native-select-guard.test.ts keeps rules off it), and the transcript
+   reader's two real ones get the same rule in media-library.css. */
 @supports (-webkit-touch-callout: none) {
   input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="file"], [type="color"], [type="image"]),
-  select,
   textarea,
   [contenteditable="true"],
   [contenteditable=""] { font-size: max(16px, 1em) !important; }
