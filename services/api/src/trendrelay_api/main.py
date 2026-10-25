@@ -130,7 +130,12 @@ app.add_middleware(
         # are case-insensitive even though browsers usually send them lowered.
         # Public names never match: a page from anywhere on the internet gets
         # no read access to this API.
-        r"^http://(?i:(?:"
+        #
+        # The second branch is a local preview pane (ProjectManager's built-in
+        # browser) that shows the web app on its own loopback origin,
+        # p<web port>.localhost, served from the pane's port. *.localhost
+        # always resolves to this machine, so it is no wider than localhost.
+        r"^(?:http://(?i:(?:"
         r"localhost|127\.0\.0\.1"
         r"|10(?:\.\d{1,3}){3}"
         r"|192\.168(?:\.\d{1,3}){2}"
@@ -138,7 +143,8 @@ app.add_middleware(
         r"|[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.local"
         r"|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
         r"|\[(?:f[cd][0-9a-f]{0,2}(?::[0-9a-f]*)+|fe[89ab][0-9a-f]{0,2}(?::[0-9a-f]*)*|::1)\]"
-        r")):(3000|3001)$"
+        r")):(3000|3001)"
+        r"|http://(?i:p(?:3000|3001)\.localhost):\d{2,5})$"
         if settings.environment != "production"
         else None
     ),

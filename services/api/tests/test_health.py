@@ -71,6 +71,8 @@ def test_local_session_follows_the_network_trust_boundary(client_host: str, enab
         "http://studio-pc:3001",
         "http://[fd12:3456:789a::1]:3001",
         "http://[fe80::1]:3001",
+        # A local preview pane showing the web app on its own loopback origin.
+        "http://p3001.localhost:5180",
     ],
 )
 def test_development_cors_allows_lan_hostnames(origin: str) -> None:
