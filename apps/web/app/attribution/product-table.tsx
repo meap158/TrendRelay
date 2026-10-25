@@ -635,8 +635,12 @@ export function ProductTable({
                   className={creativeFilter === value ? "selected" : ""}
                   aria-pressed={creativeFilter === value}
                   title={value === "library" ? t("attribution.creativeLibraryProducts", { count }) : undefined}
+                  aria-describedby={value === "library" ? "creative-library-unit" : undefined}
                   onClick={() => setCreativeFilter(value)}
-                ><span>{label}</span><b>{count}</b></button>
+                ><span>{label}</span><b>{count}</b>{value === "library" && (
+                  // The visible text stays the name; this only adds what the number counts.
+                  <span id="creative-library-unit" className="sr-only">{t("attribution.creativeLibraryProducts", { count })}</span>
+                )}</button>
               ))}
             </div>
           )}
