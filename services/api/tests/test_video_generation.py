@@ -207,6 +207,50 @@ def test_a_moderation_refusal_does_not_call_the_other_provider(values, tmp_path,
         assert "content moderation" in stored.last_error
 
 
+def test_gemini_model_is_a_listed_choice_and_falls_back_to_the_default(values) -> None:
+    gemini = video.PROVIDERS["gemini"]
+    assert video.model_for(gemini) == gemini.model
+    values[gemini.model_env] = "veo-3.1-fast-generate-preview"
+    assert video.model_for(gemini) == "veo-3.1-fast-generate-preview"
+    # Anything not listed (a stale value, an edited file) never reaches a paid endpoint.
+    values[gemini.model_env] = "veo-9-ultra; drop table"
+    assert video.model_for(gemini) == gemini.model
+    # A provider without a choice always uses its one model.
+    values["VIDEO_PROVIDER_XAI_MODEL"] = "anything"
+    assert video.model_for(video.PROVIDERS["xai"]) == video.PROVIDERS["xai"].model
+
+
+def test_the_model_choice_is_offered_validated_and_sent(values) -> None:
+    fields = {field["key"]: field for field in video.describe_fields()}
+    choice = fields["VIDEO_PROVIDER_GEMINI_MODEL"]
+    assert choice["kind"] == "choice"
+    assert choice["options"] == list(video.PROVIDERS["gemini"].model_options)
+    assert choice["value"] == video.PROVIDERS["gemini"].model
+    assert "VIDEO_PROVIDER_XAI_MODEL" not in fields
+    with pytest.raises(video.SettingsError):
+        video.save_settings({"VIDEO_PROVIDER_GEMINI_MODEL": "not-a-model"})
+
+    values["GEMINI_API_KEY"] = "g" * 20
+    values["VIDEO_PROVIDER_GEMINI_MODEL"] = "veo-3.1-fast-generate-preview"
+    seen: list[str] = []
+
+    def transport(method, url, headers, body, timeout):
+        seen.append(url)
+        return 400, b'{"error":{"message":"stop here"}}'
+
+    with pytest.raises(video.VideoError):
+        video.generate_gemini(
+            video.PROVIDERS["gemini"],
+            "A silent hallway.",
+            b"\xff\xd8\xff\x00",
+            "image/jpeg",
+            transport=transport,
+            sleep=lambda _seconds: None,
+            now=lambda: 0,
+        )
+    assert seen and seen[0].endswith("/models/veo-3.1-fast-generate-preview:predictLongRunning")
+
+
 def test_xai_sends_one_presigned_upload_and_stops_on_moderation(values) -> None:
     values["XAI_API_KEY"] = "x" * 20
     seen: list[tuple[str, str, bytes | None]] = []

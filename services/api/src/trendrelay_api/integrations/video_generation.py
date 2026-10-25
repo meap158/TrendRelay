@@ -130,6 +130,11 @@ class VideoProvider:
     #: with nowhere to write the file is refused. The bucket is the one
     #: Publish already configured.
     requires_bucket: bool
+    #: A setting that picks among `model_options`, empty when there is no choice.
+    #: Anything outside the list falls back to `model`, so a stale or edited
+    #: value can never send an unknown model name to a paid endpoint.
+    model_env: str = ""
+    model_options: tuple[str, ...] = ()
 
 
 PROVIDERS: dict[str, VideoProvider] = {
@@ -162,12 +167,22 @@ PROVIDERS: dict[str, VideoProvider] = {
         duration_seconds=8,
         check_url=f"{GEMINI_BASE}/models",
         requires_bucket=False,
+        model_env="VIDEO_PROVIDER_GEMINI_MODEL",
+        model_options=("veo-3.1-generate-preview", "veo-3.1-fast-generate-preview"),
     ),
 }
 
 
 def _enabled(provider: VideoProvider) -> bool:
     return effective_value(provider.enabled_env).strip().lower() == "on"
+
+
+def model_for(provider: VideoProvider) -> str:
+    """The model a job sends: the saved choice when it is one of the listed ones."""
+    if not provider.model_env:
+        return provider.model
+    chosen = effective_value(provider.model_env).strip()
+    return chosen if chosen in provider.model_options else provider.model
 
 
 def _key(provider: VideoProvider) -> str:
@@ -297,6 +312,24 @@ def describe_fields() -> list[dict[str, Any]]:
             "value": switch if switch in {"on", "off"} else "off",
             "preview": None,
         })
+        if provider.model_env:
+            described.append({
+                "key": provider.model_env,
+                "label": f"{provider.label} model",
+                "kind": "choice",
+                "secret": False,
+                "required": False,
+                "options": list(provider.model_options),
+                "default": provider.model,
+                "help": (
+                    "The first is the default. The fast model is cheaper per clip; "
+                    "judge its quality on a few drafts before relying on it. "
+                    "Check does not test the model name; the first clip does."
+                ),
+                "configured": bool(effective_value(provider.model_env).strip()),
+                "value": model_for(provider),
+                "preview": None,
+            })
     return described
 
 
@@ -320,7 +353,7 @@ def save_settings(values: dict[str, str]) -> list[str]:
                     f"That does not look like an API key for {field['label']}."
                 )
         elif value not in field["options"]:
-            raise SettingsError(f"Choose on or off for {field['label']}.")
+            raise SettingsError(f"Choose one of the listed values for {field['label']}.")
         cleaned[key] = value
     if not cleaned:
         return []
@@ -708,7 +741,7 @@ def generate_xai(
             for data, kind in ((image, mime), *references)
         ]
         payload = {
-            "model": provider.model,
+            "model": model_for(provider),
             "prompt": prompt,
             "duration": provider.duration_seconds,
             "aspect_ratio": "9:16",
@@ -800,7 +833,7 @@ def generate_gemini(
         progress.posting()
         status, body = call(
             "POST",
-            f"{GEMINI_BASE}/models/{provider.model}:predictLongRunning",
+            f"{GEMINI_BASE}/models/{model_for(provider)}:predictLongRunning",
             headers,
             json.dumps(payload).encode("utf-8"),
             60,
