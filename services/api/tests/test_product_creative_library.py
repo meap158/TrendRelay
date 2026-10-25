@@ -11,12 +11,19 @@ import pytest
 
 from trendrelay_api.product_creative_library import (
     CAST,
+    CLEAN,
+    CLEAN_LABELLED,
     COVERED,
     DEFAULT_MODEL,
     KEEP,
+    KEEP_ACCESSORY,
+    KEEP_ACCESSORY_EACH,
     KEEP_EACH,
+    KEEP_PRODUCT,
+    KEEP_PRODUCT_EACH,
     LIBRARY_DIR,
     LOCALES,
+    MODEST,
     SILENT,
     catalogue,
     library,
@@ -37,33 +44,64 @@ def test_the_library_loads_and_never_reuses_a_hand_written_id() -> None:
         assert RECIPES[recipe]["library"] is True
 
 
+#: What each product type is promised, alone and in a group.
+PROMISES = {
+    "apparel": (KEEP, KEEP_EACH),
+    "accessory": (KEEP_ACCESSORY, KEEP_ACCESSORY_EACH),
+    "beauty": (KEEP_PRODUCT, KEEP_PRODUCT_EACH),
+    "goods": (KEEP_PRODUCT, KEEP_PRODUCT_EACH),
+    "food": (KEEP_PRODUCT, KEEP_PRODUCT_EACH),
+}
+
+
 @pytest.mark.parametrize("recipe", MINED)
 def test_every_wording_keeps_the_product_and_the_rules(recipe: str) -> None:
     entry = library()[recipe]
     kind = entry["kinds"][0]
-    for background in (False, True):
-        for together in (False, True):
-            for character in (False, True):
-                prompt = resolve_prompt(
-                    recipe, background=background, together=together, character=character
-                )
-                assert len(prompt) <= 4000
-                assert "  " not in prompt
-                assert (KEEP_EACH if together else KEEP) in prompt
-                assert ("attached background image" in prompt) is background
-                if entry["cast"] == "person":
-                    assert COVERED in prompt
-                    assert (CAST in prompt) is character
-                    assert (DEFAULT_MODEL in prompt) is not character
-                if kind == "video":
-                    assert SILENT in prompt
-                if kind == "carousel":
-                    assert f"Create exactly {len(entry['beats'])} separate" in prompt
-                    assert f"Card {len(entry['beats'])}:" in prompt
+    for product_type in RECIPES[recipe]["fits"]:
+        worn = product_type == "apparel"
+        for background in (False, True):
+            for together in (False, True):
+                for character in (False, True):
+                    prompt = resolve_prompt(
+                        recipe, background=background, together=together,
+                        character=character, product_type=product_type,
+                    )
+                    assert len(prompt) <= 4000
+                    assert "  " not in prompt
+                    assert PROMISES[product_type][1 if together else 0] in prompt
+                    assert ("attached background image" in prompt) is background
+                    # A label is part of the product; only clothing bans all text.
+                    assert (CLEAN if worn else CLEAN_LABELLED) in prompt
+                    if entry["cast"] == "person":
+                        assert (COVERED if worn else MODEST) in prompt
+                        assert (COVERED in prompt) is worn
+                        assert (CAST in prompt) is character
+                        assert (DEFAULT_MODEL in prompt) is not character
+                    if kind == "video":
+                        assert SILENT in prompt
+                    if kind == "carousel":
+                        assert f"Create exactly {len(entry['beats'])} separate" in prompt
+                        assert f"Card {len(entry['beats'])}:" in prompt
     # The background switch replaces the recipe's own set, not adds to it.
     assert entry["scene"] not in resolve_prompt(
         recipe, background=True, together=False, character=False
     )
+
+
+def test_a_recipe_for_other_products_never_reads_as_clothing() -> None:
+    """A type a recipe does not fit - unknown, or a mixed group - still reads
+    as a plain product, never as a garment to wear."""
+    others = [r for r in MINED if "apparel" not in RECIPES[r]["fits"]]
+    assert others
+    for recipe in others:
+        for product_type in ("unknown", "apparel"):
+            prompt = resolve_prompt(
+                recipe, background=False, together=False, character=False,
+                product_type=product_type,
+            )
+            assert "clothing from the attached product image" not in prompt
+            assert KEEP_PRODUCT in prompt
 
 
 def test_the_card_count_and_product_ceiling_follow_the_entry() -> None:

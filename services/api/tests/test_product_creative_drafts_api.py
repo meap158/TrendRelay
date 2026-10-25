@@ -657,6 +657,10 @@ def test_a_recipe_written_for_clothing_refuses_another_kind_of_product() -> None
         "bed_flat_lay is written for clothing, and Lip tint is beauty and "
         "personal care. Choose a recipe made for beauty and personal care."
     )
+    hero = request("POST", url, json=draft_body(
+        add_product(workspace_id, image=True, name="Slip set"), recipe="surface_product_hero",
+    ))
+    assert hero.status_code == 200, hero.text
     service = request("POST", url, json=draft_body(voucher))
     assert service.status_code == 422
     assert "nothing to photograph" in service.json()["detail"]

@@ -75,7 +75,11 @@ class ProductCreativeDraft(Base):
             "'garden_twirl_video','door_coat_reveal_video','bed_lounge_settle_video',"
             "'fabric_touch_pullback_video','corridor_walk_toward_video',"
             # Single reference posts, batch 2026-10-25 (migration 20261025_0102).
-            "'sunlit_floor_shadow_heap','night_window_chair_mirror_selfie')",
+            "'sunlit_floor_shadow_heap','night_window_chair_mirror_selfie',"
+            # Starter recipes for other product types, batch 2026-10-26 (migration 20261026_0103).
+            "'surface_product_hero','beside_face_product_hold','vanity_application_story',"
+            "'overhead_everyday_flat_lay','home_use_moment_story','worn_accessory_portrait',"
+            "'unboxing_reveal_video','turntable_product_video')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(

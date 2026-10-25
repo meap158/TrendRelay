@@ -53,7 +53,9 @@
       "architecture": {"en": "Stairs and arches", "vi": "Cầu thang, mái vòm", "ja": "階段とアーチ", "zh": "楼梯与拱门", "ru": "Лестницы и арки", "fr": "Escaliers et arches", "ar": "سلالم وأقواس"},
       "nature": {"en": "Garden and park", "vi": "Vườn, công viên", "ja": "庭・公園", "zh": "花园公园", "ru": "Сад и парк", "fr": "Jardin et parc", "ar": "حديقة ومتنزه"},
       "waterside": {"en": "Waterside", "vi": "Bên nước", "ja": "水辺", "zh": "水边", "ru": "У воды", "fr": "Au bord de l'eau", "ar": "بجانب الماء"},
-      "corridor": {"en": "Plain wall", "vi": "Tường trơn", "ja": "無地の壁", "zh": "素墙", "ru": "Простая стена", "fr": "Mur uni", "ar": "جدار بسيط"}
+      "corridor": {"en": "Plain wall", "vi": "Tường trơn", "ja": "無地の壁", "zh": "素墙", "ru": "Простая стена", "fr": "Mur uni", "ar": "جدار بسيط"},
+      "vanity": {"en": "Vanity and bathroom", "vi": "Bàn trang điểm, phòng tắm", "ja": "洗面台・ドレッサー", "zh": "梳妆台与浴室", "ru": "Туалетный столик и ванная", "fr": "Coiffeuse et salle de bain", "ar": "منضدة الزينة والحمام"},
+      "kitchen": {"en": "Kitchen", "vi": "Nhà bếp", "ja": "キッチン", "zh": "厨房", "ru": "Кухня", "fr": "Cuisine", "ar": "مطبخ"}
     },
     "mood": {
       "soft_feminine": {"en": "Soft and sweet", "vi": "Ngọt ngào", "ja": "ガーリー", "zh": "甜美", "ru": "Нежно", "fr": "Doux", "ar": "ناعم ولطيف"},

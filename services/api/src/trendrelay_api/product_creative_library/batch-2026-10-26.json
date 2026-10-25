@@ -1,0 +1,305 @@
+{
+  "batch": "2026-10-26",
+  "about": "A hand-written starter set for products that are not clothing - accessories, beauty and personal care, everyday goods, food and drink - so they have recipes from the day the types exist. Not mined from references: each is a common product-photography pattern in our own words. Replace or add to them through SOP/attribution/mine-reference-recipes.md as references for these products are studied.",
+  "recipes": [
+    {
+      "id": "surface_product_hero",
+      "kinds": ["image"],
+      "cast": "none",
+      "together": "frame",
+      "fits": ["accessory", "beauty", "goods", "food"],
+      "scene": "A clean, matte stone surface against a softly blurred warm-white wall, with one or two quiet props in tones that suit the product, such as a folded linen cloth, a sprig of greenery or a smooth pebble.",
+      "camera": "A close camera at product height, soft window light from one side with a gentle shadow, shallow depth of field and a clean, natural grade.",
+      "beats": [
+        "The product stands front and centre in sharp focus, turned so its face, label and shape read clearly, with the props kept small and softly out of focus behind it. With several products, they stand in a small staggered group, each turned to show its own face."
+      ],
+      "facets": {
+        "framing": ["close_up"],
+        "setting": ["studio"],
+        "mood": ["clean_minimal", "elegant"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Surface product hero",
+        "vi": "Sản phẩm nổi bật trên mặt đá",
+        "ja": "台の上の商品ヒーロー",
+        "zh": "台面商品主图",
+        "ru": "Товар крупно на поверхности",
+        "fr": "Produit en vedette sur un plateau",
+        "ar": "المنتج بارزًا على سطح"
+      },
+      "help": {
+        "en": "The product alone on a clean stone surface in soft side light, label and shape sharp, a prop or two blurred behind.",
+        "vi": "Sản phẩm đứng riêng trên mặt đá sạch, ánh sáng nghiêng dịu, nhãn và dáng rõ nét, đạo cụ mờ phía sau.",
+        "ja": "柔らかな横光の中、きれいな石の台に商品だけ。ラベルと形は鮮明に、小物は背景にぼかして。",
+        "zh": "商品单独立于干净石台上，柔和侧光，标签与外形清晰，身后一两件道具虚化。",
+        "ru": "Товар один на чистой каменной поверхности в мягком боковом свете: этикетка и форма чёткие, реквизит размыт.",
+        "fr": "Le produit seul sur une surface de pierre nette, en lumière latérale douce, étiquette nette, un accessoire flou derrière.",
+        "ar": "المنتج وحده على سطح حجري نظيف بضوء جانبي ناعم، الملصق والشكل واضحان وخلفه قطعة أو اثنتان ضبابيتان."
+      }
+    },
+    {
+      "id": "beside_face_product_hold",
+      "kinds": ["image"],
+      "cast": "person",
+      "together": "frame",
+      "fits": ["beauty", "goods", "food"],
+      "scene": "A bright room by a large window with sheer curtains, a pale wall and soft daylight.",
+      "camera": "A close camera at eye level through a slightly long phone lens, soft daylight on the face and the product, a warm natural grade.",
+      "beats": [
+        "Framed from the shoulders up, they hold the product up beside the cheek with the label turned to the camera, fingers relaxed around it so none of its face is covered, and look into the lens. The product is as sharp as the face. With several products, they hold two up together in one hand and the others rest on the sill in front, each label readable."
+      ],
+      "facets": {
+        "pose": ["holding_prop", "hands_to_face"],
+        "framing": ["close_up"],
+        "setting": ["window_room"],
+        "mood": ["candid", "clean_minimal"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Held beside the face",
+        "vi": "Cầm sản phẩm cạnh mặt",
+        "ja": "顔の横で商品を持つ",
+        "zh": "手持商品贴脸",
+        "ru": "Товар у лица",
+        "fr": "Tenu près du visage",
+        "ar": "المنتج بجانب الوجه"
+      },
+      "help": {
+        "en": "A shoulders-up portrait by a window, the product held up beside the cheek with its label to the camera.",
+        "vi": "Chân dung ngang vai bên cửa sổ, cầm sản phẩm cạnh má, nhãn hướng về máy ảnh.",
+        "ja": "窓辺の胸上ポートレート。頬の横で商品を持ち、ラベルをカメラに向けて。",
+        "zh": "窗边肩部以上人像，商品举在脸颊旁，标签朝向镜头。",
+        "ru": "Портрет по плечи у окна: товар у щеки, этикеткой к камере.",
+        "fr": "Un portrait aux épaules près d'une fenêtre, le produit tenu contre la joue, étiquette vers l'objectif.",
+        "ar": "صورة من الكتفين قرب نافذة، المنتج مرفوع بجانب الخد وملصقه نحو الكاميرا."
+      }
+    },
+    {
+      "id": "vanity_application_story",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "fits": ["beauty"],
+      "scene": "A tidy bathroom vanity in soft morning light: a pale counter, a round mirror, a folded white towel and a small glass of water, with nothing else branded in view.",
+      "camera": "Soft, even daylight from a window beside the mirror, a phone-camera feel, a fresh and clean colour grade.",
+      "beats": [
+        "The product stands on the vanity counter in sharp focus, label to the camera, the mirror and towel softly behind it.",
+        "A close view of the hands as they use the product as it is meant to be used - a little dispensed onto the fingertips, a swatch on the back of the hand, or a sweep of the applicator - with the product held in frame, label readable.",
+        "Framed from the shoulders up in the mirror's light, they use it where it is made for - skin, lips, hair, teeth or nails - eyes relaxed, the product held in the other hand.",
+        "A close portrait of the finished, natural result in the same light, the product held beside the face with its label to the camera."
+      ],
+      "facets": {
+        "pose": ["holding_prop", "hands_to_face"],
+        "framing": ["detail", "close_up"],
+        "setting": ["vanity"],
+        "mood": ["clean_minimal", "soft_feminine"],
+        "layout": ["story_sequence", "detail_to_full"]
+      },
+      "label": {
+        "en": "Vanity application story",
+        "vi": "Câu chuyện sử dụng bên bàn trang điểm",
+        "ja": "洗面台での使い方ストーリー",
+        "zh": "梳妆台使用故事",
+        "ru": "История нанесения у зеркала",
+        "fr": "Application devant la coiffeuse",
+        "ar": "قصة الاستخدام أمام المرآة"
+      },
+      "help": {
+        "en": "Four cards at a bright vanity: the product on the counter, a swatch or dispense, applying it, then the result with the product in hand.",
+        "vi": "Bốn thẻ bên bàn trang điểm sáng: sản phẩm trên mặt bàn, lấy một ít, thoa lên, rồi kết quả với sản phẩm trên tay.",
+        "ja": "明るい洗面台で4枚：台の上の商品、手に取る、使う、商品を持って仕上がり。",
+        "zh": "明亮梳妆台四张：台面上的商品、取用试色、上妆使用、手持商品展示效果。",
+        "ru": "Четыре кадра у светлого столика: товар на столешнице, немного на пальцах, нанесение и результат с товаром в руке.",
+        "fr": "Quatre cartes devant une coiffeuse claire : le produit posé, un peu au bout des doigts, l'application, puis le résultat produit en main.",
+        "ar": "أربع بطاقات أمام منضدة مضيئة: المنتج على السطح، قليل منه على الأصابع، تطبيقه، ثم النتيجة والمنتج في اليد."
+      }
+    },
+    {
+      "id": "overhead_everyday_flat_lay",
+      "kinds": ["image"],
+      "cast": "none",
+      "together": "frame",
+      "fits": ["accessory", "beauty", "goods", "food"],
+      "scene": "A light oak table top in even daylight, with a few everyday companions to the product arranged loosely around it - a notebook, a ceramic cup, a pair of sunglasses, a sprig of flowers - chosen to suit what the product is for.",
+      "camera": "Looking straight down from above, soft even daylight with very light shadows, a fresh, slightly warm grade.",
+      "beats": [
+        "The product lies at the centre of the arrangement, largest and sharpest, its label or face upright to the camera, the companions kept smaller and at the edges so the eye lands on it first. With several products, they share the centre in a loose cluster, each clearly its own item."
+      ],
+      "facets": {
+        "framing": ["flat_lay"],
+        "setting": ["living_room"],
+        "mood": ["clean_minimal", "cozy"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Everyday flat lay",
+        "vi": "Bày phẳng đồ dùng hằng ngày",
+        "ja": "日常のフラットレイ",
+        "zh": "日常俯拍平铺",
+        "ru": "Повседневная раскладка сверху",
+        "fr": "Mise à plat du quotidien",
+        "ar": "ترتيب مسطح يومي"
+      },
+      "help": {
+        "en": "Overhead on a light oak table, the product at the centre with a few everyday companions around it.",
+        "vi": "Chụp từ trên xuống bàn gỗ sáng, sản phẩm ở giữa cùng vài món đồ thường ngày xung quanh.",
+        "ja": "明るいオークのテーブルを真上から。中央に商品、周りに日常の小物を少し。",
+        "zh": "从上方俯拍浅色橡木桌，商品居中，周围摆几件日常小物。",
+        "ru": "Сверху на светлом дубовом столе: товар в центре, вокруг немного повседневных вещей.",
+        "fr": "Vu d'en haut sur une table en chêne clair, le produit au centre entouré de quelques objets du quotidien.",
+        "ar": "من الأعلى على طاولة بلوط فاتحة، المنتج في الوسط وحوله بعض الأغراض اليومية."
+      }
+    },
+    {
+      "id": "home_use_moment_story",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "fits": ["goods", "food"],
+      "scene": "A bright, lived-in home in daylight: a clean kitchen counter by a window and a sofa corner beyond it, plants and plain ceramics, nothing else branded in view.",
+      "camera": "Soft daylight, a phone-camera feel at chest height, a warm, natural grade.",
+      "beats": [
+        "The product set down where it belongs in the home - on the kitchen counter, a shelf or the table by the sofa - in sharp focus, label to the camera, the room softly behind it.",
+        "Framed from the waist up, they pick it up and use it the way it is meant to be used in this home - opening, pouring, wiping, serving or setting it in place - the product clearly in frame.",
+        "A close view of the product in use: the hands, the product and what it is doing, its label or shape still readable.",
+        "Seated at the sofa corner, relaxed, with the product within reach on the table beside them, the moment after it has done its job."
+      ],
+      "facets": {
+        "pose": ["holding_prop", "seated"],
+        "framing": ["half_body", "detail"],
+        "setting": ["kitchen", "living_room"],
+        "mood": ["cozy", "candid"],
+        "layout": ["story_sequence"]
+      },
+      "label": {
+        "en": "Home use story",
+        "vi": "Câu chuyện dùng tại nhà",
+        "ja": "おうちで使うストーリー",
+        "zh": "居家使用故事",
+        "ru": "История использования дома",
+        "fr": "Moment d'usage à la maison",
+        "ar": "قصة الاستخدام في المنزل"
+      },
+      "help": {
+        "en": "Four cards in a bright home: the product on the counter, picked up and used, a close view in use, then a relaxed moment after.",
+        "vi": "Bốn thẻ trong ngôi nhà sáng: sản phẩm trên kệ bếp, cầm lên dùng, cận cảnh khi dùng, rồi khoảnh khắc thư giãn.",
+        "ja": "明るい家で4枚：カウンターの商品、手に取って使う、使っている寄り、使ったあとのくつろぎ。",
+        "zh": "明亮居家四张：台面上的商品、拿起使用、使用中特写、用后放松时刻。",
+        "ru": "Четыре кадра в светлом доме: товар на столешнице, в руках в деле, крупный план и спокойный момент после.",
+        "fr": "Quatre cartes dans une maison claire : le produit sur le plan de travail, pris en main, en gros plan à l'usage, puis un moment de détente.",
+        "ar": "أربع بطاقات في منزل مشرق: المنتج على المنضدة، رفعه واستخدامه، لقطة قريبة أثناء الاستخدام، ثم لحظة استرخاء."
+      }
+    },
+    {
+      "id": "worn_accessory_portrait",
+      "kinds": ["image"],
+      "cast": "person",
+      "together": "frame",
+      "fits": ["accessory"],
+      "scene": "A quiet corner by a window with a plain warm-grey wall and soft daylight, nothing else in view.",
+      "camera": "A close camera at eye level through a portrait lens, soft daylight falling across the accessory, shallow depth of field and a gentle, warm grade.",
+      "beats": [
+        "A close portrait framed around where the accessory is worn - at the ear, the hair, the eyes, the wrist, the head or the hand - turned slightly so it catches the light and shows its shape, one hand raised near it without covering it. The accessory is the sharpest thing in the frame. With several products, they are worn together the way they would be styled, each clearly its own piece."
+      ],
+      "facets": {
+        "pose": ["hands_to_face", "over_shoulder"],
+        "framing": ["close_up"],
+        "setting": ["window_room"],
+        "mood": ["elegant", "soft_feminine"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Worn accessory portrait",
+        "vi": "Chân dung đeo phụ kiện",
+        "ja": "アクセサリー着用ポートレート",
+        "zh": "佩戴配饰特写",
+        "ru": "Портрет с аксессуаром",
+        "fr": "Portrait avec l'accessoire porté",
+        "ar": "صورة مع الإكسسوار"
+      },
+      "help": {
+        "en": "A close window-light portrait framed around where the accessory is worn, the piece sharp and catching the light.",
+        "vi": "Chân dung cận ánh sáng cửa sổ, khung quanh nơi đeo phụ kiện, món đồ sắc nét và bắt sáng.",
+        "ja": "窓の光で、アクセサリーを着けた部分を中心に寄ったポートレート。光を受けて鮮明に。",
+        "zh": "窗光近景人像，构图围绕佩戴配饰的部位，饰品清晰并捕捉光线。",
+        "ru": "Портрет крупно у окна, кадр вокруг места, где носят аксессуар: он резкий и ловит свет.",
+        "fr": "Un portrait serré en lumière de fenêtre, cadré là où l'accessoire se porte, net et pris dans la lumière.",
+        "ar": "صورة قريبة بضوء النافذة حول موضع ارتداء الإكسسوار، والقطعة حادة تلتقط الضوء."
+      }
+    },
+    {
+      "id": "unboxing_reveal_video",
+      "kinds": ["video"],
+      "cast": "person",
+      "together": "frame",
+      "fits": ["accessory", "beauty", "goods", "food"],
+      "scene": "A light wooden table by a window in soft daylight, with a plain kraft-paper box and a little tissue paper on it, nothing else branded in view.",
+      "camera": "A steady close camera looking down at the table at a slight angle, soft daylight, a warm natural grade, gentle real-time motion.",
+      "beats": [
+        "Framed on the hands and the table, the face staying out of frame, they lift the lid of the box, fold back the tissue, and take the product out. They turn it slowly toward the camera so its label and shape read clearly, hold it still for a moment in the light, then set it down upright beside the box. With several products, they lift each out in turn and line them up beside the box."
+      ],
+      "facets": {
+        "pose": ["holding_prop", "motion"],
+        "framing": ["close_up", "detail"],
+        "setting": ["living_room"],
+        "mood": ["candid", "cozy"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Unboxing reveal video",
+        "vi": "Video mở hộp",
+        "ja": "開封リビール動画",
+        "zh": "开箱展示视频",
+        "ru": "Видео распаковки",
+        "fr": "Vidéo de déballage",
+        "ar": "فيديو فتح العلبة"
+      },
+      "help": {
+        "en": "Hands open a plain box on a sunlit table, lift the product out and turn it to the camera.",
+        "vi": "Đôi tay mở hộp giấy trên bàn đầy nắng, lấy sản phẩm ra và xoay về phía máy quay.",
+        "ja": "日の当たるテーブルで手が無地の箱を開け、商品を取り出してカメラに向ける。",
+        "zh": "双手在阳光餐桌上打开素色纸盒，取出商品并转向镜头。",
+        "ru": "Руки открывают простую коробку на солнечном столе, достают товар и поворачивают к камере.",
+        "fr": "Des mains ouvrent une boîte simple sur une table ensoleillée, sortent le produit et le tournent vers la caméra.",
+        "ar": "يدان تفتحان علبة بسيطة على طاولة مشمسة وتخرجان المنتج وتديرانه نحو الكاميرا."
+      }
+    },
+    {
+      "id": "turntable_product_video",
+      "kinds": ["video"],
+      "cast": "none",
+      "together": "frame",
+      "fits": ["accessory", "beauty", "goods", "food"],
+      "scene": "A small round turntable on a seamless soft-grey studio sweep, with one gentle key light and a pale reflector.",
+      "camera": "A locked-off close camera at product height, soft studio light with a slow highlight that glides across the surface, a clean neutral grade.",
+      "beats": [
+        "The product turns slowly through one full revolution on the turntable, so every side, its label and its finish pass the camera in turn, and the highlight moves across it as it turns. It ends facing the camera, label upright and sharp. With several products, they stand together on the turntable and turn as one group."
+      ],
+      "facets": {
+        "framing": ["close_up", "detail"],
+        "setting": ["studio"],
+        "mood": ["clean_minimal"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Turntable product video",
+        "vi": "Video sản phẩm xoay",
+        "ja": "ターンテーブル商品動画",
+        "zh": "转台商品视频",
+        "ru": "Видео товара на поворотном столике",
+        "fr": "Vidéo produit sur plateau tournant",
+        "ar": "فيديو المنتج على قاعدة دوارة"
+      },
+      "help": {
+        "en": "The product turns once on a turntable in a soft-grey studio, a highlight gliding across it, ending label to the camera.",
+        "vi": "Sản phẩm xoay một vòng trên bàn xoay trong studio xám dịu, vệt sáng lướt qua, dừng với nhãn hướng về máy quay.",
+        "ja": "柔らかなグレーのスタジオで商品がターンテーブル上を一周。ハイライトが流れ、最後はラベルを正面に。",
+        "zh": "商品在柔灰影棚的转台上旋转一圈，高光掠过，最后标签正对镜头。",
+        "ru": "Товар делает один оборот на столике в мягкой серой студии, блик скользит, в конце этикетка к камере.",
+        "fr": "Le produit fait un tour sur un plateau dans un studio gris doux, un reflet glisse dessus, il finit étiquette face caméra.",
+        "ar": "المنتج يدور دورة واحدة على قاعدة في استوديو رمادي ناعم، ولمعة تنساب عليه، وينتهي وملصقه نحو الكاميرا."
+      }
+    }
+  ]
+}
