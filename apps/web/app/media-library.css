@@ -1904,13 +1904,25 @@ button.music-picker-row:hover { border-color: var(--link); }
 .library-filter-panel .library-arrange-controls { display: contents; }
 .library-filter-panel .library-arrange-controls > label { display: grid; gap: 4px; flex: 0 1 104px; min-width: 0; color: var(--muted); font-size: 10px; font-weight: 600; }
 .library-filter-panel .asset-filters { display: contents; }
-.library-filter-panel .asset-filters > label { flex: 1 1 80px; max-inline-size: 160px; }
-.library-filter-panel .asset-filters > .asset-filter-wide { flex: 1.25 1 112px; }
+/* Each facet starts at the width of what it shows and the row shares out the
+   rest, rather than every facet getting an equal slot: "Any processing" needs
+   more than "Any time", and equal slots cut the long ones off while the short
+   ones sat half empty. Still capped, so one long channel name cannot take the
+   row, and still shrinkable when a chosen value is longer than the default. */
+.library-filter-panel .asset-filters > label,
+.library-filter-panel .asset-filters > .asset-filter-wide { flex: 1 1 auto; max-inline-size: 160px; }
 .library-filter-panel .ui-select { width: 100%; }
+/* Eight facets share one row, so their values get the size the Sort and Group
+   controls beside the tabs already use: "All sources" fits where 12px cut it
+   to "All sour…". A phone keeps the full size below, where each facet has
+   half the row and a finger needs the height. */
+.library-filter-panel .asset-filters .search-select-trigger { min-height: 30px; gap: 6px; padding: 5px 8px; font-size: 11px; }
+.library-filter-panel .asset-filters .search-select-chevron { inline-size: 13px; block-size: 13px; }
 @media (max-width: 600px) {
   .library-filter-panel .library-arrange-controls > label,
   .library-filter-panel .asset-filters > label,
   .library-filter-panel .asset-filters > .asset-filter-wide { flex: 1 1 calc(50% - 8px); max-inline-size: none; }
+  .library-filter-panel .asset-filters .search-select-trigger { min-height: 36px; padding: 7px 10px; font-size: 12px; }
 }
 
 /* Sort/group sit beside category tabs; filters retain their own visible row. */
