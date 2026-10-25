@@ -3,8 +3,21 @@
 Purpose: learn what works in other brands' carousels and lookbooks, as data, and turn it into ORIGINAL TrendRelay characters and
 templates. The catalogue stores observations in our own words. It never stores or republishes the other brands' images.
 
-Status: schema only. No page has been catalogued yet; that waits on a SocialMiner export (PM-234) of the reference pages:
-rilly_emulie_official, anmille.official, hemell_official (Instagram).
+Status (2026-10-25): the SocialMiner batch `2026-10-23` has 1,852 annotated
+posts across five accounts. Validation reports zero invalid or missing
+annotations. Its aggregate includes 425 apparel-usable posts in the top 30%
+of their own account with reuse scores of at least 3. Three extraction passes
+produced 58 mined recipes; evidence and deferred patterns are recorded in
+`References/brand-pages/2026-10-23/recipes-evidence.md` (local only).
+
+The current catalogue has 71 distinct recipes: 13 built-ins and 58 mined.
+The picker filters by type: 10 support Image, 47 Carousel, and 14 Video;
+some built-ins support several types, so those counts overlap. These are
+implemented reusable patterns, not an estimate of every pattern the export
+could support. Further extraction must establish recurrence and a distinct
+setting, pose, framing, and card structure under
+`SOP/attribution/mine-reference-recipes.md` rather than inflate the count with
+near-duplicates.
 
 ## Rules (read first)
 1. Reference images stay local and git-ignored (`References/brand-pages/`, already covered by the repo's `/References/` ignore, never committed, never uploaded, never used to train or
@@ -61,7 +74,9 @@ Convert an export into skeletons (facts filled, annotations empty; image URLs ar
 4. Acceptance (PM-233): catalogue for 3 pages with 20+ posts each, 3 original characters, 3 templates.
 
 ## Open items
-- Owner: run the SocialMiner mine of the three pages and give the export path.
+- Continue future extraction from the existing batch annotations, aggregates,
+  local contact sheets, and recipe evidence; the initial export and annotation
+  pass are complete.
 - Owner: confirm that "pribng" meant pricing; if so add a price-positioning column per page (price band shown, if any).
 - Confirm on the first real export that Instagram carousels list every slide in `mediaUrls` (SocialMiner's docs say they do).
 - Decide how TrendRelay invokes FrameMotion (package import vs `npm run carousel`).
