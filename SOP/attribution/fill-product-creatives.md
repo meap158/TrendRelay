@@ -3,7 +3,7 @@ id: attribution.fill-product-creatives
 action: attribution.fill-product-creatives
 title: Fill pending Attribution product creatives
 summary: Work the pending product-creative queue one draft at a time. Read the stored prompt and the product's image references, generate that file outside TrendRelay, and submit it to the Library before the task is done. A carousel stays unlinked until every card has landed. Nothing is published.
-version: 5
+version: 6
 tags: [attribution, media, creatives, library]
 aliases: [fill-product-creatives, attribution.needs-creatives, generate-product-creative]
 ---
@@ -143,7 +143,27 @@ A carousel's `card_count` is fixed at confirm, from 2 to 10. It cannot be
 lowered. Generate that many separate images and submit them one at a time,
 in order. Do not submit one picture that contains every card as panels.
 
-## 4. One draft, then the next
+## 4. Generation order: finish one draft, then the next
+
+Choose the next draft in this order (operator instruction, 2026-10-25):
+
+1. Prioritize templates/recipes with no completed media yet. Check completed
+   drafts and linked Library media; a pending prompt is not existing media.
+2. Within that priority, prefer drafts featuring a selected character, then
+   character drafts among the remaining templates.
+3. Alternate products between completed drafts when eligible drafts are
+   available at the same priority. Rotate products without splitting a draft.
+
+Completion takes precedence once a draft has started. Generate, review, and
+submit every remaining card in stored order, then verify `status: succeeded`,
+`owed: 0`, `linked: true`, and Library asset ids before selecting another
+draft. For a five-card draft, finish all five; never generate one of five and
+move to another draft or product to satisfy the rotation. Resume an already
+started draft before opening a fresh one. If a provider or reference blocker
+prevents completion, record the draft id, completed cards, remaining cards,
+and reason before moving on; preserve its progress and do not claim it done.
+
+Apply the priorities when choosing the next whole draft, not the next image.
 
 1. Read the draft. A video draft is filled by the command in section 5, which
    submits the file itself. For an image or a carousel, generate the file
