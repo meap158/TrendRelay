@@ -24,6 +24,7 @@ import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { Select } from "../ui/select";
 import { useLocale, useT } from "../i18n-provider";
 import { relativeTime } from "../../lib/relative-time";
+import { campaignDefaultCharacter } from "../../lib/characters";
 import { useRelativeClock } from "../ui/relative-time";
 import { useWorkspace } from "../workspace-provider";
 import { commissionRate } from "../commission";
@@ -171,7 +172,14 @@ export function ProductTable({
    */
   onReadListing?: (productId: string) => Promise<FullListing | null>;
   /** Campaigns a product can be promoted by. */
-  campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
+  campaigns?: {
+    id: string;
+    name: string;
+    status: string;
+    tagged_products: number;
+    /** The character Generate media starts with for this campaign's products. */
+    default_character_id?: string | null;
+  }[];
   /** Which campaigns already promote each offer, keyed by offer id. */
   campaignsByOffer?: Record<string, string[]>;
   /**
@@ -1403,6 +1411,7 @@ export function ProductTable({
           key={generateFor.map((item) => item.id).join(",")}
           open
           products={generateFor}
+          defaultCharacterId={campaignDefaultCharacter(generateFor, campaignsByOffer, campaigns)}
           onClose={() => setGenerateFor(null)}
           onChanged={onCreativesChanged}
           onOpenDraft={(productId, draftId) => {

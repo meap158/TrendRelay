@@ -281,6 +281,7 @@ export function ProductMediaGenerator({
   onClose,
   onChanged,
   onOpenDraft,
+  defaultCharacterId = "",
 }: {
   open: boolean;
   products: {
@@ -299,6 +300,8 @@ export function ProductMediaGenerator({
   onChanged?: () => void;
   /** Open an existing draft in place of queuing its twin. */
   onOpenDraft?: (productId: string, draftId: string) => void;
+  /** The character a new ask starts with: the products' campaign default. */
+  defaultCharacterId?: string;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -349,9 +352,11 @@ export function ProductMediaGenerator({
   const [subjects, setSubjects] = useState<LibraryAsset[]>([]);
   const [storedSubjects, setStoredSubjects] = useState<StoredSubject[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  /** Feature a character: on, and which one. Off sends nothing. */
-  const [characterOn, setCharacterOn] = useState(false);
-  const [characterId, setCharacterId] = useState("");
+  /** Feature a character: on, and which one. Off sends nothing. A new ask
+      starts with the campaign's default; a review shows the stored draft. */
+  const startCharacter = draftId ? "" : defaultCharacterId;
+  const [characterOn, setCharacterOn] = useState(Boolean(startCharacter));
+  const [characterId, setCharacterId] = useState(startCharacter);
   /** A character dialog is open over this one. */
   const [characterOverlay, setCharacterOverlay] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<ListingFieldKey>>(() => {
@@ -1102,8 +1107,8 @@ export function ProductMediaGenerator({
     setCardCount(2);
     setSubjects([]);
     setStoredSubjects([]);
-    setCharacterOn(false);
-    setCharacterId("");
+    setCharacterOn(Boolean(defaultCharacterId));
+    setCharacterId(defaultCharacterId);
     setScope("each");
     setSkipped({});
     let fields: readonly ListingFieldKey[] = DEFAULT_LISTING_FIELDS;

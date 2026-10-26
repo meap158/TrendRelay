@@ -79,7 +79,13 @@ type AttributionSnapshot = {
   summary: Summary;
   products: ProductRow[];
   tagChoices: {
-    campaigns: { id: string; name: string; status: string; tagged_products: number }[];
+    campaigns: {
+      id: string;
+      name: string;
+      status: string;
+      tagged_products: number;
+      default_character_id?: string | null;
+    }[];
     by_offer: Record<string, string[]>;
   };
 };

@@ -91,3 +91,30 @@ export function recipeTakesCharacter(_recipe: string): boolean {
 
 /** The Library's source filter for character pictures. */
 export const CHARACTER_SOURCE = "character";
+
+/**
+ * The character Generate media starts with for these products: the default of
+ * the campaigns they are tagged to, when those campaigns agree on one.
+ *
+ * Campaigns with no default do not count against it, so a product tagged to a
+ * brand's sleepwear campaign and to a general shop campaign still starts with
+ * the sleepwear model. Two different defaults among the selection start with
+ * none, since neither is the one somebody meant.
+ */
+export function campaignDefaultCharacter(
+  products: readonly { offers: readonly { id: string }[] }[],
+  campaignsByOffer: Readonly<Record<string, readonly string[]>>,
+  campaigns: readonly { id: string; default_character_id?: string | null }[],
+): string {
+  const defaults = new Map(campaigns.map((campaign) => [campaign.id, campaign.default_character_id ?? ""]));
+  const chosen = new Set<string>();
+  for (const product of products) {
+    for (const offer of product.offers) {
+      for (const campaignId of campaignsByOffer[offer.id] ?? []) {
+        const character = defaults.get(campaignId);
+        if (character) chosen.add(character);
+      }
+    }
+  }
+  return chosen.size === 1 ? [...chosen][0] : "";
+}

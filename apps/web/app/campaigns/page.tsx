@@ -78,6 +78,9 @@ type Campaign = {
       campaign has no autopilot at all, which is not the same as one that was
       switched off. Only the list endpoint fills it in. */
   autopilot_running?: boolean | null;
+  /** The character Generate media starts with for this campaign's products.
+      Only the list endpoint fills it in. */
+  default_character_id?: string | null;
   /** Where it sits in the workspace's own order. The list arrives sorted by
       it; this is here so a reorder can be sent back in the same terms. */
   position?: number;
@@ -430,6 +433,9 @@ export default function CampaignsPage() {
   // The campaign being edited, held as its own copy so an abandoned edit
   // changes nothing and the list keeps showing what is actually saved.
   const [settingsFor, setSettingsFor] = useState<Campaign | null>(null);
+  /** The models a campaign can default to, read when its settings open. Null
+      until they arrive, and then the choice is left out of the save. */
+  const [settingsModels, setSettingsModels] = useState<{ id: string; name: string }[] | null>(null);
   const [policy, setPolicy] = useState<CampaignPolicy | null>(null);
   /** The workspace's Telegram, as the list reports it: whether the dialogs
       offer approvals there, and which bot and chat they would go to. */
@@ -759,6 +765,19 @@ export default function CampaignsPage() {
   function openCampaignSettings(campaign: Campaign) {
     setSettingsFor(campaign);
     setPolicy(null);
+    setSettingsModels(null);
+    void (async () => {
+      try {
+        const body = await json<{
+          characters: { id: string; name: string; status: string; archived?: boolean }[];
+        }>(await apiFetch(`/api/workspaces/${workspaceId}/characters`));
+        setSettingsModels(body.characters
+          .filter((item) => item.status === "ready" && !item.archived)
+          .map((item) => ({ id: item.id, name: item.name })));
+      } catch {
+        setSettingsModels(null);
+      }
+    })();
     void (async () => {
       try {
         const body = await json<{ autopilot: CampaignPolicy }>(await apiFetch(
@@ -800,6 +819,9 @@ export default function CampaignsPage() {
             objective: form.get("objective"),
             audience: form.get("audience"),
             languages: [form.get("language")].filter(Boolean),
+            ...(settingsModels
+              ? { default_character_id: String(form.get("default_character_id") ?? "") }
+              : {}),
             // Only sent when the dialog had them to show. Every one is
             // optional at the API, so a campaign whose autopilot has not been
             // created yet corrects its wording without inventing a policy.
@@ -1456,6 +1478,19 @@ export default function CampaignsPage() {
               </Select>
               <small>Changes the disclosure and bio hint too, unless you have written your own.</small>
             </label>
+            {settingsModels && (
+              <label>Default model
+                <Select name="default_character_id"
+                  defaultValue={settingsModels.some((item) => item.id === settingsFor.default_character_id)
+                    ? settingsFor.default_character_id ?? "" : ""}>
+                  <option value="">No default model</option>
+                  {settingsModels.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </Select>
+                <small>Generate media starts with this model for the campaign&apos;s products. It can still be changed there.</small>
+              </label>
+            )}
             {/* How hard it is run. Set once when the campaign is described
                 and rarely touched after, which is why it is here rather than
                 beside the queue somebody works in every day. */}

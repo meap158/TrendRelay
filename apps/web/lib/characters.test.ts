@@ -5,6 +5,7 @@ import { activeFilterCount, assetFilterParams } from "./asset-filters.ts";
 import {
   CHARACTER_SOURCE,
   anyDrawing,
+  campaignDefaultCharacter,
   characterField,
   isPickable,
   paidRequests,
@@ -78,4 +79,22 @@ test("editorial carousel needs an explicit character while ordinary recipes allo
   assert.equal(recipeTakesCharacter("character_editorial_carousel"), true);
   assert.equal(recipeRequiresCharacter("bed_flat_lay"), false);
   assert.equal(recipeRequiresCharacter("hikaru_lookbook"), false);
+});
+
+test("a selection starts with the model its campaigns agree on", () => {
+  const campaigns = [
+    { id: "sleepwear", default_character_id: "ha-my" },
+    { id: "shop", default_character_id: null },
+    { id: "menswear", default_character_id: "minh" },
+  ];
+  const byOffer = { "offer-set": ["sleepwear", "shop"], "offer-shop": ["shop"], "offer-shirt": ["menswear"] };
+  const product = (...offers: string[]) => ({ offers: offers.map((id) => ({ id })) });
+
+  // A campaign without a default does not outvote the one that has one.
+  assert.equal(campaignDefaultCharacter([product("offer-set")], byOffer, campaigns), "ha-my");
+  assert.equal(campaignDefaultCharacter([product("offer-set"), product("offer-shop")], byOffer, campaigns), "ha-my");
+  // Two different defaults, or none at all, start with no model.
+  assert.equal(campaignDefaultCharacter([product("offer-set"), product("offer-shirt")], byOffer, campaigns), "");
+  assert.equal(campaignDefaultCharacter([product("offer-shop")], byOffer, campaigns), "");
+  assert.equal(campaignDefaultCharacter([product()], byOffer, campaigns), "");
 });
