@@ -220,6 +220,12 @@ class Campaign(Base):
     #: somebody had learned to find third from the bottom was not there any
     #: more. The same column and the same ties as a queue item's `position`.
     position: Mapped[int] = mapped_column(default=0)
+    #: The character Generate media starts with for this campaign's products.
+    #: Deferred, and read only through `campaign_defaults`, so a database the
+    #: migration has not reached yet still answers every campaign query.
+    default_character_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, deferred=True
+    )
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)

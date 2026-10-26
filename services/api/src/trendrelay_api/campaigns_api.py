@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, undefer
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.autopilot_models import CampaignAutopilot
+from trendrelay_api.campaign_characters import campaign_defaults, has_default_column, set_default
 from trendrelay_api.campaign_offer_tags import offer_counts
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
@@ -269,6 +270,9 @@ class CampaignUpdate(BaseModel):
     disclose: bool | None = None
     disclosure: str | None = Field(default=None, max_length=280)
     bio_hint: str | None = Field(default=None, max_length=120)
+    #: The character Generate media starts with for this campaign's products.
+    #: None leaves it alone; an empty string clears it.
+    default_character_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("name", "objective", "audience")
     @classmethod
@@ -446,6 +450,7 @@ def list_campaigns(
     # can be tagged to several campaigns, so these counts overlap and do not sum
     # to a distinct-product total - each is only what that campaign may promote.
     counts = offer_counts(session, workspace_id)
+    defaults = campaign_defaults(session, workspace_id)
     # How many posts each campaign is holding for approval - the "proposed"
     # executions - in one grouped query, so the sidebar can show what needs a
     # person without a count per row.
@@ -484,6 +489,7 @@ def list_campaigns(
                 **_campaign(item),
                 "tagged_products": counts.get(item.id, 0),
                 "held_count": held_counts.get(item.id, 0),
+                "default_character_id": defaults.get(item.id),
                 # None where a campaign has no autopilot row at all: it was
                 # never set up to run, which is a different thing from having
                 # been switched off, and the sidebar says neither.
@@ -765,6 +771,13 @@ def update_campaign(
         "audience": item.audience,
         "languages": list(item.languages or []),
     }
+    if body.default_character_id is not None:
+        previous = item.default_character_id if has_default_column(session) else None
+        try:
+            set_default(session, item, body.default_character_id)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        before["default_character_id"] = previous
     autopilot = session.scalar(
         select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
     )

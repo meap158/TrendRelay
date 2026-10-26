@@ -196,12 +196,17 @@ def campaign_choices(session: Session, workspace_id: str) -> list[dict[str, Any]
         .order_by(Campaign.created_at.desc())
     ).all()
     counts = offer_counts(session, workspace_id)
+    from trendrelay_api.campaign_characters import campaign_defaults
+
+    defaults = campaign_defaults(session, workspace_id)
     return [
         {
             "id": campaign.id,
             "name": campaign.name,
             "status": campaign.status,
             "tagged_products": counts.get(campaign.id, 0),
+            # The character Generate media starts with for these products.
+            "default_character_id": defaults.get(campaign.id),
         }
         for campaign in rows
     ]
