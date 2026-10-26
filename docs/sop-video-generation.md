@@ -19,9 +19,10 @@ signing in to Google and pasting a fresh Cookie header into Tools, and restartin
 | `python scripts/veo_video.py generate --confirm [--draft ID]` | one video | Runs the doctor gates, queues the newest pending single-product video draft (or the one given) through the API as the Attribution button does, waits up to 15 minutes, then verifies Gate C |
 | `python scripts/veo_video.py verify --asset ID [--recipe R]` | no | Gate C alone, for any filed clip |
 
-Gate C, checked by the command: the asset is a video; it carries the tags `ai-video`, `veo`, `gemini-web` and the recipe; it is
+Gate C, checked by the command: the asset is a video; it carries the tags `ai-generated`, `ai-video`, `veo`, `gemini-web` and the
+recipe; its creator is `Veo (Gemini Web)` and its title ends with that name; the file's own metadata says it is AI-generated; it is
 720x1280 H.264 with audio and 5-15 s long; the Library file downloads at exactly the recorded size; and a Library search for
-`gemini-web` finds it. It also saves one frame to `.data/gemini-web/verify-<asset>.jpg`; compare that with the product picture,
+`gemini-web` finds it. See "Naming and provenance" below for what each of these is and why. It also saves one frame to `.data/gemini-web/verify-<asset>.jpg`; compare that with the product picture,
 the one check left to eyes. Exit codes: 0 done, 1 a gate failed before anything was spent, 2 refused (no `--confirm`), 3 the
 generation failed, 4 the clip was made but a check on it failed. It never resends a request and never falls back to another
 provider. A failure prints what to do; read the failure table before running `generate` again.
@@ -96,8 +97,8 @@ Set the slot that lists the Pro models in Tools (**Gemini Web account slot**). O
 All of these must hold. The first is the app, the rest are the file and the Library.
 
 1. The draft shows its file and leaves the pending list.
-2. Find the clip: Library search `ai-video`, `veo`, `gemini-web` or the recipe id. Every clip made by a provider is filed with
-   the hashtags `ai-video`, its provider (`grok`; `veo` + `gemini`; `veo` + `gemini-web`) and the draft's recipe id, and is
+2. Find the clip: Library search `ai-generated`, `ai-video`, `veo`, `gemini-web` or the recipe id. Every clip made by a provider is
+   named, tagged and marked as in "Naming and provenance" above (hashtags `ai-generated`, `ai-video`, its engine and the recipe id), and is
    linked to the draft's product, recipe and character like every other creative (so "Open in Library", the recipe filter and
    the batch viewer all find it).
 3. Probe the file: `ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,duration -of compact <file>`
@@ -105,6 +106,29 @@ All of these must hold. The first is the app, the rest are the file and the Libr
 4. Look at a frame (`ffmpeg -ss 4 -i <file> -frames:v 1 frame.jpg`) beside the product picture. It must show that product
    in the scene the prompt describes. A different garment means the picture did not reach Gemini: check that the bridge
    log line "Video generation submitted" came from a patched build, and that the draft's Library image is the right one.
+
+## Naming and provenance
+
+Every clip from every provider (Grok, Veo through the Gemini API, Veo through Gemini Web) is filed the same way by
+`video_generation.py`, and the xAI script `scripts/fill_creative_videos.py` uses the same functions. A generated clip must be
+recognisable as generated in four places, so that no single missing one hides it:
+
+| Where | What | Why |
+| --- | --- | --- |
+| **Title** | `<Product> - <Recipe> - <Maker>`, for example `Silk cami set - Hanger rail reveal - Veo (Gemini Web)` | Readable in any list, picker or export, even where tags are not shown. The maker is always last, so it survives truncation of a long product name. A clip made from a Library image alone is `<Image name> - <Maker>`. Never a bare provider id or file name such as `gemini_web-clip.mp4` |
+| **Tags** | `ai-generated`, `ai-video`, the engine (`grok`; `veo` + `gemini`; `veo` + `gemini-web`) and the recipe id | What the Library search and filters read. `ai-generated` is the one tag that means "disclose this" for every provider |
+| **Creator** | the maker, as the provider is named in Tools: `Grok (xAI)`, `Veo (Gemini API)`, `Veo (Gemini Web)` | Pickers show creator beside the length, and the Library can filter by it. Set only when empty. The licence `attribution` field is deliberately not used: it means a credit is owed, and none is |
+| **The file** | MP4 metadata `ai_generated=true`, `generator`, `generator_model`, a `comment` ("AI-generated video. Generator: ..., model ... Made <date> with TrendRelay.") and `title`, written by a stream-copy remux with the bundled ffmpeg before the file is ingested | Travels with the file when it is exported, downloaded or uploaded elsewhere, where the Library's tags do not. If ffmpeg is missing or the remux fails, the original clip is filed unchanged: the clip is already paid for |
+
+Practices behind this, and what they do not cover:
+- Veo output carries Google's invisible SynthID watermark. This process never removes or re-encodes it (the remux copies the streams),
+  and it adds the readable statement that SynthID alone does not give a person or a platform's check.
+- Disclosure on the platform is separate. TikTok, Meta and YouTube each ask for realistic AI-generated video to be labelled when it
+  is posted; the `ai-generated` tag is how a campaign can know which clips need that label. This SOP files clips; it does not post them.
+- The Library keeps originals immutable, so a clip filed before this was in place cannot gain the file metadata, and there is no rename
+  endpoint, so its title stays. `verify` reports exactly that for such a clip; refile it from a new generation if it matters.
+- Signed provenance (C2PA content credentials) is the stronger standard, and is not done here: it needs a signing certificate that
+  this install does not have.
 
 ## 6. When it goes wrong
 
