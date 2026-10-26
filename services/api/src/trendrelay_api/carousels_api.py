@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -20,11 +21,19 @@ from sqlalchemy.orm import Session
 from trendrelay_api import carousel_slides as slides
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
-from trendrelay_api.foundation import membership
+from trendrelay_api.foundation import membership, require_role
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/carousels", tags=["carousels"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
 DatabaseSession = Annotated[Session, Depends(get_session)]
+EDITORS = {"owner", "editor", "approver"}
+
+
+class SaveBody(BaseModel):
+    script: str = Field(min_length=1, max_length=slides.MAX_SLIDES * (slides.MAX_SLIDE_CHARS + 2))
+    style: str = Field(default=slides.DEFAULT_STYLE, max_length=20)
+    size: str = Field(default=slides.DEFAULT_SIZE, max_length=20)
+    title: str = Field(default="Carousel", min_length=1, max_length=120)
 
 
 class PreviewBody(BaseModel):
@@ -82,3 +91,41 @@ def preview(
         "height": height,
         "slides": rendered,
     }
+
+
+@router.post("/save", status_code=201)
+def save(
+    workspace_id: str, body: SaveBody, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Render the slides and file each one in the Library as an image."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    from trendrelay_api.config import get_settings
+    from trendrelay_api.media_library import create_ingest_job, run_ingest_job
+    from trendrelay_api.tool_registry import PROJECT_ROOT
+
+    roots = get_settings().publishing_media_root_list
+    if not roots:
+        raise HTTPException(status_code=409, detail="No approved media root is configured.")
+    root = Path(roots[0])
+    folder = (root if root.is_absolute() else PROJECT_ROOT / root) / "carousels" / uuid.uuid4().hex
+    try:
+        paths = slides.render_slides(body.script, folder, body.style, body.size)
+    except slides.CarouselError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    asset_ids: list[str] = []
+    for number, path in enumerate(paths, start=1):
+        ingest = create_ingest_job(
+            workspace_id=workspace_id,
+            actor_user_id=user.id,
+            path=str(path),
+            title=f"{body.title} {number}/{len(paths)}",
+            source_type="carousel",
+        )
+        asset_id = ingest.get("asset_id")
+        if not asset_id and ingest.get("id"):
+            done = run_ingest_job(ingest["id"])
+            asset_id = (done.get("result") or {}).get("asset_id") or done.get("asset_id")
+        if not asset_id:
+            raise HTTPException(status_code=500, detail=f"Slide {number} could not be filed.")
+        asset_ids.append(asset_id)
+    return {"asset_ids": asset_ids, "slides": len(asset_ids)}

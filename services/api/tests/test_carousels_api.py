@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from pathlib import Path
 
 import httpx
 import pytest
@@ -99,3 +100,45 @@ def test_a_preview_returns_one_png_per_slide() -> None:
     image = data["slides"][0]["image"]
     assert image.startswith("data:image/png;base64,")
     assert base64.b64decode(image.split(",", 1)[1])[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.skipif(not FFMPEG.is_file(), reason="the pinned FFmpeg is not installed")
+def test_save_files_each_slide_in_the_library(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from trendrelay_api import media_library
+
+    filed: list[dict] = []
+
+    def fake_ingest(**kwargs):
+        assert Path(kwargs["path"]).is_file() and kwargs["source_type"] == "carousel"
+        filed.append(kwargs)
+        return {"asset_id": f"asset-{len(filed)}"}
+
+    monkeypatch.setattr(
+        "trendrelay_api.config.get_settings",
+        lambda: SimpleNamespace(publishing_media_root_list=[str(tmp_path)]),
+    )
+    monkeypatch.setattr(media_library, "create_ingest_job", fake_ingest)
+    workspace = make_workspace()
+    reply = request(
+        "POST",
+        f"/api/workspaces/{workspace}/carousels/save",
+        json={"script": "One.\n\nTwo.", "style": "big-centre", "title": "Habits"},
+    )
+    assert reply.status_code == 201
+    assert reply.json() == {"asset_ids": ["asset-1", "asset-2"], "slides": 2}
+    assert [f["title"] for f in filed] == ["Habits 1/2", "Habits 2/2"]
+
+
+def test_save_refuses_a_bad_style_and_a_viewer(monkeypatch) -> None:
+    workspace = make_workspace()
+    bad = request(
+        "POST",
+        f"/api/workspaces/{workspace}/carousels/save",
+        json={"script": "Hi", "style": "neon"},
+    )
+    assert bad.status_code in (409, 422)
+    app.dependency_overrides[current_user] = lambda: CurrentUser(id="stranger")
+    other = request("POST", f"/api/workspaces/{workspace}/carousels/save", json={"script": "Hi"})
+    assert other.status_code in (403, 404)

@@ -24,3 +24,7 @@ Scope proposal (to confirm with the owner):
 - Reference pages (Instagram: rilly_emulie_official, anmille.official, hemell_official) inform structure and style as data only; see
   `reference-catalogue.md`. If "pribng" in the original request meant pricing, add a price-positioning note per reference page.
 Open: which lookbook themes to publish first; whether prices appear on slides.
+
+## Status (2026-10-27)
+
+Built inside TrendRelay with no FrameMotion and no browser: `carousel_slides.py` draws each slide with the pinned FFmpeg and libass (three looks, two sizes), `carousels_api.py` serves rules, preview and save, and Library > Carousel is the dialog. Saved slides are Library images. Not done: keeping a carousel as a resumable creation draft, and choosing a style inside the publish flow itself.

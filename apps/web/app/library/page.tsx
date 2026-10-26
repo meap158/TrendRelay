@@ -75,6 +75,7 @@ const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => 
 // handlers), so the library's 2.5s poll re-render does not reconcile the whole
 // dialog subtree while one is open. A prop that actually changes still re-renders.
 const AutoCutDialog = memo(dynamic(() => import("./autocut-dialog").then((m) => m.AutoCutDialog), { ssr: false }));
+const CarouselDialog = memo(dynamic(() => import("./carousel-dialog").then((m) => m.CarouselDialog), { ssr: false }));
 const StorytellingDialog = memo(dynamic(() => import("./storytelling-dialog").then((m) => m.StorytellingDialog), { ssr: false }));
 /** AutoCut cuts pictures, so its minimum is a couple; a single image is not a
     montage. Matched to the API, which filters non-images out server-side. */
@@ -1455,6 +1456,7 @@ function LibraryContent() {
   const [autoCutOpen, setAutoCutOpen] = useState(false);
   const [storytellingOpen, setStorytellingOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [carouselOpen, setCarouselOpen] = useState(false);
   // Files dragged onto the Library from the desktop. Handed to the import
   // dialog, which stages and uploads them the same way picked files go.
   const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
@@ -2643,6 +2645,15 @@ function LibraryContent() {
                 )}
                 <Button
                   type="button"
+                  variant="secondary"
+                  onClick={() => setCarouselOpen(true)}
+                  title="Turn a script into carousel slides and file them in the Library"
+                >
+                  <ActionIcon name="effects" />
+                  <span className="import-label">Carousel</span>
+                </Button>
+                <Button
+                  type="button"
                   variant="primary"
                   onClick={() => setImportOpen(true)}
                   title={t("library.importMediaDescription")}
@@ -3728,6 +3739,16 @@ function LibraryContent() {
           canApprove={canApprove}
           apiFetch={apiFetch}
           onClose={() => setEditorOpen(false)}
+        />
+      )}
+      {workspaceId && (
+        <CarouselDialog
+          open={carouselOpen}
+          workspaceId={workspaceId}
+          apiFetch={apiFetch}
+          onClose={() => setCarouselOpen(false)}
+          onSaved={() => void refresh()}
+          onError={fail}
         />
       )}
       {workspaceId && (
