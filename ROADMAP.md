@@ -44,3 +44,20 @@ by URL, FFmpeg, optional research and ads provider keys, and the operator's own 
 ## Owner actions
 
 `node scripts/owner-pages.mjs`, then open `References/owner-pages/index.html`.
+
+## Media completion checkpoint
+
+2026-10-26: the two prioritized image recipes have 27 of 56 product/recipe
+combinations verified in Library; 29 have recorded moderation holds. The broader
+recipe queue remains in progress. BABYPINK's three-card vintage-sideboard draft
+is now complete. CHOCO's four-card sheer-drape draft has two uploaded cards;
+card three is moderation-blocked. MIU's four-card editorial draft is complete;
+BLUEBELL's four-card two-location draft is also complete (11 linked images across
+these three completed carousels). The wider generation queue remains in progress.
+These assets are filed in Library; this work does not publish campaign posts.
+
+2026-10-26 continuation: BABYPINK pastel_corner_back_detail is also complete,
+with four reviewed images linked in Library. The broader queue remains in progress.
+
+2026-10-26 continuation: MIU pink_tile_salon_chair is complete, four reviewed
+images linked in Library. Broader recipe completion remains in progress.
