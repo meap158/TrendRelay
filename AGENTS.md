@@ -82,3 +82,14 @@ delete, restore it and say so - do not commit over it.
   you can continue with meanwhile. Mark a task Completed only with `evidence` or the owner's confirmation (the
   generator refuses a Completed task without it). Never put secrets in it.
 - `References/DEV_TASKS.html` is retired (kept as `DEV_TASKS.retired.html`); its tasks moved to the Owner desk.
+
+## Writing style (PM-314)
+
+Write prose, UI text, docs and commit messages like a person writing for one reader. No em dashes
+(use a period, comma, colon or parentheses), no stock openers or closers, no overused words, no
+contrast framing that argues with nobody, no chatbot residue, no emoji in headings. The full pattern
+list is [blader/humanizer](https://github.com/blader/humanizer); it edits prose only, never code,
+data or link targets. `node scripts/prose-audit.mjs` counts the pattern-detectable tells in the
+project's markdown and text, and `node scripts/prose-audit.mjs --diff` fails on any added line that
+has one. Run the `--diff` form before every commit. Existing text is not a failure; fix it when you
+touch it. The script is copied from ProjectManager's `scripts/prose-audit.mjs`.
