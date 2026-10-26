@@ -3,6 +3,31 @@
 Follow it top to bottom. Each gate has a check that must pass before the next step; every failure below names its cause.
 Background and limits: `docs/gemini-web-video.md`. Providers are listed in Tools > Video providers.
 
+## Run it as a command
+
+Everything below is automated by `scripts/veo_video.py`. The only steps left to a person are the ones no program can do:
+signing in to Google and pasting a fresh Cookie header into Tools, and restarting the API and worker (the operator's).
+
+| Command | Spends | What it does |
+| --- | --- | --- |
+| `python scripts/veo_video.py doctor` | no | Gates 1-3: cookie saved and switched on, account slot not the free account, bridge started if it is not answering and signed in, Check passes, the API offers Gemini Web |
+| `python scripts/veo_video.py slots [--apply]` | no | Gate A: starts a throwaway bridge per account slot on a spare port, reads each model list, picks the slot with the Pro models, and with `--apply` saves it in Tools |
+| `python scripts/veo_video.py generate --confirm [--draft ID]` | one video | Runs the doctor gates, queues the newest pending single-product video draft (or the one given) through the API as the Attribution button does, waits up to 15 minutes, then verifies Gate C |
+| `python scripts/veo_video.py verify --asset ID [--recipe R]` | no | Gate C alone, for any filed clip |
+
+Gate C, checked by the command: the asset is a video; it carries the tags `ai-video`, `veo`, `gemini-web` and the recipe; it is
+720x1280 H.264 with audio and 5-15 s long; the Library file downloads at exactly the recorded size; and a Library search for
+`gemini-web` finds it. It also saves one frame to `.data/gemini-web/verify-<asset>.jpg`; compare that with the product picture,
+the one check left to eyes. Exit codes: 0 done, 1 a gate failed before anything was spent, 2 refused (no `--confirm`), 3 the
+generation failed, 4 the clip was made but a check on it failed. It never resends a request and never falls back to another
+provider. A failure prints what to do; read the failure table before running `generate` again.
+
+**The cookie goes stale.** Google rotates the session cookie, so the copy saved in Tools stops signing in within hours. A bridge
+that is already running keeps its own session alive and keeps working, but a restart, or `slots`, then fails with "invalid or
+expired". `doctor` and `slots` say so. Fix: paste a fresh Cookie header in Tools, save, run `doctor --restart-bridge`.
+
+The sections below are the same flow written out, for when a gate fails and you need the reason.
+
 ## 0. What goes into a clip, and what comes out
 
 | Provider | Product picture sent | Character pictures sent | Product described in words | Output |
@@ -88,6 +113,7 @@ All of these must hold. The first is the app, the rest are the file and the Libr
 | `moderation` | Gemini refused the prompt | change the draft's recipe or wording; it is not retried |
 | "bridge is the unpatched one" | the bridge was built without the picture patch | run `scripts/gemini_web_bridge.py` again; nothing was spent |
 | Connection dropped while sending | pictures larger than the bridge's body limit (unpatched default is 4 MB) | the patch raises it to 40 MB; rebuild |
+| `slots` or a bridge restart says the cookie is "invalid or expired" while a running bridge still answers | the saved cookie went stale; the running bridge holds a rotated session | fresh cookie in Tools, then `doctor --restart-bridge`. Do not restart a working bridge needlessly |
 | Check says "not signed in" | cookie expired or signed out | fresh cookie, restart the bridge |
 | Bridge exits at start | cookie missing `__Secure-1PSID` or `__Secure-1PSIDTS` | copy the whole Cookie header |
 | Bridge on port 5180, Check cannot reach it | the shell's `PORT` overrode `.env` | start it with the script, not by hand |
