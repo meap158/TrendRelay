@@ -12,6 +12,8 @@ from trendrelay_api import __version__
 from trendrelay_api.attribution_api import router as attribution_router
 from trendrelay_api.autocut_api import router as autocut_router
 from trendrelay_api.carousels_api import router as carousels_router
+from trendrelay_api.remote_access import router as remote_access_router
+from trendrelay_api.remote_gate import RemoteGateMiddleware
 from trendrelay_api.hook_overlays_api import router as hook_overlays_router
 from trendrelay_api.creation_drafts_api import router as creation_drafts_router
 from trendrelay_api.storytelling_api import router as storytelling_router
@@ -113,6 +115,7 @@ app.include_router(characters_router)
 app.include_router(autocut_router)
 app.include_router(hook_overlays_router)
 app.include_router(carousels_router)
+app.include_router(remote_access_router)
 app.include_router(storytelling_router)
 app.include_router(creation_drafts_router)
 app.include_router(campaigns_router)
@@ -169,6 +172,8 @@ app.add_middleware(
     # said no face was found over a picture of a blurred face.
     expose_headers=["X-Faces-Found", "X-Frame-Position", "X-Clip-Duration"],
 )
+# Outermost, so it runs first: a tunnelled request is made to look remote before any check.
+app.add_middleware(RemoteGateMiddleware)
 
 
 class Confirmation(BaseModel):

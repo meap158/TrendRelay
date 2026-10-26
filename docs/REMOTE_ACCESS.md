@@ -1,45 +1,51 @@
 # Remote access
 
-How to use TrendRelay from your phone or another computer, at home or away, without opening it to the
-internet and without a public hostname.
+How to use TrendRelay from your phone or another computer, away from home, without installing
+anything system-wide and without opening your router.
 
 ## What works with no setup
 
-On the same Wi-Fi, open `http://<this computer's address>:3001`. The page finds the API on the same
-address at port 8011, and the API treats loopback and private LAN addresses (10.x, 172.16-31.x,
-192.168.x) as you. Nothing below changes that.
+On the same Wi-Fi, open `http://<this computer's address>:3001`. The API treats loopback and private
+LAN addresses (10.x, 172.16-31.x, 192.168.x) as you.
 
-## Away from home: Tailscale
+## Away from home: the built-in tunnel
 
-Tailscale is a private network between your own devices. The computer and the phone both join it, and
-only they can reach each other. TrendRelay then treats the tailnet like your LAN.
+Tools > Remote access, on the computer that runs TrendRelay:
 
-1. Install Tailscale on this computer and on the phone, and sign in to the same account on both.
-2. In the project's `.env`, add `TRUSTED_CLIENT_NETWORKS=100.64.0.0/10` and restart the API
-   (`npm run dev` or the launcher). Leave it out to keep today's behaviour exactly.
-3. On the phone, open `http://<computer's tailnet name or 100.x address>:3001`. The tailnet name is
-   shown in the Tailscale app, for example `my-pc.tail1234.ts.net`.
+1. Press **Start remote access**. This starts a Cloudflare quick tunnel (`cloudflared`, already
+   installed here; no account) to the web app and shows its address, for example
+   `https://quiet-river-demo.trycloudflare.com`. The address changes each time.
+2. Press **New pairing code**. It is eight characters, works once, and lasts five minutes.
+3. On the phone, open `<address>/remote`, enter the code, and press **Pair this device**. The phone
+   keeps a device token and opens TrendRelay.
+4. Press **Stop remote access** when done. Closing TrendRelay also ends the tunnel.
 
-What the setting does: clients whose address is inside the network you list are trusted as you,
-and pages served from tailnet addresses and `*.ts.net` names may read the API. What it does not do:
-it does not open a port on your router, it does not make anything public, and a client outside the
-list still needs a bearer token like any other. Machine-level actions keep their own loopback-only
-guards.
+## How it is kept safe
 
-## Why not a public https hostname
+- A tunnel connects to the API from this computer's own loopback address, which the API trusts. So
+  `remote_gate.py` rewrites every request that carries Cloudflare's headers to come from the
+  visitor's address (or a non-routable one when that is missing or private). Every existing check
+  then sees a remote client: no automatic local sign-in, no loopback-only action, no desktop device
+  pairing.
+- Without a device token the API answers 401. The controls (status, start, stop, code) answer only
+  this computer's loopback, so the tunnel cannot reach them.
+- A code is single use, expires after five minutes, and is retired after five wrong guesses across
+  all live codes. Pairing attempts are limited to ten a minute in total. Codes only exist while the
+  tunnel runs, and stopping it clears them.
+- A paired device holds a signed token that expires after `DEVICE_TOKEN_TTL_HOURS`. Rotating
+  `DEVICE_TOKEN_SECRET` (or deleting `.data/device-token-secret`) signs every paired device out.
+- The tunnel address is unguessable but public. Anyone who has it can load the pages; they cannot
+  use the API without a token. Do not share the address and the code together.
 
-The API trusts you by address. A tunnel to a public hostname forwards from this machine, so
-without a login in front (Cloudflare Access) every visitor would arrive as a trusted client. The
-web server's `/api/*` rewrite and the https branch of `apiBaseUrl` exist for that case and stay,
-but nothing here depends on them. uvicorn takes the client address from `X-Forwarded-For` only when
-the request comes from 127.0.0.1, so a tunnelled request is seen as the visitor's own address.
-That behaviour is a default of the installed uvicorn and is not tested here. Do not point a public
-hostname at port 3001 without an access layer in front of it.
+## Optional: a private network such as Tailscale
+
+If you already run one, `TRUSTED_CLIENT_NETWORKS=100.64.0.0/10` in `.env` makes clients inside that
+network count as you, and the web app accepts pages served from tailnet addresses and `*.ts.net`
+names. It is not needed for the tunnel.
 
 ## Checking it
 
-Not yet verified on a real tailnet, because Tailscale is not installed on this computer. After
-setup, check from the phone: the page loads with its styles, the workspace stops saying
-"Loading workspace", a write works (edit a draft title), and an image or video from the Library
-plays. If the page loads but the API calls fail, see the browser console for a CORS or 401 error.
-A request from an address outside `TRUSTED_CLIENT_NETWORKS` is refused with 401.
+Unit tests cover the gate, pairing, rate limits, expiry and the tunnel start and stop with a stand-in
+for `cloudflared`. A run through a real tunnel has not been done: start remote access, then from the
+phone check that the page loads, that the code pairs, that an edit saves, and that Library media
+plays. Without a token, `<address>/api/workspaces` must answer 401.

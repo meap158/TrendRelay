@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { RemoteAccessPanel } from "./remote-access";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
@@ -631,6 +632,7 @@ export default function ToolsPage() {
           <span>{tools.filter((tool) => tool.active).length} active</span>
         </div>
       </header>
+      <RemoteAccessPanel />
       <section className="access-guides" aria-labelledby="access-guides-title">
         <div className="access-guides-heading">
           <div>

@@ -4,6 +4,7 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl, apiPath } from "../lib/api";
+import { readRemoteToken, remoteSessionUser } from "../lib/remote-token";
 // Type only - erased at build, so importing it pulls no Supabase code. The SDK
 // itself is loaded dynamically below, and only when a hosted session needs it.
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -131,9 +132,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cache: "no-store",
       signal: controller.signal,
     })
-      .then(async (response) => response.ok
-        ? response.json() as Promise<{ enabled: boolean; user: AuthUser | null }>
-        : { enabled: false, user: null })
+      .then(async (response) => {
+        const local: { enabled: boolean; user: AuthUser | null } = response.ok
+          ? await response.json()
+          : { enabled: false, user: null };
+        if (local.enabled) return local;
+        // Not this machine. A phone paired through the tunnel carries a device token instead.
+        const paired = await remoteSessionUser(apiBaseUrl(), controller.signal).catch(() => null);
+        return paired ? { enabled: true, user: paired } : local;
+      })
       .then((result) => {
         if (replaced) return;
         setLocalUser(result.enabled ? result.user : null);
@@ -339,6 +346,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (localUser) {
         const headers = new Headers(init.headers);
         if (init.body && !hasCustomBody && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+        const remoteToken = readRemoteToken();
+        if (remoteToken && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${remoteToken}`);
         return fetch(`${apiBaseUrl()}${path}`, { ...init, headers, cache: "no-store" });
       }
       const bridge = window.trendrelayDesktop;
