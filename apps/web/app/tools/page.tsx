@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { RemoteAccessPanel } from "./remote-access";
 import { useLocale } from "../i18n-provider";
+import { settingSections } from "../../lib/setting-sections";
 import { buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
 import { WaitingBlock } from "../ui/waiting-block";
@@ -106,6 +107,8 @@ type SetupAction = {
   requires_confirmation?: boolean;
   /** Shown instead of the generic setup prompt when this action reaches a service. */
   confirm?: string;
+  /** The settings section this action belongs to, shown inside it rather than below the form. */
+  group?: string;
 };
 type MediaAiJob = {
   status: string;
@@ -136,6 +139,21 @@ type SetupReport = {
   /** MCP only: every exposed tool with what it does, for the inspector list. */
   tool_details?: McpToolDetail[];
 };
+function SetupActionButton({
+  action, disabled, onRun,
+}: { action: SetupAction; disabled: boolean; onRun: () => void }) {
+  if (action.kind === "navigate" && action.href) {
+    return <Link className={buttonClass({ variant: "primary" })} href={action.href}>{action.label}</Link>;
+  }
+  return (
+    <button
+      className={buttonClass({ variant: "primary" })}
+      disabled={disabled}
+      onClick={onRun}
+      type="button"
+    ><ActionIcon name={action.kind === "diagnostics" ? "search" : action.kind === "prepare-media-ai" ? "download" : action.kind === "navigate" ? "link" : "play"} />{action.label}</button>
+  );
+}
 type McpToolDetail = {
   name: string;
   /** The group the surface is explained in - already in display order. */
@@ -166,6 +184,10 @@ type ToolSetting = {
   value: string;
   /** The saved secret masked to its last few characters, or null. */
   preview?: string | null;
+  /** The offering this setting belongs to. Each one is shown as its own section. */
+  group?: string;
+  /** One line under that section's heading. */
+  group_blurb?: string;
 };
 type ReachDiagnostics = {
   mode: string;
@@ -1038,88 +1060,113 @@ export default function ToolsPage() {
             <div className="tool-settings">
               <strong>{setup.settings_title}</strong>
               {setup.settings_blurb && <p>{setup.settings_blurb}</p>}
-              {setup.settings.map((field) => {
-                const typed = settingsDraft[field.key];
-                return (
-                  <label className="tool-setting" key={field.key}>
-                    <span>
-                      {field.label}
-                      {field.required ? null : <em>optional</em>}
-                    </span>
-                    {field.kind === "choice" && field.options ? (
-                      <SegmentedControl
-                        value={typed ?? field.value ?? field.default ?? ""}
-                        options={field.options.map((option) => ({ value: option, label: option }))}
-                        onChange={(next) =>
-                          setSettingsDraft((draft) => ({ ...draft, [field.key]: next }))}
-                        label={field.label}
-                      />
-                    ) : field.secret ? (
-                      <div className="tool-secret-input">
+              {settingSections(setup.settings).map((section) => {
+                const fields = section.fields.map((field) => {
+                  const typed = settingsDraft[field.key];
+                  return (
+                    <label className="tool-setting" key={field.key}>
+                      <span>
+                        {field.label}
+                        {field.required ? null : <em>optional</em>}
+                      </span>
+                      {field.kind === "choice" && field.options ? (
+                        <SegmentedControl
+                          value={typed ?? field.value ?? field.default ?? ""}
+                          options={field.options.map((option) => ({ value: option, label: option }))}
+                          onChange={(next) =>
+                            setSettingsDraft((draft) => ({ ...draft, [field.key]: next }))}
+                          label={field.label}
+                        />
+                      ) : field.secret ? (
+                        <div className="tool-secret-input">
+                          <input
+                            type={revealedSecrets[field.key] !== undefined ? "text" : "password"}
+                            value={typed ?? revealedSecrets[field.key] ?? ""}
+                            placeholder={field.preview ?? field.placeholder}
+                            onChange={(event) => {
+                              setRevealedSecrets((current) => {
+                                const next = { ...current };
+                                delete next[field.key];
+                                return next;
+                              });
+                              setSettingsDraft((draft) => ({
+                                ...draft,
+                                [field.key]: event.target.value,
+                              }));
+                            }}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          {field.configured && typed === undefined && (
+                            <button
+                              type="button"
+                              className={buttonClass({ variant: "quiet", size: "sm", iconOnly: true })}
+                              aria-label={revealedSecrets[field.key] !== undefined ? "Hide API key" : "Show API key"}
+                              title={revealedSecrets[field.key] !== undefined ? "Hide API key" : "Show API key"}
+                              disabled={busy === `${field.key}-reveal`}
+                              onClick={() => void toggleSecret(field.key)}
+                            >
+                              <ActionIcon name={revealedSecrets[field.key] !== undefined ? "hide" : "reveal"} />
+                            </button>
+                          )}
+                          {(field.configured || Boolean(typed)) && (
+                            <button
+                              type="button"
+                              className={buttonClass({ variant: "quiet", size: "sm", iconOnly: true })}
+                              aria-label="Copy API key"
+                              title={copiedSecret === field.key ? "Copied" : "Copy API key"}
+                              disabled={busy === `${field.key}-copy`}
+                              onClick={() => void copySecret(field.key)}
+                            >
+                              <ActionIcon name={copiedSecret === field.key ? "confirm" : "copy"} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
                         <input
-                          type={revealedSecrets[field.key] !== undefined ? "text" : "password"}
-                          value={typed ?? revealedSecrets[field.key] ?? ""}
-                          placeholder={field.preview ?? field.placeholder}
-                          onChange={(event) => {
-                            setRevealedSecrets((current) => {
-                              const next = { ...current };
-                              delete next[field.key];
-                              return next;
-                            });
-                            setSettingsDraft((draft) => ({
-                              ...draft,
-                              [field.key]: event.target.value,
-                            }));
-                          }}
+                          type={field.kind === "number" ? "number" : "text"}
+                          min={field.min}
+                          max={field.max}
+                          step={field.step}
+                          value={typed ?? field.value}
+                          placeholder={field.placeholder}
+                          onChange={(event) =>
+                            setSettingsDraft((draft) => ({ ...draft, [field.key]: event.target.value }))}
                           autoComplete="off"
                           spellCheck={false}
                         />
-                        {field.configured && typed === undefined && (
-                          <button
-                            type="button"
-                            className={buttonClass({ variant: "quiet", size: "sm", iconOnly: true })}
-                            aria-label={revealedSecrets[field.key] !== undefined ? "Hide API key" : "Show API key"}
-                            title={revealedSecrets[field.key] !== undefined ? "Hide API key" : "Show API key"}
-                            disabled={busy === `${field.key}-reveal`}
-                            onClick={() => void toggleSecret(field.key)}
-                          >
-                            <ActionIcon name={revealedSecrets[field.key] !== undefined ? "hide" : "reveal"} />
-                          </button>
-                        )}
-                        {(field.configured || Boolean(typed)) && (
-                          <button
-                            type="button"
-                            className={buttonClass({ variant: "quiet", size: "sm", iconOnly: true })}
-                            aria-label="Copy API key"
-                            title={copiedSecret === field.key ? "Copied" : "Copy API key"}
-                            disabled={busy === `${field.key}-copy`}
-                            onClick={() => void copySecret(field.key)}
-                          >
-                            <ActionIcon name={copiedSecret === field.key ? "confirm" : "copy"} />
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <input
-                        type={field.kind === "number" ? "number" : "text"}
-                        min={field.min}
-                        max={field.max}
-                        step={field.step}
-                        value={typed ?? field.value}
-                        placeholder={field.placeholder}
-                        onChange={(event) =>
-                          setSettingsDraft((draft) => ({ ...draft, [field.key]: event.target.value }))}
-                        autoComplete="off"
-                        spellCheck={false}
-                      />
-                    )}
-                    <small>
-                      {field.help}
-                      {field.help_url && (
-                        <> <a href={field.help_url} target="_blank" rel="noreferrer">Open</a></>
                       )}
-                    </small>
-                  </label>
+                      <small>
+                        {field.help}
+                        {field.help_url && (
+                          <> <a href={field.help_url} target="_blank" rel="noreferrer">Open</a></>
+                        )}
+                      </small>
+                    </label>
+                  );
+                });
+                if (!section.name) return <Fragment key="standalone">{fields}</Fragment>;
+                const actions = setup.actions.filter((action) => action.group === section.name);
+                return (
+                  <section className="tool-setting-group" key={section.name}>
+                    <header>
+                      <h5>{section.name}</h5>
+                      {section.blurb && <p>{section.blurb}</p>}
+                    </header>
+                    {fields}
+                    {actions.length > 0 && (
+                      <div className="tool-setting-group-actions">
+                        {actions.map((action) => (
+                          <SetupActionButton
+                            action={action}
+                            disabled={busy === `${setup.tool_id}-${action.id}`}
+                            key={action.id}
+                            onRun={() => void runSetupAction(action)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 );
               })}
               <div className="tool-settings-actions">
@@ -1140,18 +1187,18 @@ export default function ToolsPage() {
               </div>
             </div>
           )}
-          <div className="setup-actions">
-            {setup.actions.map((action) => action.kind === "navigate" && action.href ? (
-              <Link className={buttonClass({ variant: "primary" })} href={action.href} key={action.id}>{action.label}</Link>
-            ) : (
-              <button
-                className={buttonClass({ variant: "primary" })}
-                disabled={busy === `${setup.tool_id}-${action.id}` || busy === "agent-reach-diagnostics"}
-                key={action.id}
-                onClick={() => void runSetupAction(action)}
-              ><ActionIcon name={action.kind === "diagnostics" ? "search" : action.kind === "prepare-media-ai" ? "download" : action.kind === "navigate" ? "link" : "play"} />{action.label}</button>
-            ))}
-          </div>
+          {setup.actions.some((action) => !action.group) && (
+            <div className="setup-actions">
+              {setup.actions.filter((action) => !action.group).map((action) => (
+                <SetupActionButton
+                  action={action}
+                  disabled={busy === `${setup.tool_id}-${action.id}` || busy === "agent-reach-diagnostics"}
+                  key={action.id}
+                  onRun={() => void runSetupAction(action)}
+                />
+              ))}
+            </div>
+          )}
           {/* Feedback sits right under the buttons that produce it - a start's
               message, an error, the tunnel test's checks - so what you clicked
               answers where you are looking. All dismissable. */}

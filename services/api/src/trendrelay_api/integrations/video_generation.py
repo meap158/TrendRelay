@@ -145,6 +145,9 @@ class VideoProvider:
     #: value can never send an unknown model name to a paid endpoint.
     model_env: str = ""
     model_options: tuple[str, ...] = ()
+    #: One line for the head of this provider's section on the Tools card: what makes the
+    #: video, through which route, and what it needs.
+    summary: str = ""
     #: A signed-in browser session instead of an API key. The "key" is the
     #: Cookie header, a clip goes through a bridge on this machine, and the
     #: two settings below say where it listens and which Google account slot.
@@ -165,14 +168,17 @@ PROVIDERS: dict[str, VideoProvider] = {
         enabled_env="VIDEO_PROVIDER_XAI_ENABLED",
         dashboard_url="https://console.x.ai/team/default/api-keys",
         key_help=(
-            "Makes video with Grok Imagine. From the xAI console. The same key Last 30 Days "
-            "reads, so saving it here serves both. The switch below is what offers it on a "
-            "video draft."
+            "From the xAI console. The same key Last 30 Days reads, so saving it here serves "
+            "both. The switch below is what offers it on a video draft."
         ),
         model="grok-imagine-video-1.5",
         duration_seconds=10,
         check_url=f"{XAI_BASE}/models",
         requires_bucket=True,
+        summary=(
+            "Grok Imagine through the xAI API. Needs an xAI API key and the Cloudflare R2 "
+            "bucket Publish already uses. Billed by xAI per clip."
+        ),
     ),
     "gemini": VideoProvider(
         id="gemini",
@@ -181,8 +187,7 @@ PROVIDERS: dict[str, VideoProvider] = {
         enabled_env="VIDEO_PROVIDER_GEMINI_ENABLED",
         dashboard_url="https://aistudio.google.com/apikey",
         key_help=(
-            "Makes video with Veo through the official Gemini API. From Google AI Studio. "
-            "Video on this API is paid. Check only proves the key is accepted."
+            "From Google AI Studio. Check only proves the key is accepted."
         ),
         model="veo-3.1-generate-preview",
         duration_seconds=8,
@@ -190,6 +195,10 @@ PROVIDERS: dict[str, VideoProvider] = {
         requires_bucket=False,
         model_env="VIDEO_PROVIDER_GEMINI_MODEL",
         model_options=("veo-3.1-generate-preview", "veo-3.1-fast-generate-preview"),
+        summary=(
+            "Veo through Google's official Gemini API. Needs an AI Studio API key. "
+            "Video on this API is paid."
+        ),
     ),
     "gemini_web": VideoProvider(
         id="gemini_web",
@@ -198,7 +207,6 @@ PROVIDERS: dict[str, VideoProvider] = {
         enabled_env="VIDEO_PROVIDER_GEMINI_WEB_ENABLED",
         dashboard_url="https://github.com/ntthanh2603/gemini-web-to-api",
         key_help=(
-            "Makes video with Veo through a signed-in Gemini web session, with no API key. "
             "The Cookie header of a signed-in gemini.google.com tab: open DevTools, Network, "
             "pick a request whose address contains batchexecute, and copy its Cookie request "
             "header. This uses a Google account's web session, not an API key, so it is "
@@ -215,6 +223,10 @@ PROVIDERS: dict[str, VideoProvider] = {
         session=True,
         bridge_env="GEMINI_WEB_BRIDGE_URL",
         account_env="GEMINI_WEB_AUTH_USER",
+        summary=(
+            "Veo through a signed-in Gemini web session and a local bridge, with no API key. "
+            "Uses a Google account's daily video allowance (Pro or Ultra)."
+        ),
     ),
 }
 
@@ -399,6 +411,7 @@ def describe_fields() -> list[dict[str, Any]]:
     """The Tools form, one key and one switch per registry entry."""
     described: list[dict[str, Any]] = []
     for provider in PROVIDERS.values():
+        first = len(described)
         key_stored = _key(provider)
         switch = effective_value(provider.enabled_env).strip().lower()
         described.append({
@@ -473,6 +486,10 @@ def describe_fields() -> list[dict[str, Any]]:
                 "value": model_for(provider),
                 "preview": None,
             })
+        # One section per provider on the card, so each reads as its own offering.
+        for item in described[first:]:
+            item["group"] = provider.label
+            item["group_blurb"] = provider.summary
     return described
 
 
@@ -697,6 +714,7 @@ def setup_report() -> dict[str, Any]:
             })
         actions.append({
             "id": f"check-{provider.id}",
+            "group": provider.label,
             "label": f"Check {provider.label}",
             "kind": "local-launch",
             "requires_confirmation": True,

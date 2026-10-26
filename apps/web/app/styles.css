@@ -1893,6 +1893,13 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .tool-settings { display: grid; gap: 12px; margin: 18px 0; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-raised); }
 .tool-settings > strong { font-size: 13px; }
 .tool-settings > p { margin: -6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+/* One offering of a tool (a video provider) as its own block, so the alternatives
+   read as separate things rather than one long run of fields. */
+.tool-setting-group { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.tool-setting-group > header { display: grid; gap: 3px; }
+.tool-setting-group > header > h5 { margin: 0; font-size: 13px; }
+.tool-setting-group > header > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.tool-setting-group-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tool-setting { display: grid; gap: 5px; }
 .tool-setting > span { display: flex; align-items: baseline; gap: 7px; color: var(--text); font-size: 11px; font-weight: 600; }
 /* "optional" as a quiet aside rather than a badge: it qualifies the label, and
