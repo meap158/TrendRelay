@@ -274,6 +274,36 @@ def settings_gate() -> dict[str, str]:
     return state
 
 
+DELIVERED = HOME / "delivered-run"
+
+
+def bridge_run() -> int:
+    """Which start of the bridge this is: how many times its log says the client signed in."""
+    log = HOME / "bridge.log"
+    if not log.is_file():
+        return 0
+    return log.read_bytes().count(b"client initialized successfully")
+
+
+def mark_delivered() -> None:
+    """Remember that this bridge run has delivered a clip, so its session is proven alive."""
+    DELIVERED.write_text(str(bridge_run()), encoding="utf-8")
+
+
+def running_bridge_delivered() -> bool:
+    """A bridge that has delivered a clip since it started keeps its own session alive.
+
+    It rotates the cookie on start and holds the rotated session in memory, so the saved copy
+    goes stale minutes after the bridge uses it while the bridge itself stays signed in.
+    Testing the saved cookie then would stop a working bridge.
+    """
+    try:
+        proven = int(DELIVERED.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return False
+    return bool(bridge_models(BRIDGE_PORT)) and proven == bridge_run() > 0
+
+
 def cookie_gate(slot: str) -> None:
     """Stop before spending when the saved cookie no longer signs in. No spend.
 
@@ -428,8 +458,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     state = settings_gate()
     print(f"settings: cookie {state['cookie']}, enabled, account slot {state['slot'] or '(none)'}")
-    cookie_gate(state["slot"])
-    print("cookie: the saved cookie signs in")
+    if running_bridge_delivered() and not args.restart_bridge:
+        print("cookie: not tested; the running bridge has delivered a clip since it started")
+    else:
+        cookie_gate(state["slot"])
+        print("cookie: the saved cookie signs in")
     models = ensure_bridge(args.restart_bridge)
     print(f"bridge: signed in, {len(models)} models: {', '.join(models)}")
     if models == ["gemini-auto"]:
@@ -468,7 +501,9 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if not args.confirm:
         print("Refused: this spends one video from the account's daily quota. Add --confirm.")
         return 2
-    cookie_gate(settings_gate()["slot"])
+    state = settings_gate()
+    if args.restart_bridge or not running_bridge_delivered():
+        cookie_gate(state["slot"])
     models = ensure_bridge(args.restart_bridge)
     if models == ["gemini-auto"]:
         raise Gate("The saved slot is the free account; run `slots --apply` first.")
@@ -488,6 +523,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     asset_id = str(generation.get("asset_id") or "")
     if not asset_id:
         raise Gate("The job succeeded but named no Library file.", 4)
+    mark_delivered()
     problems = verify(args.api_base, workspace, asset_id, recipe)
     frame = grab_frame(HOME / f"verify-{asset_id}.mp4")
     print(f"library asset: {asset_id}")
