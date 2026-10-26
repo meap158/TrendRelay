@@ -82,6 +82,7 @@ All of these must hold. The first is the app, the rest are the file and the Libr
 | What you see | Cause | Fix |
 | --- | --- | --- |
 | Job at 95% for minutes, then "did not finish in time" | free account slot, or the plan lost Veo | Gate A; read the bridge log for the upgrade sentence |
+| Job ends "not ready before the deadline; it may still appear in Gemini Web conversation c_..." | Gemini accepted the prompt ("I'm generating your video") but delivered nothing in 10 minutes: capacity or a silent daily limit. Seen 2026-10-26 at the third clip of the day; the first two arrived in about 80 s | Open that conversation at gemini.google.com (signed in to the same account) to see whether the clip appeared late. Wait before trying again; the worker does not resend it, so one attempt costs at most one unit |
 | "limit reached" / `quota` | the account's daily video quota is spent | wait for the reset or use another account's cookie |
 | "already making a video" | another clip is running on the bridge | wait; do not retry in a loop |
 | `moderation` | Gemini refused the prompt | change the draft's recipe or wording; it is not retried |
