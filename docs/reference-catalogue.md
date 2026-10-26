@@ -13,10 +13,11 @@ produced 58 mined recipes; evidence and deferred patterns are recorded in
 picked, each kept to its pattern in our own words.
 
 Batch `2026-10-26` adds eight hand-written starter recipes for products that
-are not clothing; they are not mined.
+are not clothing; they are not mined. Batch `2026-10-26b` adds two more: a
+carousel for accessories and a second recipe with a person for food.
 
-The current catalogue has 81 distinct recipes: 13 built-ins, 60 from
-references and 8 starters. The picker filters by type: 16 support Image, 52 Carousel, and 16 Video;
+The current catalogue has 83 distinct recipes: 13 built-ins, 60 from
+references and 10 starters. The picker filters by type: 17 support Image, 53 Carousel, and 16 Video;
 some built-ins support several types, so those counts overlap. These are
 implemented reusable patterns, not an estimate of every pattern the export
 could support. Further extraction must establish recurrence and a distinct

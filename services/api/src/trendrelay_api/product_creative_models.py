@@ -79,7 +79,9 @@ class ProductCreativeDraft(Base):
             # Starter recipes for other product types, batch 2026-10-26 (migration 20261026_0103).
             "'surface_product_hero','beside_face_product_hold','vanity_application_story',"
             "'overhead_everyday_flat_lay','home_use_moment_story','worn_accessory_portrait',"
-            "'unboxing_reveal_video','turntable_product_video')",
+            "'unboxing_reveal_video','turntable_product_video',"
+            # Second starter batch, 2026-10-26b (migration 20261026_0104).
+            "'accessory_styling_story','cafe_table_tasting')",
             name="valid_product_creative_recipe",
         ),
         CheckConstraint(

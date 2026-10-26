@@ -1,0 +1,83 @@
+{
+  "batch": "2026-10-26b",
+  "about": "Two more hand-written starter recipes, filling the gaps the 2026-10-26 set left: a carousel for accessories, and a second recipe with a person in it for food and drink. Not mined from references: each is a common product-photography pattern in our own words. Replace or add to them through SOP/attribution/mine-reference-recipes.md as references for these products are studied.",
+  "recipes": [
+    {
+      "id": "accessory_styling_story",
+      "kinds": ["carousel"],
+      "cast": "person",
+      "together": "card",
+      "fits": ["accessory"],
+      "scene": "A calm, sunlit room with a plain cream wall, a light wooden side table and a linen chair, nothing branded in view.",
+      "camera": "Soft daylight from a tall window to one side, a phone-camera feel with a gentle portrait lens for the close cards, a warm and clean colour grade.",
+      "beats": [
+        "The accessory alone on the light wooden table in sharp focus, turned to show its shape, with the window light picking out its material and the room softly blurred behind.",
+        "A close view of the hands putting the accessory on or picking it up the way it is used - fastening it, slipping it on, opening it or lifting it by its handle - the piece held clearly in frame.",
+        "Framed from the waist up by the window, they wear or carry the accessory as part of a simple, plain outfit, turned slightly so the piece sits in the light and reads at a glance.",
+        "A close detail of the accessory as it is worn or held - its clasp, stitching, lens, strap or finish - sharp against the softly blurred outfit."
+      ],
+      "facets": {
+        "pose": ["holding_prop", "standing"],
+        "framing": ["detail", "half_body"],
+        "setting": ["living_room"],
+        "mood": ["clean_minimal", "elegant"],
+        "layout": ["story_sequence", "detail_to_full"]
+      },
+      "label": {
+        "en": "Accessory styling story",
+        "vi": "Câu chuyện phối phụ kiện",
+        "ja": "アクセサリーの着こなしストーリー",
+        "zh": "配饰搭配故事",
+        "ru": "История с аксессуаром",
+        "fr": "Histoire de style avec l'accessoire",
+        "ar": "قصة تنسيق الإكسسوار"
+      },
+      "help": {
+        "en": "Four cards in a sunlit room: the accessory on a table, putting it on, worn with a plain outfit, then a close detail.",
+        "vi": "Bốn thẻ trong căn phòng đầy nắng: phụ kiện trên bàn, đeo vào, phối với trang phục đơn giản, rồi cận chi tiết.",
+        "ja": "日差しの入る部屋で4枚：テーブルの上のアクセサリー、身に着ける、シンプルな服と合わせる、細部のアップ。",
+        "zh": "阳光房间四张：桌上的配饰、佩戴上身、搭配简洁穿搭、细节特写。",
+        "ru": "Четыре кадра в солнечной комнате: аксессуар на столе, его надевают, носят с простым нарядом, затем деталь крупно.",
+        "fr": "Quatre cartes dans une pièce ensoleillée : l'accessoire sur une table, on le met, porté avec une tenue simple, puis un détail de près.",
+        "ar": "أربع بطاقات في غرفة مشمسة: الإكسسوار على طاولة، ارتداؤه، مع ملابس بسيطة، ثم تفصيل عن قرب."
+      }
+    },
+    {
+      "id": "cafe_table_tasting",
+      "kinds": ["image"],
+      "cast": "person",
+      "together": "frame",
+      "fits": ["food"],
+      "scene": "A bright café corner by a window: a small round marble table, a light wooden chair and a plain wall, with nothing branded in view.",
+      "camera": "A camera at the table's height through a slightly long phone lens, soft daylight from the window, a warm, appetising colour grade with a shallow depth of field.",
+      "beats": [
+        "Seated at the table and framed from the waist up, they are about to taste the product - a piece or a sip lifted towards the mouth, or a spoonful from an open pack - smiling, with the package standing on the table in front, label to the camera and as sharp as the face. A plate or glass holds a little of it served as it is meant to be eaten. With several products, the packages stand side by side on the table, each label readable, and one of them is being tasted."
+      ],
+      "facets": {
+        "pose": ["seated", "holding_prop"],
+        "framing": ["half_body"],
+        "setting": ["cafe"],
+        "mood": ["candid", "cozy"],
+        "layout": ["single_hero"]
+      },
+      "label": {
+        "en": "Café table tasting",
+        "vi": "Thưởng thức bên bàn cà phê",
+        "ja": "カフェテーブルで試食",
+        "zh": "咖啡桌边品尝",
+        "ru": "Дегустация за столиком кафе",
+        "fr": "Dégustation en terrasse de café",
+        "ar": "تذوق على طاولة المقهى"
+      },
+      "help": {
+        "en": "Seated at a bright café table, about to taste the product, its package on the table with the label to the camera.",
+        "vi": "Ngồi bên bàn cà phê sáng sủa, sắp nếm thử sản phẩm, bao bì đặt trên bàn với nhãn hướng về máy ảnh.",
+        "ja": "明るいカフェのテーブルで商品を味わう直前。パッケージはラベルをカメラに向けてテーブルに。",
+        "zh": "坐在明亮的咖啡桌旁正要品尝商品，包装立在桌上，标签朝向镜头。",
+        "ru": "За светлым столиком кафе, вот-вот попробует товар; упаковка на столе этикеткой к камере.",
+        "fr": "À une table de café lumineuse, sur le point de goûter le produit, l'emballage posé étiquette vers l'objectif.",
+        "ar": "جلوس إلى طاولة مقهى مضيئة على وشك تذوق المنتج، وعبوته على الطاولة وملصقها نحو الكاميرا."
+      }
+    }
+  ]
+}
