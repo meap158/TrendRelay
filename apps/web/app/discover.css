@@ -195,7 +195,7 @@
    The Google Sans override is gone: Discover reads in the app's own Roboto like
    every other tab, rather than in a second typeface that made it a place apart. */
 .dsc-page { --dsc-measure: 1180px; --dsc-inset: 18px; --dsc-space-1: 4px; --dsc-space-2: 8px; --dsc-space-3: 12px; --dsc-space-4: 16px; --dsc-space-6: 24px; background: var(--bg); color: var(--text); min-height: 100vh; }
-.dsc-view-nav { position: sticky; top: 51px; z-index: 30; display: flex; box-sizing: border-box; max-width: var(--dsc-measure); margin: 0 auto 8px; padding: 0 var(--dsc-inset); overflow-x: auto; border-block: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(10px); scrollbar-width: thin; }
+.dsc-view-nav { position: sticky; top: var(--app-toolbar-offset, 51px); z-index: 30; display: flex; box-sizing: border-box; max-width: var(--dsc-measure); margin: 0 auto 8px; padding: 0 var(--dsc-inset); overflow-x: auto; border-block: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(10px); scrollbar-width: thin; }
 .dsc-view-tab { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; min-height: 44px; border: 0; border-bottom: 2px solid transparent; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .dsc-view-tab:hover { color: var(--text); background: var(--panel-raised); }
 .dsc-view-tab[aria-current="page"] { border-bottom-color: var(--link); color: var(--link); }
@@ -401,7 +401,7 @@
 }
 
 @media (max-width: 640px) {
-  .dsc-view-nav { top: 49px; padding-inline: 8px; }
+  .dsc-view-nav { top: var(--app-toolbar-offset, 49px); padding-inline: 8px; }
   .dsc-view-tab { padding-inline: 11px; }
   .dsc-hero-head { align-items: flex-start; }
   .dsc-hero-status { justify-content: flex-end; }
