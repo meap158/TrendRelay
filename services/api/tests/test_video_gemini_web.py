@@ -64,7 +64,7 @@ def test_it_is_offered_on_the_card_as_a_cookie_not_an_api_key(values) -> None:
     fields = {field["key"]: field for field in video.describe_fields()}
     cookie = fields["GEMINI_WEB_COOKIES"]
     assert cookie["secret"] is True
-    assert cookie["label"] == "Gemini Web cookie"
+    assert cookie["label"] == "Veo (Gemini Web) cookie"
     assert fields["VIDEO_PROVIDER_GEMINI_WEB_ENABLED"]["options"] == ["on", "off"]
     assert fields["GEMINI_WEB_BRIDGE_URL"]["value"] == video.GEMINI_WEB_BRIDGE
     assert fields["GEMINI_WEB_AUTH_USER"]["kind"] == "text"
@@ -138,7 +138,7 @@ def test_it_is_not_offered_until_on_and_checked(values) -> None:
     assert all(item["id"] != "gemini_web" for item in video.ready_providers())
     video.save_settings({"VIDEO_PROVIDER_GEMINI_WEB_ENABLED": "on"})
     video._store_check("gemini_web", ok=True, message="ok")
-    assert {"id": "gemini_web", "label": "Gemini Web"} in video.ready_providers()
+    assert {"id": "gemini_web", "label": "Veo (Gemini Web)"} in video.ready_providers()
 
 
 def _parts(body: bytes) -> list[tuple[str, bytes]]:

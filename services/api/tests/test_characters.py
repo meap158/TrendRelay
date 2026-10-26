@@ -141,7 +141,7 @@ def ready_generator(monkeypatch) -> list[tuple[str, str]]:
     """A ready provider that records each paid call and returns a JPEG."""
     calls: list[tuple[str, str]] = []
     monkeypatch.setattr(image_generation, "readiness", lambda: {
-        "ready": True, "provider_id": "xai", "label": "xAI", "message": "",
+        "ready": True, "provider_id": "xai", "label": "Grok (xAI)", "message": "",
     })
 
     def generate(prompt: str, **_: object) -> bytes:

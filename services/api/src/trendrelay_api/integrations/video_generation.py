@@ -160,13 +160,14 @@ class VideoProvider:
 PROVIDERS: dict[str, VideoProvider] = {
     "xai": VideoProvider(
         id="xai",
-        label="xAI",
+        label="Grok (xAI)",
         key_env="XAI_API_KEY",
         enabled_env="VIDEO_PROVIDER_XAI_ENABLED",
         dashboard_url="https://console.x.ai/team/default/api-keys",
         key_help=(
-            "From the xAI console. The same key Last 30 Days reads, so saving "
-            "it here serves both. The switch below is what offers it on a video draft."
+            "Makes video with Grok Imagine. From the xAI console. The same key Last 30 Days "
+            "reads, so saving it here serves both. The switch below is what offers it on a "
+            "video draft."
         ),
         model="grok-imagine-video-1.5",
         duration_seconds=10,
@@ -175,13 +176,13 @@ PROVIDERS: dict[str, VideoProvider] = {
     ),
     "gemini": VideoProvider(
         id="gemini",
-        label="Gemini",
+        label="Veo (Gemini API)",
         key_env="GEMINI_API_KEY",
         enabled_env="VIDEO_PROVIDER_GEMINI_ENABLED",
         dashboard_url="https://aistudio.google.com/apikey",
         key_help=(
-            "From Google AI Studio. Video on this API is paid. Check only "
-            "proves the key is accepted."
+            "Makes video with Veo through the official Gemini API. From Google AI Studio. "
+            "Video on this API is paid. Check only proves the key is accepted."
         ),
         model="veo-3.1-generate-preview",
         duration_seconds=8,
@@ -192,17 +193,20 @@ PROVIDERS: dict[str, VideoProvider] = {
     ),
     "gemini_web": VideoProvider(
         id="gemini_web",
-        label="Gemini Web",
+        label="Veo (Gemini Web)",
         key_env="GEMINI_WEB_COOKIES",
         enabled_env="VIDEO_PROVIDER_GEMINI_WEB_ENABLED",
         dashboard_url="https://github.com/ntthanh2603/gemini-web-to-api",
         key_help=(
+            "Makes video with Veo through a signed-in Gemini web session, with no API key. "
             "The Cookie header of a signed-in gemini.google.com tab: open DevTools, Network, "
             "pick a request whose address contains batchexecute, and copy its Cookie request "
             "header. This uses a Google account's web session, not an API key, so it is "
             "against Google's terms and can expire or get the account limited. Use a spare "
-            "account. The clip is text-to-video only (the product image is not sent) and "
-            "counts against that account's daily video quota."
+            "account. The product picture and a character's pictures are attached to the "
+            "request through the local bridge, which needs the patched build "
+            "(scripts/gemini_web_bridge.py). Each clip counts against that account's daily "
+            "video quota."
         ),
         model="veo-3",
         duration_seconds=10,
@@ -233,7 +237,7 @@ def _key(provider: VideoProvider) -> str:
 
 def _credential(provider: VideoProvider) -> str:
     """What the saved secret is called on screen."""
-    return "cookie" if provider.session else "API key"
+    return "cookie" if provider.session else "key"
 
 
 def bridge_url(provider: VideoProvider) -> str:

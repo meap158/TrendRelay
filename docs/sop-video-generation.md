@@ -3,6 +3,10 @@
 Follow it top to bottom. Each gate has a check that must pass before the next step; every failure below names its cause.
 Background and limits: `docs/gemini-web-video.md`. Providers are listed in Tools > Video providers.
 
+Names in Tools and on the draft: **Grok (xAI)** is the xAI API and makes Grok Imagine video; **Veo (Gemini API)** is Google's
+official API with an AI Studio key (paid); **Veo (Gemini Web)** is the same Veo model through a signed-in Gemini web session, with a
+cookie and no API key. This SOP is about the last one; the first two need only a key and a switch.
+
 ## Run it as a command
 
 Everything below is automated by `scripts/veo_video.py`. The only steps left to a person are the ones no program can do:
