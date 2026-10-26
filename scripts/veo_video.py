@@ -234,11 +234,18 @@ def ensure_bridge(restart: bool = False) -> list[str]:
     subprocess.Popen(
         [sys.executable, str(LAUNCHER)], cwd=ROOT, stdout=log, stderr=log, creationflags=flags,
     )
+    answered = 0
     for _ in range(90):  # a first run builds it
         time.sleep(4)
         models = bridge_models(BRIDGE_PORT)
-        if models is not None:
+        if models:
             break
+        # It answers before its Gemini client has signed in, so an empty list right after the
+        # start is not yet a failure. Give it a short grace, then call it not signed in.
+        if models is not None:
+            answered += 1
+            if answered >= 6:
+                break
     if not models:
         raise Gate(
             "The bridge is up but not signed in, or did not start. Save a fresh cookie in "
