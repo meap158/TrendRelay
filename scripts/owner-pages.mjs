@@ -10,6 +10,7 @@
 // (References is git-ignored); the generator is tracked. Statuses live in the JSON, never in the
 // page, and a Completed task needs `evidence`. Pages work opened from the filesystem, in both
 // light and dark themes. Copied from ProjectManager's scripts/owner-pages.mjs (PM-258).
+// Design: colours and type follow this project's own design (TrendRelay DESIGN.md palette); contrast checked in both themes.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -74,28 +75,28 @@ export function summary(tasks) {
   };
 }
 
-// ---- the shared shell: ProjectManager's tokens, both themes, one stylesheet --------------------
+// ---- the shared shell: tokens, both themes, one stylesheet ------------------------------
 
 const TOKENS = `
 :root {
   color-scheme: light;
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
-  --bg: #f5f5f3; --surface: #fcfcfb; --surface-2: #f0efec; --surface-hover: #ebeae6;
-  --border: #e2e1dc; --border-strong: #cfcdc6;
-  --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7974;
-  --accent: #2a78d6; --accent-text: #ffffff; --accent-soft: #e6f0fc;
-  --danger: #d03b3b; --danger-soft: #fbeaea; --good: #0ca30c; --warn: #eda100; --focus: #2a78d6;
+  --bg: #f0f2f5; --surface: #ffffff; --surface-2: #f4f4f4; --surface-hover: #ebebeb;
+  --border: #cbd2d9; --border-strong: #b0b2b5;
+  --text: #1c1e21; --text-2: #4f5154; --text-3: #686a6d;
+  --accent: #0b71b1; --accent-text: #ffffff; --accent-soft: #e2eef6;
+  --danger: #c0392b; --danger-soft: #f9ebea; --good: #1f7a45; --warn: #9a6200; --focus: #0b71b1;
   --radius-sm: 4px; --radius: 8px; --radius-lg: 12px;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 1px 3px rgb(0 0 0 / 0.06);
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --surface-hover: #2a2a28;
-  --border: #2e2e2b; --border-strong: #3d3d39;
-  --text: #e4e3dd; --text-2: #a8a79f; --text-3: #86857d;
-  --accent: #7fa8e0; --accent-text: #10161f; --accent-soft: #1d2633;
-  --danger: #e0807c; --danger-soft: #3a1d1d; --good: #3fbf3f; --warn: #c98500; --focus: #96b8e7;
+  --bg: #18191a; --surface: #242526; --surface-2: #2e2f30; --surface-hover: #353638;
+  --border: #393a3b; --border-strong: #595b5d;
+  --text: #e4e6eb; --text-2: #aeb0b4; --text-3: #8a8c8f;
+  --accent: #4aa8e0; --accent-text: #101010; --accent-soft: #2a3a44;
+  --danger: #e0807c; --danger-soft: #4a3737; --good: #4cc38a; --warn: #e0a030; --focus: #4aa8e0;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
 }`;
 
