@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     tunnel_client_bin: str = ""
     tunnel_log_level: str = "warn"
     tunnel_health_port: str = ""
+    #: Extra client networks trusted like the LAN, as comma-separated CIDRs, for
+    #: reaching the app from outside the house over a private network such as a
+    #: Tailscale tailnet (100.64.0.0/10). Empty by default, and then nothing
+    #: changes. See docs/REMOTE_ACCESS.md.
+    trusted_client_networks: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

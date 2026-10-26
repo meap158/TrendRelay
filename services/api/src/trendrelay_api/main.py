@@ -14,7 +14,12 @@ from trendrelay_api.autocut_api import router as autocut_router
 from trendrelay_api.hook_overlays_api import router as hook_overlays_router
 from trendrelay_api.creation_drafts_api import router as creation_drafts_router
 from trendrelay_api.storytelling_api import router as storytelling_router
-from trendrelay_api.auth import LOCAL_ADMIN_EMAIL, LOCAL_ADMIN_ID, local_auth_allowed
+from trendrelay_api.auth import (
+    LOCAL_ADMIN_EMAIL,
+    LOCAL_ADMIN_ID,
+    local_auth_allowed,
+    operator_origin_regex,
+)
 from trendrelay_api.campaign_autopilot_api import router as campaign_autopilot_router
 from trendrelay_api.campaign_management_api import router as campaign_management_router
 from trendrelay_api.campaigns_api import router as campaigns_router
@@ -122,7 +127,8 @@ app.include_router(production_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_origin_regex=(
+    allow_origin_regex=operator_origin_regex(
+        settings,
         # Development admits the origins a browser actually sends when the app
         # is opened from another device on the local network. The numeric IPv4
         # shapes cover the address someone types; the rest cover how machines

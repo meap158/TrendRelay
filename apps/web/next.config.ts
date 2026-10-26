@@ -57,6 +57,11 @@ const nextConfig: NextConfig = {
     // computer names (NetBIOS) cannot be listed here because they differ per
     // machine; the API's CORS layer is what has to accept those origins.
     "*.local",
+    // A Tailscale tailnet: its 100.x addresses and its machine names. Reaching the API from these
+    // also needs TRUSTED_CLIENT_NETWORKS in .env (docs/REMOTE_ACCESS.md); this only lets the dev
+    // server serve its own assets to them.
+    "100.*.*.*",
+    "*.ts.net",
     // The owner's tunnel hostnames (Cloudflare Tunnel with Access in front); see apiBaseUrl.
     "*.meap.pro",
   ],

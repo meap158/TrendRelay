@@ -57,8 +57,43 @@ _TRUSTED_CLIENT_NETWORKS = tuple(
 )
 
 
+def extra_trusted_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    """The operator's own additions to the trusted networks (TRUSTED_CLIENT_NETWORKS).
+
+    An entry that is not a network is skipped rather than raised on: a typo must
+    not take the API down, and skipping can only trust fewer clients, never more.
+    """
+    found = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            found.append(ipaddress.ip_network(part, strict=False))
+        except ValueError:
+            continue
+    return tuple(found)
+
+
+#: Origins a browser sends from a private overlay network such as Tailscale: the
+#: tailnet's own 100.x addresses and its `*.ts.net` machine names, on the web
+#: app's ports. Admitted only when the operator has added a trusted network, and
+#: only for reading the API from a page; who may act is still decided by the
+#: client address in `client_is_local_operator`.
+_OVERLAY_ORIGINS = (
+    r"http://(?i:(?:100(?:\.\d{1,3}){3}|[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.ts\.net)):(3000|3001)"
+)
+
+
+def operator_origin_regex(settings, base: str | None) -> str | None:
+    """The development CORS pattern, widened only by what the operator opted into."""
+    if base is None or not extra_trusted_networks(settings.trusted_client_networks):
+        return base
+    return f"(?:{base})|(?:{_OVERLAY_ORIGINS})"
+
+
 def client_is_local_operator(host: str | None) -> bool:
-    """Whether the client address belongs to this machine or its private LAN."""
+    """Whether the client is this machine, its private LAN, or a network the operator added."""
     if not host:
         return False
     if host in _TESTCLIENT_HOSTS:
@@ -67,7 +102,10 @@ def client_is_local_operator(host: str | None) -> bool:
         address = ipaddress.ip_address(host)
     except ValueError:
         return False
-    return any(address in network for network in _TRUSTED_CLIENT_NETWORKS)
+    networks = _TRUSTED_CLIENT_NETWORKS + extra_trusted_networks(
+        getattr(get_settings(), "trusted_client_networks", "")
+    )
+    return any(address in network for network in networks)
 
 
 def local_auth_allowed(request: Request | None) -> bool:
