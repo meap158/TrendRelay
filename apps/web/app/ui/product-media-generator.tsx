@@ -1702,6 +1702,7 @@ export function ProductMediaGenerator({
         <div className="generate-recipes">
           <RecipePicker
             kind={kind}
+            cardCount={cardCount}
             value={recipe}
             onChange={chooseRecipe}
             onNoneFit={setNoRecipeFits}

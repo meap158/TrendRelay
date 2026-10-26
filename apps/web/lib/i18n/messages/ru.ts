@@ -1267,6 +1267,7 @@ export const ru: Messages = {
       recipePreviewKey: "Зелёным отмечено, где будет ваш товар.",
       recipeSearch: "Поиск рецептов",
       recipeCount: "{count, plural, one {# рецепт} few {# рецепта} many {# рецептов} other {# рецепта}}",
+      recipeImageCount: "{count, plural, one {# изображение} few {# изображения} many {# изображений} other {# изображения}}",
       recipeMade: "Создано: {count}",
       recipeLibraryAll: "Все результаты в библиотеке",
       recipeLibraryItem: "Найти этот файл в библиотеке",

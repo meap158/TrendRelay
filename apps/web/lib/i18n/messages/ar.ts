@@ -1256,6 +1256,7 @@ export const ar: Messages = {
       recipePreviewKey: "اللون الأخضر يحدد مكان ظهور منتجك.",
       recipeSearch: "ابحث في الوصفات",
       recipeCount: "{count} وصفة",
+      recipeImageCount: "{count, plural, zero {# صورة} one {# صورة} two {# صورتان} few {# صور} many {# صورة} other {# صورة}}",
       recipeMade: "تم إنشاء {count}",
       recipeLibraryAll: "عرض الكل في المكتبة",
       recipeLibraryItem: "العثور على هذا العنصر في المكتبة",

@@ -1254,6 +1254,7 @@ export const vi: Messages = {
       recipePreviewKey: "Màu xanh là vị trí sản phẩm của bạn.",
       recipeSearch: "Tìm công thức",
       recipeCount: "{count} công thức",
+      recipeImageCount: "{count} ảnh",
       recipeMade: "Đã tạo {count}",
       recipeLibraryAll: "Xem tất cả trong Thư viện",
       recipeLibraryItem: "Tìm mục này trong Thư viện",

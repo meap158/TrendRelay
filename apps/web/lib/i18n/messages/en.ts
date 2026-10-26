@@ -1258,6 +1258,7 @@ export const en = {
       recipePreviewKey: "Green marks where your product appears.",
       recipeSearch: "Search recipes",
       recipeCount: "{count, plural, one {# recipe} other {# recipes}}",
+      recipeImageCount: "{count, plural, one {# image} other {# images}}",
       recipeMade: "{count, plural, one {# made} other {# made}}",
       recipeLibraryAll: "View all in Library",
       recipeLibraryItem: "Find this item in Library",

@@ -1592,6 +1592,8 @@ button.product-group-chip[data-pending][aria-pressed="true"] { background: var(-
   font-size: 10px;
   font-weight: 650;
 }
+.recipe-output-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.recipe-output-count { display: inline-block; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-raised); color: var(--text); font-size: 10px; font-weight: 600; }
 button.recipe-made { background: transparent; font-family: inherit; line-height: inherit; cursor: pointer; }
 button.recipe-made:hover:not(:disabled) { background: var(--green-dark); }
 button.recipe-made:disabled { cursor: default; opacity: .6; }

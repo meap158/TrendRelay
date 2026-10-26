@@ -1254,6 +1254,7 @@ export const ja: Messages = {
       recipePreviewKey: "緑色の部分に商品が入ります。",
       recipeSearch: "レシピを検索",
       recipeCount: "{count}件のレシピ",
+      recipeImageCount: "{count}枚の画像",
       recipeMade: "{count}件作成済み",
       recipeLibraryAll: "ライブラリですべて表示",
       recipeLibraryItem: "この項目をライブラリで表示",

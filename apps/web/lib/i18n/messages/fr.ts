@@ -1266,6 +1266,7 @@ export const fr: Messages = {
       recipePreviewKey: "Le vert indique où apparaît votre produit.",
       recipeSearch: "Rechercher une recette",
       recipeCount: "{count, plural, one {# recette} other {# recettes}}",
+      recipeImageCount: "{count, plural, one {# image} other {# images}}",
       recipeMade: "{count, plural, one {# réalisé} other {# réalisés}}",
       recipeLibraryAll: "Tout voir dans la bibliothèque",
       recipeLibraryItem: "Trouver cet élément dans la bibliothèque",

@@ -1241,6 +1241,7 @@ export const zh: Messages = {
       recipePreviewKey: "绿色部分就是你的商品出现的位置。",
       recipeSearch: "搜索方案",
       recipeCount: "{count} 个方案",
+      recipeImageCount: "{count} 张图片",
       recipeMade: "已生成 {count} 个",
       recipeLibraryAll: "在素材库中查看全部",
       recipeLibraryItem: "在素材库中查找此项",

@@ -63,6 +63,7 @@ export function RecipePicker({
   productTypes = [],
   workspaceId,
   apiFetch,
+  cardCount = 2,
   onNoneFit,
 }: {
   kind: string;
@@ -81,6 +82,7 @@ export function RecipePicker({
   productTypes?: readonly string[];
   workspaceId: string | null;
   apiFetch: Fetcher;
+  cardCount?: number;
   /** Told when no recipe is written for these products, so the caller stops asking for a prompt. */
   onNoneFit?: (noneFit: boolean) => void;
 }) {
@@ -237,6 +239,7 @@ export function RecipePicker({
         options={(locked ? [value] : shown).map((option) => {
           const row = recipes.find((item) => item.id === option);
           const made = examples[option];
+          const imageCount = row?.card_count ?? (option === "character_editorial_carousel" ? 5 : cardCount);
           return {
             value: option,
             label: labelOf(option),
@@ -270,7 +273,9 @@ export function RecipePicker({
                 ))}
               </span>
             ) : undefined,
-            meta: made && made.count > 0 ? (
+            meta: <span className="recipe-output-meta">
+              {kind === "carousel" && <span className="recipe-output-count">{t("attribution.generate.recipeImageCount", { count: imageCount })}</span>}
+              {made && made.count > 0 && (
               <button type="button" className="recipe-made"
                 aria-label={t("attribution.generate.recipePreviewMade", { name: labelOf(option) })}
                 disabled={!workspaceId || !made.assets.length}
@@ -279,7 +284,7 @@ export function RecipePicker({
                   event.stopPropagation();
                   setPreviewing({ recipe: option, asset: made.assets[0].id });
                 }}>{t("attribution.generate.recipeMade", { count: made.count })}</button>
-            ) : undefined,
+            )}</span>,
           };
         })}
         onChange={onChange}
