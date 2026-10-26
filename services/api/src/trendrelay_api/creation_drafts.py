@@ -18,6 +18,7 @@ input pointed at can vanish between sessions.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
 from datetime import timedelta
 from dataclasses import dataclass
@@ -88,6 +89,17 @@ class StorySpec(BaseModel):
     fill: str = Field(default="cover", pattern="^(cover|blur)$")
     subtitles: bool = True
     caption_style: str = Field(default="", max_length=40)
+
+
+class CarouselSpec(BaseModel):
+    """What a Carousel draft holds: the script (a blank line starts a slide), its look and size."""
+
+    model_config = {"extra": "forbid"}
+
+    script: str = Field(default="", max_length=3_000)
+    style: str = Field(default="big-centre", pattern="^(big-centre|subtitle|stick-man)$")
+    size: str = Field(default="portrait", pattern="^(portrait|story)$")
+    title: str = Field(default="Carousel", max_length=120)
 
 
 # --- media resolution ---------------------------------------------------------
@@ -193,6 +205,30 @@ def _render_story(
     )
 
 
+def _render_carousel(
+    session: Session, workspace_id: str, actor_user_id: str,
+    spec: dict[str, Any], *, title: str | None, preview: bool,
+) -> dict[str, Any]:
+    # Slides are drawn and filed in one step by the Carousel dialog (Save to Library), not queued.
+    raise ValueError("A carousel is filed from its own dialog: open the draft and press Save.")
+
+
+def _summarize_carousel(spec: dict[str, Any]) -> dict[str, Any]:
+    blocks = [b for b in re.split(r"\n\s*\n", spec.get("script") or "") if b.strip()]
+    return {
+        "slides": len(blocks),
+        "style": spec.get("style", "big-centre"),
+        "size": spec.get("size", "portrait"),
+    }
+
+
+def _name_carousel(session: Session, workspace_id: str, spec: dict[str, Any]) -> str | None:
+    """A carousel is about its first sentence."""
+    from trendrelay_api import creation_titles
+
+    return creation_titles.from_script(spec.get("script", ""))
+
+
 def _summarize_autocut(spec: dict[str, Any]) -> dict[str, Any]:
     return {
         "clips": len(spec.get("asset_ids", [])),
@@ -256,6 +292,10 @@ ADAPTERS: dict[str, Adapter] = {
     ),
     "storytelling": Adapter(
         "storytelling", StorySpec, _render_story, _summarize_story, _name_story, "story",
+    ),
+    "carousel": Adapter(
+        "carousel", CarouselSpec, _render_carousel, _summarize_carousel, _name_carousel,
+        "carousel",
     ),
 }
 

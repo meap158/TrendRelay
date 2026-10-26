@@ -36,6 +36,7 @@ export function CarouselDialog({
   open,
   workspaceId,
   apiFetch,
+  initialDraftId,
   onClose,
   onSaved,
   onError,
@@ -43,6 +44,8 @@ export function CarouselDialog({
   open: boolean;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  /** A saved carousel to reopen. */
+  initialDraftId?: string;
   onClose: () => void;
   onSaved: () => void;
   onError: (message: string) => void;
@@ -57,7 +60,11 @@ export function CarouselDialog({
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<number | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState<string | null>(null);
   const latest = useRef(0);
+  const creations = `/api/workspaces/${workspaceId}/creations`;
+  const resumedFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open || rules) return;
@@ -75,6 +82,51 @@ export function CarouselDialog({
       live = false;
     };
   }, [open, rules, apiFetch, base]);
+
+  // Reopen a saved carousel: its script, look and size come back as they were left.
+  useEffect(() => {
+    if (!open || !initialDraftId || resumedFor.current === initialDraftId) return;
+    resumedFor.current = initialDraftId;
+    void apiFetch(`${creations}/${initialDraftId}`)
+      .then((response) => response.json().then((body) => ({ ok: response.ok, body })))
+      .then(({ ok, body }) => {
+        if (!ok) throw new Error(body.detail ?? "Could not open the draft.");
+        const spec = body.spec ?? {};
+        setScript(spec.script ?? "");
+        if (spec.style) setStyle(spec.style);
+        if (spec.size) setSize(spec.size);
+        setTitle(spec.title ?? "Carousel");
+        setDraftId(initialDraftId);
+      })
+      .catch((reason) => onError(reason instanceof Error ? reason.message : "Could not open the draft."));
+  }, [open, initialDraftId, apiFetch, creations, onError]);
+
+  // Start clean on close, so the next open is not a stale draft.
+  function close() {
+    resumedFor.current = null;
+    setDraftId(null);
+    setDraftNote(null);
+    onClose();
+  }
+
+  async function saveDraft() {
+    setBusy(true);
+    try {
+      const spec = { script, style, size, title: title.trim() || "Carousel" };
+      const response = await apiFetch(draftId ? `${creations}/${draftId}` : creations, {
+        method: draftId ? "PATCH" : "POST",
+        body: JSON.stringify(draftId ? { spec } : { kind: "carousel", spec }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "Could not save the draft.");
+      setDraftId(body.id as string);
+      setDraftNote("Draft saved. Reopen it from Drafts in the Library.");
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "Could not save the draft.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const render = useCallback(async () => {
     const mine = ++latest.current;
@@ -144,12 +196,15 @@ export function CarouselDialog({
       open={open}
       title="Carousel"
       description="Write the slides, one block of text each, with a blank line between them."
-      onClose={onClose}
+      onClose={close}
       size="wide"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={close}>
             Close
+          </Button>
+          <Button variant="secondary" disabled={busy || !script.trim()} onClick={() => void saveDraft()}>
+            Save draft
           </Button>
           <Button variant="primary" disabled={busy || !preview} onClick={() => void save()}>
             Save {preview ? `${preview.slides.length} slides` : "slides"} to Library
@@ -182,6 +237,11 @@ export function CarouselDialog({
         {problem && (
           <DismissibleStatus tone="bad" onDismiss={() => setProblem(null)}>
             {problem}
+          </DismissibleStatus>
+        )}
+        {draftNote && (
+          <DismissibleStatus tone="good" onDismiss={() => setDraftNote(null)}>
+            {draftNote}
           </DismissibleStatus>
         )}
         {saved !== null && (

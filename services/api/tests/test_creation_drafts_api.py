@@ -183,3 +183,23 @@ def test_a_draft_in_another_workspace_is_not_found() -> None:
         json={"kind": "autocut", "spec": {}},
     ).json()["id"]
     assert request("GET", f"/api/workspaces/{other}/creations/{draft_id}").status_code == 404
+
+
+def test_a_carousel_is_a_draft_kind_with_a_checked_spec_and_a_name() -> None:
+    from trendrelay_api import creation_drafts as drafts
+
+    assert "carousel" in drafts.kinds()
+    script = "Stop scrolling.\n\nStep one."
+    spec = drafts.validate_spec("carousel", {"script": script, "style": "stick-man"})
+    assert spec["size"] == "portrait" and spec["style"] == "stick-man"
+    assert drafts.ADAPTERS["carousel"].summarize(spec) == {
+        "slides": 2,
+        "style": "stick-man",
+        "size": "portrait",
+    }
+    for bad in ({"style": "neon"}, {"size": "huge"}, {"unknown": 1}):
+        try:
+            drafts.validate_spec("carousel", bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} should be refused")

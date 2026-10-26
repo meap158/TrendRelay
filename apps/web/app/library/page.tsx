@@ -1471,7 +1471,7 @@ function LibraryContent() {
   // shared library picker that other tabs open.
   type CreationDraftRow = {
     id: string; kind: string; title: string; status: string;
-    summary: { clips?: number; pictures?: number; script_chars?: number };
+    summary: { clips?: number; pictures?: number; script_chars?: number; slides?: number };
     updated_at: string | null;
   };
   const [creationDrafts, setCreationDrafts] = useState<CreationDraftRow[]>([]);
@@ -2917,21 +2917,24 @@ function LibraryContent() {
                     onClick={() => {
                       setResumeDraft({ kind: draft.kind, id: draft.id });
                       if (draft.kind === "autocut") setAutoCutOpen(true);
+                      else if (draft.kind === "carousel") setCarouselOpen(true);
                       else setStorytellingOpen(true);
                     }}
                   >
                     <DraftThumbnail kind={draft.kind} count={draft.summary?.clips ?? draft.summary?.pictures} />
                     <span className="library-draft-kind">
-                      {draft.kind === "autocut" ? "AutoCut" : "Storytelling"}
+                      {draft.kind === "autocut" ? "AutoCut" : draft.kind === "carousel" ? "Carousel" : "Storytelling"}
                     </span>
-                    <Badge tone="neutral">Video draft</Badge>
+                    <Badge tone="neutral">{draft.kind === "carousel" ? "Image draft" : "Video draft"}</Badge>
                     <strong className="library-draft-title">{draft.title}</strong>
                     <small>
                       {draft.status === "rendering"
                         ? "rendering…"
                         : draft.kind === "autocut"
                           ? `${draft.summary?.clips ?? 0} clips`
-                          : `${draft.summary?.pictures ?? 0} pictures`}
+                          : draft.kind === "carousel"
+                            ? `${draft.summary?.slides ?? 0} slides`
+                            : `${draft.summary?.pictures ?? 0} pictures`}
                     </small>
                   </button>
                   {/* A draft nobody is going to finish had no way out of this
@@ -3746,7 +3749,8 @@ function LibraryContent() {
           open={carouselOpen}
           workspaceId={workspaceId}
           apiFetch={apiFetch}
-          onClose={() => setCarouselOpen(false)}
+          initialDraftId={resumeDraft?.kind === "carousel" ? resumeDraft.id : undefined}
+          onClose={() => { setCarouselOpen(false); setResumeDraft(null); refreshCreationDrafts(); }}
           onSaved={() => void refresh()}
           onError={fail}
         />
