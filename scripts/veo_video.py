@@ -400,6 +400,8 @@ def says_generated(clip: Path) -> bool | None:
         return None
     shown = subprocess.run(
         [ffmpeg, "-i", str(clip)], capture_output=True, text=True, check=False,
+        # The clip's title is the product name, often Vietnamese; the Windows locale cannot decode it.
+        encoding="utf-8", errors="replace",
     ).stderr
     return "ai_generated" in shown and "AI-generated" in shown
 
