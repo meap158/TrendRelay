@@ -255,15 +255,67 @@ def test_a_prompt_the_bridge_would_refuse_never_leaves(values) -> None:
 
 
 def test_a_clip_is_tagged_by_provider_model_family_and_recipe() -> None:
+    base = ["ai-generated", "ai-video"]
     assert video.clip_tags("gemini_web", "hanger_rail_reveal") == [
-        "ai-video", "veo", "gemini-web", "hanger_rail_reveal",
+        *base, "veo", "gemini-web", "hanger_rail_reveal",
     ]
-    assert video.clip_tags("xai") == ["ai-video", "grok"]
-    assert video.clip_tags("gemini", "HANGER") == ["ai-video", "veo", "gemini", "HANGER"]
+    assert video.clip_tags("xai") == [*base, "grok"]
+    assert video.clip_tags("gemini", "HANGER") == [*base, "veo", "gemini", "HANGER"]
     # A provider added later still gets its own id as a tag.
-    assert video.clip_tags("newcomer") == ["ai-video", "newcomer"]
+    assert video.clip_tags("newcomer") == [*base, "newcomer"]
     # No tag twice, whatever its case.
-    assert video.clip_tags("gemini", "Veo") == ["ai-video", "veo", "gemini"]
+    assert video.clip_tags("gemini", "Veo") == [*base, "veo", "gemini"]
+
+
+def test_a_clip_is_named_for_what_it_shows_and_what_made_it() -> None:
+    web, grok = _provider(), video.PROVIDERS["xai"]
+    assert video.clip_title(web, "Silk cami set", "hanger_rail_reveal") == (
+        "Silk cami set - Hanger rail reveal - Veo (Gemini Web)"
+    )
+    assert video.clip_title(grok, "  Silk   cami set ", "mirror_selfie") == (
+        "Silk cami set - Mirror selfie - Grok (xAI)"
+    )
+    # Nothing known about the draft still names the maker, never an empty or bare title.
+    assert video.clip_title(web) == "Veo (Gemini Web)"
+    # The maker survives a very long product name.
+    long = video.clip_title(web, "x" * 500, "mirror_selfie")
+    assert long.endswith("Veo (Gemini Web)") and len(long) <= 300
+
+
+def test_provenance_says_plainly_that_the_clip_is_generated() -> None:
+    record = video.provenance(_provider(), "A title")
+    assert record["ai_generated"] == "true"
+    assert "AI-generated video" in record["comment"]
+    assert "Veo (Gemini Web)" in record["comment"] and "veo-3" in record["comment"]
+    assert record["title"] == "A title"
+
+
+def test_provenance_is_written_into_the_file_and_the_streams_are_untouched(tmp_path) -> None:
+    import shutil
+    import subprocess
+
+    from trendrelay_api.integrations.effects import FFMPEG
+
+    if not shutil.which(str(FFMPEG)) and not FFMPEG.is_file():
+        pytest.skip("ffmpeg is not available")
+    source = tmp_path / "in.mp4"
+    subprocess.run(
+        [str(FFMPEG), "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=10",
+         "-f", "lavfi", "-i", "sine=frequency=440", "-t", "1", "-shortest", str(source)],
+        check=True, capture_output=True,
+    )
+    fields = video.provenance(_provider(), "Silk cami set - Veo (Gemini Web)")
+    marked = video.embed_provenance(source.read_bytes(), fields)
+    assert marked != source.read_bytes() and marked[4:8] == b"ftyp"
+    out = tmp_path / "out.mp4"
+    out.write_bytes(marked)
+    info = subprocess.run(
+        [str(FFMPEG), "-i", str(out)], capture_output=True, text=True, check=False,
+    ).stderr
+    assert "ai_generated" in info and "AI-generated video" in info
+    assert "Video:" in info and "Audio:" in info
+    # Garbage in, the same garbage out: a failed remux never loses the clip.
+    assert video.embed_provenance(b"not a video", fields) == b"not a video"
 
 
 VIEW = {

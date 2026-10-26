@@ -56,7 +56,8 @@ PROBE_LOG = HOME / "probe.log"
 #: A clip arrives in about 80 s. The bridge gives up at 10 minutes; so does this wait.
 GENERATION_WAIT_SECONDS = 15 * 60
 POLL_SECONDS = 10
-WANTED_TAGS = ("ai-video", "veo", "gemini-web")
+WANTED_TAGS = ("ai-generated", "ai-video", "veo", "gemini-web")
+MAKER = "Veo (Gemini Web)"
 MIN_SECONDS, MAX_SECONDS = 5.0, 15.0
 
 
@@ -86,7 +87,9 @@ def best_slot(models_by_slot: dict[int, list[str]]) -> int | None:
     return max(ranked)[2] if ranked else None
 
 
-def verify_clip(asset: dict[str, Any], recipe: str, downloaded: int | None) -> list[str]:
+def verify_clip(
+    asset: dict[str, Any], recipe: str, downloaded: int | None, embedded: bool | None = True,
+) -> list[str]:
     """What is wrong with a filed clip. Empty means every Gate C check holds."""
     problems: list[str] = []
     if asset.get("media_kind") != "video":
@@ -105,6 +108,12 @@ def verify_clip(asset: dict[str, Any], recipe: str, downloaded: int | None) -> l
     seconds = (asset.get("duration_ms") or 0) / 1000
     if not MIN_SECONDS <= seconds <= MAX_SECONDS:
         problems.append(f"it runs {seconds:.1f} s, outside {MIN_SECONDS:g}-{MAX_SECONDS:g} s")
+    if asset.get("creator") != MAKER:
+        problems.append(f"creator is {asset.get('creator')!r}, not {MAKER!r}")
+    if not str(asset.get("title") or "").endswith(MAKER):
+        problems.append(f"the title {asset.get('title')!r} does not name its maker ({MAKER})")
+    if embedded is False:
+        problems.append("the file itself does not say it is AI-generated (no provenance metadata)")
     size = asset.get("size_bytes")
     if downloaded is None or not size or downloaded != size:
         problems.append(f"the Library file downloads {downloaded} bytes, expected {size}")
@@ -325,7 +334,9 @@ def verify(base: str, workspace: str, asset_id: str, recipe: str) -> list[str]:
     _status, body = request(base, "GET", library)
     asset = body.get("asset", body) if isinstance(body, dict) else {}
     size = download_size(base, f"{library}/content/original")
-    problems = verify_clip(asset, recipe, size)
+    clip = fetch_original(base, workspace, asset_id)
+    embedded = says_generated(clip) if clip else None
+    problems = verify_clip(asset, recipe, size, embedded)
     _status, found = request(
         base, "GET", f"/api/workspaces/{workspace}/media/library/assets?q=gemini-web&limit=50",
     )
@@ -335,22 +346,46 @@ def verify(base: str, workspace: str, asset_id: str, recipe: str) -> list[str]:
     return problems
 
 
-def grab_frame(base: str, workspace: str, asset_id: str) -> Path | None:
-    """One frame beside the file, for the human glance the SOP asks for. Best effort."""
-    if not shutil.which("ffmpeg"):
-        return None
-    out = HOME / f"verify-{asset_id}"
+def ffmpeg_path() -> str | None:
+    """The project's bundled ffmpeg, else one on PATH."""
+    from trendrelay_api.integrations.effects import FFMPEG
+
+    return str(FFMPEG) if Path(str(FFMPEG)).is_file() else shutil.which("ffmpeg")
+
+
+def fetch_original(base: str, workspace: str, asset_id: str) -> Path | None:
+    """The Library's original file, saved beside the bridge's files for inspection."""
+    target = HOME / f"verify-{asset_id}.mp4"
     try:
         with urllib.request.urlopen(
             f"{base.rstrip('/')}/api/workspaces/{workspace}/media/library/assets/{asset_id}"
             "/content/original", timeout=120,
         ) as response:
-            out.with_suffix(".mp4").write_bytes(response.read())
+            target.write_bytes(response.read())
     except (OSError, urllib.error.URLError):
         return None
-    frame = out.with_suffix(".jpg")
+    return target
+
+
+def says_generated(clip: Path) -> bool | None:
+    """Whether the file's own metadata says it is AI-generated. None when ffmpeg is missing."""
+    ffmpeg = ffmpeg_path()
+    if not ffmpeg:
+        return None
+    shown = subprocess.run(
+        [ffmpeg, "-i", str(clip)], capture_output=True, text=True, check=False,
+    ).stderr
+    return "ai_generated" in shown and "AI-generated" in shown
+
+
+def grab_frame(clip: Path | None) -> Path | None:
+    """One frame beside the file, for the human glance the SOP asks for. Best effort."""
+    ffmpeg = ffmpeg_path()
+    if clip is None or not ffmpeg:
+        return None
+    frame = clip.with_suffix(".jpg")
     done = subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-ss", "4", "-i", str(out.with_suffix(".mp4")),
+        [ffmpeg, "-v", "error", "-y", "-ss", "4", "-i", str(clip),
          "-frames:v", "1", "-vf", "scale=360:-1", str(frame)],
         capture_output=True, check=False,
     )
@@ -424,7 +459,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if not asset_id:
         raise Gate("The job succeeded but named no Library file.", 4)
     problems = verify(args.api_base, workspace, asset_id, recipe)
-    frame = grab_frame(args.api_base, workspace, asset_id)
+    frame = grab_frame(HOME / f"verify-{asset_id}.mp4")
     print(f"library asset: {asset_id}")
     if frame:
         print(f"frame to compare with the product picture: {frame}")
@@ -437,7 +472,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     workspace = workspace_of(args.api_base, args.workspace)
     problems = verify(args.api_base, workspace, args.asset, args.recipe or "")
-    frame = grab_frame(args.api_base, workspace, args.asset)
+    frame = grab_frame(HOME / f"verify-{args.asset}.mp4")
     if frame:
         print(f"frame: {frame}")
     if problems:

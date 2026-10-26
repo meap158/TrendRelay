@@ -24,7 +24,9 @@ def veo():
 
 
 GOOD = {
-    "media_kind": "video", "hashtags": ["ai-video", "veo", "gemini-web", "hanger_rail_reveal"],
+    "media_kind": "video",
+    "hashtags": ["ai-generated", "ai-video", "veo", "gemini-web", "hanger_rail_reveal"],
+    "title": "Silk cami set - Hanger rail reveal - Veo (Gemini Web)", "creator": "Veo (Gemini Web)",
     "width": 720, "height": 1280, "video_codec": "h264", "has_audio": True,
     "duration_ms": 10005, "size_bytes": 3526528,
 }
@@ -47,7 +49,9 @@ def test_a_clip_that_is_right_has_no_problems(veo) -> None:
 
 @pytest.mark.parametrize(("change", "expected"), [
     ({"media_kind": "image"}, "not a video"),
-    ({"hashtags": ["ai-video"]}, "missing tags: veo, gemini-web, hanger_rail_reveal"),
+    ({"hashtags": ["ai-video"]}, "missing tags: ai-generated, veo, gemini-web, hanger_rail_reveal"),
+    ({"creator": None}, "creator is None"),
+    ({"title": "gemini_web-clip.mp4"}, "does not name its maker"),
     ({"width": 1280, "height": 720}, "not 720x1280"),
     ({"video_codec": "vp9"}, "not h264"),
     ({"has_audio": False}, "no audio"),
@@ -56,6 +60,13 @@ def test_a_clip_that_is_right_has_no_problems(veo) -> None:
 def test_each_way_a_clip_can_be_wrong_is_named(veo, change, expected) -> None:
     problems = veo.verify_clip({**GOOD, **change}, "hanger_rail_reveal", 3526528)
     assert any(expected in problem for problem in problems), problems
+
+
+def test_a_clip_whose_file_does_not_say_it_is_generated_fails(veo) -> None:
+    problems = veo.verify_clip(GOOD, "hanger_rail_reveal", 3526528, embedded=False)
+    assert any("no provenance metadata" in problem for problem in problems)
+    # Unknown (no ffmpeg to look with) is not a failure.
+    assert veo.verify_clip(GOOD, "hanger_rail_reveal", 3526528, embedded=None) == []
 
 
 def test_a_short_or_missing_download_fails_the_size_check(veo) -> None:

@@ -384,15 +384,26 @@ def _write_local(draft_id: str, data: bytes) -> None:
     (CLIP_DIR / f"{draft_id}.mp4").write_bytes(data)
 
 
-def _submit(api_base: str, workspace: str, draft_id: str, recipe: str, data: bytes) -> dict:
+def _submit(
+    api_base: str, workspace: str, draft_id: str, recipe: str, data: bytes,
+    draft: dict | None = None,
+) -> dict:
+    """File the clip named and marked like every generated clip: by what it shows and what made
+    it, with a plain statement in the file and the Library's generated-video tags."""
+    from trendrelay_api.integrations import video_generation as video
+
+    provider = video.PROVIDERS["xai"]
+    members = [m for m in ((draft or {}).get("products") or []) if m.get("name")]
+    title = video.clip_title(provider, str(members[0]["name"]) if members else "", recipe)
+    data = video.embed_provenance(data, video.provenance(provider, title))
     _status, body = _request(
         api_base, "POST",
         f"/api/workspaces/{workspace}/attribution/creative-drafts/{draft_id}/media",
-        {
-            "media_base64": base64.b64encode(data).decode("ascii"),
-            "filename": f"{recipe}.mp4",
-        },
+        {"media_base64": base64.b64encode(data).decode("ascii"), "filename": title},
     )
+    asset_id = str(body.get("asset_id") or "")
+    if asset_id:
+        video._mark_clip(workspace, asset_id, video.clip_tags(provider.id, recipe), provider.label)
     return body
 
 
@@ -483,7 +494,7 @@ def fill_draft(api_base: str, workspace: str, draft_id: str) -> None:
             _subject_id(draft),
             _character_references(workspace, draft),
         )
-        body = _submit(api_base, workspace, draft_id, recipe, data)
+        body = _submit(api_base, workspace, draft_id, recipe, data, draft)
     except FillFailure as error:
         if not error.draft_id:
             error.draft_id = draft_id

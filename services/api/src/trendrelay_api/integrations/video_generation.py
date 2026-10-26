@@ -1535,7 +1535,7 @@ _PROVIDER_TAGS = {
 
 def clip_tags(provider_id: str, recipe: str = "") -> list[str]:
     """The hashtags a generated clip is filed with: kind, provider, model family and recipe."""
-    tags = ["ai-video", *_PROVIDER_TAGS.get(provider_id, (provider_id,))]
+    tags = ["ai-generated", "ai-video", *_PROVIDER_TAGS.get(provider_id, (provider_id,))]
     if recipe:
         tags.append(recipe)
     seen: set[str] = set()
@@ -1587,11 +1587,105 @@ def prompt_for(provider: VideoProvider, view: dict[str, Any]) -> str:
     return f"{context}\n\n{prompt}" if context else prompt
 
 
-def _tag_clip(workspace_id: str, asset_id: str, tags: list[str]) -> None:
-    """Add these tags to a filed clip, keeping any it already has.
+_TITLE_LIMIT = 300
+_PRODUCT_NAME_LIMIT = 120
 
-    The clip is already in the Library and paid for, so a failure here is logged and
-    never fails the job.
+
+def recipe_name(recipe: str) -> str:
+    """A recipe id as a person says it: hanger_rail_reveal becomes Hanger rail reveal."""
+    words = recipe.replace("_", " ").replace("-", " ").split()
+    return " ".join(words).capitalize() if words else ""
+
+
+def clip_title(provider: VideoProvider, product: str = "", recipe: str = "") -> str:
+    """The Library name of a generated clip: what it shows, how, and what made it.
+
+    "Silk cami set - Hanger rail reveal - Veo (Gemini Web)". The maker stays in the name so a clip
+    is recognised as generated in any list, export or file picker, even where tags are not shown.
+    """
+    name = " ".join(product.split())[:_PRODUCT_NAME_LIMIT]
+    parts = [name, recipe_name(recipe), provider.label]
+    return " - ".join(part for part in parts if part)[:_TITLE_LIMIT]
+
+
+def provenance(provider: VideoProvider, title: str) -> dict[str, str]:
+    """What a generated clip says about itself, in the file's own metadata.
+
+    Google marks every Veo video with an invisible SynthID watermark, and that stays. This adds
+    the readable half: a plain statement in the container that survives export and download,
+    so a person or a platform's check can see the clip is AI-generated and by what.
+    """
+    model = model_for(provider)
+    made = datetime.now(UTC).strftime("%Y-%m-%d")
+    return {
+        "title": title,
+        "comment": (
+            f"AI-generated video. Generator: {provider.label}, model {model}. "
+            f"Made {made} with TrendRelay."
+        ),
+        "ai_generated": "true",
+        "generator": provider.label,
+        "generator_model": model,
+    }
+
+
+def embed_provenance(data: bytes, fields: dict[str, str]) -> bytes:
+    """The same video with `fields` written into its metadata, streams copied untouched.
+
+    Best effort: with no ffmpeg, or if the remux fails or does not give back an MP4, the
+    original bytes are returned, because the clip is already paid for.
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    from trendrelay_api.integrations.effects import FFMPEG
+
+    if not Path(str(FFMPEG)).is_file():
+        return data
+    try:
+        with tempfile.TemporaryDirectory(prefix="provenance-") as folder:
+            source, target = Path(folder, "in.mp4"), Path(folder, "out.mp4")
+            source.write_bytes(data)
+            command = [
+                str(FFMPEG), "-v", "error", "-y", "-i", str(source), "-map", "0", "-c", "copy",
+                "-movflags", "use_metadata_tags+faststart",
+            ]
+            for key, value in fields.items():
+                command += ["-metadata", f"{key}={value}"]
+            done = subprocess.run(  # noqa: S603 - fixed argv, no shell
+                [*command, str(target)], capture_output=True, timeout=120, check=False,
+            )
+            result = target.read_bytes() if done.returncode == 0 and target.is_file() else b""
+    except (OSError, subprocess.SubprocessError):
+        logger.warning("Could not write provenance into a clip", exc_info=True)
+        return data
+    return result if result[4:8] == b"ftyp" else data
+
+
+def _asset_title(session: Session, asset_id: str) -> str:
+    """A Library image's name without its file extension, for naming a clip made from it."""
+    from trendrelay_api.media_models import MediaAsset
+
+    asset = session.get(MediaAsset, asset_id)
+    title = str(asset.title) if asset is not None and asset.title else ""
+    return re.sub(r"\.(jpe?g|png|webp|gif|avif)$", "", title, flags=re.IGNORECASE)
+
+
+def _draft_product_name(view: dict[str, Any]) -> str:
+    members = [item for item in (view.get("products") or []) if item.get("name")]
+    return str(members[0]["name"]) if members else ""
+
+
+def _mark_clip(workspace_id: str, asset_id: str, tags: list[str], creator: str = "") -> None:
+    """Tag a filed clip and name its maker, keeping what it already has.
+
+    The maker goes in `creator`, which pickers show beside the length, so a generated clip reads
+    "Veo (Gemini Web)" where a scraped one reads its author. A licence credit (`attribution`) is
+    not used: that field means a credit is owed, and none is.
+
+    The clip is already in the Library and paid for, so a failure here is logged and never
+    fails the job.
     """
     from trendrelay_api.media_library import JOB_SESSION_FACTORY
     from trendrelay_api.media_models import MediaAsset
@@ -1604,9 +1698,11 @@ def _tag_clip(workspace_id: str, asset_id: str, tags: list[str]) -> None:
             current = [str(tag) for tag in (asset.hashtags or [])]
             known = {tag.casefold() for tag in current}
             asset.hashtags = current + [tag for tag in tags if tag.casefold() not in known]
+            if creator and not asset.creator:
+                asset.creator = creator[:200]
             session.commit()
-    except Exception:  # noqa: BLE001 - tagging is a convenience, the clip is already filed
-        logger.warning("Could not tag clip %s", asset_id, exc_info=True)
+    except Exception:  # noqa: BLE001 - marking is a convenience, the clip is already filed
+        logger.warning("Could not mark clip %s", asset_id, exc_info=True)
 
 
 def _file_library_clip(
@@ -1789,12 +1885,12 @@ def run_job(
             asset_id = str(payload.get("subject_asset_id") or "")
             with session_factory() as session:
                 image, mime = _subject_bytes(session, workspace_id, asset_id)
+                title = clip_title(provider, _asset_title(session, asset_id))
             object_key = f"library-clips/{asset_id}/{job_id}.mp4"
             data = _run_adapter(provider, prompt, image, mime, object_key, transport, progress)
-            filed_id = _file_library_clip(
-                workspace_id, actor_user_id, data, f"{provider.label} video",
-            )
-            _tag_clip(workspace_id, filed_id, clip_tags(provider.id))
+            data = embed_provenance(data, provenance(provider, title))
+            filed_id = _file_library_clip(workspace_id, actor_user_id, data, title)
+            _mark_clip(workspace_id, filed_id, clip_tags(provider.id), provider.label)
             complete_job(
                 job_id,
                 worker_id,
@@ -1821,13 +1917,14 @@ def run_job(
         )
         with session_factory() as session:
             view = get_draft(session, workspace_id, draft_id)
+        recipe = str(view.get("recipe") or "")
+        title = clip_title(provider, _draft_product_name(view), recipe)
+        data = embed_provenance(data, provenance(provider, title))
         if not _still_owed(view):
             # Filled while the provider worked. The clip is paid for, so it is
             # kept in the Library instead of being dropped.
-            kept_id = _file_library_clip(
-                workspace_id, actor_user_id, data, f"{provider.label} video",
-            )
-            _tag_clip(workspace_id, kept_id, clip_tags(provider.id, str(view.get("recipe") or "")))
+            kept_id = _file_library_clip(workspace_id, actor_user_id, data, title)
+            _mark_clip(workspace_id, kept_id, clip_tags(provider.id, recipe), provider.label)
             raise VideoError(
                 "unavailable",
                 "This draft was filled while the video was generated. The video is "
@@ -1841,12 +1938,12 @@ def run_job(
                 actor_user_id,
                 draft_id,
                 media_base64=encoded,
-                filename=f"{provider.id}-clip.mp4",
+                filename=title,
             )
         if filed.get("asset_id"):
-            _tag_clip(
-                workspace_id, str(filed["asset_id"]),
-                clip_tags(provider.id, str(view.get("recipe") or "")),
+            _mark_clip(
+                workspace_id, str(filed["asset_id"]), clip_tags(provider.id, recipe),
+                provider.label,
             )
         complete_job(
             job_id,
