@@ -316,6 +316,12 @@
     position: static;
     top: auto;
   }
+  /* The same on Attribution, where the selection bar takes the bottom edge
+     instead: a pinned heading above it would leave the rows the middle. */
+  .attribution-page > .attribution-heading {
+    position: static;
+    top: auto;
+  }
 }
 
 /* The toolbar control owns both workspace selection and regional preferences.
