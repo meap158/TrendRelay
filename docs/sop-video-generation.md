@@ -14,7 +14,7 @@ signing in to Google and pasting a fresh Cookie header into Tools, and restartin
 
 | Command | Spends | What it does |
 | --- | --- | --- |
-| `python scripts/veo_video.py doctor` | no | Gates 1-3: cookie saved and switched on, account slot not the free account, bridge started if it is not answering and signed in, Check passes, the API offers Gemini Web |
+| `python scripts/veo_video.py doctor` | no | Gates 1-3: cookie saved and switched on, the saved cookie still signs in (throwaway bridge), account slot not the free account, bridge started if it is not answering and signed in, Check passes, the API offers Gemini Web |
 | `python scripts/veo_video.py slots [--apply]` | no | Gate A: starts a throwaway bridge per account slot on a spare port, reads each model list, picks the slot with the Pro models, and with `--apply` saves it in Tools |
 | `python scripts/veo_video.py generate --confirm [--draft ID]` | one video | Runs the doctor gates, queues the newest pending single-product video draft (or the one given) through the API as the Attribution button does, waits up to 15 minutes, then verifies Gate C |
 | `python scripts/veo_video.py verify --asset ID [--recipe R]` | no | Gate C alone, for any filed clip |
@@ -27,9 +27,12 @@ the one check left to eyes. Exit codes: 0 done, 1 a gate failed before anything 
 generation failed, 4 the clip was made but a check on it failed. It never resends a request and never falls back to another
 provider. A failure prints what to do; read the failure table before running `generate` again.
 
-**The cookie goes stale.** Google rotates the session cookie, so the copy saved in Tools stops signing in within hours. A bridge
-that is already running keeps its own session alive and keeps working, but a restart, or `slots`, then fails with "invalid or
-expired". `doctor` and `slots` say so. Fix: paste a fresh Cookie header in Tools, save, run `doctor --restart-bridge`.
+**The cookie goes stale, and a stale session looks healthy.** Google rotates the session cookie, so the copy saved in Tools stops
+signing in within hours, and the running bridge's own session goes with it. Nothing on the bridge shows it: `/health` is a fixed
+"ok", `/models` answers from a list cached at start-up, and Check passes. Gemini then treats the bridge as a guest, accepts a video
+prompt and never makes the clip. So `doctor` and `generate` first start a throwaway bridge from the saved cookie, which cannot
+sign in when the cookie is stale, and stop there. Fix: paste a fresh Cookie header in Tools, save, run `doctor --restart-bridge`.
+Paste it just before generating, not a day ahead.
 
 The sections below are the same flow written out, for when a gate fails and you need the reason.
 
@@ -135,13 +138,13 @@ Practices behind this, and what they do not cover:
 | What you see | Cause | Fix |
 | --- | --- | --- |
 | Job at 95% for minutes, then "did not finish in time" | free account slot, or the plan lost Veo | Gate A; read the bridge log for the upgrade sentence |
-| Job ends "not ready before the deadline; it may still appear in Gemini Web conversation c_..." | Gemini accepted the prompt ("I'm generating your video") but delivered nothing in 10 minutes: capacity or a silent daily limit. Seen 2026-10-26 at the third clip of the day; the first two arrived in about 80 s | Open that conversation at gemini.google.com (signed in to the same account) to see whether the clip appeared late. Wait before trying again; the worker does not resend it, so one attempt costs at most one unit |
+| Job ends "not ready before the deadline; it may still appear in Gemini Web conversation c_..." | The bridge's session had gone stale, and Gemini serves a stale session as a guest: it accepts the prompt ("I'm generating your video"), saves no chat and makes no clip. Confirmed 2026-10-26/27: three queued runs failed this way, none of their conversations exist in the account's chat list, and neither does a text chat sent through the same bridge, while the two earlier runs (fresh cookie) appear there and arrived in about 80 s. Check and `/models` kept passing, because they answer from a list cached at start-up | Paste a fresh cookie in Tools, then `doctor --restart-bridge`. `doctor` and `generate` now start a throwaway bridge from the saved cookie first and refuse to go on when it does not sign in. Do not retry before that: the worker never resends, but each attempt can still count against the quota |
 | "limit reached" / `quota` | the account's daily video quota is spent | wait for the reset or use another account's cookie |
 | "already making a video" | another clip is running on the bridge | wait; do not retry in a loop |
 | `moderation` | Gemini refused the prompt | change the draft's recipe or wording; it is not retried |
 | "bridge is the unpatched one" | the bridge was built without the picture patch | run `scripts/gemini_web_bridge.py` again; nothing was spent |
 | Connection dropped while sending | pictures larger than the bridge's body limit (unpatched default is 4 MB) | the patch raises it to 40 MB; rebuild |
-| `slots` or a bridge restart says the cookie is "invalid or expired" while a running bridge still answers | the saved cookie went stale; the running bridge holds a rotated session | fresh cookie in Tools, then `doctor --restart-bridge`. Do not restart a working bridge needlessly |
+| `doctor`, `generate`, `slots` or a bridge restart says the cookie is "invalid or expired" | the saved cookie went stale. A bridge that was already running is not safe either: its session degrades to a guest one | fresh cookie in Tools, then `doctor --restart-bridge` |
 | Check says "not signed in" | cookie expired or signed out | fresh cookie, restart the bridge |
 | Bridge exits at start | cookie missing `__Secure-1PSID` or `__Secure-1PSIDTS` | copy the whole Cookie header |
 | Bridge on port 5180, Check cannot reach it | the shell's `PORT` overrode `.env` | start it with the script, not by hand |

@@ -74,6 +74,26 @@ def test_a_short_or_missing_download_fails_the_size_check(veo) -> None:
     assert veo.verify_clip(GOOD, "hanger_rail_reveal", None)
 
 
+def test_a_stale_cookie_stops_a_run_before_anything_is_spent(veo, monkeypatch) -> None:
+    def stale(slots):
+        raise veo.Gate("The saved cookie no longer signs in")
+
+    monkeypatch.setattr(veo, "probe_slots", stale)
+    with pytest.raises(veo.Gate, match="no longer signs in"):
+        veo.cookie_gate("1")
+
+
+def test_a_slot_that_lists_nothing_stops_a_run_too(veo, monkeypatch) -> None:
+    probed = []
+    monkeypatch.setattr(veo, "probe_slots", lambda slots: probed.append(list(slots)) or {1: []})
+    with pytest.raises(veo.Gate, match="did not sign in"):
+        veo.cookie_gate("1")
+    assert probed == [[1]]
+    # An empty setting means the bridge's own default, slot 0.
+    monkeypatch.setattr(veo, "probe_slots", lambda slots: {0: ["gemini-auto"]})
+    veo.cookie_gate("")
+
+
 def test_generate_refuses_to_spend_without_confirm(veo, capsys) -> None:
     assert veo.main(["generate"]) == 2
     assert "--confirm" in capsys.readouterr().out

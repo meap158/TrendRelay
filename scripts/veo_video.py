@@ -212,8 +212,9 @@ def probe_slots(slots: range) -> dict[int, list[str]]:
         raise Gate(
             "The saved cookie no longer signs in (Google rotates it, so a copy goes stale within "
             "hours). Copy a fresh Cookie header into Tools > Video providers > Gemini Web, save, "
-            "then run `slots` again. A bridge that is already running keeps its own session "
-            "alive, but it will not sign in again after a restart until the cookie is fresh."
+            "then run `doctor --restart-bridge`. Do not generate until then: a bridge whose "
+            "session has gone stale is served as a guest, so Gemini accepts a video prompt and "
+            "never delivers it."
         )
     return found
 
@@ -264,6 +265,24 @@ def settings_gate() -> dict[str, str]:
     if not (HOME / ".env").is_file():
         raise Gate("The bridge env file is missing. Save the Gemini Web card in Tools once.")
     return state
+
+
+def cookie_gate(slot: str) -> None:
+    """Stop before spending when the saved cookie no longer signs in. No spend.
+
+    The running bridge cannot tell us: its /health is a fixed "ok" and /models answers from a
+    list it cached when it started. A session that has gone stale is served by Gemini as a guest:
+    chats and video prompts are accepted ("I'm generating your video") and saved nowhere, so
+    the clip never arrives and the quota may still be counted. A throwaway bridge started from
+    the saved cookie fails to sign in ("invalid or expired") in exactly that case.
+    """
+    number = int(slot) if slot.isdigit() else 0
+    found = probe_slots(range(number, number + 1))  # raises when the cookie is stale
+    if not found.get(number):
+        raise Gate(
+            f"Account slot {number} did not sign in with the saved cookie. Check the slot with "
+            "`slots`, or paste a fresh cookie in Tools."
+        )
 
 
 def workspace_of(base: str, requested: str | None) -> str:
@@ -400,6 +419,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     state = settings_gate()
     print(f"settings: cookie {state['cookie']}, enabled, account slot {state['slot'] or '(none)'}")
+    cookie_gate(state["slot"])
+    print("cookie: the saved cookie signs in")
     models = ensure_bridge(args.restart_bridge)
     print(f"bridge: signed in, {len(models)} models: {', '.join(models)}")
     if models == ["gemini-auto"]:
@@ -438,7 +459,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if not args.confirm:
         print("Refused: this spends one video from the account's daily quota. Add --confirm.")
         return 2
-    settings_gate()
+    cookie_gate(settings_gate()["slot"])
     models = ensure_bridge(args.restart_bridge)
     if models == ["gemini-auto"]:
         raise Gate("The saved slot is the free account; run `slots --apply` first.")
