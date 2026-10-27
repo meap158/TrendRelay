@@ -9,18 +9,14 @@ before it would change what it has to find.
 
 An external program, `GeminiWatermarkTool-Video` from
 [allenk/VeoWatermarkRemover](https://github.com/allenk/VeoWatermarkRemover). It undoes the mark by
-reverse alpha blending, so nothing is generated or painted over. It is not bundled, because its
-source is not published, the repository has no licence file and its builds are unsigned.
+reverse alpha blending, so nothing is generated or painted over. Its source is not published and the
+repository has no licence file, so it is never bundled or redistributed.
 
-Install it yourself:
-
-1. Download the release for your system from the project's Releases page.
-2. Check its SHA256 against the value you trust (the author lists VirusTotal scans per release).
-3. Put the program in `.data/tools/veo-watermark/`, or set `TRENDRELAY_VEO_WATERMARK_TOOL` to its path.
-4. Optionally set `TRENDRELAY_VEO_WATERMARK_TOOL_SHA256` to that checksum. TrendRelay then refuses
-   to run a file that does not match it.
-
-Until it is installed the effect shows as unavailable and says how to install it.
+It is a tool in the Tools page like the others: open **Veo Watermark Remover** and press Install.
+The catalogue pins one release with its size and SHA256 for each system, the installer checks both,
+and the program lands in `.tools/veo-watermark-remover/` inside this project. Uninstall removes it.
+The effect is offered only while the tool is installed and switched on. Details:
+`docs/third-party/veo-watermark-remover.md`.
 
 ## What TrendRelay adds
 
@@ -31,6 +27,7 @@ Until it is installed the effect shows as unavailable and says how to install it
   instead of being delivered.
 - A clip with no watermark passes through unchanged and the render report says so.
 - A preview renders only the first seconds, cut by stream copy.
+- Tried on a real 10 s library clip (720x1280): the diamond was gone, length and sound matched, 9 s.
 
 ## Limits
 

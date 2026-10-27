@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import stat
 import subprocess
 import sys
+import tempfile
+import urllib.parse
+import urllib.request
+import zipfile
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -189,6 +194,8 @@ def _installed_revision(tool: dict[str, Any]) -> str | None:
     # and reporting it is what lets such a tool be activated at all.
     if tool.get("install_strategy") == "pypi" and tool.get("distribution"):
         return _runtime_distribution_version(tool["distribution"], _tool_runtime(tool))
+    if tool.get("install_strategy") == "release-download":
+        return _release_revision(tool)
     if not tool.get("source_path"):
         return None
     source = _project_path(tool["source_path"])
@@ -270,6 +277,106 @@ def list_tools() -> list[dict[str, Any]]:
     return response
 
 
+REVISION_FILE = ".installed-revision"
+#: Release downloads may only come from these hosts, over https. GitHub serves release assets
+#: from its own download host after a redirect, so that host is listed as well.
+RELEASE_HOSTS = ("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
+
+
+def _platform_key() -> str:
+    return {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux")
+
+
+def _release_asset(tool: dict[str, Any]) -> dict[str, Any]:
+    downloads = tool.get("downloads") or {}
+    asset = downloads.get(_platform_key())
+    if not asset:
+        raise ToolRegistryError(f"{tool['name']} has no pinned download for this system.")
+    return asset
+
+
+def _release_revision(tool: dict[str, Any]) -> str | None:
+    """The revision recorded by a completed install, or None when the files are not all there."""
+    try:
+        root = _project_path(tool["root_path"])
+        asset = _release_asset(tool)
+    except ToolRegistryError:
+        return None
+    marker = root / REVISION_FILE
+    if not marker.is_file() or not (root / asset["executable"]).is_file():
+        return None
+    return marker.read_text(encoding="utf-8").strip() or None
+
+
+def release_executable(tool_id: str) -> Path | None:
+    """The installed program of a release-download tool, or None when it is not installed."""
+    try:
+        tool = _tool(tool_id)
+        if tool.get("install_strategy") != "release-download":
+            return None
+        if _release_revision(tool) != tool["revision"]:
+            return None
+        return _project_path(tool["root_path"]) / _release_asset(tool)["executable"]
+    except ToolRegistryError:
+        return None
+
+
+def is_active(tool_id: str) -> bool:
+    """Whether the Tools page has this tool installed and switched on."""
+    return any(item["id"] == tool_id and item["active"] for item in list_tools())
+
+
+def _download_verified(asset: dict[str, Any], destination: Path) -> None:
+    """Fetch one pinned file over https and keep it only if its size and SHA256 match."""
+    url = str(asset["url"])
+    if not url.startswith("https://") or urllib.parse.urlparse(url).hostname not in RELEASE_HOSTS:
+        raise ToolRegistryError("Release downloads must come from the pinned GitHub release over https.")
+    expected_size, expected_hash = int(asset["size"]), str(asset["sha256"]).lower()
+    digest, received = hashlib.sha256(), 0
+    request = urllib.request.Request(url, headers={"User-Agent": "TrendRelay-tool-installer"})
+    with urllib.request.urlopen(request, timeout=60) as response, destination.open("wb") as out:  # noqa: S310
+        final_host = urllib.parse.urlparse(response.geturl()).hostname or ""
+        if not final_host.endswith(("github.com", "githubusercontent.com")):
+            raise ToolRegistryError("The download was redirected away from GitHub, so it was refused.")
+        while block := response.read(1 << 20):
+            received += len(block)
+            if received > expected_size:
+                raise ToolRegistryError("The download is larger than the pinned size, so it was refused.")
+            digest.update(block)
+            out.write(block)
+    if received != expected_size or digest.hexdigest() != expected_hash:
+        raise ToolRegistryError("The download does not match the pinned size and SHA256, so it was discarded.")
+
+
+def _install_release(tool: dict[str, Any]) -> None:
+    """Download the pinned release asset, verify it and unpack only the files the catalogue names."""
+    asset = _release_asset(tool)
+    root = _project_path(tool["root_path"])
+    wanted = set(asset["files"])
+    root.parent.mkdir(parents=True, exist_ok=True)
+    scratch = Path(tempfile.mkdtemp(prefix="release-", dir=root.parent))
+    try:
+        archive = scratch / "asset.zip"
+        _download_verified(asset, archive)
+        staged = scratch / "files"
+        staged.mkdir()
+        with zipfile.ZipFile(archive) as bundle:
+            names = {Path(info.filename).name: info for info in bundle.infolist() if not info.is_dir()}
+            missing = wanted - set(names)
+            if missing:
+                raise ToolRegistryError(f"The release does not contain {sorted(missing)}.")
+            for name in wanted:
+                # Read by member name and written under a fixed name: nothing in the archive can
+                # choose where a file lands.
+                (staged / name).write_bytes(bundle.read(names[name]))
+        (staged / REVISION_FILE).write_text(tool["revision"] + "\n", encoding="utf-8")
+        if root.exists():
+            _remove_tree(root)
+        staged.replace(root)
+    finally:
+        _remove_tree(scratch)
+
+
 def install_tool(tool_id: str) -> dict[str, Any]:
     tool = _tool(tool_id)
     if not tool["install_allowed"]:
@@ -300,6 +407,8 @@ def install_tool(tool_id: str) -> dict[str, Any]:
             if root.exists():
                 _remove_tree(root)
             raise
+    elif strategy == "release-download":
+        _install_release(tool)
     elif strategy == "pypi":
         distribution = tool.get("distribution")
         if not distribution:

@@ -21,7 +21,6 @@ def tool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     fake = tmp_path / "GeminiWatermarkTool-Video.exe"
     fake.write_bytes(b"not a real program")
     monkeypatch.setenv(watermark_tool.TOOL_ENV, str(fake))
-    monkeypatch.delenv(watermark_tool.SHA256_ENV, raising=False)
     return fake
 
 
@@ -54,22 +53,26 @@ def test_effect_is_registered_as_a_video_only_frame_step() -> None:
     assert effect_render.VEO_WATERMARK.stage == "frame"
 
 
-def test_status_says_how_to_install_when_the_tool_is_missing(
+def test_status_points_at_the_tools_page_when_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(watermark_tool.TOOL_ENV, raising=False)
+    monkeypatch.setattr(watermark_tool.tool_registry, "release_executable", lambda _id: None)
+    ready, reason = watermark_tool.status()
+    assert not ready and "Tools" in reason
+
+
+def test_an_installed_tool_must_also_be_switched_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(watermark_tool.TOOL_ENV, str(tmp_path / "nope.exe"))
-    monkeypatch.setattr(watermark_tool, "DEFAULT_FOLDER", tmp_path / "empty")
+    program = tmp_path / "t.exe"
+    program.write_bytes(b"x")
+    monkeypatch.delenv(watermark_tool.TOOL_ENV, raising=False)
+    monkeypatch.setattr(watermark_tool.tool_registry, "release_executable", lambda _id: program)
+    monkeypatch.setattr(watermark_tool.tool_registry, "is_active", lambda _id: False)
     ready, reason = watermark_tool.status()
-    assert not ready and "SHA256" in reason
-
-
-def test_a_wrong_checksum_makes_the_tool_unavailable(
-    tool: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(watermark_tool.SHA256_ENV, "0" * 64)
-    ready, reason = watermark_tool.status()
-    assert not ready and "does not match" in reason
-    monkeypatch.setenv(watermark_tool.SHA256_ENV, watermark_tool.file_sha256(tool).upper())
+    assert not ready and "switched off" in reason
+    monkeypatch.setattr(watermark_tool.tool_registry, "is_active", lambda _id: True)
     assert watermark_tool.status() == (True, None)
 
 

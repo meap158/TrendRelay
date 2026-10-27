@@ -693,6 +693,62 @@
       "documentation": "docs/third-party/python-telegram-bot.md",
       "surface": "campaigns",
       "runs": "network"
+    },
+    {
+      "id": "veo-watermark-remover",
+      "name": "Veo Watermark Remover (GeminiWatermarkTool-Video)",
+      "repository": "https://github.com/allenk/VeoWatermarkRemover",
+      "revision": "v0.6.5-demo",
+      "version": "0.6.5-demo",
+      "license": "None published (all rights reserved by default)",
+      "license_url": "https://github.com/allenk/VeoWatermarkRemover",
+      "category": "Video editing",
+      "summary": "Removes the visible Veo / Gemini watermark from generated videos by reverse alpha blending, keeping sound and timing. A prebuilt, unsigned command line program: its source is not published and the repository has no licence file, so it is run here on the owner's own media and never redistributed.",
+      "capabilities": [
+        "Gemini 3.5 diamond and small Veo text removal",
+        "Legacy large Veo text mode",
+        "Audio kept untouched",
+        "Removes visible marks only, not SynthID"
+      ],
+      "integration_status": "adapted",
+      "commercial_use": "conditional",
+      "install_strategy": "release-download",
+      "downloads": {
+        "windows": {
+          "url": "https://github.com/allenk/VeoWatermarkRemover/releases/download/v0.6.5-demo/GeminiWatermarkTool-Windows-x64-Video.zip",
+          "sha256": "542d413f0cc0467e90bc0a13a197df55a811fce312f3f0fb6a151f548e2964a0",
+          "size": 17143448,
+          "executable": "GeminiWatermarkTool-Video.exe",
+          "files": [
+            "GeminiWatermarkTool-Video.exe"
+          ]
+        },
+        "linux": {
+          "url": "https://github.com/allenk/VeoWatermarkRemover/releases/download/v0.6.5-demo/GeminiWatermarkTool-Linux-x64-Video.zip",
+          "sha256": "958a8f429208848af55d461754a841d5c5703301a61ac66d045831c5a9622654",
+          "size": 21605480,
+          "executable": "GeminiWatermarkTool-Video",
+          "files": [
+            "GeminiWatermarkTool-Video"
+          ]
+        },
+        "macos": {
+          "url": "https://github.com/allenk/VeoWatermarkRemover/releases/download/v0.6.5-demo/GeminiWatermarkTool-macOS-Universal-Video.zip",
+          "sha256": "1998739f3a881d4cd9894b087a3eccba03d22b02bbcd9cfcc70dbeacf5aa6280",
+          "size": 33103024,
+          "executable": "GeminiWatermarkTool-Video",
+          "files": [
+            "GeminiWatermarkTool-Video"
+          ]
+        }
+      },
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": true,
+      "root_path": ".tools/veo-watermark-remover",
+      "documentation": "docs/third-party/veo-watermark-remover.md",
+      "surface": "library",
+      "runs": "local"
     }
   ]
 }

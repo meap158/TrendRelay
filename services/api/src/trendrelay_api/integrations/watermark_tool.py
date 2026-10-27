@@ -3,8 +3,9 @@
 The work is done by `GeminiWatermarkTool-Video`, a third-party command line program that undoes
 the watermark by reverse alpha blending (original = (watermarked - alpha * logo) / (1 - alpha)).
 It is not bundled: its source is not published, it ships with no licence file, and its builds are
-unsigned. TrendRelay runs a copy the owner has installed and checked, found by
-`TRENDRELAY_VEO_WATERMARK_TOOL` or in `.data/tools/veo-watermark/`.
+unsigned. It is a tool in the Tools page like the others: the catalogue pins one release with its
+size and SHA256, Install downloads and verifies it into `.tools/veo-watermark-remover/`, and the
+effect is offered only while it is installed and switched on.
 
 What this module adds around it:
 
@@ -22,7 +23,6 @@ It removes the visible mark only. SynthID and other invisible provenance marks a
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import subprocess
@@ -32,13 +32,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from trendrelay_api import tool_registry
 from trendrelay_api.integrations.effects import FFMPEG, EffectError
-from trendrelay_api.tool_registry import PROJECT_ROOT
 
+TOOL_ID = "veo-watermark-remover"
+#: A developer override for trying another build. Normal use goes through the Tools page.
 TOOL_ENV = "TRENDRELAY_VEO_WATERMARK_TOOL"
-SHA256_ENV = "TRENDRELAY_VEO_WATERMARK_TOOL_SHA256"
-TOOL_NAME = "GeminiWatermarkTool-Video" + (".exe" if os.name == "nt" else "")
-DEFAULT_FOLDER = PROJECT_ROOT / ".data" / "tools" / "veo-watermark"
 
 #: How far the output's running time may differ from the source's before it counts as cut short.
 DURATION_TOLERANCE_SECONDS = 0.3
@@ -46,10 +45,8 @@ DURATION_TOLERANCE_SECONDS = 0.3
 SECONDS_PER_VIDEO_SECOND = 30
 BASE_TIMEOUT_SECONDS = 120
 
-INSTALL_HELP = (
-    "Install GeminiWatermarkTool-Video from github.com/allenk/VeoWatermarkRemover, check its "
-    f"SHA256, and put it in {DEFAULT_FOLDER} or point {TOOL_ENV} at it."
-)
+INSTALL_HELP = "Install Veo Watermark Remover from the Tools page first."
+ACTIVATE_HELP = "Veo Watermark Remover is installed but switched off. Turn it on in the Tools page."
 
 
 @dataclass(frozen=True)
@@ -61,31 +58,20 @@ class WatermarkSettings:
 
 
 def tool_path() -> Path | None:
-    """The installed tool, or None when there is not one."""
+    """The program to run: the developer override, else the copy the Tools page installed."""
     configured = os.environ.get(TOOL_ENV)
-    candidate = Path(configured) if configured else DEFAULT_FOLDER / TOOL_NAME
-    return candidate if candidate.is_file() else None
-
-
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    if configured:
+        candidate = Path(configured)
+        return candidate if candidate.is_file() else None
+    return tool_registry.release_executable(TOOL_ID)
 
 
 def status() -> tuple[bool, str | None]:
     """Whether the effect can run, and what to do when it cannot."""
-    tool = tool_path()
-    if tool is None:
+    if tool_path() is None:
         return False, INSTALL_HELP
-    expected = os.environ.get(SHA256_ENV, "").strip().lower()
-    if expected and file_sha256(tool) != expected:
-        return (
-            False,
-            f"{tool.name} does not match the SHA256 in {SHA256_ENV}. Replace it or fix the value.",
-        )
+    if not os.environ.get(TOOL_ENV) and not tool_registry.is_active(TOOL_ID):
+        return False, ACTIVATE_HELP
     return True, None
 
 
@@ -205,7 +191,7 @@ def render_cleaned(
             if "SKIP" in said.upper():
                 shutil.copy2(working, destination)
                 return {
-                    "tool": TOOL_NAME,
+                    "tool": tool.name,
                     "skipped": True,
                     "note": "No Veo or Gemini watermark was found, so the clip was left as it was.",
                 }
@@ -219,7 +205,7 @@ def render_cleaned(
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(produced), str(destination))
         return {
-            "tool": TOOL_NAME,
+            "tool": tool.name,
             "skipped": False,
             "note": "Watermark removed; audio and timing kept.",
         }
