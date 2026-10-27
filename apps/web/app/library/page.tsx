@@ -1384,6 +1384,13 @@ function LibraryContent() {
   // until the latest filter request resolves (PM-180).
   const [loadedWorkspaceId, setLoadedWorkspaceId] = useState("");
   const [loadedQueryKey, setLoadedQueryKey] = useState("");
+  const loadedQueryKeyRef = useRef("");
+  const assetCountRef = useRef(0);
+  useEffect(() => { loadedQueryKeyRef.current = loadedQueryKey; }, [loadedQueryKey]);
+  useEffect(() => { assetCountRef.current = assets.length; }, [assets.length]);
+  // Asks for the next page when the "Show more" row scrolls near the viewport. The button
+  // in that row does the same by hand, for keyboards and for when the observer is missing.
+  const [moreRow, setMoreRow] = useState<HTMLDivElement | null>(null);
   // Background syncs, filter changes and job completion can all request a
   // refresh. They must all read the latest selection, and an older response
   // must never put an unfiltered list back after a newer filtered one arrived.
@@ -1391,6 +1398,8 @@ function LibraryContent() {
   const latestSortOrder = useRef(sortOrder);
   const latestWorkspaceId = useRef(workspaceId);
   const refreshSequence = useRef(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
   // The two reviewed-text boxes, so a machine draft can be copied into one on
   // request. The form reads its values from the DOM, so writing to the node is
   // what the submit will pick up.
@@ -1754,18 +1763,22 @@ function LibraryContent() {
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
   useEffect(() => { latestWorkspaceId.current = workspaceId; }, [workspaceId]);
   useEffect(() => { latestQueryKey.current = currentQueryKey; }, [currentQueryKey]);
-  const refresh = useCallback(async (nextWorkspace = workspaceId) => {
-    if (!nextWorkspace) return;
-    if (nextWorkspace !== latestWorkspaceId.current) return;
-    // A delayed auto-sync may hold a callback created before the user selected
-    // Images or an effect. Reading refs here makes even that delayed refresh
-    // use what the controls show now, rather than silently restoring "All".
+  // A delayed auto-sync may hold a callback created before the user selected
+  // Images or an effect. Reading refs here makes even that delayed refresh
+  // use what the controls show now, rather than silently restoring "All".
+  const assetQueryParams = useCallback(() => {
     const params = assetFilterParams(latestFilters.current);
     if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
     if (downloadJobFilter) params.set("download_job_ids", downloadJobFilter);
     if (downloadFileHash) params.set("sha256", downloadFileHash);
     params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
+    return params;
+  }, [downloadFileHash, downloadJobFilter, notificationAssetIds]);
+  const refresh = useCallback(async (nextWorkspace = workspaceId) => {
+    if (!nextWorkspace) return;
+    if (nextWorkspace !== latestWorkspaceId.current) return;
+    const params = assetQueryParams();
     const suffix = `?${params}`;
     const snapshotKey = `${nextWorkspace}${suffix}`;
     const sequence = ++refreshSequence.current;
@@ -1792,7 +1805,15 @@ function LibraryContent() {
           activeQueryKey: latestQueryKey.current,
         })
       ) return;
-      setAssets(assetBody.assets);
+      // A background refresh asks for the first page again. When the filters have not
+      // changed, keep the pages the user already scrolled to instead of cutting back to 100.
+      const sameQuery = snapshotKey === loadedQueryKeyRef.current;
+      setAssets((current) => {
+        if (!sameQuery || current.length <= assetBody.assets.length) return assetBody.assets;
+        const fresh = new Set(assetBody.assets.map((asset) => asset.id));
+        const tail = current.slice(assetBody.assets.length).filter((asset) => !fresh.has(asset.id));
+        return [...assetBody.assets, ...tail];
+      });
       setTotal(assetBody.total ?? assetBody.assets.length);
       if (assetBody.facets) setFacets(assetBody.facets);
       setJobs(jobBody.jobs);
@@ -1843,7 +1864,45 @@ function LibraryContent() {
         setLoadingAssets(false);
       }
     }
-  }, [apiFetch, downloadFileHash, downloadJobFilter, notificationAssetIds, workspaceId]);
+  }, [apiFetch, assetQueryParams, workspaceId]);
+
+  // The list arrives a hundred at a time. This appends the next hundred for the same
+  // filters, and drops the answer if the filters or workspace changed while it was in flight.
+  const loadMoreAssets = useCallback(async () => {
+    if (!workspaceId || loadingMoreRef.current) return;
+    const key = latestQueryKey.current;
+    const sequence = refreshSequence.current;
+    const params = assetQueryParams();
+    params.set("offset", String(assetCountRef.current));
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const body = await json<{ assets: Asset[]; total?: number }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`),
+      );
+      if (key !== latestQueryKey.current || sequence !== refreshSequence.current) return;
+      setAssets((current) => {
+        const known = new Set(current.map((asset) => asset.id));
+        return [...current, ...body.assets.filter((asset) => !known.has(asset.id))];
+      });
+      if (body.total !== undefined) setTotal(body.total);
+    } catch {
+      // The button stays, so a failed page can be asked for again.
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [apiFetch, assetQueryParams, workspaceId]);
+
+  useEffect(() => {
+    if (!moreRow || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreAssets();
+    }, { rootMargin: "600px 0px" });
+    observer.observe(moreRow);
+    return () => observer.disconnect();
+    // Re-observed after every page, so a row that is still in view asks again.
+  }, [moreRow, loadMoreAssets, assets.length]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -3082,6 +3141,18 @@ function LibraryContent() {
                     </div>
                   </section>
                 ))}
+            {assets.length > 0 && total > assets.length && (
+              <div className="library-load-more" ref={setMoreRow}>
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  busy={loadingMore}
+                  onClick={() => void loadMoreAssets()}
+                >
+                  {`Show more (${(total - assets.length).toLocaleString()} left)`}
+                </Button>
+              </div>
+            )}
             {(!assets.length && (!charactersView || characterGroups.length === 0)) && (
               <div className="library-empty-state">
                 <p>{charactersView ? t("attribution.characters.none") : t("library.empty")}</p>

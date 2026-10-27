@@ -1544,6 +1544,14 @@ button.music-picker-row:hover { border-color: var(--link); }
   @keyframes library-drop-in { from { opacity: 0; } to { opacity: 1; } }
 }
 
+/* The row that asks for the next hundred; it also spans the grid when the list is a grid. */
+.library-load-more {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+}
+
 /* Empty state */
 .library-empty-state {
   grid-column: 1 / -1;
