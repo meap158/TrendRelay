@@ -1971,6 +1971,15 @@ export const zh: Messages = {
       saturation_scale: "鲜艳度",
       saturation_scaleHelp: "1 表示保持原有强度。",
     },
+    veo_watermark: {
+      label: "去除 Veo 水印",
+      tag: "已去除水印",
+      summary: "从生成的视频中去掉可见的 Veo / Gemini 水印，保留声音和时长。",
+      legacy: "旧版大号文字",
+      legacyHelp: "仅适用于 Gemini 3.5 之前、带有较大 Veo 标志的视频。",
+      ml: "强度辅助",
+      mlHelp: "让本机的小模型在强度变化的片段上自动调整力度。可能修正过度，所以默认关闭。",
+    },
     face_swap: {
       label: "替换人脸",
       summary: "把某个人的脸换成另一张，并在整段片段中持续跟踪。",

@@ -2000,6 +2000,15 @@ export const en = {
       saturation_scale: "Vividness",
       saturation_scaleHelp: "1 keeps the original strength.",
     },
+    veo_watermark: {
+      label: "Remove Veo watermark",
+      tag: "Watermark removed",
+      summary: "Take the visible Veo / Gemini watermark off a generated video, keeping sound and timing.",
+      legacy: "Older, larger text",
+      legacyHelp: "Only for videos from before Gemini 3.5, which carry a bigger Veo wordmark.",
+      ml: "Intensity assist",
+      mlHelp: "Lets a small on-device model tune the strength on clips where it varies. It can over-correct, so it is off unless a clip needs it.",
+    },
     face_swap: {
       label: "Replace a face",
       summary: "Put a different face on one person, tracked across the clip.",

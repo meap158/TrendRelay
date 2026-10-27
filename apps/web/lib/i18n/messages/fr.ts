@@ -2017,6 +2017,15 @@ export const fr: Messages = {
       saturation_scale: "Éclat",
       saturation_scaleHelp: "1 conserve l'intensité d'origine.",
     },
+    veo_watermark: {
+      label: "Retirer le filigrane Veo",
+      tag: "Filigrane retiré",
+      summary: "Retire le filigrane Veo / Gemini visible d'une vidéo générée, en gardant le son et la durée.",
+      legacy: "Ancien texte, plus grand",
+      legacyHelp: "Uniquement pour les vidéos d'avant Gemini 3.5, qui portent un logo Veo plus grand.",
+      ml: "Aide à l'intensité",
+      mlHelp: "Laisse un petit modèle local ajuster la force sur les clips où elle varie. Il peut trop corriger, donc il reste désactivé sauf besoin.",
+    },
     face_swap: {
       label: "Remplacer un visage",
       summary: "Pose un autre visage sur une personne, suivie tout au long du clip.",

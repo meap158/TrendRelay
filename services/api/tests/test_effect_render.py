@@ -38,6 +38,7 @@ FRAME_RENDER_CASES = [
     ("face_overlay", "face_overlays", "render_overlaid"),
     ("garment_recolour", "recolour", "render_recoloured"),
     ("face_swap", "face_swap", "render_swapped"),
+    ("veo_watermark", "watermark_tool", "render_cleaned"),
 ]
 
 
@@ -308,6 +309,7 @@ def test_every_frame_effect_is_dispatched_by_the_shared_recipe_renderer(
         "face_identity": effect_render.face_identity,
         "face_overlays": effect_render.face_overlays,
         "recolour": effect_render.recolour,
+        "watermark_tool": effect_render.watermark_tool,
         "face_swap": face_swap,
     }
     source = tmp_path / "source.mp4"

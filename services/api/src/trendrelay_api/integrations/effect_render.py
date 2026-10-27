@@ -37,6 +37,7 @@ from trendrelay_api.integrations import (
     face_overlays,
     overlay_catalogue,
     recolour,
+    watermark_tool,
 )
 from trendrelay_api.integrations.effects import (
     Effect,
@@ -272,6 +273,31 @@ GARMENT_RECOLOUR = Effect(
 )
 
 register(GARMENT_RECOLOUR)
+
+
+VEO_WATERMARK = Effect(
+    id="veo_watermark",
+    label="Remove Veo watermark",
+    tag="Watermark removed",
+    summary="Take the visible Veo / Gemini watermark off a generated video, keeping sound and timing.",
+    stage="frame",
+    params=(
+        EffectParam(
+            id="legacy", label="Older, larger text", kind="toggle", default=False,
+            help="Only for videos from before Gemini 3.5, which carry a bigger Veo wordmark.",
+        ),
+        EffectParam(
+            id="ml", label="Intensity assist", kind="toggle", default=False,
+            help="Lets a small on-device model tune the strength on clips where it varies. "
+                 "It can over-correct, so it is off unless a clip needs it.",
+        ),
+    ),
+    availability=watermark_tool.status,
+    unpreviewable_reason="The tool works on the whole clip, so there is no single frame to show.",
+    media_kinds=frozenset({"video"}),
+)
+
+register(VEO_WATERMARK)
 
 
 FACE_OVERLAY = Effect(
@@ -519,6 +545,10 @@ FACE_SWAP = Effect(
 )
 
 register(FACE_SWAP)
+
+
+def _watermark_settings(values: dict[str, Any]) -> watermark_tool.WatermarkSettings:
+    return watermark_tool.WatermarkSettings(legacy=bool(values.get("legacy")), ml=bool(values.get("ml")))
 
 
 def _recolour_settings(values: dict[str, Any]) -> recolour.RecolourSettings:
@@ -972,6 +1002,11 @@ def render_recipe(
                 outcome = face_swap.render_swapped(
                     current, staged, _swap_settings(step.values),
                     preview_seconds=preview_for_this_pass,
+                )
+            elif step.effect.id == "veo_watermark":
+                outcome = watermark_tool.render_cleaned(
+                    current, staged, _watermark_settings(step.values),
+                    preview_seconds=preview_for_this_pass, progress=step_progress,
                 )
             elif step.effect.id == "garment_recolour":
                 outcome = recolour.render_recoloured(

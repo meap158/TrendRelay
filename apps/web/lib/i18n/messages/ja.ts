@@ -1989,6 +1989,15 @@ export const ja: Messages = {
       saturation_scale: "鮮やかさ",
       saturation_scaleHelp: "1 で元の鮮やかさのままです。",
     },
+    veo_watermark: {
+      label: "Veoの透かしを除去",
+      tag: "透かし除去済み",
+      summary: "生成された動画から目に見えるVeo / Geminiの透かしを取り除きます。音声とタイミングはそのままです。",
+      legacy: "旧式の大きな文字",
+      legacyHelp: "Gemini 3.5より前の動画にある、大きめのVeoロゴ用です。",
+      ml: "強度アシスト",
+      mlHelp: "強度が変わるクリップで、端末内の小さなモデルが強さを調整します。補正しすぎることがあるため、必要なときだけオンにしてください。",
+    },
     face_swap: {
       label: "顔を差し替える",
       summary: "特定の一人の顔を別の顔に置き換え、クリップ全体で追跡します。",

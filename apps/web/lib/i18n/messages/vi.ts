@@ -1997,6 +1997,15 @@ export const vi: Messages = {
       saturation_scale: "Độ rực",
       saturation_scaleHelp: "1 là giữ nguyên độ rực ban đầu.",
     },
+    veo_watermark: {
+      label: "Xóa watermark Veo",
+      tag: "Đã xóa watermark",
+      summary: "Gỡ watermark Veo / Gemini hiển thị khỏi video do AI tạo, giữ nguyên âm thanh và thời lượng.",
+      legacy: "Chữ cũ, lớn hơn",
+      legacyHelp: "Chỉ dùng cho video trước Gemini 3.5, có logo Veo lớn hơn.",
+      ml: "Hỗ trợ cường độ",
+      mlHelp: "Cho một mô hình nhỏ chạy trên máy tự chỉnh độ mạnh ở những clip có cường độ thay đổi. Có thể chỉnh quá tay nên mặc định tắt.",
+    },
     face_swap: {
       label: "Thay khuôn mặt",
       summary: "Đặt một khuôn mặt khác lên một người, bám theo suốt clip.",
