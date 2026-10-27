@@ -222,6 +222,16 @@ export function HookDialog({
   const anchors = (rules?.anchors ?? ["top", "middle"]).map((id) => ({ value: id, label: ANCHOR_LABELS[id] ?? id }));
   const approvedCount = items.filter((item) => item.approved).length;
 
+  const itemBox = {
+    display: "grid",
+    gap: 12,
+    padding: 14,
+    border: "1px solid var(--line)",
+    borderRadius: "var(--radius-lg)",
+    background: "var(--panel)",
+  } as const;
+  const row = { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" } as const;
+
   return (
     <Dialog
       open={open}
@@ -243,14 +253,14 @@ export function HookDialog({
         </>
       }
     >
-      <div style={{ display: "grid", gap: 14 }}>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+      <div className="stack-form" style={{ margin: 0, padding: 0, border: 0, gap: 16 }}>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
           <SegmentedControl label="Look" value={preset} options={presets} onChange={setPreset} />
           <SegmentedControl label="Position" value={anchor} options={anchors} onChange={setAnchor} />
         </div>
         {items.map((item) => (
-          <section key={item.id} style={{ display: "grid", gap: 8, borderTop: "1px solid var(--border, #ddd)", paddingTop: 10 }}>
-            <strong>{item.title}</strong>
+          <section key={item.id} style={itemBox}>
+            <strong style={{ overflowWrap: "anywhere" }}>{item.title}</strong>
             <label>
               What the video is about
               <input
@@ -259,7 +269,7 @@ export function HookDialog({
                 onChange={(event) => patch(item.id, { topic: event.target.value })}
               />
             </label>
-            <div>
+            <div style={row}>
               <Button
                 variant="secondary"
                 size="sm"
@@ -268,28 +278,27 @@ export function HookDialog({
               >
                 {item.phase === "suggesting" ? "Thinking..." : item.lines.length ? "New suggestions" : "Suggest"}
               </Button>
-              {item.options.length > 1 &&
-                item.options.map((option, at) => (
-                  <Button
-                    key={at}
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
+              {item.options.length > 1 && (
+                <SegmentedControl
+                  label="Option"
+                  value={String(Math.max(0, item.options.findIndex((option) => option.lines === item.lines)))}
+                  options={item.options.map((_, at) => ({ value: String(at), label: String(at + 1) }))}
+                  onChange={(value) => {
+                    const option = item.options[Number(value)];
+                    if (option)
                       patch(item.id, {
                         lines: option.lines,
                         problems: option.problems,
                         notes: option.notes,
                         approved: false,
-                      })
-                    }
-                  >
-                    Option {at + 1}
-                  </Button>
-                ))}
+                      });
+                  }}
+                />
+              )}
             </div>
             {item.lines.map((line, index) => (
-              <div key={`${index}:${line.start_ms}:${line.end_ms}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-                <label style={{ flex: "1 1 240px" }}>
+              <div key={`${index}:${line.start_ms}:${line.end_ms}`} style={{ ...row, flexWrap: "nowrap" }}>
+                <label style={{ flex: "1 1 auto", minWidth: 0 }}>
                   Line {index + 1}
                   <input
                     value={line.text}
@@ -297,19 +306,17 @@ export function HookDialog({
                     onChange={(event) => setLine(item, index, { text: event.target.value })}
                   />
                 </label>
-                <label>
+                <label style={{ flex: "0 0 92px" }}>
                   From (s)
                   <input
-                    style={{ width: 70 }}
                     defaultValue={msToSeconds(line.start_ms)}
                     inputMode="decimal"
                     onBlur={(event) => setLine(item, index, { start_ms: secondsToMs(event.target.value) })}
                   />
                 </label>
-                <label>
+                <label style={{ flex: "0 0 92px" }}>
                   To (s)
                   <input
-                    style={{ width: 70 }}
                     defaultValue={msToSeconds(line.end_ms)}
                     inputMode="decimal"
                     onBlur={(event) => setLine(item, index, { end_ms: secondsToMs(event.target.value) })}
@@ -318,18 +325,30 @@ export function HookDialog({
               </div>
             ))}
             {item.problems.length > 0 && (
-              <ul role="alert" style={{ margin: 0, paddingLeft: 18 }}>
+              <ul
+                role="alert"
+                style={{
+                  margin: 0,
+                  padding: "8px 12px 8px 28px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "var(--bad-bg)",
+                  color: "var(--red)",
+                  fontSize: 13,
+                }}
+              >
                 {item.problems.map((problem) => (
                   <li key={problem}>{problem}</li>
                 ))}
               </ul>
             )}
             {item.notes.map((note) => (
-              <small key={note}>{note}</small>
+              <small key={note} style={{ color: "var(--muted)" }}>
+                {note}
+              </small>
             ))}
             {item.lines.length > 0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-                <label style={{ flex: "1 1 240px" }}>
+              <div style={{ ...row, flexWrap: "nowrap" }}>
+                <label style={{ flex: "1 1 auto", minWidth: 0 }}>
                   Ask the AI to change it
                   <input
                     value={item.instruction}
@@ -346,18 +365,24 @@ export function HookDialog({
                 >
                   Revise
                 </Button>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={item.approved}
-                    disabled={!canApprove(item.lines, item.problems) || item.phase === "queued" || item.phase === "done"}
-                    onChange={(event) => patch(item.id, { approved: event.target.checked })}
-                  />{" "}
-                  Approve
-                </label>
               </div>
             )}
-            {item.message && <small role="status">{item.message}</small>}
+            {item.lines.length > 0 && (
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={item.approved}
+                  disabled={!canApprove(item.lines, item.problems) || item.phase === "queued" || item.phase === "done"}
+                  onChange={(event) => patch(item.id, { approved: event.target.checked })}
+                />
+                Approve this hook for rendering
+              </label>
+            )}
+            {item.message && (
+              <small role="status" style={{ color: "var(--muted)" }}>
+                {item.message}
+              </small>
+            )}
           </section>
         ))}
         {!items.length && <p>Select one or more videos in the Library first.</p>}

@@ -2646,15 +2646,42 @@ function LibraryContent() {
                     {t("library.importingCount", dropProgress)}
                   </span>
                 )}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setCarouselOpen(true)}
-                  title="Turn a script into carousel slides and file them in the Library"
-                >
-                  <ActionIcon name="effects" />
-                  <span className="import-label">Carousel</span>
-                </Button>
+                {/* Carousel, Hook text and Storytelling make something new, so they share one
+                    menu instead of three buttons that wrapped the toolbar. The last two work on
+                    the current selection and say so when there is none. */}
+                <ActionMenu
+                  label="Create"
+                  ariaLabel="Create something new"
+                  icon={<ActionIcon name="effects" />}
+                  size="md"
+                  disabled={!canImport}
+                  items={[
+                    {
+                      id: "carousel",
+                      label: "Carousel",
+                      description: "Turn a script into carousel slides and file them in the Library",
+                    },
+                    {
+                      id: "hook",
+                      label: "Hook text",
+                      description: "Suggest the short on-screen line a video opens with, review it, burn it in once approved",
+                      disabled: selectedVideos.length === 0,
+                      disabledReason: "Select one or more videos first",
+                    },
+                    {
+                      id: "storytelling",
+                      label: "Storytelling",
+                      description: "Narrate a script over the selected photos and videos",
+                      disabled: selectedVisuals.length === 0,
+                      disabledReason: "Select photos or videos first",
+                    },
+                  ]}
+                  onSelect={(id) => {
+                    if (id === "carousel") setCarouselOpen(true);
+                    else if (id === "hook") setHookOpen(true);
+                    else if (id === "storytelling") setStorytellingOpen(true);
+                  }}
+                />
                 <Button
                   type="button"
                   variant="primary"
@@ -2829,29 +2856,6 @@ function LibraryContent() {
                         title="Cut the selected photos and videos into a beat-synced video from a template"
                         onClick={() => setAutoCutOpen(true)}
                       ><ActionIcon name="play" />AutoCut{selectedVisuals.length !== selection.size ? ` ${selectedVisuals.length}` : ""}</Button>
-                    )}
-                    {/* Beside AutoCut because it is the same kind of thing:
-                        many pictures in, one new video out. AutoCut cuts them
-                        to a track's beats and this cuts them to the sentences
-                        of a narration, so they belong in the same place and
-                        are reached the same way. */}
-                    {selectedVisuals.length > 0 && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={!canImport}
-                        title="Narrate a script over the selected photos and videos"
-                        onClick={() => setStorytellingOpen(true)}
-                      ><ActionIcon name="effects" />Storytelling</Button>
-                    )}
-                    {selectedVideos.length > 0 && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={!canImport}
-                        title="Suggest the short on-screen line a video opens with, review it, and burn it in once approved"
-                        onClick={() => setHookOpen(true)}
-                      ><ActionIcon name="captions" />Hook text{selectedVideos.length !== selection.size ? ` ${selectedVideos.length}` : ""}</Button>
                     )}
                     <ActionMenu
                       label={t("library.selectionActions")}
