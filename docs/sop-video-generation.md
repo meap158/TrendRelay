@@ -34,6 +34,12 @@ prompt and never makes the clip. So `doctor` and `generate` first start a throwa
 sign in when the cookie is stale, and stop there. Fix: paste a fresh Cookie header in Tools, save, run `doctor --restart-bridge`.
 Paste it just before generating, not a day ahead.
 
+Observed 2026-10-27: on a fresh cookie the first clip arrived, and three later submissions (one refused for load, two
+accepted) saved no chat and no video. A bridge that has delivered once is therefore not proven to stay signed in. Two likely
+causes, not yet tested: the bridge renewed its cookie only once a day (the launcher now sets a ten-minute interval), and a
+signed-in browser tab rotates the same session, so the bridge's copy dies. Until a test settles it, make one clip per paste,
+and prefer a cookie copied from a separate Incognito sign-in that nothing else uses.
+
 The sections below are the same flow written out, for when a gate fails and you need the reason.
 
 ## 0. What goes into a clip, and what comes out
