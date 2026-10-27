@@ -75,6 +75,7 @@ const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => 
 // handlers), so the library's 2.5s poll re-render does not reconcile the whole
 // dialog subtree while one is open. A prop that actually changes still re-renders.
 const AutoCutDialog = memo(dynamic(() => import("./autocut-dialog").then((m) => m.AutoCutDialog), { ssr: false }));
+const HookDialog = dynamic(() => import("./hook-dialog").then((m) => m.HookDialog), { ssr: false });
 const CarouselDialog = memo(dynamic(() => import("./carousel-dialog").then((m) => m.CarouselDialog), { ssr: false }));
 const StorytellingDialog = memo(dynamic(() => import("./storytelling-dialog").then((m) => m.StorytellingDialog), { ssr: false }));
 /** AutoCut cuts pictures, so its minimum is a couple; a single image is not a
@@ -1457,6 +1458,7 @@ function LibraryContent() {
   const [storytellingOpen, setStorytellingOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [carouselOpen, setCarouselOpen] = useState(false);
+  const [hookOpen, setHookOpen] = useState(false);
   // Files dragged onto the Library from the desktop. Handed to the import
   // dialog, which stages and uploads them the same way picked files go.
   const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
@@ -2015,6 +2017,7 @@ function LibraryContent() {
   // AutoCut cuts photos and videos together; the button appears once the
   // selection holds enough visuals, and it hands the assets over in order so
   // the dialog can show and rearrange them on a timeline.
+  const selectedVideos = useMemo(() => selectionList.filter((asset) => asset.media_kind === "video"), [selectionList]);
   const selectedVisuals = useMemo(
     () => selectionList.filter(
       (asset) => asset.media_kind === "image" || asset.media_kind === "video",
@@ -2840,6 +2843,15 @@ function LibraryContent() {
                         title="Narrate a script over the selected photos and videos"
                         onClick={() => setStorytellingOpen(true)}
                       ><ActionIcon name="effects" />Storytelling</Button>
+                    )}
+                    {selectedVideos.length > 0 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!canImport}
+                        title="Suggest the short on-screen line a video opens with, review it, and burn it in once approved"
+                        onClick={() => setHookOpen(true)}
+                      ><ActionIcon name="captions" />Hook text{selectedVideos.length !== selection.size ? ` ${selectedVideos.length}` : ""}</Button>
                     )}
                     <ActionMenu
                       label={t("library.selectionActions")}
@@ -3742,6 +3754,18 @@ function LibraryContent() {
           canApprove={canApprove}
           apiFetch={apiFetch}
           onClose={() => setEditorOpen(false)}
+        />
+      )}
+      {workspaceId && hookOpen && selectedVideos.length > 0 && (
+        <HookDialog
+          key={`hook-${selectedVideos.map((asset) => asset.id).join("-")}`}
+          open
+          workspaceId={workspaceId}
+          targets={selectedVideos.map((asset) => ({ id: asset.id, title: asset.title }))}
+          apiFetch={apiFetch}
+          onClose={() => setHookOpen(false)}
+          onRendered={() => void refresh()}
+          onError={fail}
         />
       )}
       {workspaceId && (
