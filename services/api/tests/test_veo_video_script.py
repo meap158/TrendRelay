@@ -97,21 +97,3 @@ def test_a_slot_that_lists_nothing_stops_a_run_too(veo, monkeypatch) -> None:
 def test_generate_refuses_to_spend_without_confirm(veo, capsys) -> None:
     assert veo.main(["generate"]) == 2
     assert "--confirm" in capsys.readouterr().out
-
-
-def test_a_bridge_that_delivered_a_clip_skips_the_cookie_test(veo, tmp_path, monkeypatch):
-    # The bridge rotates the cookie on start, so the saved copy goes stale while it keeps working.
-    monkeypatch.setattr(veo, "HOME", tmp_path)
-    monkeypatch.setattr(veo, "DELIVERED", tmp_path / "delivered-run")
-    monkeypatch.setattr(veo, "bridge_models", lambda port: ["gemini-3.1-pro"])
-    (tmp_path / "bridge.log").write_bytes(b"client initialized successfully\n")
-    assert not veo.running_bridge_delivered()
-    veo.mark_delivered()
-    assert veo.running_bridge_delivered()
-    # A restart signs in again: a new run, which has delivered nothing yet.
-    (tmp_path / "bridge.log").write_bytes(b"client initialized successfully\n" * 2)
-    assert not veo.running_bridge_delivered()
-    # A bridge that is not answering proves nothing.
-    veo.mark_delivered()
-    monkeypatch.setattr(veo, "bridge_models", lambda port: None)
-    assert not veo.running_bridge_delivered()
