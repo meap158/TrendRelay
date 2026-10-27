@@ -83,6 +83,15 @@ delete, restore it and say so - do not commit over it.
   generator refuses a Completed task without it). Never put secrets in it.
 - `References/DEV_TASKS.html` is retired (kept as `DEV_TASKS.retired.html`); its tasks moved to the Owner desk.
 
+## Process cleanup
+
+Stop only processes you started yourself (by the PID your tool returned) or processes you verified by
+their full command line to belong to this project, or a PID file this project wrote. Never kill by
+image name (`node`, `python`, `chrome`), by a loose command-line match such as `launch.mjs`, or by
+whatever listens on a port: other projects on this machine use the same tools, script names and
+ports, and a loose cleanup has ended ProjectManager's launcher before. Read the URL or port your own
+launcher printed instead of assuming one, and stop that launcher by its own PID.
+
 ## Writing style (PM-314)
 
 Write prose, UI text, docs and commit messages like a person writing for one reader. No em dashes
