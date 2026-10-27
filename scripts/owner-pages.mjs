@@ -210,7 +210,7 @@ const open = (t) => OPEN.includes(t.status);
 let ticks = {};
 try { ticks = JSON.parse(localStorage.getItem(TICKS_KEY) || '{}') || {}; } catch (e) { ticks = {}; }
 const saveTicks = () => { try { localStorage.setItem(TICKS_KEY, JSON.stringify(ticks)); } catch (e) {} };
-function fill(id, values) { const el = $(id); [...new Set(values)].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); }); }
+function fill(id, values) { const el = $(id); [...new Set(values)].filter((v) => ![...el.options].some((o) => o.value === v)).forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); }); }
 fill('fs', TASKS.map((t) => t.status)); fill('fp', TASKS.map((t) => t.priority)); fill('fc', TASKS.map((t) => t.category));
 function draw() {
   const fs = $('fs').value, fp = $('fp').value, fc = $('fc').value, q = $('q').value.trim().toLowerCase();
