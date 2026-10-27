@@ -292,6 +292,29 @@ def _clean_text_setting(provider: VideoProvider, key: str, value: str) -> str:
     return value.rstrip("/")
 
 
+#: The two cookies that identify the Google session. The bridge keeps both current by itself.
+SESSION_COOKIE_NAMES = ("__Secure-1PSID", "__Secure-1PSIDTS")
+
+
+def session_cookies(header: str) -> str:
+    """The Cookie header cut down to the two session cookies.
+
+    The bridge sends the whole header on every request and only renews these two, so the
+    other cookies in a full paste (the rotating `*PSIDCC`, `__Secure-3PSIDTS` and `SIDCC`
+    ones) stay frozen at paste time and get the session rejected. Sending only the two
+    kept a session saved for over thirty minutes while the browser stayed open. An
+    unrecognisable header is returned as it was.
+    """
+    pairs = [part.strip() for part in header.split(";")]
+    kept = [
+        pair for pair in pairs
+        if pair.split("=", 1)[0].strip() in SESSION_COOKIE_NAMES and "=" in pair
+    ]
+    if {pair.split("=", 1)[0] for pair in kept} != set(SESSION_COOKIE_NAMES):
+        return header
+    return "; ".join(kept)
+
+
 def write_bridge_env() -> Path | None:
     """The `.env` the bridge reads: this card's cookie and account slot.
 
@@ -306,6 +329,7 @@ def write_bridge_env() -> Path | None:
         return None
     port = urllib.parse.urlsplit(bridge_url(provider)).port or 4981
     # Single quotes: the bridge's dotenv reader would expand `$` and cut at ` #` otherwise.
+    cookie = session_cookies(cookie)
     quoted = cookie.replace("'", "") if "'" in cookie else cookie
     lines = [f"PORT={port}", f"GEMINI_COOKIES='{quoted}'"]
     account = effective_value(provider.account_env).strip()

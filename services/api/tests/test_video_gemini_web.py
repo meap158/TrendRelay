@@ -101,7 +101,9 @@ def test_saving_writes_the_env_file_the_bridge_starts_with(values) -> None:
         "GEMINI_WEB_AUTH_USER": "2",
     })
     lines = video.BRIDGE_ENV_PATH.read_text(encoding="utf-8").splitlines()
-    assert lines == ["PORT=5000", f"GEMINI_COOKIES='{COOKIE}'", "GEMINI_AUTH_USER=2"]
+    # Only the two session cookies go to the bridge; SID=abc stays in the saved copy.
+    reduced = "__Secure-1PSID=g.a000xyz; __Secure-1PSIDTS=sidts-123"
+    assert lines == ["PORT=5000", f"GEMINI_COOKIES='{reduced}'", "GEMINI_AUTH_USER=2"]
 
 
 def test_check_asks_the_bridge_for_models_and_never_for_a_video(values) -> None:
@@ -360,3 +362,10 @@ def test_context_is_left_out_when_the_draft_names_nothing() -> None:
     # An archived character is not named as being in the video.
     archived = {**VIEW, "character": {"name": "Mai", "archived": True}}
     assert "Mai" not in video.prompt_context(archived)
+
+
+def test_the_bridge_gets_only_the_two_session_cookies():
+    header = "SID=a; __Secure-1PSID=one; __Secure-1PSIDCC=cc; __Secure-1PSIDTS=two; SIDCC=zz"
+    assert video.session_cookies(header) == "__Secure-1PSID=one; __Secure-1PSIDTS=two"
+    # A header missing one of them is passed on as it was rather than guessed at.
+    assert video.session_cookies("SID=a; __Secure-1PSID=one") == "SID=a; __Secure-1PSID=one"
