@@ -2017,7 +2017,17 @@ function LibraryContent() {
   // AutoCut cuts photos and videos together; the button appears once the
   // selection holds enough visuals, and it hands the assets over in order so
   // the dialog can show and rearrange them on a timeline.
-  const selectedVideos = useMemo(() => selectionList.filter((asset) => asset.media_kind === "video"), [selectionList]);
+  // Create actions work on the ticked items, or on the item open in the preview when nothing is
+  // ticked, so opening a clip is enough to make a hook for it.
+  const createTargets = useMemo(
+    () => (selectionList.length > 0 ? selectionList : selected ? [selected] : []),
+    [selectionList, selected],
+  );
+  const selectedVideos = useMemo(() => createTargets.filter((asset) => asset.media_kind === "video"), [createTargets]);
+  const createVisuals = useMemo(
+    () => createTargets.filter((asset) => asset.media_kind === "image" || asset.media_kind === "video"),
+    [createTargets],
+  );
   const selectedVisuals = useMemo(
     () => selectionList.filter(
       (asset) => asset.media_kind === "image" || asset.media_kind === "video",
@@ -2666,14 +2676,14 @@ function LibraryContent() {
                       label: "Hook text",
                       description: "Suggest the short on-screen line a video opens with, review it, burn it in once approved",
                       disabled: selectedVideos.length === 0,
-                      disabledReason: "Select one or more videos first",
+                      disabledReason: "Open or select a video first",
                     },
                     {
                       id: "storytelling",
                       label: "Storytelling",
                       description: "Narrate a script over the selected photos and videos",
-                      disabled: selectedVisuals.length === 0,
-                      disabledReason: "Select photos or videos first",
+                      disabled: createVisuals.length === 0,
+                      disabledReason: "Open or select photos or videos first",
                     },
                   ]}
                   onSelect={(id) => {
@@ -3712,7 +3722,7 @@ function LibraryContent() {
           open={storytellingOpen}
           workspaceId={workspaceId}
           apiFetch={apiFetch}
-          assets={selectedVisuals}
+          assets={createVisuals}
           initialDraftId={resumeDraft?.kind === "storytelling" ? resumeDraft.id : undefined}
           onClose={closeStorytelling}
           onQueued={queuedStorytelling}
