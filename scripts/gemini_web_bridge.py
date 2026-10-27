@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / ".data" / "gemini-web"
 SOURCE = HOME / "src" / "bridge"
 BINARY = HOME / ("bridge.exe" if os.name == "nt" else "bridge")
+PID_FILE = HOME / "bridge.pid"
 REPO = "https://github.com/ntthanh2603/gemini-web-to-api.git"
 #: The release the patch was written against. The patch lets a video request carry the
 #: product picture, which the bridge refuses without it.
@@ -83,7 +84,13 @@ def main() -> int:
         )
     run_env = {**env, "PORT": _port()}
     print(f"Gemini Web bridge on http://127.0.0.1:{run_env['PORT']} (Ctrl+C to stop)")
-    return subprocess.call([str(BINARY)], cwd=HOME, env=run_env)
+    # The PID is written down so a restart can stop this process and no other.
+    process = subprocess.Popen([str(BINARY)], cwd=HOME, env=run_env)
+    PID_FILE.write_text(str(process.pid), encoding="utf-8")
+    try:
+        return process.wait()
+    finally:
+        PID_FILE.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

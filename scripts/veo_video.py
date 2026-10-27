@@ -219,11 +219,34 @@ def probe_slots(slots: range) -> dict[int, list[str]]:
     return found
 
 
+def stop_bridge() -> None:
+    """Stop the bridge this project started, by the PID its launcher wrote, and nothing else."""
+    pid_file = HOME / "bridge.pid"
+    try:
+        pid = int(pid_file.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return  # no PID file: not started by our launcher, so not ours to stop
+    if os.name == "nt":
+        listing = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, check=False,
+        ).stdout.lower()
+        if BINARY.name.lower() not in listing:
+            return  # the PID was reused by something else
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, check=False)
+    else:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            return
+    pid_file.unlink(missing_ok=True)
+    time.sleep(2)
+
+
 def ensure_bridge(restart: bool = False) -> list[str]:
     """The main bridge, started when it is not answering. Returns the models it lists."""
-    if restart and shutil.which("taskkill") and BINARY.name:
-        subprocess.run(["taskkill", "/F", "/IM", BINARY.name], capture_output=True, check=False)
-        time.sleep(2)
+    if restart:
+        stop_bridge()
     models = bridge_models(BRIDGE_PORT)
     if models:
         return models
