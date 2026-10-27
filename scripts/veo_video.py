@@ -29,6 +29,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -297,6 +298,56 @@ def settings_gate() -> dict[str, str]:
     return state
 
 
+REFRESH_FRESH_MINUTES = 25
+
+
+def bridge_refreshed_recently(now: datetime | None = None) -> bool:
+    """True when the running bridge renewed its own session cookie a few minutes ago.
+
+    The bridge rotates the session in memory and writes none of it back, so the saved cookie
+    goes stale while the bridge stays signed in. A recent "refresh completed" line since its
+    last start is the evidence that it is. Log lines carry the time of day only.
+    """
+    log = HOME / "bridge.log"
+    if not log.is_file():
+        return False
+    lines = log.read_bytes().decode("utf-8", errors="replace").splitlines()
+    started = max(
+        (i for i, line in enumerate(lines) if "client initialized successfully" in line), default=-1,
+    )
+    now = now or datetime.now()  # noqa: DTZ005 - the log is in local time of day
+    for line in reversed(lines[started + 1:]):
+        if "session refresh completed" not in line and "Cookie rotated successfully" not in line:
+            continue
+        try:
+            stamp = datetime.strptime(line[:8], "%H:%M:%S").time()  # noqa: DTZ007
+        except ValueError:
+            continue
+        logged = datetime.combine(now.date(), stamp)
+        if logged > now:  # the log crossed midnight
+            logged -= timedelta(days=1)
+        return now - logged <= timedelta(minutes=REFRESH_FRESH_MINUTES)
+    return False
+
+
+def session_gate(slot: str, restart: bool) -> bool:
+    """Gate 1. Returns True when the running bridge vouched for itself instead of the saved cookie.
+
+    A bridge that renewed its session lately is signed in whatever the saved cookie says, and
+    restarting it would lose a session the saved cookie cannot recreate, so that is refused.
+    """
+    if bridge_models(BRIDGE_PORT) and bridge_refreshed_recently():
+        if restart:
+            raise Gate(
+                "The running bridge renewed its session minutes ago and is signed in. A restart "
+                "would drop that session, and the saved cookie can no longer rebuild it. Leave it "
+                "running, or paste a fresh cookie first if you mean to replace it."
+            )
+        return True
+    cookie_gate(slot)
+    return False
+
+
 def cookie_gate(slot: str) -> None:
     """Stop before spending when the saved cookie no longer signs in. No spend.
 
@@ -451,8 +502,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     state = settings_gate()
     print(f"settings: cookie {state['cookie']}, enabled, account slot {state['slot'] or '(none)'}")
-    cookie_gate(state["slot"])
-    print("cookie: the saved cookie signs in")
+    if session_gate(state["slot"], args.restart_bridge):
+        print("session: the running bridge renewed its own session minutes ago")
+    else:
+        print("cookie: the saved cookie signs in")
     models = ensure_bridge(args.restart_bridge)
     print(f"bridge: signed in, {len(models)} models: {', '.join(models)}")
     if models == ["gemini-auto"]:
@@ -491,7 +544,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if not args.confirm:
         print("Refused: this spends one video from the account's daily quota. Add --confirm.")
         return 2
-    cookie_gate(settings_gate()["slot"])
+    session_gate(settings_gate()["slot"], args.restart_bridge)
     models = ensure_bridge(args.restart_bridge)
     if models == ["gemini-auto"]:
         raise Gate("The saved slot is the free account; run `slots --apply` first.")

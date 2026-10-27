@@ -97,3 +97,41 @@ def test_a_slot_that_lists_nothing_stops_a_run_too(veo, monkeypatch) -> None:
 def test_generate_refuses_to_spend_without_confirm(veo, capsys) -> None:
     assert veo.main(["generate"]) == 2
     assert "--confirm" in capsys.readouterr().out
+
+
+def _log(tmp_path, *lines):
+    (tmp_path / "bridge.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_a_recent_refresh_since_the_last_start_vouches_for_the_bridge(veo, tmp_path, monkeypatch):
+    from datetime import datetime
+
+    monkeypatch.setattr(veo, "HOME", tmp_path)
+    now = datetime(2026, 10, 27, 10, 40, 0)
+    _log(
+        tmp_path,
+        "10:00:00|info|x|Gemini client initialized successfully",
+        "10:28:00|info|x|Gemini session refresh completed",
+    )
+    assert veo.bridge_refreshed_recently(now)
+    # An old refresh does not count, and neither does one from before the last start.
+    assert not veo.bridge_refreshed_recently(datetime(2026, 10, 27, 11, 30, 0))
+    _log(
+        tmp_path,
+        "10:28:00|info|x|Gemini session refresh completed",
+        "10:35:00|info|x|Gemini client initialized successfully",
+    )
+    assert not veo.bridge_refreshed_recently(now)
+    # The log carries the time of day only, so a refresh before midnight still counts after it.
+    _log(tmp_path, "23:55:00|info|x|Cookie rotated successfully")
+    assert veo.bridge_refreshed_recently(datetime(2026, 10, 28, 0, 5, 0))
+
+
+def test_a_running_bridge_that_refreshed_is_not_restarted(veo, tmp_path, monkeypatch):
+    monkeypatch.setattr(veo, "HOME", tmp_path)
+    monkeypatch.setattr(veo, "bridge_models", lambda port: ["gemini-3.1-pro"])
+    monkeypatch.setattr(veo, "bridge_refreshed_recently", lambda: True)
+    monkeypatch.setattr(veo, "cookie_gate", lambda slot: pytest.fail("saved cookie was tested"))
+    assert veo.session_gate("1", restart=False) is True
+    with pytest.raises(veo.Gate):
+        veo.session_gate("1", restart=True)
