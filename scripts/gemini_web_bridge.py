@@ -82,7 +82,9 @@ def main() -> int:
         subprocess.run(
             ["go", "build", "-o", str(BINARY), "./cmd/server"], cwd=SOURCE, env=env, check=True,
         )
-    run_env = {**env, "PORT": _port()}
+    # The session cookie rotates within the hour, but the bridge's default is to refresh it once
+    # a day, so its copy dies after about one clip. Ten minutes is the bridge's minimum.
+    run_env = {"GEMINI_REFRESH_INTERVAL": "10", **env, "PORT": _port()}
     print(f"Gemini Web bridge on http://127.0.0.1:{run_env['PORT']} (Ctrl+C to stop)")
     # The PID is written down so a restart can stop this process and no other.
     process = subprocess.Popen([str(BINARY)], cwd=HOME, env=run_env)
