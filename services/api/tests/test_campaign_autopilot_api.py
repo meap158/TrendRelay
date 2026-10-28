@@ -1782,12 +1782,20 @@ def test_library_links_over_the_campaign_cap_roll_back_the_import(workspace, bat
     campaign_id = campaign(workspace)
     _draft_asset(workspace, "linked-media", "Coffee", "", [])
     with TestingSession.begin() as session:
+        # Two products, so two links: one product's second link would no
+        # longer count twice against the cap.
+        session.add(Product(
+            id="prod-extra", workspace_id=workspace, catalog_key="extra", identifier="extra",
+            name="Kettle", marketplace="amazon", created_by="owner-user",
+        ))
         session.add(ProductOffer(
-            id="offer-extra", workspace_id=workspace, product_id="prod-1", fingerprint="extra",
+            id="offer-extra", workspace_id=workspace, product_id="prod-extra", fingerprint="extra",
             network="amazon", merchant="Amazon", affiliate_url="https://example.test/extra",
             currency="USD", availability="available", created_by="owner-user",
         ))
         session.add(ProductCreativeLink(workspace_id=workspace, product_id="prod-1",
+                                        asset_id="linked-media", draft_id=None))
+        session.add(ProductCreativeLink(workspace_id=workspace, product_id="prod-extra",
                                         asset_id="linked-media", draft_id=None))
         session.scalar(select(CampaignAutopilot).where(
             CampaignAutopilot.campaign_id == campaign_id,
@@ -1802,6 +1810,38 @@ def test_library_links_over_the_campaign_cap_roll_back_the_import(workspace, bat
     with TestingSession() as session:
         assert not session.scalars(select(CampaignQueueItem).where(CampaignQueueItem.campaign_id == campaign_id)).all()
         assert not session.scalars(select(CampaignOffer).where(CampaignOffer.campaign_id == campaign_id)).all()
+
+
+def test_a_product_with_two_links_carries_the_one_the_campaign_promotes(workspace) -> None:
+    from trendrelay_api.product_creative_models import ProductCreativeLink
+    from trendrelay_api.autopilot_models import CampaignOffer
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "linked-media", "Coffee", "", [])
+    with TestingSession.begin() as session:
+        # The same listing imported twice: a second link to the same product,
+        # which this campaign already promotes, while the first link is not.
+        session.add(ProductOffer(
+            id="offer-second", workspace_id=workspace, product_id="prod-1", fingerprint="second",
+            network="shopee", merchant="Shopee", affiliate_url="https://example.test/second",
+            currency="USD", availability="available", created_by="owner-user",
+        ))
+        session.add(CampaignOffer(workspace_id=workspace, campaign_id=campaign_id,
+                                  offer_id="offer-second", created_by="owner-user"))
+        session.add(ProductCreativeLink(workspace_id=workspace, product_id="prod-1",
+                                        asset_id="linked-media", draft_id=None))
+        session.scalar(select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == campaign_id,
+        )).max_products_per_post = 1
+    response = request("POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue", json={
+        "asset_id": "linked-media", "video_path": r"S:\media\linked-media.mp4",
+    })
+    # One product is one product against the cap, however many links it has.
+    assert response.status_code == 201, response.text
+    assert response.json()["item"]["offer_ids"] == ["offer-second"]
+    with TestingSession() as session:
+        tagged = session.scalars(select(CampaignOffer.offer_id).where(
+            CampaignOffer.campaign_id == campaign_id)).all()
+        assert tagged == ["offer-second"]
 
 
 def test_carousel_carries_products_from_a_later_image(workspace) -> None:

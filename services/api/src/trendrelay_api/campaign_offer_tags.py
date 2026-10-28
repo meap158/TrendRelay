@@ -33,13 +33,27 @@ def tagged_offer_ids(session: Session, campaign_id: str) -> list[str]:
 
 def carry_library_products(session: Session, workspace_id: str, campaign_id: str,
                            asset_ids: list[str], *, user_id: str) -> dict[str, Any]:
-    """Tag linked affiliate offers and return them for explicit post attachment."""
+    """Tag linked affiliate offers and return them for explicit post attachment.
+
+    One offer per linked product. A listing imported twice has two affiliate
+    links for the same product, and carrying both counted it twice against the
+    per-post product cap - a group shot of three sets was refused as six - and
+    tagged the spare link to the campaign besides. The link the campaign
+    already promotes wins, then the oldest.
+    """
     from trendrelay_api.product_creative_models import ProductCreativeLink
-    offers = list(session.scalars(select(ProductOffer.id)
+    tagged = select(CampaignOffer.offer_id).where(CampaignOffer.campaign_id == campaign_id)
+    rows = session.execute(select(ProductOffer.product_id, ProductOffer.id)
         .join(ProductCreativeLink, ProductCreativeLink.product_id == ProductOffer.product_id)
         .where(ProductCreativeLink.workspace_id == workspace_id,
                ProductOffer.workspace_id == workspace_id,
-               ProductCreativeLink.asset_id.in_(asset_ids)).distinct()).all())
+               ProductCreativeLink.asset_id.in_(asset_ids))
+        .order_by(ProductOffer.product_id, ProductOffer.id.not_in(tagged),
+                  ProductOffer.created_at, ProductOffer.id)).all()
+    chosen: dict[str, str] = {}
+    for product_id, offer_id in rows:
+        chosen.setdefault(product_id, offer_id)
+    offers = list(chosen.values())
     result = tag(session, workspace_id, campaign_id, offers, user_id=user_id)
     result["offer_ids"] = offers
     session.flush()
