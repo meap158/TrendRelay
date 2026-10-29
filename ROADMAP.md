@@ -1,9 +1,9 @@
 # Roadmap
 
-PM-355 (2026-10-29): the existing 48-post Mây Meo round is stock-ranked and
-pinned after the current queue, from 16 to 25 November. All posts remain drafts.
-The owner desk records the remaining decision on strict feed alternation;
-see `docs/pm-355-round-review.md` for measured acceptance and local receipts.
+PM-355 (2026-10-29): the Mây Meo round now has 39 stock-ranked drafts pinned
+after the current queue, from 16 to 23 November. All 174 media files are unique;
+format, editorial recipe and product count alternate. Superseded drafts are
+retired. See `docs/pm-355-round-review.md` for the passing live audit.
 
 
 **Draft, 2026-10-25.** Written from the README ("Project status") and the handover's next recommended

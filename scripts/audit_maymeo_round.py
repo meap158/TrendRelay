@@ -95,10 +95,29 @@ def main():
                      "products": stocks, "paths": paths, "caption": item["body"],
                      "ha_my": choice.get("character") is not None})
     rows.sort(key=lambda r: (r["pinned_slot"] or "9999", r["position"]))
+    superseded = []
+    original_receipts = args.round_dir / "original-built.json"
+    if original_receipts.exists():
+        active_ids = {r["item_id"] for r in rows}
+        for receipt in read(original_receipts).values():
+            if receipt["item_id"] not in active_ids:
+                item = queue.get(receipt["item_id"])
+                if item is None or item["state"] != "retired" or item["pinned_slot"]:
+                    errors.append(f"Superseded post is not retired and unpinned: {receipt['item_id']}")
+                superseded.append(receipt["item_id"])
     files = Counter(path.casefold() for row in rows for path in row["paths"])
     duplicates = {path: count for path, count in files.items() if count > 1}
     if duplicates:
         errors.append("Media files reused within round")
+    original_files = set()
+    baseline = args.round_dir / "before-regroup.json"
+    if baseline.exists() and original_receipts.exists():
+        original_ids = {r["item_id"] for r in read(original_receipts).values()}
+        original_files = {path.casefold() for item in read(baseline)["queue"]
+                          if item["id"] in original_ids
+                          for path in item["image_paths"] + [item["video_path"]] if path}
+        if original_files - files.keys():
+            errors.append("Original round media omitted from the active regrouped round")
     captions = Counter(row["caption"] for row in rows)
     if any(count > 1 for count in captions.values()):
         errors.append("Duplicate captions")
@@ -115,6 +134,9 @@ def main():
               "duplicate_files": duplicates, "pinned": sum(bool(r["pinned_slot"]) for r in rows),
               "adjacent_equal": adjacent, "stock_inversions": inversions,
               "source_drafts_checked": len(sources), "errors": errors, "rows": rows}
+    report["superseded_retired_posts"] = len(superseded)
+    report["original_files_preserved"] = len(original_files & files.keys())
+    report["recipe_basis"] = "Editorial post recipe; merged comparisons retain their source draft recipes in the manifest."
     report["acceptance"] = {
         "media_integrity": not errors,
         "stock_order": not inversions and all(r["lead_stock"] is not None for r in rows),
