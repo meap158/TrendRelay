@@ -1,5 +1,11 @@
 # Roadmap
 
+PM-355 (2026-10-29): the existing 48-post Mây Meo round is stock-ranked and
+pinned after the current queue, from 16 to 25 November. All posts remain drafts.
+The owner desk records the remaining decision on strict feed alternation;
+see `docs/pm-355-round-review.md` for measured acceptance and local receipts.
+
+
 **Draft, 2026-10-25.** Written from the README ("Project status") and the handover's next recommended
 action; there was no roadmap before. The owner has not reviewed it. No account names or credentials
 belong in this file.
