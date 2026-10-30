@@ -12,7 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
     "@trendrelay/schemas": "*",
-    "next": "16.2.11",
+    "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.2.7"
   },
