@@ -33,7 +33,9 @@ Confirmed import, offer fetch, listing refresh and session probe can contact
 Shopee or queue listing reads. Obtain permission first. Read the enrichment
 jobs and stored product listing afterwards. Session status exposes readiness,
 not cookies; sign-in, credential storage and disconnect remain local-only.
-The browser offer-page opener and HTTP CSV download are not MCP operations.
+Use `export_shopee_workbook` with explicit confirmation to fetch offers and
+receive the GUI's XLSX export as an embedded MCP resource (16 MiB maximum).
+The browser offer-page opener remains local-only.
 
 The `creative_` tools expose the product-creative GUI's preview, filtered draft
 listing, read, create, media submit, discard, provider availability and video

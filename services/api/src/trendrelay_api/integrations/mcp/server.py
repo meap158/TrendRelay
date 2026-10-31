@@ -10,7 +10,7 @@ registered here, so they are absent from the listing and refused by name.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +19,7 @@ from trendrelay_api.integrations.mcp import (
     context,
     drafts,
     intake,
+    media_transfer,
     policy,
     product_creatives,
     products,
@@ -1682,6 +1683,52 @@ def build_server(workspace_id: str) -> FastMCP:
             "get_publishing_job", lambda s: publishing.get_publishing_job(workspace_id, job_id)
         )
 
+    @server.tool(description=(
+        "Read a Library file as bounded MCP embedded resource content (16 MiB maximum). "
+        "Uses the GUI's workspace-scoped reader. Larger files require the GUI stream."
+    ))
+    def read_library_media(
+        asset_id: str,
+        version: Literal["original", "proxy", "thumbnail", "audio", "edited"] = "thumbnail",
+    ) -> Any:
+        return _call("read_library_media", lambda s: media_transfer.read_library_media(
+            s, workspace_id, asset_id, version,
+        ))
+
+    @server.tool(description=(
+        "Read a caption export as MCP resource content, up to 16 MiB. path must come from "
+        "library_list_caption_files and belong to this asset; GUI path guards still apply."
+    ))
+    def read_library_caption(asset_id: str, path: str) -> Any:
+        return _call("read_library_caption", lambda s: media_transfer.read_library_caption(
+            s, workspace_id, asset_id, path,
+        ))
+
+    @server.tool(description=(
+        "Preview an ordered effect stack on one frame of a workspace Library asset. "
+        "Returns MCP image content. Requires consent and confirm_external_action=true; "
+        "does not render or replace the complete video."
+    ))
+    def preview_library_effect(
+        asset_id: str, steps: Annotated[list[dict[str, Any]], Field(max_length=24)],
+        at: Annotated[float | None, Field(ge=0, le=1)] = None,
+        confirm_external_action: bool = False,
+    ) -> Any:
+        return _call("preview_library_effect", lambda s: media_transfer.preview_library_effect(
+            s, workspace_id, asset_id, steps, at, confirmed=confirm_external_action,
+        ))
+
+    @server.tool(description=(
+        "Export Shopee offers as an XLSX MCP embedded resource, without importing products. "
+        "Contacts Shopee: obtain consent and pass confirm_external_action=true."
+    ))
+    def export_shopee_workbook(
+        limit: Annotated[int, Field(ge=1, le=100)] = 100, confirm_external_action: bool = False,
+    ) -> Any:
+        return _call("export_shopee_workbook", lambda s: media_transfer.export_shopee_workbook(
+            s, workspace_id, limit, confirmed=confirm_external_action,
+        ))
+
     campaigns.install(server, workspace_id, _call)
     return server
 
@@ -1702,6 +1749,10 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Publish GUI": tuple(campaigns.PUBLISH_OPERATIONS),
     "Attribution GUI": tuple(campaigns.ATTRIBUTION_OPERATIONS),
     "Library GUI": tuple(campaigns.LIBRARY_OPERATIONS),
+    "Media transfers": (
+        "read_library_media", "read_library_caption", "preview_library_effect",
+        "export_shopee_workbook",
+    ),
     "Publish": (
         "get_publishing_context", "preview_publishing",
         "list_publishing_accounts", "list_publishing_boards", "submit_publishing",
@@ -1766,6 +1817,7 @@ CATEGORY_TABS: dict[str, str | None] = {
     "Publish GUI": "Publish",
     "Attribution GUI": "Attribution",
     "Library GUI": "Library",
+    "Media transfers": "Library",
     "Publish": "Publish",
     "Campaign context": "Campaigns",
     "Copy": "Campaigns",
@@ -1776,6 +1828,7 @@ CATEGORY_TABS: dict[str, str | None] = {
     "Product creatives": "Attribution",
 }
 TOOL_TAB_OVERRIDES: dict[str, str] = {
+    "export_shopee_workbook": "Attribution",
     "upload_image": "Library",
     "upload_media": "Library",
     "get_import_status": "Library",

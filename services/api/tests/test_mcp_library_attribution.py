@@ -283,7 +283,23 @@ def test_background_work_runs_after_committed_gui_write(factory, monkeypatch):
     assert seen == ["Changed"]
 
 
-def test_streamable_client_browses_library_and_attribution_and_updates_recipe(factory):
+@pytest.fixture
+def original_version(factory):
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
+    with factory() as session:
+        asset = session.get(MediaAsset, "image-one")
+        session.add(MediaAssetVersion(
+            id="original-one", workspace_id="ws", asset_id=asset.id,
+            version_kind="original", path=asset.original_path,
+            sha256=asset.original_sha256, mime_type="image/png", size_bytes=asset.size_bytes,
+        ))
+        session.commit()
+
+
+def test_streamable_client_browses_library_and_attribution_and_updates_recipe(
+    factory, original_version,
+):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
@@ -303,6 +319,12 @@ def test_streamable_client_browses_library_and_attribution_and_updates_recipe(fa
                         )
                         assert not page.isError, page
                         assert page.structuredContent["total"] == 2
+                        resource = await client.call_tool(
+                            "read_library_media", {"asset_id": "image-one", "version": "original"}
+                        )
+                        assert not resource.isError, resource
+                        assert resource.content[0].type == "resource"
+                        assert resource.content[0].resource.mimeType == "image/png"
                         summary = await client.call_tool("attribution_attribution_summary", {})
                         assert not summary.isError, summary
                         denied = await client.call_tool(
@@ -324,3 +346,93 @@ def test_streamable_client_browses_library_and_attribution_and_updates_recipe(fa
                         assert not saved.isError, saved
 
     asyncio.run(exercise())
+
+
+def test_media_transfer_scope_and_size(factory, original_version, monkeypatch):
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    with factory() as session:
+        with pytest.raises(HTTPException) as error:
+            media_transfer.read_library_media(session, "ws", "foreign-image", "original")
+        assert error.value.status_code == 404
+        monkeypatch.setattr(media_transfer, "MAX_TRANSFER_BYTES", 1)
+        with pytest.raises(ValueError, match="transfer limit"):
+            media_transfer.read_library_media(session, "ws", "image-one", "original")
+
+
+def test_caption_transfer_preserves_gui_path_guards(factory, tmp_path, monkeypatch):
+    import base64
+
+    from trendrelay_api import caption_jobs
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    monkeypatch.setattr(caption_jobs, "CAPTION_ROOT", tmp_path)
+    root = tmp_path / "ws"
+    root.mkdir()
+    caption = root / "image-one.test.srt"
+    caption.write_bytes(b"caption")
+    with factory() as session:
+        result = media_transfer.read_library_caption(session, "ws", "image-one", str(caption))
+        assert base64.b64decode(result.resource.blob) == b"caption"
+        for path in (tmp_path / "outside.srt", root / "image-two.test.srt"):
+            with pytest.raises(HTTPException) as error:
+                media_transfer.read_library_caption(session, "ws", "image-one", str(path))
+            assert error.value.status_code == 403
+
+
+def test_transfer_provider_actions_require_confirmation(factory):
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    with factory() as session:
+        with pytest.raises(PermissionError, match="confirm_external_action"):
+            media_transfer.preview_library_effect(session, "ws", "image-one", [])
+        with pytest.raises(PermissionError, match="confirm_external_action"):
+            media_transfer.export_shopee_workbook(session, "ws")
+
+
+def test_effect_transfer_returns_native_image_without_provider(factory, monkeypatch):
+    import base64
+
+    from starlette.responses import Response
+
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    def preview(workspace_id, body, actor, session):
+        assert workspace_id == "ws"
+        assert body.source_path.endswith("image-one.png")
+        assert body.at == 0.5
+        return Response(b"jpeg", media_type="image/jpeg", headers={"X-Preview-Note": "test"})
+
+    monkeypatch.setattr(media_library_api, "effect_preview_frame", preview)
+    with factory() as session:
+        result = media_transfer.preview_library_effect(
+            session, "ws", "image-one", [], 0.5, confirmed=True,
+        )
+        assert result[1].type == "image"
+        assert base64.b64decode(result[1].data) == b"jpeg"
+        with pytest.raises(HTTPException):
+            media_transfer.preview_library_effect(
+                session, "ws", "foreign-image", [], confirmed=True,
+            )
+
+
+def test_workbook_transfer_uses_confirmed_gui_export(factory, monkeypatch):
+    import base64
+
+    from starlette.responses import Response
+
+    from trendrelay_api import attribution_api
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    def export(workspace_id, body, request, actor, session):
+        assert workspace_id == "ws"
+        assert body.confirm_external_action is True
+        assert body.limit == 7
+        return Response(
+            b"xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    monkeypatch.setattr(attribution_api, "export_shopee_offers", export)
+    with factory() as session:
+        result = media_transfer.export_shopee_workbook(session, "ws", 7, confirmed=True)
+        assert base64.b64decode(result.resource.blob) == b"xlsx"

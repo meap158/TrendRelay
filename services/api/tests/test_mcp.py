@@ -140,7 +140,10 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "update_creation_draft", "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure",
         "write_first_comment", "write_post_copy", "write_thread",
-    ] + list(campaigns.ALL_OPERATIONS))
+    ] + list(campaigns.ALL_OPERATIONS) + [
+        "read_library_media", "read_library_caption", "preview_library_effect",
+        "export_shopee_workbook",
+    ])
 
 
 def test_credentials_and_execution_are_refused_with_a_reason() -> None:

@@ -76,6 +76,10 @@ _REFUSAL_REASON: dict[Access, str] = {
 #: than merely absent so a caller that asks for one by name is told why, and so
 #: a test can prove the boundary holds against a caller that ignores the menu.
 EXPOSURE: dict[str, Access] = {
+    "read_library_media": Access.READ,
+    "read_library_caption": Access.READ,
+    "preview_library_effect": Access.CONFIRMED_EXTERNAL,
+    "export_shopee_workbook": Access.CONFIRMED_EXTERNAL,
     **{
         name: Access.CONFIRMED_EXTERNAL if op.mutation or op.external else Access.READ
         for name, op in ALL_OPERATIONS.items()

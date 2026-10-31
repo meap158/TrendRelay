@@ -11,6 +11,7 @@ Explicit allowlists in `integrations/mcp/library_attribution.py` now register
 typed tools using the same GUI body models and handlers. The groups are
 `Library GUI` and `Attribution GUI`; existing compact task helpers remain.
 This adds 39 Attribution/Character tools and 94 Library/shared-dialog tools.
+Four additional tools transfer media/captions, preview effects and export offers.
 
 | GUI area | MCP coverage |
 | --- | --- |
@@ -48,14 +49,21 @@ including shared dialogs invoked from these screens.
 - Server-local file and folder imports stay behind their GUI loopback check.
   Remote clients transfer bytes or a public URL with the existing MCP upload
   flow; the adapter does not forge a loopback origin to import arbitrary paths.
-- Raw content streams, frame/sprite previews, caption downloads,
-  archives and Shopee CSV exports remain on authenticated GUI HTTP routes.
-  Archive preparation is available, but MCP does not transfer the archive bytes.
+- `read_library_media` transfers original, proxy, thumbnail, audio or edited
+  media through the GUI's workspace-scoped readers. `read_library_caption`
+  preserves the GUI's caption directory and asset ownership checks.
+- `preview_library_effect` returns native MCP image content for an effect stack.
+  `export_shopee_workbook` returns the GUI's XLSX workbook as embedded resource
+  content. Both require explicit confirmation and governed workspace access.
+- File transfers are capped at 16 MiB. Larger streams, specialized face/sprite
+  previews and archives remain on authenticated GUI HTTP routes. Archive
+  preparation is available, but MCP does not transfer the archive bytes.
 - Browser multipart uploads are replaced by the existing MCP byte/URL upload
   flow for media. The GUI's overlay multipart upload is not an MCP file input;
   importing an overlay from existing Library media is available.
 
-`BINARY_OR_MULTIPART` and `LOCAL_ONLY` name those exclusions explicitly. A new
+`BINARY_OR_MULTIPART` classifies routes outside the JSON adapter, including
+those served by the bounded transfer tools. `LOCAL_ONLY` names local boundaries. A new
 GUI endpoint fails the test until it is exposed or its boundary is reviewed.
 No credentials, provider calls, generation charges or live Library/Attribution
 mutations were used to test this work.
@@ -69,13 +77,15 @@ role refusal and commit-before-background execution. A real Streamable HTTP
 ClientSession discovers Library/Attribution context and saves a recipe in an
 isolated database. Existing GUI and task-helper tests remain regression gates.
 
-The live read-only audit confirms all 255 tools are present, with matching
+The live read-only audit confirms all 259 tools are present, with matching
 input schemas and initialization guidance. Its local evidence is
 `.data/library-attribution-mcp-live-audit.json`. No operator service was
 started, stopped or restarted for that check.
 
-Final validation: 1,232 MCP, Attribution, Library, effects, captions, voice,
+Final validation: 1,237 MCP, Attribution, Library, effects, captions, voice,
 character and creation-workflow regression tests pass. Ruff and the prose
 audit pass. The suite uses a fresh project-drive test directory. It was run
 outside the sandbox to read the installed media-AI runtime and inspect its own
 test child processes; a sandboxed attempt failed on those environment limits.
+The 31 focused tests include native MCP resource delivery, transfer limits,
+caption path ownership and confirmed preview/export delegation with provider mocks.

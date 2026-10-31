@@ -46,11 +46,14 @@ A path on a different app's computer is not a server path. Remote clients
 use `upload_media` with transferable bytes or an accepted public
 URL, then read `get_import_status`; never invent a server path.
 
-Raw HTTP file streams, browser multipart uploads and binary frame/sprite
-previews are not represented by these JSON tools. Library thumbnails and MCP
-uploads are the available MCP alternatives. Archive preparation returns the
-GUI's download reference, not transferred archive bytes. The authenticated GUI
-still handles those downloads. Face-swap licence attestations and account
+Use `read_library_media` for original, proxy, thumbnail, audio or edited files,
+and `read_library_caption` for paths from the caption file listing. Downloads
+return embedded MCP resources, capped at 16 MiB. Use `preview_library_effect`
+with explicit confirmation for an effect-stack preview as MCP image content.
+Larger streams, specialized face/sprite previews and archive downloads use the
+authenticated GUI. Archive preparation returns the GUI's download reference.
+Browser multipart media uploads use the MCP byte/URL upload flow instead.
+Face-swap licence attestations and account
 sign-in stay with the operator. Do not record consent or licence ownership on
 their behalf.
 
