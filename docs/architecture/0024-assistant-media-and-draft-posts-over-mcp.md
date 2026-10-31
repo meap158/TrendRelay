@@ -1,5 +1,9 @@
 # ADR 0024: An assistant brings media in and proposes posts, as drafts
 
+Authority update: [social posting parity](../mcp-social-posting-parity.md)
+adds separate confirmed GUI-equivalent posting tools. The draft helpers
+described here retain their unapproved defaults.
+
 Status: Accepted and built - `services/api/src/trendrelay_api/integrations/mcp/intake.py`,
 the `campaigns.add-post-with-media` SOP, surfaced through the same MCP server
 as ADR 0023's copy surface.

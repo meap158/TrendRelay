@@ -1,18 +1,16 @@
 """What an MCP caller may invoke, decided here and nowhere else.
 
-The boundary is the same one AdRelay arrived at: a model reaching the workspace
-over a tunnel is not the operator sitting in front of it, so it may *read*, and
-it may make *workspace writes that stay in the workspace* - a draft caption, a
-first comment, a thread reply - but never a write that leaves: signing in,
-connecting an account, approving a post, or publishing one.
+Reads and local writes are allowed. Named external actions require explicit
+user confirmation and GUI role and assurance checks in their handlers.
+Being listed does not itself authorize a send. Credentials and account
+sign-in remain local-only.
 
 Two rules hold however many operations are added:
 
 - **Credentials and sessions are refused.** A provider token or an account
   login opens a window on someone's screen. It is not a remote caller's to do.
-- **Approval and execution are refused.** An approval is only an approval if a
-  person gives it. A caller that can propose a change and also approve it has
-  not been governed - it has been given a longer arm.
+- **External actions require confirmation.** Legacy execution aliases stay
+  refused. Specific confirmed workflow tools check consent and permissions.
 
 Schedules are configuration, and sit on the allowed side. Nothing in the
 posting-time tools approves a post, arms a campaign, or sends anything: a
@@ -34,6 +32,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from .campaigns import ALL_OPERATIONS
+
 
 class Access(StrEnum):
     """Why an operation is or is not reachable over MCP."""
@@ -42,13 +42,15 @@ class Access(StrEnum):
     READ = "read"
     #: A write that stays in the workspace - a draft the operator still approves.
     WORKSPACE_WRITE = "workspace_write"
+    #: Explicit user confirmation and the GUI role/assurance checks are required.
+    CONFIRMED_EXTERNAL = "confirmed_external"
     #: Refused: it would sign in, mint a token, or connect a provider account.
     REFUSED_CREDENTIALS = "refused_credentials"
     #: Refused: it would approve, publish, deploy, or otherwise leave the app.
     REFUSED_EXECUTION = "refused_execution"
 
 
-ALLOWED = frozenset({Access.READ, Access.WORKSPACE_WRITE})
+ALLOWED = frozenset({Access.READ, Access.WORKSPACE_WRITE, Access.CONFIRMED_EXTERNAL})
 
 #: The reason given when an operation is not named below. Refusal is the
 #: default so that reaching a new capability is a decision someone makes here,
@@ -74,10 +76,17 @@ _REFUSAL_REASON: dict[Access, str] = {
 #: than merely absent so a caller that asks for one by name is told why, and so
 #: a test can prove the boundary holds against a caller that ignores the menu.
 EXPOSURE: dict[str, Access] = {
+    **{
+        name: Access.CONFIRMED_EXTERNAL if op.mutation or op.external else Access.READ
+        for name, op in ALL_OPERATIONS.items()
+    },
     "get_publishing_context": Access.READ,
     "preview_publishing": Access.READ,
     "list_publishing_jobs": Access.READ,
     "get_publishing_job": Access.READ,
+    "list_publishing_accounts": Access.CONFIRMED_EXTERNAL,
+    "list_publishing_boards": Access.CONFIRMED_EXTERNAL,
+    "submit_publishing": Access.CONFIRMED_EXTERNAL,
     # --- Reads: context for writing copy -----------------------------------
     "list_campaigns": Access.READ,
     "list_posts_needing_copy": Access.READ,

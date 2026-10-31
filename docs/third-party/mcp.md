@@ -7,7 +7,12 @@ matrix without probing provider accounts. `preview_publishing` validates a
 standalone composer request through the GUI preview and Library credit helper.
 `list_publishing_jobs` and `get_publishing_job` read delivery history within
 the connection's workspace. The reviewed procedure is
-`publishing.inspect-and-preview`. These tools do not submit posts.
+`publishing.inspect-and-preview`. `submit_publishing` submits the same typed
+composer through durable Publish jobs after explicit external-action consent.
+Account and board discovery also require confirmation. The `Campaign GUI`
+group provides typed counterparts of all public Campaign application routes;
+read `campaigns.manage-social-posting` for draft versus rotation-ready creation,
+optional slot pinning, approval and execution handling.
 
 GUI parity work is tracked in [the social posting audit](../mcp-social-posting-parity.md).
 
@@ -171,20 +176,22 @@ call. Two rules hold however many operations are added:
 
 - **Credentials and sessions are refused.** Signing in and connecting an account
   open a window on the operator's screen. Not a remote caller's to do.
-- **Approval and execution are refused.** Approving, publishing and deploying are
-  a person's decision, made in the app. A model may write copy, never send it.
+- **Named execution tools require confirmation.** User consent is required for
+  content, targets and timing. The handler then applies the GUI's workspace,
+  role and state checks. The MCP connection acts for the local operator and
+  does not mint an AAL2 session; installations requiring it refuse governed
+  calls. Legacy generic execution aliases remain refused.
 
 Anything not named is refused by the default, so a new capability is argued for
 rather than inherited. The refused operations are named in the policy and never
 registered on the server, so they are absent from the listing and refused when a
 caller names one directly.
 
-| | Count |
-| --- | --- |
-| Reads | 9 |
-| Workspace writes (copy, schedule, media, drafts) | 12 |
-| Refused - credentials and sessions | 4 |
-| Refused - approval, execution, deployment | 6 |
+The live Tools catalog shows each operation's classification and typed schema.
+`confirmed_external` operations require explicit confirmation before an edit,
+discovery or delivery. Machine credentials, sign-in, provider activation and
+global connection configuration remain local-only. Media preview bytes stay
+on the GUI's authenticated HTTP route; MCP reads Library thumbnails instead.
 
 ## Running it
 

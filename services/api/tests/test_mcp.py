@@ -27,6 +27,7 @@ from trendrelay_api.autopilot_models import (
 from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
 from trendrelay_api.integrations import posting_slots
 from trendrelay_api.integrations.mcp import (
+    campaigns,
     context,
     policy,
     schedules,
@@ -113,7 +114,7 @@ def test_every_operation_is_classified_on_purpose() -> None:
 
 
 def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
-    assert policy.allowed_operations() == [
+    assert policy.allowed_operations() == sorted([
         "add_creation_draft_media", "clear_burst_day", "create_campaign_post",
         "create_creation_draft", "create_posting_preset",
         "create_product_creative_draft",
@@ -128,16 +129,18 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "list_creation_kinds", "list_creative_recipes", "list_library_assets",
         "list_posting_times",
         "list_posts_needing_copy", "list_product_creative_drafts",
-        "list_products", "list_published_posts", "list_publishing_jobs",
+        "list_products", "list_published_posts", "list_publishing_accounts",
+        "list_publishing_boards", "list_publishing_jobs",
         "list_sops", "pin_post_slot", "preview_publishing", "render_creation_draft",
         "set_burst_day", "set_campaign_posting_times", "set_page_posting_times",
         "set_post_media", "set_post_media_target", "set_post_products",
         "set_post_skipped_destinations", "set_workspace_posting_times",
         "submit_product_creative_media",
+        "submit_publishing",
         "update_creation_draft", "upload_image", "upload_media",
         "write_bio_hint", "write_caption", "write_disclosure",
         "write_first_comment", "write_post_copy", "write_thread",
-    ]
+    ] + list(campaigns.ALL_OPERATIONS))
 
 
 def test_credentials_and_execution_are_refused_with_a_reason() -> None:
@@ -201,6 +204,7 @@ def test_the_campaign_sops_are_discovered_by_action() -> None:
         "campaigns.editorial-quality",
         "campaigns.fill-needs-copy",
         "campaigns.fill-needs-media",
+        "campaigns.manage-social-posting",
     ]
     # Whatever else is registered still has to be a catalogue row rather than a
     # whole document: the listing is read into a prompt, and the markdown is

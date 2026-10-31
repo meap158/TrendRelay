@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from trendrelay_api.integrations.mcp import (
+    campaigns,
     context,
     drafts,
     intake,
@@ -169,8 +170,14 @@ INSTRUCTIONS = (
     "back to the rotation. Locks work on drafts too, and each lock reserves "
     "its slot against the next, so pinning a batch one by one - say ten "
     "drafts to the next ten days - spreads them without a collision.\n\n"
-    "You write drafts and schedules only. You cannot approve, publish, deploy, "
-    "connect an account or sign in - those stay a person's decision in the app. "
+    "Standalone Publish supports get_publishing_context, preview_publishing, "
+    "list_publishing_accounts, list_publishing_boards, submit_publishing and job reads. "
+    "Read publishing.inspect-and-preview. submit_publishing can send a real post: "
+    "obtain user consent for content, targets and delivery before setting "
+    "confirm_external_action=true. Account discovery also requires confirmation. "
+    "Role and governed-assurance checks apply; no tool grants an MFA session. "
+    "Campaign creation still defaults to drafts. Account credentials, connection "
+    "and sign-in remain local-only. "
     "Changing a schedule moves when already-approved posts go out; it never sends "
     "one, so say what you are about to reschedule before you do it."
 )
@@ -1005,7 +1012,7 @@ def build_server(workspace_id: str) -> FastMCP:
         job_id: str | None = None, job_ids: list[str] | None = None
     ) -> dict[str, Any]:
         _guard("get_import_status")
-        return intake.get_import_status(job_id, job_ids)
+        return intake.get_import_status(job_id, job_ids, workspace_id=workspace_id)
 
     @server.tool(
         name="create_campaign_post",
@@ -1583,12 +1590,72 @@ def build_server(workspace_id: str) -> FastMCP:
             "Validate a standalone Publish composer request using the GUI preview, "
             "including Library media credit. Pass the GUI PublishRequest fields in request: "
             "caption, date, targets, delivery, media and optional platform fields. "
-            "workspace_id is supplied by this connection. Does not submit or send a post."
+            "Use asset_ids to select ordered Library media without knowing paths. "
+            "workspace_id is supplied by this connection. Does not submit or send a post. "
+            "Local validation is the default. Optional confirm_external_action=true permits "
+            "provider validation after user consent, matching the GUI preview."
         ),
     )
-    def preview_publishing(request: dict[str, Any]) -> dict[str, Any]:
+    def preview_publishing(
+        request: publishing.PublishComposer, confirm_external_action: bool = False,
+    ) -> dict[str, Any]:
         return _call(
-            "preview_publishing", lambda s: publishing.preview_publishing(s, workspace_id, request)
+            "preview_publishing",
+            lambda s: publishing.preview_publishing(
+                s, workspace_id, request.model_dump(), confirmed=confirm_external_action,
+            ),
+        )
+
+    @server.tool(
+        name="list_publishing_accounts",
+        description=(
+            "Discover connected posting targets across configured engines. Contacts providers, "
+            "so require user consent and confirm_external_action=true. Does not connect accounts."
+        ),
+    )
+    def list_publishing_accounts(confirm_external_action: bool = False) -> dict[str, Any]:
+        return _call(
+            "list_publishing_accounts",
+            lambda s: publishing.list_publishing_accounts(
+                s, workspace_id, confirmed=confirm_external_action,
+            ),
+        )
+
+    @server.tool(
+        name="list_publishing_boards",
+        description=(
+            "Read one connected account's Pinterest boards through its engine. Requires "
+            "user consent and confirm_external_action=true. Returns the GUI's IDs and names."
+        ),
+    )
+    def list_publishing_boards(
+        provider: str, integration_id: str, confirm_external_action: bool = False,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_publishing_boards",
+            lambda s: publishing.list_publishing_boards(
+                s, workspace_id, provider, integration_id, confirmed=confirm_external_action,
+            ),
+        )
+
+    @server.tool(
+        name="submit_publishing",
+        description=(
+            "Submit a standalone post through the GUI's durable Publish job path. "
+            "delivery is draft, schedule or now. This can send a real post: obtain user "
+            "consent for its content, targets and time, then pass confirm_external_action=true. "
+            "Preview first. Returns the durable job with delivery results; query it by ID "
+            "after an interrupted call. Workspace roles and governed assurance still apply."
+        ),
+    )
+    def submit_publishing(
+        request: publishing.PublishComposer, confirm_external_action: bool = False,
+    ) -> dict[str, Any]:
+        return _call(
+            "submit_publishing",
+            lambda s: publishing.submit_publishing(
+                s, workspace_id, request.model_dump(), confirmed=confirm_external_action,
+            ),
         )
 
     @server.tool(
@@ -1615,6 +1682,7 @@ def build_server(workspace_id: str) -> FastMCP:
             "get_publishing_job", lambda s: publishing.get_publishing_job(workspace_id, job_id)
         )
 
+    campaigns.install(server, workspace_id, _call)
     return server
 
 
@@ -1630,8 +1698,11 @@ def exposed_tool_names() -> list[str]:
 #: list silt up. Order here is display order.
 TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Guidance": ("list_sops", "get_sop"),
+    "Campaign GUI": tuple(campaigns.OPERATIONS),
+    "Publish GUI": tuple(campaigns.PUBLISH_OPERATIONS),
     "Publish": (
         "get_publishing_context", "preview_publishing",
+        "list_publishing_accounts", "list_publishing_boards", "submit_publishing",
         "list_publishing_jobs", "get_publishing_job",
     ),
     "Campaign context": (
@@ -1689,6 +1760,8 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
 #: is a Campaigns matter.
 CATEGORY_TABS: dict[str, str | None] = {
     "Guidance": None,
+    "Campaign GUI": "Campaigns",
+    "Publish GUI": "Publish",
     "Publish": "Publish",
     "Campaign context": "Campaigns",
     "Copy": "Campaigns",

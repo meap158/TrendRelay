@@ -1,5 +1,10 @@
 # ADR 0023: An outside assistant reaches the workspace over MCP, to write copy
 
+Authority update: [social posting parity](../mcp-social-posting-parity.md)
+adds named, confirmed Publish and Campaign GUI operations. The original
+draft-only decision below records the initial design. Credentials stay local;
+confirmed tools preserve GUI role, workspace, assurance and state checks.
+
 Status: Accepted and built - `services/api/src/trendrelay_api/integrations/mcp/`,
 `scripts/mcp_server.py`, surfaced in the Tools tab as **Assistant Access (MCP)**.
 

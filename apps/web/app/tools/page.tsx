@@ -161,7 +161,7 @@ type McpToolDetail = {
   /** The app tab where this tool's work shows up, if it has one. */
   tab?: string | null;
   description: string;
-  access: "read" | "workspace_write" | null;
+  access: "read" | "workspace_write" | "confirmed_external" | null;
   params: { name: string; required: boolean; type: string | null }[];
   meta?: Record<string, unknown> | null;
 };
@@ -985,7 +985,7 @@ export default function ToolsPage() {
                           <div>
                             <code>{tool.name}</code>
                             <em className={tool.access === "read" ? "access-read" : "access-write"}>
-                              {tool.access === "read" ? "read" : "write"}
+                              {tool.access === "read" ? "read" : tool.access === "confirmed_external" ? "confirmation required" : "write"}
                             </em>
                             {tool.tab && <em className="tab" title={`Its work shows up in the ${tool.tab} tab`}>{tool.tab}</em>}
                             {Boolean((tool.meta as Record<string, unknown> | null)?.["openai/fileParams"]) && (

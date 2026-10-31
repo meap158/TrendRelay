@@ -4368,7 +4368,9 @@ def _delivery_plan(
     return plan
 
 
-def preview_publish(request: PublishRequest) -> dict[str, Any]:
+def preview_publish(
+    request: PublishRequest, *, validate_remote: bool = True,
+) -> dict[str, Any]:
     groups = grouped_targets(request)
     scoped = {
         provider_id: _scoped_request(request, provider_id, targets)
@@ -4400,7 +4402,7 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
     # would be worse than one that checked a little less.
     engine_problems: list[str] = []
     for provider_id, part in scoped.items():
-        if provider_id != "woopsocial":
+        if provider_id != "woopsocial" or not validate_remote:
             continue
         try:
             engine_problems.extend(_woopsocial_validate(part))

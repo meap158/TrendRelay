@@ -11,6 +11,8 @@ write operation looks convenient.
 
 | Intended action | Canonical action | First live operation |
 | --- | --- | --- |
+| Compose, preview or submit a standalone Publish post | `publishing.inspect-and-preview` | `get_publishing_context` |
+| Use Campaign GUI actions, including confirmed queueing or delivery | `campaigns.manage-social-posting` | `campaign_read_autopilot` |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
 | Fill missing Campaigns media (generate a carousel per waiting post) | `campaigns.fill-needs-media` | `list_campaign_posts` |
 | Add a post with media (existing asset, new upload, or carousel) | `campaigns.add-post-with-media` | `list_campaigns` |
@@ -137,8 +139,10 @@ unlike currencies or treat pending/reversed conversions as settled earnings.
    creates no campaign attachment and its error must be reported.
 5. Create a new draft with `create_campaign_post(asset_ids=[...])`, or add the
    asset to a post that is still waiting for its media with `set_post_media`.
-   Use `append=true` only to extend an image carousel. The MCP cannot approve
-   or publish a draft; tell the operator it is waiting in Campaigns.
+   Use `append=true` only to extend an image carousel. These draft helpers do
+   not approve or publish; tell the operator it is waiting in Campaigns.
+   Approval or delivery requires the separate confirmed workflow in
+   `campaigns.manage-social-posting`.
 
 ### Quick path: give a queue of waiting posts their carousels
 
@@ -280,10 +284,13 @@ An SOP explains how to use authority already granted by the MCP policy; it does
 not grant new authority. TrendRelay MCP may read workspace context, write draft
 copy that remains inside the workspace, bring an image into the media library,
 propose a draft post into a campaign, and read or change the posting schedule.
-It may not sign in, connect an account, approve content, publish, deploy,
-delete, or trigger another external side effect reserved for the operator. A
-post it creates arrives as a draft outside the rotation; only the operator
-promotes it, in the app.
+The draft helpers keep their draft-only behavior. The explicit Campaign GUI
+and Publish submission tools additionally support confirmed posting workflows.
+Read `campaigns.manage-social-posting` or `publishing.inspect-and-preview`
+before using them. Obtain user consent before top-level
+`confirm_external_action=true`; the GUI's role, state and assurance checks
+still apply. Do not infer permission from the existence of a tool. Sign-in,
+credentials and machine-wide account configuration stay local-only.
 
 A schedule is configuration, which is why it sits inside that authority:
 changing one moves when work a person has already written and already approved

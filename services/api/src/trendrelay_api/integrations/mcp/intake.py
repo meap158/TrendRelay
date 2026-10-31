@@ -532,13 +532,15 @@ def _ingest_fetched(
 MAX_TRACKED_IMPORTS = 40
 
 
-def _import_record(job_id: str) -> dict[str, Any]:
+def _import_record(job_id: str, workspace_id: str | None = None) -> dict[str, Any]:
     from trendrelay_api.jobs import get_job_record
 
     try:
         record = get_job_record(job_id)
     except FileNotFoundError as error:
         raise LookupError(f"No import job {job_id!r}.") from error
+    if workspace_id is not None and record.get("workspace_id") != workspace_id:
+        raise LookupError(f"No import job {job_id!r}.")
     result = record.get("result") or {}
     return {
         "job_id": record.get("id"),
@@ -549,7 +551,8 @@ def _import_record(job_id: str) -> dict[str, Any]:
 
 
 def get_import_status(
-    job_id: str | None = None, job_ids: list[str] | None = None
+    job_id: str | None = None, job_ids: list[str] | None = None,
+    *, workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """How the uploads for one post are going, and their asset ids once ready.
 
@@ -571,7 +574,10 @@ def get_import_status(
             f"{len(wanted)} import jobs at once; {MAX_TRACKED_IMPORTS} is the "
             "most this reports on. A post holds fewer pictures than that."
         )
-    imports = [_import_record(one) for one in wanted]
+    imports = [
+        _import_record(one, workspace_id) if workspace_id is not None else _import_record(one)
+        for one in wanted
+    ]
     return {
         "imports": imports,
         # In the order asked for, which for a carousel is the order the

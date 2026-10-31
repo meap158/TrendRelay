@@ -1,8 +1,9 @@
 # Roadmap
 
-Social posting MCP parity: in progress. Publish context, composer preview and
-workspace-scoped delivery history are exposed. Campaign execution, submission
-and authority parity remain under audit in `docs/mcp-social-posting-parity.md`.
+Social posting MCP parity: implementation and regression checks complete.
+Publish submission and all Campaign GUI operations have typed MCP counterparts,
+with confirmed actions and Library selection. The running service needs its
+initialization guidance refreshed. See `docs/mcp-social-posting-parity.md`.
 
 PM-355 (2026-10-29): the Mây Meo round now has 39 stock-ranked drafts pinned
 after the current queue, from 16 to 23 November. All 174 media files are unique;

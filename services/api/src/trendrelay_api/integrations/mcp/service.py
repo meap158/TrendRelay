@@ -32,8 +32,8 @@ LOCK = threading.Lock()
 #: The one line that says what the server will and will not let a caller do,
 #: shown beside the connection so the boundary is not only in a policy file.
 BOUNDARY_NOTE = (
-    "Reads and draft copy only. Approving, publishing, connecting an account and "
-    "signing in are refused - those stay a person's decision in the app."
+    "Read context and write drafts. Named posting actions require explicit confirmation "
+    "and workspace permission. Credentials, account connection and sign-in stay local-only."
 )
 
 

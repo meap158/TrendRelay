@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload a video or image into the media library and propose a draft post from Library assets into a campaign - whole, or a piece at a time - for the operator to promote.
-version: 11
+version: 12
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post, set-post-media]
 ---
@@ -23,12 +23,14 @@ Several images become one carousel later; they are not a bulk upload.
 
 ## What you can and cannot do here
 
-You can add an image to the media library and create a **draft** post in a
-campaign. You cannot publish it, approve it, or move it into the rotation:
-every post you create arrives as a draft outside the rotation, and only the
-operator can promote it, in the app. This is not a formality to work around -
-it is the boundary. End your work by telling the operator a draft is waiting
-for their review.
+This procedure adds media to the Library and proposes a **draft** campaign
+post. Its draft helpers cannot publish it, approve it, or move it into the
+rotation. End this procedure by saying the draft is waiting for review.
+
+When the user instead requests a GUI-equivalent queue or delivery action,
+load `campaigns.manage-social-posting`. Its separate confirmed tools preserve
+the GUI's role, authority and frozen-execution checks. Do not use one merely
+to skip review of a draft that was only requested as a proposal.
 
 One thing this boundary does not forbid, and which is easy to read as a
 contradiction: giving media to a post the operator has **already** approved,
