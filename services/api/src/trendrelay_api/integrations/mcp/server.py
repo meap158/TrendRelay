@@ -1700,6 +1700,8 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Guidance": ("list_sops", "get_sop"),
     "Campaign GUI": tuple(campaigns.OPERATIONS),
     "Publish GUI": tuple(campaigns.PUBLISH_OPERATIONS),
+    "Attribution GUI": tuple(campaigns.ATTRIBUTION_OPERATIONS),
+    "Library GUI": tuple(campaigns.LIBRARY_OPERATIONS),
     "Publish": (
         "get_publishing_context", "preview_publishing",
         "list_publishing_accounts", "list_publishing_boards", "submit_publishing",
@@ -1762,6 +1764,8 @@ CATEGORY_TABS: dict[str, str | None] = {
     "Guidance": None,
     "Campaign GUI": "Campaigns",
     "Publish GUI": "Publish",
+    "Attribution GUI": "Attribution",
+    "Library GUI": "Library",
     "Publish": "Publish",
     "Campaign context": "Campaigns",
     "Copy": "Campaigns",

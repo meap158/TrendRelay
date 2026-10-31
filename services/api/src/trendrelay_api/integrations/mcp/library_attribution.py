@@ -1,0 +1,228 @@
+"""Audited Library and Attribution GUI operations exposed through MCP.
+
+Only explicit application operations are listed. Credential/session management,
+machine licences and raw binary HTTP responses have separate boundaries below.
+"""
+
+# module, read-only local endpoints, confirmed mutation/provider endpoints
+SURFACES = {
+    "character": (
+        "characters_api",
+        ("read_characters", "read_character"),
+        (
+            "register_reviewed_character",
+            "register_reviewed_images",
+            "draw_character",
+            "retry_drawing",
+            "remove_character",
+        ),
+    ),
+    "autocut": (
+        "autocut_api",
+        ("list_templates", "preview_plan", "render_status"),
+        ("start_render", "start_preview"),
+    ),
+    "storytelling": (
+        "storytelling_api",
+        (
+            "list_templates",
+            "list_caption_styles",
+            "outline_script",
+            "autocreate_status",
+            "render_status",
+            "broll_status",
+            "arrange_pictures",
+        ),
+        (
+            "start_render",
+            "start_preview",
+            "start_autocreate",
+            "search_broll",
+            "import_broll",
+            "shared_voices",
+            "add_voice",
+        ),
+    ),
+    "carousel": ("carousels_api", ("rules",), ("preview", "save")),
+    "hook": (
+        "hook_overlays_api",
+        ("rules", "check", "autotime", "status"),
+        ("propose_hooks", "batch", "render"),
+    ),
+    "creation": (
+        "creation_drafts_api",
+        ("list_creations", "list_kinds", "get_creation", "list_creation_media"),
+        (
+            "create_creation",
+            "update_creation",
+            "attach_creation_media",
+            "render_creation",
+            "archive_creation",
+        ),
+    ),
+    "studio": (
+        "production_api",
+        ("status", "productions", "get_render"),
+        ("propose", "approve", "render"),
+    ),
+    "attribution": (
+        "attribution_api",
+        (
+            "list_tracking_links",
+            "list_conversions",
+            "attribution_products",
+            "list_campaign_tags",
+            "attribution_summary",
+            "preview_shopee_import",
+            "read_shopee_session",
+            "read_shopee_enrichment",
+            "read_product_listing",
+            "read_shopee_enrichment_jobs",
+        ),
+        (
+            "create_tracking_link",
+            "update_tracking_link_status",
+            "import_conversions",
+            "tag_products_to_campaigns",
+            "untag_products_from_campaigns",
+            "import_shopee_offers",
+            "fetch_shopee_offers",
+            "refresh_shopee_listings",
+            "probe_shopee_session",
+        ),
+    ),
+    "creative": (
+        "product_creative_api",
+        (
+            "list_creative_recipes",
+            "list_creative_recipe_examples",
+            "preview_creative_draft",
+            "list_creative_drafts",
+            "read_creative_draft",
+            "list_video_providers",
+            "read_creative_generation",
+        ),
+        (
+            "attach_media_products",
+            "detach_media_product",
+            "create_creative_draft",
+            "submit_creative_media",
+            "discard_creative_draft",
+            "generate_creative_video",
+        ),
+    ),
+    "library": (
+        "media_library_api",
+        (
+            "library_status",
+            "ingestion_jobs",
+            "media_processing_jobs",
+            "list_asset_ids",
+            "list_assets",
+            "get_asset",
+            "face_blur_status",
+            "face_overlay_status",
+            "face_overlay_objects",
+            "suggest_face_overlay_objects",
+            "face_overlay_mesh",
+            "list_effects",
+            "list_caption_styles",
+            "list_caption_files",
+            "read_swap_licence",
+            "get_recipe",
+            "list_effect_render_jobs",
+            "list_bulk_actions",
+            "translation_pairs",
+            "asset_text_regions",
+            "list_library_video_providers",
+            "read_library_generation",
+            "voice_jobs",
+            "transcription_jobs",
+        ),
+        (
+            "search_music",
+            "suggest_music",
+            "import_music",
+            "submit_face_blur",
+            "import_overlay_from_library",
+            "import_face_swap_portrait",
+            "remove_face_swap_portrait",
+            "preview_captions",
+            "render_captions",
+            "save_recipe",
+            "discard_rendered_cuts",
+            "clear_effect_history",
+            "submit_render",
+            "submit_batch_render",
+            "cancel_effect_render_job",
+            "run_effect_render_job_next",
+            "prepare_archive",
+            "run_bulk_action",
+            "preview_text_overlay",
+            "translate_transcript",
+            "transcribe_asset",
+            "preview_voice",
+            "generate_voiceover",
+            "generate_library_video",
+            "available_voices",
+            "enrich_asset",
+        ),
+    ),
+}
+
+# Every excluded route is named and justified, so route additions fail the
+# coverage test until the exposure decision is reviewed.
+LOCAL_ONLY = {
+    **{
+        module: set()
+        for module in (
+            "characters_api",
+            "autocut_api",
+            "storytelling_api",
+            "carousels_api",
+            "hook_overlays_api",
+            "creation_drafts_api",
+            "production_api",
+        )
+    },
+    "attribution_api": {
+        "open_shopee_offer_page",
+        "connect_shopee_session",
+        "disconnect_shopee_session",
+        "open_shopee_sign_in",
+        "read_shopee_sign_in",
+    },
+    "media_library_api": {"record_swap_licence", "import_asset", "batch_import_assets"},
+    "product_creative_api": set(),
+}
+BINARY_OR_MULTIPART = {
+    **{
+        module: set()
+        for module in (
+            "characters_api",
+            "carousels_api",
+            "hook_overlays_api",
+            "creation_drafts_api",
+            "production_api",
+        )
+    },
+    "autocut_api": {"stream_preview"},
+    "storytelling_api": {"stream_preview"},
+    "attribution_api": {"export_shopee_offers"},
+    "product_creative_api": set(),
+    "media_library_api": {
+        "upload_import_asset",
+        "asset_content",
+        "asset_preview",
+        "asset_preview_stream",
+        "face_blur_media",
+        "face_blur_frame",
+        "face_overlay_sprite",
+        "upload_overlay_object",
+        "effect_preview_frame",
+        "face_swap_face_thumbnail",
+        "download_caption_file",
+        "consume_effect_preview",
+        "download_archive",
+    },
+}

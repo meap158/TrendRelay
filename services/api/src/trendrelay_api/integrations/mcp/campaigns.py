@@ -19,6 +19,7 @@ from pydantic.fields import FieldInfo
 from starlette.requests import Request
 
 from .access import confirm_external_action, require_access
+from .library_attribution import SURFACES
 
 
 @dataclass(frozen=True)
@@ -141,7 +142,26 @@ PUBLISH_OPERATIONS = {
     ),
 }
 
-ALL_OPERATIONS = {**OPERATIONS, **PUBLISH_OPERATIONS}
+ATTRIBUTION_OPERATIONS = {
+    f"{prefix}_{name}": Operation(name, module=module, mutation=confirmed, external=confirmed)
+    for prefix, (module, reads, writes) in SURFACES.items()
+    if prefix in {"attribution", "creative", "character"}
+    for names, confirmed in ((reads, False), (writes, True))
+    for name in names
+}
+LIBRARY_OPERATIONS = {
+    f"{prefix}_{name}": Operation(name, module=module, mutation=confirmed, external=confirmed)
+    for prefix, (module, reads, writes) in SURFACES.items()
+    if prefix not in {"attribution", "creative", "character"}
+    for names, confirmed in ((reads, False), (writes, True))
+    for name in names
+}
+ALL_OPERATIONS = {
+    **OPERATIONS,
+    **PUBLISH_OPERATIONS,
+    **ATTRIBUTION_OPERATIONS,
+    **LIBRARY_OPERATIONS,
+}
 
 
 def endpoint(operation: Operation):
@@ -169,7 +189,7 @@ def _public_signature(fn, operation: Operation | None = None) -> inspect.Signatu
     hints = get_type_hints(fn, include_extras=True)
     parameters = []
     for param in inspect.signature(fn).parameters.values():
-        if param.name in {"workspace_id", "session", "user", "request"}:
+        if param.name in {"workspace_id", "session", "user", "request", "background_tasks"}:
             continue
         annotation = hints[param.name]
         if (
@@ -252,14 +272,30 @@ def invoke(session, workspace_id: str, name: str, arguments: dict[str, Any]) -> 
     if operation.endpoint in {"add_queue_item", "update_queue_item"}:
         body_type = get_type_hints(fn)["body"]
         arguments["body"] = body = body_type.model_validate(fields)
-    if isinstance(body, BaseModel) and "confirm_external_action" in type(body).model_fields:
+    confirmation_fields = (
+        {
+            key: confirmed
+            for key in ("confirm_external_action", "confirm")
+            if key in type(body).model_fields
+        }
+        if isinstance(body, BaseModel)
+        else {}
+    )
+    if confirmation_fields:
         arguments["body"] = type(body).model_validate(
             {
                 **body.model_dump(exclude_unset=True),
-                "confirm_external_action": confirmed,
+                **confirmation_fields,
             }
         )
+    elif isinstance(body, dict) and (operation.mutation or operation.external):
+        arguments["body"] = {**body, "confirm_external_action": confirmed}
     values = {**arguments, "workspace_id": workspace_id, "session": session, "user": actor}
+    tasks = None
+    if "background_tasks" in inspect.signature(fn).parameters:
+        from fastapi import BackgroundTasks
+
+        tasks = values["background_tasks"] = BackgroundTasks()
     if "request" in inspect.signature(fn).parameters:
         values["request"] = Request(
             {
@@ -274,6 +310,12 @@ def invoke(session, workspace_id: str, name: str, arguments: dict[str, Any]) -> 
         result = fn(**values)
         if operation.mutation:
             session.commit()
+        if tasks and tasks.tasks:
+            import anyio
+
+            # The sync MCP handler runs in a worker thread. Match HTTP's
+            # commit-before-background-work order and keep the returned job IDs.
+            anyio.run(tasks)
         return result
     except Exception:
         session.rollback()
@@ -299,10 +341,24 @@ def install(server, workspace_id: str, call) -> None:
             return dispatch
 
         description = inspect.getdoc(fn) or operation.endpoint.replace("_", " ")
-        procedure = (
-            "publishing.inspect-and-preview" if operation.module == "publishing_api"
-            else "campaigns.manage-social-posting"
-        )
+        procedure = {
+            "publishing_api": "publishing.inspect-and-preview",
+            "attribution_api": "attribution.manage-library-data",
+            "product_creative_api": "attribution.manage-library-data",
+            "media_library_api": "library.manage-media",
+            "characters_api": "attribution.manage-library-data",
+            **{
+                module: "library.manage-media"
+                for module in (
+                    "autocut_api",
+                    "storytelling_api",
+                    "carousels_api",
+                    "hook_overlays_api",
+                    "creation_drafts_api",
+                    "production_api",
+                )
+            },
+        }.get(operation.module, "campaigns.manage-social-posting")
         description += (
             " Uses the GUI operation and its workspace/role/state validation. "
             f"Read {procedure} before acting. "

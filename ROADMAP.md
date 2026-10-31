@@ -1,5 +1,10 @@
 # Roadmap
 
+Library and Attribution MCP audit: typed GUI workflows added for full Library
+filters, processing, tracking, creatives, Characters and shared creation dialogs.
+Credentials, licence attestations and binary HTTP transports keep explicit
+boundaries. See `docs/mcp-library-attribution-parity.md` for coverage.
+
 Social posting MCP parity: implementation, regression and live checks complete.
 Publish submission and all Campaign GUI operations have typed MCP counterparts,
 with confirmed actions and Library selection. The running service's tools,

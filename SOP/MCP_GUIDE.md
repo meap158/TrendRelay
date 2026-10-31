@@ -11,6 +11,8 @@ write operation looks convenient.
 
 | Intended action | Canonical action | First live operation |
 | --- | --- | --- |
+| Browse, filter, inspect or process Library media | `library.manage-media` | `library_list_assets` |
+| Manage Attribution links, conversions, product tags or creative records | `attribution.manage-library-data` | `attribution_attribution_summary` |
 | Compose, preview or submit a standalone Publish post | `publishing.inspect-and-preview` | `get_publishing_context` |
 | Use Campaign GUI actions, including confirmed queueing or delivery | `campaigns.manage-social-posting` | `campaign_read_autopilot` |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
