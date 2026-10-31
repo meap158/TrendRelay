@@ -1,6 +1,6 @@
 # MCP social posting parity audit
 
-Status: implemented and regression-tested; live guidance refresh pending.
+Status: implemented, regression-tested and verified against the running MCP server.
 Scope covers Publish and Campaigns, including the path
 from another app through Streamable HTTP to context, composition, queueing,
 optional slot pinning and delivery. Named confirmed actions supplement the
@@ -75,16 +75,15 @@ search the queue before repeating it. Publish job IDs are stable for identical
 operations; job reads recover an interrupted delivery. No real social post was
 sent during verification.
 
-## Live check and remaining operation
+## Final live check
 
 A read-only connection to the operator's running MCP server lists all 122
 tools, with no missing operations or input-schema differences from the source.
 It exposes 53 Campaign GUI and 11 Publish GUI counterparts. Local evidence is
 `.data/social-mcp-live-audit.json`.
 
-The running server's initialization instructions differ from the revised source
-guide. The guide is captured when a server instance starts, while guide/SOP
-resources read current files. The operator's service must be refreshed before
-the full live-completion gate can pass. Repository rules prohibit this agent
-from restarting operator-owned services. No restart was performed. The goal
-remains active pending that live guidance check; no owner-desk task was added.
+The final check after commit `0d60e926` also confirms the running server's
+initialization instructions match the source guide. An earlier check found
+stale initialization guidance; it subsequently refreshed without an agent
+restart. The live-completion gate now passes. No real posts, credential changes
+or service restarts were performed, and no owner-desk task was added.

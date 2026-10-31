@@ -1,9 +1,9 @@
 # Roadmap
 
-Social posting MCP parity: implementation and regression checks complete.
+Social posting MCP parity: implementation, regression and live checks complete.
 Publish submission and all Campaign GUI operations have typed MCP counterparts,
-with confirmed actions and Library selection. The running service needs its
-initialization guidance refreshed. See `docs/mcp-social-posting-parity.md`.
+with confirmed actions and Library selection. The running service's tools,
+schemas and guidance match. See `docs/mcp-social-posting-parity.md`.
 
 PM-355 (2026-10-29): the Mây Meo round now has 39 stock-ranked drafts pinned
 after the current queue, from 16 to 23 November. All 174 media files are unique;
