@@ -1,5 +1,16 @@
 # Assistant Access (MCP)
 
+## Publish context and preview
+
+`get_publishing_context` reads configured readiness and the GUI capability
+matrix without probing provider accounts. `preview_publishing` validates a
+standalone composer request through the GUI preview and Library credit helper.
+`list_publishing_jobs` and `get_publishing_job` read delivery history within
+the connection's workspace. The reviewed procedure is
+`publishing.inspect-and-preview`. These tools do not submit posts.
+
+GUI parity work is tracked in [the social posting audit](../mcp-social-posting-parity.md).
+
 TrendRelay can serve one workspace to an outside assistant over the Model
 Context Protocol, so a model can help write the copy a campaign is missing. It
 is a first-party capability built on the official `mcp` Python SDK (MIT), not a

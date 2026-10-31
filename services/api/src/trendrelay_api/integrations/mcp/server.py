@@ -21,6 +21,7 @@ from trendrelay_api.integrations.mcp import (
     policy,
     product_creatives,
     products,
+    publishing,
     schedules,
     sops,
     writes,
@@ -1564,6 +1565,56 @@ def build_server(workspace_id: str) -> FastMCP:
             ),
         )
 
+    @server.tool(
+        name="get_publishing_context",
+        description=(
+            "Read Publish connection readiness and the GUI capability matrix "
+            "without probing accounts or revealing credentials."
+        ),
+    )
+    def get_publishing_context() -> dict[str, Any]:
+        return _call(
+            "get_publishing_context", lambda s: publishing.get_publishing_context(workspace_id)
+        )
+
+    @server.tool(
+        name="preview_publishing",
+        description=(
+            "Validate a standalone Publish composer request using the GUI preview, "
+            "including Library media credit. Pass the GUI PublishRequest fields in request: "
+            "caption, date, targets, delivery, media and optional platform fields. "
+            "workspace_id is supplied by this connection. Does not submit or send a post."
+        ),
+    )
+    def preview_publishing(request: dict[str, Any]) -> dict[str, Any]:
+        return _call(
+            "preview_publishing", lambda s: publishing.preview_publishing(s, workspace_id, request)
+        )
+
+    @server.tool(
+        name="list_publishing_jobs",
+        description=(
+            "Read the workspace's recent Publish jobs, including delivery state and errors. "
+            "limit is 1 to 100."
+        ),
+    )
+    def list_publishing_jobs(limit: Annotated[int, Field(ge=1, le=100)] = 20) -> dict[str, Any]:
+        return _call(
+            "list_publishing_jobs", lambda s: publishing.list_publishing_jobs(workspace_id, limit)
+        )
+
+    @server.tool(
+        name="get_publishing_job",
+        description=(
+            "Read one Publish job and its delivery results. "
+            "Jobs from another workspace are not accessible."
+        ),
+    )
+    def get_publishing_job(job_id: str) -> dict[str, Any]:
+        return _call(
+            "get_publishing_job", lambda s: publishing.get_publishing_job(workspace_id, job_id)
+        )
+
     return server
 
 
@@ -1579,6 +1630,10 @@ def exposed_tool_names() -> list[str]:
 #: list silt up. Order here is display order.
 TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Guidance": ("list_sops", "get_sop"),
+    "Publish": (
+        "get_publishing_context", "preview_publishing",
+        "list_publishing_jobs", "get_publishing_job",
+    ),
     "Campaign context": (
         "list_campaigns", "list_posts_needing_copy", "list_campaign_posts",
         "get_post_context", "get_campaign_config",
@@ -1634,6 +1689,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
 #: is a Campaigns matter.
 CATEGORY_TABS: dict[str, str | None] = {
     "Guidance": None,
+    "Publish": "Publish",
     "Campaign context": "Campaigns",
     "Copy": "Campaigns",
     "Media & posts": "Campaigns",

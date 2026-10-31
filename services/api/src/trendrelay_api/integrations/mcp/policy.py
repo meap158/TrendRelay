@@ -74,6 +74,10 @@ _REFUSAL_REASON: dict[Access, str] = {
 #: than merely absent so a caller that asks for one by name is told why, and so
 #: a test can prove the boundary holds against a caller that ignores the menu.
 EXPOSURE: dict[str, Access] = {
+    "get_publishing_context": Access.READ,
+    "preview_publishing": Access.READ,
+    "list_publishing_jobs": Access.READ,
+    "get_publishing_job": Access.READ,
     # --- Reads: context for writing copy -----------------------------------
     "list_campaigns": Access.READ,
     "list_posts_needing_copy": Access.READ,
