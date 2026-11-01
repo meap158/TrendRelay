@@ -35,6 +35,7 @@ from trendrelay_api.integrations import (
     face_blur,
     face_identity,
     face_overlays,
+    gemini_watermark_tool,
     overlay_catalogue,
     recolour,
     watermark_tool,
@@ -183,6 +184,14 @@ def _swap_still(source: Path, destination: Path, values: dict[str, Any]) -> dict
     return face_swap.render_still(source, destination, _swap_settings(values))
 
 
+def _gemini_watermark_still(
+    source: Path, destination: Path, values: dict[str, Any]
+) -> dict[str, Any]:
+    return gemini_watermark_tool.render_cleaned(
+        source, destination, _gemini_watermark_settings(values)
+    )
+
+
 #: Why the identity blur has no preview. It is the one effect here whose whole
 #: question — which of these people is the subject — is answered by clustering
 #: the entire clip. A single frame has nothing to cluster, so a preview could
@@ -298,6 +307,27 @@ VEO_WATERMARK = Effect(
 )
 
 register(VEO_WATERMARK)
+
+
+GEMINI_WATERMARK = Effect(
+    id="gemini_watermark",
+    label="Remove Gemini watermark",
+    tag="Watermark removed",
+    summary="Take the visible Gemini sparkle mark off a generated picture, leaving every other "
+    "pixel alone.",
+    stage="frame",
+    params=(
+        EffectParam(
+            id="legacy", label="Older, larger text", kind="toggle", default=False,
+            help="Only for pictures from before Gemini 3.5, which carry a bigger text mark.",
+        ),
+    ),
+    availability=gemini_watermark_tool.status,
+    media_kinds=frozenset({"image"}),
+    render_still=_gemini_watermark_still,
+)
+
+register(GEMINI_WATERMARK)
 
 
 FACE_OVERLAY = Effect(
@@ -549,6 +579,10 @@ register(FACE_SWAP)
 
 def _watermark_settings(values: dict[str, Any]) -> watermark_tool.WatermarkSettings:
     return watermark_tool.WatermarkSettings(legacy=bool(values.get("legacy")), ml=bool(values.get("ml")))
+
+
+def _gemini_watermark_settings(values: dict[str, Any]) -> gemini_watermark_tool.WatermarkSettings:
+    return gemini_watermark_tool.WatermarkSettings(legacy=bool(values.get("legacy")))
 
 
 def _recolour_settings(values: dict[str, Any]) -> recolour.RecolourSettings:
@@ -1006,6 +1040,11 @@ def render_recipe(
             elif step.effect.id == "veo_watermark":
                 outcome = watermark_tool.render_cleaned(
                     current, staged, _watermark_settings(step.values),
+                    preview_seconds=preview_for_this_pass, progress=step_progress,
+                )
+            elif step.effect.id == "gemini_watermark":
+                outcome = gemini_watermark_tool.render_cleaned(
+                    current, staged, _gemini_watermark_settings(step.values),
                     preview_seconds=preview_for_this_pass, progress=step_progress,
                 )
             elif step.effect.id == "garment_recolour":

@@ -695,6 +695,62 @@
       "runs": "network"
     },
     {
+      "id": "gemini-watermark-remover",
+      "name": "Gemini Watermark Remover (GeminiWatermarkTool)",
+      "repository": "https://github.com/allenk/GeminiWatermarkTool",
+      "revision": "v0.3.2",
+      "version": "0.3.2",
+      "license": "MIT",
+      "license_url": "https://github.com/allenk/GeminiWatermarkTool",
+      "category": "Image editing",
+      "summary": "Removes the visible Gemini sparkle mark from generated images by reverse alpha blending. A prebuilt, unsigned command line program with published MIT-licensed source: it is run here on the owner's own media and never redistributed.",
+      "capabilities": [
+        "Gemini sparkle and bottom-right mark removal",
+        "Legacy large-text mode",
+        "Skips images with no mark instead of altering them",
+        "Removes visible marks only, not SynthID"
+      ],
+      "integration_status": "adapted",
+      "commercial_use": "allowed",
+      "install_strategy": "release-download",
+      "downloads": {
+        "windows": {
+          "url": "https://github.com/allenk/GeminiWatermarkTool/releases/download/v0.3.2/gwt-mini-windows-x64.zip",
+          "sha256": "785e55d1779f47b0cd0369bd3955523b8ff42af0bc2f53003edc32183145525a",
+          "size": 5086584,
+          "executable": "gwt-mini.exe",
+          "files": [
+            "gwt-mini.exe"
+          ]
+        },
+        "linux": {
+          "url": "https://github.com/allenk/GeminiWatermarkTool/releases/download/v0.3.2/gwt-mini-linux-x64.zip",
+          "sha256": "fc955993b637e072e789a0d7bc889940b8120ca090c929109dfedebe61a3e686",
+          "size": 7065338,
+          "executable": "gwt-mini",
+          "files": [
+            "gwt-mini"
+          ]
+        },
+        "macos": {
+          "url": "https://github.com/allenk/GeminiWatermarkTool/releases/download/v0.3.2/gwt-mini-macos-universal.zip",
+          "sha256": "da56b0537b54f9921498da6cfad48d92aa9795bd09ebbb2e0ac24edcbbd1db0f",
+          "size": 12275222,
+          "executable": "gwt-mini",
+          "files": [
+            "gwt-mini"
+          ]
+        }
+      },
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": true,
+      "root_path": ".tools/gemini-watermark-remover",
+      "documentation": "docs/third-party/gemini-watermark-remover.md",
+      "surface": "library",
+      "runs": "local"
+    },
+    {
       "id": "veo-watermark-remover",
       "name": "Veo Watermark Remover (GeminiWatermarkTool-Video)",
       "repository": "https://github.com/allenk/VeoWatermarkRemover",

@@ -39,6 +39,7 @@ FRAME_RENDER_CASES = [
     ("garment_recolour", "recolour", "render_recoloured"),
     ("face_swap", "face_swap", "render_swapped"),
     ("veo_watermark", "watermark_tool", "render_cleaned"),
+    ("gemini_watermark", "gemini_watermark_tool", "render_cleaned"),
 ]
 
 
@@ -310,10 +311,16 @@ def test_every_frame_effect_is_dispatched_by_the_shared_recipe_renderer(
         "face_overlays": effect_render.face_overlays,
         "recolour": effect_render.recolour,
         "watermark_tool": effect_render.watermark_tool,
+        "gemini_watermark_tool": effect_render.gemini_watermark_tool,
         "face_swap": face_swap,
     }
     source = tmp_path / "source.mp4"
     destination = tmp_path / f"{effect_id}.mp4"
+    effect = effects.REGISTRY[effect_id]
+    if effect.media_kinds == frozenset({"image"}):
+        # An image-only effect never sees the clip fixture.
+        source = tmp_path / "source.png"
+        destination = tmp_path / f"{effect_id}.png"
     source.write_bytes(b"source")
     called: list[str] = []
     preview_limits: list[float | None] = []
@@ -325,7 +332,6 @@ def test_every_frame_effect_is_dispatched_by_the_shared_recipe_renderer(
         return {"rendered": True}
 
     monkeypatch.setattr(modules[module_name], renderer_name, fake_renderer)
-    effect = effects.REGISTRY[effect_id]
     defaults = {param.id: param.default for param in effect.params}
     step = effects.RecipeStep(effect=effect, values=defaults)
 
@@ -334,11 +340,16 @@ def test_every_frame_effect_is_dispatched_by_the_shared_recipe_renderer(
     )
 
     assert called == [effect_id]
-    assert preview_limits == [0.5]
+    if effect.media_kinds == frozenset({"image"}):
+        # Stills have no timeline: no preview limit travels, and the report
+        # numbers the step.
+        assert preview_limits == [None]
+        expected = {"effect": effect_id, "step": 0, "rendered": True}
+    else:
+        assert preview_limits == [0.5]
+        expected = {"effect": effect_id, "rendered": True}
     assert destination.read_bytes() == b"source-effect"
-    assert report["frame_effects"] == [{
-        "effect": effect_id, "rendered": True,
-    }]
+    assert report["frame_effects"] == [expected]
 
 
 def test_every_registered_effect_is_in_the_execution_matrix() -> None:

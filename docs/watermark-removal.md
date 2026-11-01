@@ -1,9 +1,10 @@
-# Removing the Veo / Gemini watermark (PM-340)
+# Removing watermarks with external tools (PM-340, PM-341)
 
 The **Remove Veo watermark** effect takes the visible Veo or Gemini mark off a generated video in
-the Library. It sits in the effect stack like any other step and runs as its own pass, in the order
-you put it. Put it first: it works on the clip's own frames, so crops, zooms and captions added
-before it would change what it has to find.
+the Library. The **Remove Gemini watermark** effect does the same for a generated picture. Both sit
+in the effect stack like any other step and run as their own pass, in the order you put them. Put
+the step first: it works on the media's own pixels, so crops, zooms and captions added before it
+would change what it has to find.
 
 ## What does the work
 
@@ -17,6 +18,11 @@ The catalogue pins one release with its size and SHA256 for each system, the ins
 and the program lands in `.tools/veo-watermark-remover/` inside this project. Uninstall removes it.
 The effect is offered only while the tool is installed and switched on. Details:
 `docs/third-party/veo-watermark-remover.md`.
+
+The image twin, **Remove Gemini watermark**, works the same way through `gwt-mini` from
+[allenk/GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool) (MIT, v0.3.2 pinned),
+landing in `.tools/gemini-watermark-remover/`. Details:
+`docs/third-party/gemini-watermark-remover.md`.
 
 ## What TrendRelay adds
 
