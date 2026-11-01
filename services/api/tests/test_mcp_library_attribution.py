@@ -298,10 +298,15 @@ def original_version(factory):
 
 
 def test_streamable_client_browses_library_and_attribution_and_updates_recipe(
-    factory, original_version,
+    factory, original_version, monkeypatch,
 ):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
+    from starlette.responses import Response
+
+    monkeypatch.setattr(media_library_api, "face_overlay_sprite", lambda *args: Response(
+        b"png", media_type="image/png",
+    ))
 
     async def exercise():
         built = server.build_server("ws")
@@ -325,6 +330,12 @@ def test_streamable_client_browses_library_and_attribution_and_updates_recipe(
                         assert not resource.isError, resource
                         assert resource.content[0].type == "resource"
                         assert resource.content[0].resource.mimeType == "image/png"
+                        sprite = await client.call_tool(
+                            "read_preview_artifact", {"kind": "overlay", "identifier": "test"}
+                        )
+                        assert not sprite.isError, sprite
+                        assert sprite.content[0].type == "image"
+                        assert sprite.content[0].mimeType == "image/png"
                         summary = await client.call_tool("attribution_attribution_summary", {})
                         assert not summary.isError, summary
                         denied = await client.call_tool(
@@ -436,3 +447,159 @@ def test_workbook_transfer_uses_confirmed_gui_export(factory, monkeypatch):
     with factory() as session:
         result = media_transfer.export_shopee_workbook(session, "ws", 7, confirmed=True)
         assert base64.b64decode(result.resource.blob) == b"xlsx"
+
+
+def test_archive_transfer_real_zip_scope_and_limit(factory, tmp_path, monkeypatch):
+    import base64
+    import io
+    import zipfile
+
+    from trendrelay_api import media_archive
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    path = tmp_path / "entry.txt"
+    path.write_bytes(b"selection")
+    token = media_archive.issue("ws", [media_archive.ArchiveEntry(path, "entry.txt")], "test.zip")
+    with factory() as session:
+        resource = media_transfer.read_library_archive(session, "ws", token)
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(resource.resource.blob))) as archive:
+            assert archive.read("entry.txt") == b"selection"
+        with pytest.raises(HTTPException) as error:
+            media_transfer.read_library_archive(session, "foreign", token)
+        assert error.value.status_code == 404
+        monkeypatch.setattr(media_transfer, "MAX_TRANSFER_BYTES", 2)
+        with pytest.raises(ValueError, match="MCP limit"):
+            media_transfer.read_library_archive(session, "ws", token)
+        with pytest.raises(HTTPException):
+            media_transfer.read_library_archive(session, "ws", "expired-or-invalid")
+
+
+def test_archive_single_file_expiry_and_membership(factory, tmp_path, monkeypatch):
+    import base64
+    from dataclasses import replace
+
+    from trendrelay_api import media_archive
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    path = tmp_path / "single.png"
+    path.write_bytes(b"png")
+    token = media_archive.issue(
+        "ws", [media_archive.ArchiveEntry(path, "single.png")], "single.png", "image/png",
+    )
+    with factory() as session:
+        result = media_transfer.read_library_archive(session, "ws", token)
+        assert base64.b64decode(result.resource.blob) == b"png"
+        with pytest.raises(HTTPException):
+            media_transfer.read_library_archive(session, "no-membership", token)
+        monkeypatch.setitem(media_archive._tickets, token, replace(
+            media_archive._tickets[token], expires_at=0,
+        ))
+        with pytest.raises(HTTPException) as error:
+            media_transfer.read_library_archive(session, "ws", token)
+        assert error.value.status_code == 404
+
+
+@pytest.mark.parametrize("kind", ["autocut", "storytelling"])
+def test_creation_preview_uses_real_job_scope_guard(factory, monkeypatch, kind, tmp_path):
+    from trendrelay_api import autocut_api, storytelling_api
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    path = tmp_path / "preview.mp4"
+    path.write_bytes(b"video")
+    if kind == "autocut":
+        monkeypatch.setattr(autocut_api, "get_job_record", lambda *a, **kw: {
+            "workspace_id": "foreign", "kind": autocut_api.autocut_jobs.JOB_KIND,
+            "payload": {"preview": True}, "result": {"output_path": str(path)},
+        })
+    else:
+        def refused(*args):
+            raise HTTPException(404, "Not found")
+        monkeypatch.setattr(storytelling_api, "_record", refused)
+    with factory() as session:
+        with pytest.raises(HTTPException) as error:
+            media_transfer.read_preview_artifact(session, "ws", kind, "foreign-job")
+        assert error.value.status_code == 404
+
+
+@pytest.mark.parametrize("kind", ["portrait", "blurred", "autocut", "storytelling", "overlay"])
+def test_artifact_transfer_delegates_and_returns_native_content(
+    factory, monkeypatch, tmp_path, kind,
+):
+    import base64
+
+    from starlette.responses import FileResponse, Response
+
+    from trendrelay_api import autocut_api, storytelling_api
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    path = tmp_path / "result.png"
+    path.write_bytes(b"content")
+    module, endpoint = {
+        "portrait": (media_library_api, "face_swap_face_thumbnail"),
+        "blurred": (media_library_api, "face_blur_media"),
+        "overlay": (media_library_api, "face_overlay_sprite"),
+        "autocut": (autocut_api, "stream_preview"),
+        "storytelling": (storytelling_api, "stream_preview"),
+    }[kind]
+
+    def response(workspace_id, identifier, actor, session, *args):
+        assert workspace_id == "ws"
+        assert identifier == "chosen"
+        if kind == "overlay":
+            assert args == (64,)
+            return Response(b"content", media_type="image/png")
+        return FileResponse(path, media_type="image/png")
+
+    monkeypatch.setattr(module, endpoint, response)
+    with factory() as session:
+        result = media_transfer.read_preview_artifact(session, "ws", kind, "chosen", 64)
+        data = result.data if kind == "overlay" else result.resource.blob
+        assert base64.b64decode(data) == b"content"
+        if kind in {"autocut", "storytelling"}:
+            assert result.resource.mimeType == "video/mp4"
+
+
+def test_blur_preview_confirmation_and_scope(factory, monkeypatch):
+    from starlette.responses import Response
+
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    def preview(workspace_id, actor, session, path, padding, confidence, at):
+        assert path.endswith("image-one.png")
+        return Response(b"jpeg", media_type="image/jpeg", headers={"X-Faces-Found": "2"})
+
+    monkeypatch.setattr(media_library_api, "face_blur_frame", preview)
+    with factory() as session:
+        with pytest.raises(PermissionError):
+            media_transfer.preview_library_blur(session, "ws", "image-one")
+        with pytest.raises(HTTPException):
+            media_transfer.preview_library_blur(session, "ws", "foreign-image", confirmed=True)
+        result = media_transfer.preview_library_blur(session, "ws", "image-one", confirmed=True)
+        assert "Faces=2" in result[0].text
+        assert result[1].type == "image"
+
+
+def test_effect_preview_read_preserves_file_and_refuses_foreign_job(factory, monkeypatch, tmp_path):
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.integrations.mcp import media_transfer
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    output = root / "preview.mp4"
+    output.write_bytes(b"video")
+    job = {"workspace_id": "ws", "status": "succeeded",
+           "payload": {"request": {"preview_seconds": 3}}, "result": {"output": str(output)}}
+    monkeypatch.setattr(effect_render, "RENDER_ROOT", tmp_path)
+    monkeypatch.setattr(effect_render, "get_render_job", lambda _: job)
+    with factory() as session:
+        result = media_transfer.read_preview_artifact(session, "ws", "effect", "job")
+        assert result.resource.mimeType == "video/mp4"
+        assert output.is_file()
+        job["workspace_id"] = "foreign"
+        with pytest.raises(HTTPException) as error:
+            media_transfer.read_preview_artifact(session, "ws", "effect", "job")
+        assert error.value.status_code == 404
+        job["workspace_id"] = "ws"
+        job["result"]["output"] = str(tmp_path / "outside.mp4")
+        with pytest.raises(HTTPException):
+            media_transfer.read_preview_artifact(session, "ws", "effect", "job")

@@ -50,8 +50,14 @@ Use `read_library_media` for original, proxy, thumbnail, audio or edited files,
 and `read_library_caption` for paths from the caption file listing. Downloads
 return embedded MCP resources, capped at 16 MiB. Use `preview_library_effect`
 with explicit confirmation for an effect-stack preview as MCP image content.
-Larger streams, specialized face/sprite previews and archive downloads use the
-authenticated GUI. Archive preparation returns the GUI's download reference.
+Use `read_preview_artifact` for overlay sprites, face-picker portraits, blurred
+renders and completed AutoCut, Storytelling or effect previews. Its identifier
+is the overlay ID, portrait name, blurred output path or job ID respectively.
+Effect previews remain on disk after reading. `preview_library_blur` accepts a
+workspace asset ID and confirmed blur settings, returning a frame and face count.
+Use `read_library_archive` with the token from archive preparation for the
+selection's file or ZIP bytes. Tokens retain their workspace and expiry checks.
+All these downloads share the 16 MiB cap. Larger streams use the GUI.
 Browser multipart media uploads use the MCP byte/URL upload flow instead.
 Face-swap licence attestations and account
 sign-in stay with the operator. Do not record consent or licence ownership on

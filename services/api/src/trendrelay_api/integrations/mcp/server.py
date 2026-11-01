@@ -1729,6 +1729,44 @@ def build_server(workspace_id: str) -> FastMCP:
             s, workspace_id, limit, confirmed=confirm_external_action,
         ))
 
+    @server.tool(description=(
+        "Read an overlay sprite, face portrait, blurred render or finished AutoCut/Storytelling "
+        "preview, or a finished effect preview. identifier is an overlay ID, portrait name, "
+        "blurred output path or job ID respectively. Maximum 16 MiB. Effect previews are "
+        "read without deleting their files; no render is started."
+    ))
+    def read_preview_artifact(
+        kind: Literal["overlay", "portrait", "blurred", "autocut", "storytelling", "effect"],
+        identifier: str, width: Annotated[int, Field(ge=32, le=512)] = 192,
+    ) -> Any:
+        return _call("read_preview_artifact", lambda s: media_transfer.read_preview_artifact(
+            s, workspace_id, kind, identifier, width,
+        ))
+
+    @server.tool(description=(
+        "Download a prepared Library selection using its issued token, up to 16 MiB. "
+        "Workspace membership and token expiry still apply. Larger archives use the GUI."
+    ))
+    def read_library_archive(token: str) -> Any:
+        return _call("read_library_archive", lambda s: media_transfer.read_library_archive(
+            s, workspace_id, token,
+        ))
+
+    @server.tool(description=(
+        "Preview face blur on a workspace Library asset as MCP image content with face count "
+        "and frame position. Requires consent and confirm_external_action=true."
+    ))
+    def preview_library_blur(
+        asset_id: str, padding_ratio: Annotated[float, Field(ge=0, le=1)] = 0.08,
+        confidence: Annotated[float, Field(ge=0.1, le=0.95)] = 0.6,
+        at: Annotated[float | None, Field(ge=0, le=1)] = None,
+        confirm_external_action: bool = False,
+    ) -> Any:
+        return _call("preview_library_blur", lambda s: media_transfer.preview_library_blur(
+            s, workspace_id, asset_id, padding_ratio, confidence, at,
+            confirmed=confirm_external_action,
+        ))
+
     campaigns.install(server, workspace_id, _call)
     return server
 
@@ -1750,6 +1788,7 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Attribution GUI": tuple(campaigns.ATTRIBUTION_OPERATIONS),
     "Library GUI": tuple(campaigns.LIBRARY_OPERATIONS),
     "Media transfers": (
+        "read_preview_artifact", "read_library_archive", "preview_library_blur",
         "read_library_media", "read_library_caption", "preview_library_effect",
         "export_shopee_workbook",
     ),

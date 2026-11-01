@@ -12,6 +12,7 @@ typed tools using the same GUI body models and handlers. The groups are
 `Library GUI` and `Attribution GUI`; existing compact task helpers remain.
 This adds 39 Attribution/Character tools and 94 Library/shared-dialog tools.
 Four additional tools transfer media/captions, preview effects and export offers.
+The extension adds three tools for specialized previews and prepared archives.
 
 | GUI area | MCP coverage |
 | --- | --- |
@@ -55,9 +56,16 @@ including shared dialogs invoked from these screens.
 - `preview_library_effect` returns native MCP image content for an effect stack.
   `export_shopee_workbook` returns the GUI's XLSX workbook as embedded resource
   content. Both require explicit confirmation and governed workspace access.
-- File transfers are capped at 16 MiB. Larger streams, specialized face/sprite
-  previews and archives remain on authenticated GUI HTTP routes. Archive
-  preparation is available, but MCP does not transfer the archive bytes.
+- `read_preview_artifact` covers overlay sprites, face-picker portraits,
+  blurred renders and completed AutoCut, Storytelling and effect previews.
+  `preview_library_blur` returns a native image plus face-count/frame metadata.
+  Face-blur requests resolve a workspace asset before running the GUI handler.
+- `read_library_archive` downloads a prepared selection using the issued token.
+  File and streamed ZIP responses share the 16 MiB cap; collection stops at
+  the limit. Token workspace and expiry checks remain in the GUI handler.
+- File transfers are capped at 16 MiB. Larger streams use the GUI. The MCP
+  effect-preview reader retains the file, while the GUI consume action removes
+  it. Both check workspace ownership, preview job state and render-directory scope.
 - Browser multipart uploads are replaced by the existing MCP byte/URL upload
   flow for media. The GUI's overlay multipart upload is not an MCP file input;
   importing an overlay from existing Library media is available.
@@ -77,15 +85,18 @@ role refusal and commit-before-background execution. A real Streamable HTTP
 ClientSession discovers Library/Attribution context and saves a recipe in an
 isolated database. Existing GUI and task-helper tests remain regression gates.
 
-The live read-only audit confirms all 259 tools are present, with matching
+The live read-only audit confirms all 262 tools are present, with matching
 input schemas and initialization guidance. Its local evidence is
 `.data/library-attribution-mcp-live-audit.json`. No operator service was
 started, stopped or restarted for that check.
 
-Final validation: 1,237 MCP, Attribution, Library, effects, captions, voice,
+Extension validation: 1,247 MCP, Attribution, Library, effects, captions, voice,
 character and creation-workflow regression tests pass. Ruff and the prose
 audit pass. The suite uses a fresh project-drive test directory. It was run
 outside the sandbox to read the installed media-AI runtime and inspect its own
 test child processes; a sandboxed attempt failed on those environment limits.
-The 31 focused tests include native MCP resource delivery, transfer limits,
+The latest 42 focused tests also pass, including native MCP image/resource
+delivery, ZIP contents, archive expiry, workspace isolation, transfer limits,
 caption path ownership and confirmed preview/export delegation with provider mocks.
+The final focused run includes the additional single-file archive expiry check
+added after the broad suite collected its tests.

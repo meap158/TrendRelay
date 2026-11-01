@@ -142,6 +142,7 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "write_first_comment", "write_post_copy", "write_thread",
     ] + list(campaigns.ALL_OPERATIONS) + [
         "read_library_media", "read_library_caption", "preview_library_effect",
+        "read_preview_artifact", "read_library_archive", "preview_library_blur",
         "export_shopee_workbook",
     ])
 

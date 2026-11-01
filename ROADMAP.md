@@ -3,7 +3,8 @@
 Library and Attribution MCP audit: typed GUI workflows added for full Library
 filters, processing, tracking, creatives, Characters and shared creation dialogs.
 Bounded media/caption downloads, effect previews and Shopee XLSX exports now
-have MCP transports. Credentials, licence attestations and large streams keep
+have MCP transports, including specialized previews and prepared archives.
+Credentials, licence attestations and large streams keep
 explicit boundaries. See `docs/mcp-library-attribution-parity.md` for coverage.
 
 Social posting MCP parity: implementation, regression and live checks complete.

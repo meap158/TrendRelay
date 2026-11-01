@@ -77,6 +77,9 @@ _REFUSAL_REASON: dict[Access, str] = {
 #: a test can prove the boundary holds against a caller that ignores the menu.
 EXPOSURE: dict[str, Access] = {
     "read_library_media": Access.READ,
+    "read_preview_artifact": Access.READ,
+    "read_library_archive": Access.READ,
+    "preview_library_blur": Access.CONFIRMED_EXTERNAL,
     "read_library_caption": Access.READ,
     "preview_library_effect": Access.CONFIRMED_EXTERNAL,
     "export_shopee_workbook": Access.CONFIRMED_EXTERNAL,
