@@ -1,5 +1,11 @@
 # Roadmap
 
+PM-355 shadow priority (2 November): the two silhouette-shadow posts now lead
+the editable schedule on 3 November at 09:00 and 12:00 Asia/Bangkok. Both are
+approved under the existing autonomous authority. Displaced posts retain their
+content and move to the vacated 16 November slots. See
+`docs/pm-355-shadow-priority.md` for verified changes.
+
 Library and Attribution MCP audit: typed GUI workflows added for full Library
 filters, processing, tracking, creatives, Characters and shared creation dialogs.
 Bounded media/caption downloads, effect previews and Shopee XLSX exports now
