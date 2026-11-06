@@ -23,7 +23,7 @@ Several providers can be ready at once. The draft lists each one by the
 label the registry gives it, and the operator picks one. A refusal does not
 fall through to another provider.
 
-The first two entries:
+The three entries:
 
 - **xAI.** `XAI_API_KEY`, the same name Last 30 Days already reads. This
   account keeps zero data retention, so the video is written to a presigned
@@ -40,6 +40,14 @@ The first two entries:
   Video on that API is paid. Check proves the key is accepted. It does not
   prove the project can spend on video. A later refusal is shown on the
   draft and the draft stays pending.
+- **Gemini Web.** `GEMINI_WEB_COOKIES`, the Cookie header of a signed-in
+  gemini.google.com tab, plus the account slot after `/u/` where one is
+  used. No API key and no bucket: Veo through a local bridge
+  (`scripts/gemini_web_bridge.py`) that turns the Gemini web app into an
+  OpenAI-style server on this machine. Each clip uses one unit of that
+  account's daily video allowance. Setup, limits and the picture patch are
+  in `docs/gemini-web-video.md`; the full operating procedure is section 5
+  of `SOP/attribution/fill-product-creatives.md`.
 
 Generation is a job. The API worker has to be running, and it does not
 hot-reload, so it needs a restart after this tool is added before it will

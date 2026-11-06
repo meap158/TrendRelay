@@ -226,9 +226,12 @@ def test_a_busy_bridge_is_reported_not_retried_into_a_second_clip(values) -> Non
 
 
 @pytest.mark.parametrize(("code", "expected"), [
-    ("quota_exceeded", "quota"), ("refused", "moderation"), ("timeout", "unavailable"),
+    ("quota_exceeded", "quota"), ("refused", "moderation"), ("timeout", "transient"),
 ])
 def test_a_failed_job_maps_to_the_codes_the_draft_shows(values, code, expected) -> None:
+    # `timeout` is transient on purpose: the clip may still arrive in the
+    # Gemini Web conversation, so the job retries by polling the same bridge
+    # id rather than spending a second quota unit on a new request.
     transport, _seen = _bridge([
         (200, b'{"id":"video_1","status":"queued"}'),
         (200, json.dumps({"status": "failed", "error": {"code": code, "message": "No."}}).encode()),

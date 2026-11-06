@@ -339,6 +339,12 @@ def write_bridge_env() -> Path | None:
     temporary = BRIDGE_ENV_PATH.with_suffix(".env.tmp")
     temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
     temporary.replace(BRIDGE_ENV_PATH)
+    # It holds a Google session: readable by this user only, like the token
+    # file face-anon keeps. Best effort on Windows, where modes are advisory.
+    try:
+        BRIDGE_ENV_PATH.chmod(0o600)
+    except (OSError, NotImplementedError):
+        pass
     return BRIDGE_ENV_PATH
 
 
@@ -1153,9 +1159,15 @@ def generate_gemini(
 
 
 #: How the bridge's job errors map onto this module's codes.
+#:
+#: `timeout` is transient on purpose: the clip may still arrive in the Gemini
+#: Web conversation, so the job retries by polling the same bridge id rather
+#: than sending a second request that would spend a second quota unit. The
+#: rest fall through to `_failure_text` and settle as unavailable.
 _BRIDGE_ERRORS = {
     "quota_exceeded": "quota",
     "refused": "moderation",
+    "timeout": "transient",
 }
 
 
