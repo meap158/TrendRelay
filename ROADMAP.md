@@ -1,9 +1,9 @@
 # Roadmap
 
-PM-355 Grok videos (8 November): completed 12 Library clips across eight
-products and seven recipes, including one recovered output. All product links
-and files are verified. Two clips have garment-review notes; no campaign posts
-were created. See `docs/pm-355-grok-video-batch.md`.
+PM-355 Grok videos (8 November): completed two rounds totalling 24 Library
+clips across eight products and seven recipes, including one recovered output.
+All product links and files are verified. Eight clips have garment-review notes;
+no campaign posts were created. See `docs/pm-355-grok-video-batch.md`.
 
 PM-355 shadow priority (2 November): the two silhouette-shadow posts now lead
 the editable schedule on 3 November at 09:00 and 12:00 Asia/Bangkok. Both are
