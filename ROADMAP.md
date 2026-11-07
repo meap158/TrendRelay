@@ -1,8 +1,8 @@
 # Roadmap
 
-PM-355 video plan: ten reviewed Grok clips are campaign drafts pinned for
+PM-355 video plan: ten reviewed Grok clips are approved and pinned for
 9–13 November at 12:00 and 18:00 Asia/Bangkok, with image posts between them.
-They await normal approval. Displaced posts retain their content and approvals
+The owner approved this plan. Displaced posts retain their content and approvals
 in later open slots. See `docs/pm-355-near-term-videos.md`.
 
 PM-355 Grok videos (8 November): completed three rounds totalling 27 Library

@@ -14,10 +14,10 @@ from 9 to 13 November 2026, Asia/Bangkok.
 | 12 November | BABYPINK held garment | GREY fabric detail |
 | 13 November | BELLE grey model walk | BABYPINK fabric detail |
 
-All ten remain drafts. Pinning reserves the plan; it does not approve it.
-The campaign's autonomous authority and existing approval states were
-preserved. Final approval is still required before these videos can publish.
-No immediate publish or provider call was made.
+All ten were initially created as drafts. The owner subsequently approved
+the plan, and all ten are now approved for the existing autonomous scheduler.
+Verified that approval changed only their states, preserving reserved slots,
+copy, media and products. No immediate publish or provider call was made.
 
 The five slots on 8 November were already committed. The following five days
 retain the existing five-post cadence: image at 09:00, video at 12:00, image
@@ -34,8 +34,8 @@ the MIU studio clip's extra leg trim and BLUEBELL held-garment clip's gathering.
 This is a sampled visual review; full motion and audio approval remain separate.
 
 Live validation confirms ten distinct media files, ten distinct Vietnamese
-captions, correct product offers, no slot collisions, draft states, unchanged
-campaign authority and unchanged existing approval count. Each day's planned
+captions, correct product offers, no slot collisions, unchanged campaign
+authority and unchanged pre-existing approval states. Each day's planned
 formats alternate. The unrelated queue items are unchanged. No new Grok
 generation was attempted; the earlier provider spending limit is unrelated
 to planning these existing files.
@@ -45,3 +45,8 @@ Local evidence is in `.data/creative-videos/near-plan/`: `plan.json`,
 sheets, `existing-pin-changes.json`, and `validation.json`. Planning uses the
 live MCP creation, update and pin operations. It does not write the database
 directly or start operator services.
+
+The approval receipt and before/after checks are `approval-receipt.json`,
+`before-approval.json`, `after-approval.json` and `approval-validation.json`
+in the same local evidence directory. Approval succeeded for all ten IDs,
+with none missing and no unrelated queue changes.
