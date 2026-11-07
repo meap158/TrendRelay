@@ -85,3 +85,24 @@ The combined output is 24 Library clips: 23 new generations and one recovered
 earlier output. Eight have review notes across the two batches. No campaign
 posts, approvals, pins or publication settings were changed. Continuation
 receipts and contact sheets are under `.data/creative-videos/nov08b-review/`.
+
+## Smaller continuation with limited storage
+
+Completed three further new Grok clips and verified their saved file hashes,
+product links and succeeded draft states. All are 720 by 1280 and about ten
+seconds long. The total is now 27 filed clips, including the earlier recovered
+output. No campaign posts or publication actions were performed.
+
+| Product | Recipe | Library asset | Sampled review |
+| --- | --- | --- | --- |
+| MIU | Held garment | asset_9446a0b341054b55bc72e1d790b1bfe3 | Invented zipper and gathered cuff |
+| BLUEBELL | Fabric detail | asset_dbab61c8fc8c467d999f401d614a9105 | Added gathering below placket |
+| BABYPINK | Held garment | asset_298535750f20426e8deaba5b6ff19956 | No comparable garment change seen |
+
+Saved the MIU and BLUEBELL concerns in their Library analyst notes. Four frames
+per clip were sampled; full motion and audio approval remain separate. Local
+receipts are in `.data/creative-videos/nov08c-review/validation.json`.
+
+The project drive had about 170 MB free before this smaller batch and about
+80 MB after it. Stopped additional generation to preserve the completed media
+and avoid another failed import. Further batches require storage headroom.
