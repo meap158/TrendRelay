@@ -44,6 +44,12 @@ OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "douyin"
 #: always used, so a job queued before services existed still resolves to the
 #: path recorded in its payload.
 TIKTOK_OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "tiktok"
+#: Every other site yt-dlp supports, one service whatever the site.
+WEB_OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "web"
+#: Services fetched by yt-dlp. They have no sign-in of ours to refresh and no
+#: bookmarklet capture, which are Douyin's.
+YTDLP_SERVICES = frozenset({"tiktok", "web"})
+SERVICE_LABELS = {"douyin": "Douyin", "tiktok": "TikTok", "web": "Other sites"}
 
 
 def service_roots() -> dict[str, Path]:
@@ -53,7 +59,7 @@ def service_roots() -> dict[str, Path]:
     that tests redirect to a temporary folder, and a dictionary literal would
     have captured the real path at import time and quietly ignored them.
     """
-    return {"douyin": OUTPUT_ROOT, "tiktok": TIKTOK_OUTPUT_ROOT}
+    return {"douyin": OUTPUT_ROOT, "tiktok": TIKTOK_OUTPUT_ROOT, "web": WEB_OUTPUT_ROOT}
 
 
 def output_root_for(service: str) -> Path:
@@ -218,6 +224,10 @@ def _coverage_stats(
     the two halves come from is each service's own business, so the TikTok
     answer is built by the TikTok module rather than by a branch in here.
     """
+    if service == "web":
+        # No declared total to measure against: a link here is one video or a
+        # playlist the site lists, not a profile with a post count.
+        return []
     if service == "tiktok":
         from trendrelay_api.integrations import tiktok  # noqa: PLC0415 - cycle
 
@@ -357,8 +367,8 @@ class DownloadRequest(BaseModel):
             if not (_supported_source_url(url) or provider_for(url)):
                 raise ValueError(
                     "Use a link to a specific video, profile or collection from "
-                    + " or ".join(provider.label for provider in PROVIDERS)
-                    + ". Discovery pages are not downloadable."
+                    + ", ".join(p.label for p in PROVIDERS if not p.fallback)
+                    + " or another video site. Discovery pages are not downloadable."
                 )
             if url not in unique:
                 unique.append(url)
@@ -686,6 +696,11 @@ def import_captured_links(
         parent_payload = dict(parent.payload or {})
         original = dict(source_group_request(parent_payload))
         service = str(parent_payload.get("service") or "douyin")
+    if service == "web":
+        raise ValueError(
+            "Importing links is for a Douyin or TikTok profile captured in the browser. "
+            "Batches from other sites take direct links in a new download."
+        )
     if service not in {"douyin", "tiktok"}:
         service = "douyin"
     from trendrelay_api.integrations import download_providers as registry
@@ -721,7 +736,17 @@ def create_download_job(
 ) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Download requires explicit confirmation.")
-    if service == "tiktok":
+    if service == "web":
+        from trendrelay_api.integrations import web_video  # noqa: PLC0415
+
+        status = web_video.provider_status()
+        if not status["installed"] or not status["ready"]:
+            raise RuntimeError(status["reason"])
+        # Settled here, once for the batch and before anything is queued, so a
+        # link no extractor knows is refused in a sentence rather than failing
+        # later inside a job.
+        web_video.check_supported(list(request.urls))
+    elif service == "tiktok":
         from trendrelay_api.integrations import tiktok  # noqa: PLC0415
 
         status = tiktok.provider_status()
@@ -758,7 +783,7 @@ def create_download_job(
         # labels the job with; the tool is what to blame when it breaks.
         "service": service,
         "provider": {
-            "id": "yt-dlp" if service == "tiktok" else "douyin-downloader",
+            "id": "yt-dlp" if service in YTDLP_SERVICES else "douyin-downloader",
             "revision": status["revision"],
         },
         "request": request.model_dump(exclude={"confirm_external_action"}),
@@ -802,6 +827,58 @@ def _clean_metadata_text(value: Any, *, limit: int) -> str | None:
         return None
     cleaned = " ".join(value.split())
     return cleaned[:limit] or None
+
+
+#: A YouTube info file lists every format on offer and can run to several
+#: megabytes; the Douyin sidecar never does, which is why it keeps a smaller cap.
+YTDLP_INFO_LIMIT_BYTES = 12 * 1024 * 1024
+
+
+def _ytdlp_artifact_metadata(path: Path) -> dict[str, str]:
+    """Title, creator, caption, date and platform from yt-dlp's `.info.json`.
+
+    yt-dlp writes `<name>.info.json` beside each file it saves, so the Library
+    can describe a download without asking the site a second time. Absent or
+    unreadable is not an error: the file name and folder still describe it.
+    """
+    info_path = path.with_name(f"{path.stem}.info.json")
+    try:
+        if not info_path.is_file() or info_path.stat().st_size > YTDLP_INFO_LIMIT_BYTES:
+            return {}
+        payload = json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    metadata: dict[str, str] = {}
+    title = _clean_metadata_text(payload.get("title"), limit=300)
+    creator = _clean_metadata_text(
+        payload.get("uploader") or payload.get("channel") or payload.get("creator"), limit=200
+    )
+    caption = _clean_metadata_text(payload.get("description"), limit=5000)
+    page = _clean_metadata_text(payload.get("webpage_url"), limit=2000)
+    if title:
+        metadata["title"] = title
+    if creator:
+        metadata["creator"] = creator
+    if caption:
+        metadata["caption"] = caption
+    if page and urlparse(page).scheme in {"http", "https"}:
+        metadata["source_url"] = page
+    stamp = str(payload.get("upload_date") or "")
+    if re.fullmatch(r"\d{8}", stamp):
+        try:
+            metadata["published_at"] = datetime.strptime(stamp, "%Y%m%d").replace(
+                tzinfo=UTC
+            ).isoformat()
+        except ValueError:
+            pass
+    key = _clean_metadata_text(payload.get("extractor_key"), limit=80)
+    if key:
+        from trendrelay_api.integrations.web_video import platform_of  # noqa: PLC0415
+
+        metadata["platform"] = platform_of(key, page or "")
+    return metadata
 
 
 def _douyin_artifact_metadata(path: Path, output_root: Path | None) -> dict[str, str]:
@@ -851,6 +928,8 @@ def _douyin_artifact_metadata(path: Path, output_root: Path | None) -> dict[str,
                 ).isoformat()
         except (OSError, OverflowError, TypeError, ValueError):
             pass
+    else:
+        metadata.update(_ytdlp_artifact_metadata(path))
 
     if "creator" not in metadata and output_root:
         try:
@@ -1023,6 +1102,12 @@ def _fetch_source(
         )
 
         return tiktok_download(url, output_root, request)
+    if payload.get("service") == "web":
+        from trendrelay_api.integrations.web_video import (  # noqa: PLC0415
+            download_source as web_download,
+        )
+
+        return web_download(url, output_root, request)
     return _download_source(url, output_root, request)
 
 
@@ -1189,18 +1274,26 @@ def _library_progress(job: dict[str, Any]) -> dict[str, int]:
         **counts,
         "active": counts["queued"] + counts["running"],
     }
-def _source_platform(urls: list[str]) -> str:
+def _source_platform(urls: list[str], service: str = "douyin") -> str:
     """The platform a file actually came from, read off its URLs.
 
     TikTok posts ride this pipeline now (yt-dlp routes them), and stamping
     them `douyin` filed them under the wrong network everywhere platform is
     read - the Library card, the detail panel, the filters. The stamp
     follows the evidence; douyin remains the default this downloader is.
+
+    A job for other sites has no default to fall back on, so it names the site
+    from the link. The download's own info file says it more exactly and wins
+    where it exists; this is for when it does not.
     """
     for url in urls:
         host = (urlparse(url).hostname or "").lower()
         if host == "tiktok.com" or host.endswith(".tiktok.com"):
             return "tiktok"
+    if service == "web":
+        from trendrelay_api.integrations.web_video import platform_of  # noqa: PLC0415
+
+        return platform_of(None, urls[0]) if urls else "web"
     return "douyin"
 
 
@@ -1238,14 +1331,21 @@ def _queue_library_artifacts(
             source_url = artifact_source_url or (
                 source_urls[0] if len(source_urls) == 1 else None
             )
-            platform = _source_platform(origin_urls)
+            platform = metadata.get("platform") or _source_platform(
+                origin_urls, str(payload.get("service") or "douyin")
+            )
             queued.append(
                 create_ingest_job(
                     workspace_id=payload["workspace_id"],
                     actor_user_id=actor,
                     path=artifact["path"],
-                    title=artifact.get("name")
-                        or ("TikTok reference" if platform == "tiktok" else "Douyin reference"),
+                    title=metadata.get("title")
+                        or artifact.get("name")
+                        or (
+                            "TikTok reference" if platform == "tiktok"
+                            else "Douyin reference" if platform == "douyin"
+                            else f"{platform.title()} reference"
+                        ),
                     source_type="douyin-download",
                     source_url=source_url,
                     platform=platform,
@@ -1350,7 +1450,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         if output_root.parent != expected_parent:
             raise RuntimeError("Invalid download output location")
         request = payload["request"]
-        service_label = "TikTok" if payload.get("service") == "tiktok" else "Douyin"
+        service_label = SERVICE_LABELS.get(str(payload.get("service") or "douyin"), "Douyin")
 
         # Every path a file can reach us by is recorded once, on the download
         # thread only, so a file already handed to the library is never
@@ -1506,7 +1606,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             # clip already held all look like. Only the provider actually saying
             # so marks the connection broken - anything else had the operator
             # re-authenticating over and over against a session that was fine.
-            if payload.get("service") != "tiktok" and blocked_sources and _looks_like_auth_failure(evidence):
+            if payload.get("service", "douyin") == "douyin" and blocked_sources and _looks_like_auth_failure(evidence):
                 _write_connection_status(
                     "refresh_required",
                     f"{service_label} rejected the saved session. Refresh the {service_label} session and retry.",
@@ -1566,7 +1666,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         # attaching this to its summary would explain a shortfall by a cause
         # that cannot apply.
         if (
-            payload.get("service") != "tiktok"
+            payload.get("service", "douyin") == "douyin"
             and wall_worth_naming
             and not _session_signed_in()
         ):

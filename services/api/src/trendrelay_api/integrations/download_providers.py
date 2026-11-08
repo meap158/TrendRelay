@@ -27,6 +27,7 @@ disagreeing about what a link is.
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -65,6 +66,10 @@ class DownloadProvider:
     #: Extra file kinds this service can fetch beside the video itself.
     media_kinds: tuple[str, ...] = ("video",)
     extras: dict[str, Any] = field(default_factory=dict)
+    #: Claims any public link no other service owns, instead of owning hosts of
+    #: its own. At most one provider is a fallback and it is asked last, so a
+    #: named service always wins its own links.
+    fallback: bool = False
 
     def owns_host(self, host: str) -> bool:
         return any(host == name or host.endswith(f".{name}") for name in self.hosts)
@@ -88,6 +93,8 @@ class DownloadProvider:
             return None
         host = (parsed.hostname or "").lower()
         path = (parsed.path or "").lower()
+        if self.fallback:
+            return "link" if _is_public_page(parsed, host, path) else None
         if self.owns_short_host(host):
             # Any path is the whole address here; there is nothing else it
             # could be, and refusing it for not looking like a video would
@@ -145,8 +152,25 @@ TIKTOK = DownloadProvider(
     media_kinds=("video", "image", "audio"),
 )
 
-#: Order is the order the interface offers them in.
-PROVIDERS: tuple[DownloadProvider, ...] = (DOUYIN, TIKTOK)
+#: Everything else yt-dlp has an extractor for: YouTube, Instagram, Facebook, X,
+#: Reddit, Vimeo, Twitch, Bilibili and a thousand more. It owns no hosts. Which
+#: links it can really fetch is yt-dlp's own answer, asked once per batch when
+#: the download is created, so there is no list here to fall out of date.
+WEB = DownloadProvider(
+    id="web",
+    label="Other sites",
+    hosts=(),
+    kinds=(SourceKind("link", "Link"),),
+    example="https://www.youtube.com/watch?v=…",
+    tool_id="yt-dlp",
+    modes=("post",),
+    media_kinds=("video", "image", "audio"),
+    fallback=True,
+)
+
+#: Order is the order the interface offers them in. The fallback stays last:
+#: `provider_for` asks the named services first.
+PROVIDERS: tuple[DownloadProvider, ...] = (DOUYIN, TIKTOK, WEB)
 
 BY_ID: dict[str, DownloadProvider] = {provider.id: provider for provider in PROVIDERS}
 
@@ -171,10 +195,50 @@ class MixedProviders(ValueError):
 
 def provider_for(url: str) -> DownloadProvider | None:
     """The service a single link belongs to, or None when no service claims it."""
-    for provider in PROVIDERS:
-        if provider.accepts(url):
-            return provider
+    named = [provider for provider in PROVIDERS if not provider.fallback]
+    for provider in (*named, *(p for p in PROVIDERS if p.fallback)):
+        if not provider.accepts(url):
+            continue
+        if provider.fallback and any(_owned_by(other, url) for other in named):
+            # A page on a named service that the service itself refused, such as
+            # a front page or a discovery feed, is not for the fallback to
+            # take instead.
+            return None
+        return provider
     return None
+
+
+def _owned_by(provider: DownloadProvider, url: str) -> bool:
+    try:
+        host = (urlparse(url.strip()).hostname or "").lower()
+    except ValueError:
+        return False
+    return provider.owns_host(host) or provider.owns_short_host(host)
+
+
+#: Names that only mean something on one network. A fetch aimed at one is a
+#: request for the server's own network, not for a video.
+_PRIVATE_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home", ".intranet", ".corp")
+
+
+def _is_public_page(parsed: Any, host: str, path: str) -> bool:
+    """Whether a link points at a page on the public web rather than at nothing.
+
+    Not a statement that the page can be downloaded; that is yt-dlp's to say.
+    This keeps out what is never a source: a bare host, an address on the local
+    network, anything that is not a web link.
+    """
+    if parsed.scheme not in {"http", "https"} or not host or "." not in host:
+        return False
+    if host.endswith(_PRIVATE_SUFFIXES) or host == "localhost":
+        return False
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        return False
+    return bool(path.strip("/") or parsed.query)
 
 
 def classify(urls: list[str]) -> dict[str, list[str]]:
@@ -205,8 +269,8 @@ def detect(urls: list[str]) -> tuple[DownloadProvider, list[str], list[str]]:
         raise ValueError(
             "No downloadable link found. Paste a link to a video, a profile or "
             "a collection from "
-            + " or ".join(provider.label for provider in PROVIDERS)
-            + "."
+            + ", ".join(provider.label for provider in PROVIDERS if not provider.fallback)
+            + " or another video site."
         )
     if len(grouped) > 1:
         raise MixedProviders({key: len(value) for key, value in grouped.items()})
@@ -229,6 +293,7 @@ def catalogue() -> list[dict[str, Any]]:
             "tool_id": provider.tool_id,
             "modes": list(provider.modes),
             "media_kinds": list(provider.media_kinds),
+            "fallback": provider.fallback,
         }
         for provider in PROVIDERS
     ]

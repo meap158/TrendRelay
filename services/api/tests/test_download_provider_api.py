@@ -162,7 +162,8 @@ def test_the_catalogue_says_which_services_can_run_right_now(workspace) -> None:
 
     assert response.status_code == 200, response.text
     rows = {row["id"]: row for row in response.json()["providers"]}
-    assert set(rows) == {"douyin", "tiktok"}
+    assert set(rows) == {"douyin", "tiktok", "web"}
+    assert rows["web"]["fallback"] is True
     for row in rows.values():
         # Whether it can run, and if not, a sentence saying what to do.
         assert "ready" in row

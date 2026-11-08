@@ -359,6 +359,12 @@ def download_providers(
             live = tiktok.provider_status()
             row = {**row, "ready": live["ready"], "reason": live["reason"],
                    "revision": live["revision"]}
+        elif row["id"] == "web":
+            from trendrelay_api.integrations import web_video
+
+            live = web_video.provider_status()
+            row = {**row, "ready": live["ready"], "reason": live["reason"],
+                   "revision": live["revision"]}
         else:
             row = {
                 **row,
