@@ -1,5 +1,11 @@
 # Roadmap
 
+PM-355 inventory cleanup (8 November): removed all five MIDNIGHT SWEET entries
+from rotation after ShopPilot reported zero stock. Released their pins and
+cancelled the provider-scheduled Facebook post for 9 November at 21:00 Bangkok.
+Unrelated posts and published content are preserved. See
+`docs/pm-355-zero-stock-cleanup.md` for validation.
+
 PM-355 video plan: ten reviewed Grok clips are approved and pinned for
 9–13 November at 12:00 and 18:00 Asia/Bangkok, with image posts between them.
 The owner approved this plan. Displaced posts retain their content and approvals
