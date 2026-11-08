@@ -156,6 +156,24 @@ def probe_media(path: Path) -> dict[str, Any]:
     }
 
 
+def _link_or_copy(source: Path, destination: Path) -> None:
+    """Give the library its own name for an original without storing it twice.
+
+    Downloads are written once and never edited in place, so a file already under
+    the project's data folder is hard-linked into the library. Anything else, or
+    a link the volume refuses, is copied, because a user's own file must not
+    share storage with a hash-addressed original.
+    """
+    data_root = (PROJECT_ROOT / ".data").resolve()
+    if source.resolve().is_relative_to(data_root):
+        try:
+            os.link(source, destination)
+            return
+        except OSError:
+            pass
+    shutil.copy2(source, destination)
+
+
 def _copy_original(source: Path, output_root: Path, digest: str) -> Path:
     destination = output_root / f"original{source.suffix.lower()}"
     if destination.is_file():
@@ -163,7 +181,8 @@ def _copy_original(source: Path, output_root: Path, digest: str) -> Path:
             raise RuntimeError("Hash-addressed library original does not match its key.")
         return destination
     temporary = output_root / f"original{source.suffix.lower()}.tmp"
-    shutil.copy2(source, temporary)
+    temporary.unlink(missing_ok=True)
+    _link_or_copy(source, temporary)
     if file_sha256(temporary) != digest:
         temporary.unlink(missing_ok=True)
         raise RuntimeError("Original media changed while it was copied.")
