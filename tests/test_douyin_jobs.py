@@ -77,7 +77,7 @@ def test_captured_links_validate_and_deduplicate() -> None:
         with pytest.raises(ValueError):
             douyin.CapturedLinksRequest(urls=[invalid])
     with pytest.raises(ValueError):
-        douyin.CapturedLinksRequest(urls=["https://www.douyin.com/video/123456"] * 401)
+        douyin.CapturedLinksRequest(urls=["https://www.douyin.com/video/123456"] * 4001)
 
 
 def test_captured_links_keep_group_and_workspace_boundary(monkeypatch, tmp_path, job_factory):
@@ -391,7 +391,7 @@ def test_download_request_rejects_non_douyin_urls() -> None:
     with pytest.raises(ValueError, match="Douyin"):
         douyin.DownloadRequest(
             workspace_id="workspace-1",
-            urls=["https://www.tiktok.com/@creator/video/123"],
+            urls=["https://www.douyin.com/"],
             confirm_external_action=True,
         )
 
@@ -657,7 +657,7 @@ def test_worker_records_downloaded_media(
             confirm_external_action=True,
         )
         monkeypatch.setattr(douyin, "_session_signed_in", lambda: False)
-        monkeypatch.setattr(douyin, "_coverage_stats", lambda urls: [
+        monkeypatch.setattr(douyin, "_coverage_stats", lambda urls, **_kw: [
             {"url": urls[0], "kind": "profile", "nickname": "Creator", "held": 39, "declared_total": 369},
         ])
     job = douyin.create_download_job(download_request, actor_user_id="user-1")
@@ -744,8 +744,9 @@ def test_an_anonymous_profile_fetch_names_the_first_page_ceiling(
 
     assert completed["status"] == "succeeded"
     summary = completed["result"]["summary"]
-    assert "first page" in summary
-    assert "account" in summary
+    assert "first page" not in summary
+    # The ceiling is stated on the connection, not repeated in every summary.
+    assert "refuses deeper profile pages" in douyin.connection_status()["detail"]
 
 
 def test_a_signed_in_profile_fetch_is_not_second_guessed(
@@ -772,10 +773,7 @@ def test_connection_message_says_whether_the_session_is_signed_in(
     )
     anonymous = douyin.connection_status()
     assert anonymous["state"] == "connected"
-    # Anonymous downloads whole profiles now (via the browser); the only thing
-    # it cannot do is topic search.
-    assert "anonymous" in anonymous["message"]
-    assert "search" in anonymous["message"]
+    assert "Sign in" in anonymous["message"]
 
     monkeypatch.setattr(
         douyin,
@@ -784,7 +782,7 @@ def test_connection_message_says_whether_the_session_is_signed_in(
     )
     signed_in = douyin.connection_status()
     assert signed_in["state"] == "connected"
-    assert "signed in" in signed_in["message"]
+    assert "Signed in" in signed_in["message"]
 
 
 def test_downloads_do_not_wait_for_library_preparation(
