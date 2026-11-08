@@ -84,7 +84,7 @@ type DownloadJob = {
   error?: string | null;
   created_at: string;
   payload: {
-    service?: "douyin" | "tiktok";
+    service?: "douyin" | "tiktok" | "web";
     request?: { urls?: string[]; mode?: string; limit?: number; media_kinds?: string[] };
     source_group_request?: { urls?: string[]; mode?: string; limit?: number; media_kinds?: string[] };
     output_root?: string;
@@ -305,7 +305,7 @@ function friendlyDownloadError(error: string, retainedFiles = 0, service = "Douy
     if (retainedFiles > 0 && /without saving any media|could not access this source/i.test(error)) {
       return `${retainedFiles} retained media files are safe on disk. ${service} returned no new media on the retry; resume to finish recording the saved files locally.`;
     }
-    return `${service} could not access this source. ${service === "TikTok" ? "Try Import links after loading the channel in Chrome, then retry with direct video links." : "Refresh the Douyin session, then retry with a specific video or profile link."}`;
+    return `${service} could not access this source. ${service === "TikTok" ? "Try Import links after loading the channel in Chrome, then retry with direct video links." : service === "Other sites" ? "Check that the video is public and the link is right, then retry. Some sites need a sign-in this download cannot provide." : "Refresh the Douyin session, then retry with a specific video or profile link."}`;
   }
   if (service === "TikTok" && /secondary user id|channel_id/i.test(error)) {
     return "TikTok did not expose this channel's ID to the downloader. Use Import links after scrolling the channel in Chrome; direct video links will download normally.";
@@ -314,6 +314,7 @@ function friendlyDownloadError(error: string, retainedFiles = 0, service = "Douy
 }
 
 function modeLabel(mode: string, service = "Douyin"): string {
+  if (service === "Other sites") return ({ post: "Videos and playlists" } as Record<string, string>)[mode] ?? mode;
   if (service === "TikTok") return ({ post: "Channel videos", mix: "Collections" } as Record<string, string>)[mode] ?? mode;
   return ({ post: "Published posts", like: "Liked videos", mix: "Collections", music: "Music videos" } as Record<string, string>)[mode] ?? mode;
 }
@@ -322,6 +323,7 @@ function sourceType(url: string, service?: string): string {
   try {
     const parsed = new URL(url);
     const path = parsed.pathname.toLowerCase();
+    if (service === "Other sites") return "Link";
     if (service === "TikTok" || parsed.hostname.toLowerCase().includes("tiktok")) {
       if (path.includes("/video/") || path.includes("/photo/")) return "Video";
       if (/\/@[\w.-]+\/?$/.test(path)) return "Channel";
@@ -439,11 +441,12 @@ type JobGroup = { primary: DownloadJob; earlier: DownloadJob[] };
  */
 function jobServiceId(job: DownloadJob): string {
   const service = (job.payload as { service?: string } | undefined)?.service;
-  return service === "tiktok" ? "tiktok" : "douyin";
+  return service === "tiktok" || service === "web" ? service : "douyin";
 }
 
 function jobServiceLabel(job: DownloadJob): string {
-  return jobServiceId(job) === "tiktok" ? "TikTok" : "Douyin";
+  const id = jobServiceId(job);
+  return id === "tiktok" ? "TikTok" : id === "web" ? "Other sites" : "Douyin";
 }
 
 function sourceSignature(job: DownloadJob): string {
@@ -926,8 +929,8 @@ export default function Dashboard() {
     if (!urls.length) {
       fail(
         "Paste a link to a specific video, channel or collection from "
-        + providers.map((item) => item.label).join(" or ")
-        + ".",
+        + providers.filter((item) => !item.fallback).map((item) => item.label).join(", ")
+        + " or another video site.",
       );
       requestAnimationFrame(() => linkInputRef.current?.focus());
       return;
@@ -1309,7 +1312,7 @@ export default function Dashboard() {
                 beside. Left as a bare text node it shared the row with the
                 summary text under `space-between`, which would have pushed the
                 two to opposite ends of the row. */}
-            <summary><strong>{t("downloads.options")}</strong> <span>{modeLabel(mode, detectedService)} · {limit === 0 ? (detectedService === "TikTok" ? "all channel videos" : "all posts") : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
+            <summary><strong>{t("downloads.options")}</strong> <span>{modeLabel(mode, detectedService)} · {limit === 0 ? (detectedService === "TikTok" ? "all channel videos" : detectedService === "Other sites" ? "everything in a playlist" : "all posts") : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
               {/* Only the fetches this service can actually deliver. TikTok keeps
                   likes private and its sound extractor is broken upstream, so
@@ -1423,7 +1426,7 @@ export default function Dashboard() {
         {filteredGroups.length === 0 && !jobsLoading && <div className="download-empty">
           <span className="empty-download-icon" aria-hidden="true">↓</span>
           <strong>{jobs.length ? "No " + (queueFilter === "attention" ? "downloads need attention" : queueFilter + " downloads") : "Your downloads will appear here"}</strong>
-          <p>{jobs.length ? "Choose another filter to see the rest of your queue." : "Add one or more Douyin or TikTok links above to start your first batch."}</p>
+          <p>{jobs.length ? "Choose another filter to see the rest of your queue." : "Add one or more video links above to start your first batch."}</p>
           {!jobs.length && <a href="#add-links">{t("downloads.addLinks")}</a>}
         </div>}
 
@@ -1486,7 +1489,7 @@ export default function Dashboard() {
                     onClick={() => void refetchMissing(job)}>
                     <ActionIcon name="refresh" />{refetchingJobId === job.id ? "Queuing…" : "Fetch missing"}
                   </Button>}
-                  {sources.length > 0 && <Button variant="secondary" size="sm"
+                  {sources.length > 0 && jobServiceId(job) !== "web" && <Button variant="secondary" size="sm"
                     title={`Collect additional video links from a manually scrolled ${jobServiceLabel(job)} channel`}
                     onClick={() => { setBookmarkletCopied(false); setCapturedLinks(""); setImportLinksError(null); setBookmarkletJobId(job.id); }}>
                     <ActionIcon name="link" />Import links

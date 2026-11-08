@@ -27,6 +27,8 @@ export type DownloadProvider = {
   /** The catalogued tool that does the fetching, so it can be installed from
       wherever somebody discovers it is missing. */
   tool_id?: string;
+  /** Claims any public link no other service owns, and is asked last. */
+  fallback?: boolean;
   /** Whether it can run right now, and if not, what to do about it. */
   ready?: boolean;
   reason?: string;
@@ -66,6 +68,18 @@ export const FALLBACK_PROVIDERS: DownloadProvider[] = [
     media_kinds: ["video", "image", "audio"],
     tool_id: "yt-dlp",
   },
+  {
+    id: "web",
+    label: "Other sites",
+    hosts: [],
+    short_hosts: [],
+    kinds: [{ id: "link", label: "Link" }],
+    example: "https://www.youtube.com/watch?v=…",
+    modes: ["post"],
+    media_kinds: ["video", "image", "audio"],
+    tool_id: "yt-dlp",
+    fallback: true,
+  },
 ];
 
 /** The path fragments each kind is recognised by, mirroring the server table. */
@@ -89,6 +103,24 @@ function ownsHost(host: string, names: string[]): boolean {
   return names.some((name) => host === name || host.endsWith(`.${name}`));
 }
 
+/** Names that only mean something on one network, never a source. */
+const PRIVATE_SUFFIXES = [".local", ".localhost", ".internal", ".lan", ".home", ".intranet", ".corp"];
+
+/**
+ * Whether a link is a page on the public web rather than at nothing: the same
+ * rule the server applies. Not a claim that it can be downloaded, which is
+ * yt-dlp's to say when the download is created.
+ */
+function isPublicPage(parsed: URL): boolean {
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  if (!host || !host.includes(".") || host === "localhost") return false;
+  if (PRIVATE_SUFFIXES.some((suffix) => host.endsWith(suffix))) return false;
+  // An IPv4 literal, or an IPv6 one (URL keeps the brackets on those).
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith("[")) return false;
+  return Boolean(parsed.pathname.replace(/\//g, "") || parsed.search);
+}
+
 /**
  * Which kind of source this link is for that provider, or null when it is not
  * one. A bare host is somewhere to browse, not something to download.
@@ -102,6 +134,9 @@ export function kindOf(provider: DownloadProvider, url: string): ProviderKind | 
   }
   const host = parsed.hostname.toLowerCase();
   const path = parsed.pathname.toLowerCase();
+  if (provider.fallback) {
+    return isPublicPage(parsed) ? provider.kinds[0] ?? { id: "link", label: "Link" } : null;
+  }
   if (ownsHost(host, provider.short_hosts)) {
     // Any path on a shortener is the whole address; nothing else it could be.
     return path.replace(/\//g, "") ? { id: "share", label: "Share link" } : null;
@@ -118,7 +153,19 @@ export function providerFor(
   providers: DownloadProvider[],
   url: string,
 ): DownloadProvider | null {
-  return providers.find((provider) => kindOf(provider, url) !== null) ?? null;
+  const named = providers.filter((provider) => !provider.fallback);
+  const found = named.find((provider) => kindOf(provider, url) !== null);
+  if (found) return found;
+  // The fallback is asked last, and never for a page on a named service that
+  // the service itself refused, such as a front page or a discovery feed.
+  let host = "";
+  try {
+    host = new URL(url.trim()).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (named.some((p) => ownsHost(host, p.hosts) || ownsHost(host, p.short_hosts))) return null;
+  return providers.find((p) => p.fallback && kindOf(p, url) !== null) ?? null;
 }
 
 export type Detection = {

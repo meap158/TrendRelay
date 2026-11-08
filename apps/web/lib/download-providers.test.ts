@@ -27,11 +27,47 @@ test("a front page or a stranger is not a source", () => {
   for (const url of [
     "https://www.douyin.com/",
     "https://www.tiktok.com/",
-    "https://example.com/video/1",
+    "https://example.com/",
+    "https://www.youtube.com/",
+    // Refused by the named service, so not the fallback's to take instead.
+    "https://www.douyin.com/discover",
+    "https://www.tiktok.com/explore",
     "not a url",
+    // Never a source: this machine's own network, and anything not on the web.
+    "http://localhost:8000/api/health",
+    "http://127.0.0.1/video/1",
+    "http://169.254.169.254/latest/meta-data",
+    "http://[::1]/video/1",
+    "https://intranet/video/1",
+    "https://printer.local/video/1",
+    "file:///etc/passwd",
+    "ftp://example.com/video.mp4",
   ]) {
     assert.equal(providerFor(P, url), null, url);
   }
+});
+
+test("any other public link goes to the fallback, and named services keep theirs", () => {
+  for (const url of [
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ",
+    "https://www.instagram.com/reel/abc123/",
+    "https://example.com/video/1",
+  ]) {
+    assert.equal(providerFor(P, url)?.id, "web", url);
+  }
+  assert.equal(providerFor(P, DOUYIN)?.id, "douyin");
+  assert.equal(providerFor(P, TIKTOK)?.id, "tiktok");
+});
+
+test("a tiktok link and a youtube link cannot travel together", () => {
+  const found = detect(P, [TIKTOK, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]);
+  assert.equal(found.provider, null);
+  assert.deepEqual(found.conflict?.map((entry) => entry.provider.id).sort(), ["tiktok", "web"]);
+  assert.equal(
+    detect(P, ["https://www.youtube.com/watch?v=a", "https://vimeo.com/76979871"]).provider?.id,
+    "web",
+  );
 });
 
 test("a tiktok video is a video, not the profile it sits under", () => {
