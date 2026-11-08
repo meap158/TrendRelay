@@ -1,5 +1,11 @@
 # Roadmap
 
+PM-355 stock-aware videos (8 November): generated DOLLY DOT and DOTTIE clips
+from products with 32 and 21 units in ShopPilot. Both are linked in Library;
+DOTTIE has a fit-review note. SWAN WHITE was rejected by provider moderation
+and was not retried. Publishing remains for later. See
+`docs/pm-355-stock-aware-videos.md`.
+
 PM-355 inventory cleanup (8 November): removed all five MIDNIGHT SWEET entries
 from rotation after ShopPilot reported zero stock. Released their pins and
 cancelled the provider-scheduled Facebook post for 9 November at 21:00 Bangkok.
