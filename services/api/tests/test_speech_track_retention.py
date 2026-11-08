@@ -112,7 +112,7 @@ def test_import_no_longer_stores_a_speech_track(tmp_path, monkeypatch):
     digest = media_library.file_sha256(source)
     processed = media_library.process_media(source, "workspace-1", digest)
     kinds = {item["version_kind"] for item in processed["versions"]}
-    assert {"original", "thumbnail", "proxy"} <= kinds
+    assert {"original", "thumbnail"} <= kinds
     assert "audio" not in kinds
     assert not list((tmp_path / "library").rglob("audio.wav"))
     # What the content endpoint builds on request is real, readable speech audio.

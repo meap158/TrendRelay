@@ -1878,6 +1878,10 @@ def asset_content(
     )
     if version_kind == "audio" and _stored_file(version) is None:
         return _derived_audio_response(session, asset_id)
+    if version_kind == "proxy" and _stored_file(version) is None:
+        # A proxy is only kept where it is meaningfully smaller than the original
+        # or fixes playback; otherwise the original is what plays.
+        version = _preferred_version(session, asset_id, ("original",))
     if not version:
         raise HTTPException(status_code=404, detail="Media version not found.")
     try:

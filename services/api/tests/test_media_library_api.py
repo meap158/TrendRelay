@@ -645,7 +645,7 @@ def test_pinned_media_runtime_creates_hash_addressed_derivatives(
 
     versions = {item["version_kind"]: item for item in processed["versions"]}
     assert Path(processed["original"]).parent.name == digest
-    assert {"original", "thumbnail", "proxy"} <= versions.keys()
+    assert {"original", "thumbnail"} <= versions.keys()
     assert "audio" not in versions
     assert all(Path(item["path"]).is_file() for item in versions.values())
     assert all(

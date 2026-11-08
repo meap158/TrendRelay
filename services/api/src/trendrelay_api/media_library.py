@@ -156,6 +156,31 @@ def probe_media(path: Path) -> dict[str, Any]:
     }
 
 
+#: A proxy has to be at least this much smaller than the original to be kept.
+PROXY_MIN_SAVING = 0.30
+#: What a browser plays as it is. HEVC is not on the list, which is the reason
+#: proxies exist: an HEVC original keeps its H.264 proxy however small the gain.
+PLAYABLE_VIDEO_CODECS = frozenset({"h264"})
+PLAYABLE_AUDIO_CODECS = frozenset({"aac", "mp3"})
+
+
+def proxy_is_redundant(metadata: dict[str, Any], original_bytes: int, proxy_bytes: int) -> bool:
+    """Whether a proxy only duplicates an original that already plays everywhere.
+
+    The migration that removed the existing ones applies the same rule to stored
+    sizes and codecs; change both together.
+    """
+    audio = metadata.get("audio_codec")
+    playable = metadata.get("video_codec") in PLAYABLE_VIDEO_CODECS and (
+        audio is None or audio in PLAYABLE_AUDIO_CODECS
+    )
+    return bool(
+        playable
+        and original_bytes > 0
+        and proxy_bytes >= original_bytes * (1 - PROXY_MIN_SAVING)
+    )
+
+
 def extract_audio(original: Path, destination: Path) -> Path:
     """Write the speech track of `original` to `destination` as 16 kHz mono WAV.
 
@@ -310,7 +335,13 @@ def process_media(source: Path, workspace_id: str, digest: str) -> dict[str, Any
                     str(proxy),
                 ]
             )
-        versions.append(_version(proxy, "proxy", probe_media(proxy)))
+        if proxy_is_redundant(metadata, original.stat().st_size, proxy.stat().st_size):
+            # A re-encode that is not meaningfully smaller than a file the browser
+            # already plays adds a second copy and nothing else. Previews and the
+            # `proxy` content request fall back to the original.
+            proxy.unlink(missing_ok=True)
+        else:
+            versions.append(_version(proxy, "proxy", probe_media(proxy)))
 
     # No stored speech track: it is 16 kHz mono PCM, rebuilt from the original in
     # seconds by `extract_audio`, and only 77 of ~10,000 assets were ever
