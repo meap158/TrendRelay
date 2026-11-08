@@ -5,12 +5,13 @@ PM-355 video plan: ten reviewed Grok clips are approved and pinned for
 The owner approved this plan. Displaced posts retain their content and approvals
 in later open slots. See `docs/pm-355-near-term-videos.md`.
 
-PM-355 Grok videos (8 November): completed four rounds totalling 33 Library
+PM-355 Grok videos (8 November): completed five rounds totalling 36 Library
 clips across eight products and seven recipes, including one recovered output.
-All product links and files are verified. The latest six are saved for later
-publishing. CLOUDY fabric detail, CHOCO held garment and BELLE grey lounge lead
-the editorial test shortlist; three walks need detail review. Storage and Grok
-access recovered. See `docs/pm-355-engagement-video-priority.md` and
+All product links and files are verified. The latest three are saved for later
+publishing: CLOUDY walk, BELLE grey held garment and GREY lounge. Sampled garment
+review found no comparable construction change; full motion and audio review
+remain separate. Storage and Grok access recovered. See
+`docs/pm-355-engagement-video-priority.md` and
 `docs/pm-355-grok-video-batch.md`.
 
 PM-355 shadow priority (2 November): the two silhouette-shadow posts now lead

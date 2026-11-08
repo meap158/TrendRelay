@@ -57,3 +57,33 @@ Local evidence: `.data/creative-videos/engagement-priority/analytics.json`,
 `ranked-plan.json` and `validation.json`. Contact sheets and complete draft
 states are in `.data/creative-videos/nov08e-review/`. No direct database writes,
 service starts or restarts were used.
+
+## Three-clip continuation
+
+On the owner's instruction to continue, generated three further clips in
+priority order: CLOUDY model walk, BELLE grey held garment, then GREY lounge.
+This gives a moving model opening, a clear product demonstration and a quieter
+lifestyle option. Avoided additional flat-lay and hanger reveals because those
+styles repeatedly changed garment construction in earlier outputs.
+
+| Priority for later test | Library asset | Sampled review |
+| --- | --- | --- |
+| CLOUDY model walk | asset_b12e90212ad6406085a26ea1d214750c | Wrap neckline, light lace trim and long flared trousers retained |
+| BELLE grey held garment | asset_368413b3751a44c5ac9a3903288373ac | Long sleeves, pink lace trim, bow and shorts retained |
+| GREY lounge | asset_8cf977f340ae42169f342ad5ea33d37b | Long sleeves, short button placket and shorts retained |
+
+All three drafts are succeeded with zero owed and complete Library product
+links. Each file is 720 by 1280, about ten seconds, and has Grok and
+AI-generated labels. Verified actual saved hashes and distinct files. Four
+frames per clip were sampled against the corresponding product photograph.
+No comparable construction change was observed in those samples. Full motion
+and audio approval were not performed.
+
+The shortlist is still a test hypothesis; no new video performance data was
+available during this continuation. There are now 36 filed clips. The three
+new assets have no campaign queue posts. No pins, approvals or publishing
+settings were changed. Publishing remains for later as requested.
+
+Local validation and contact sheets are in
+`.data/creative-videos/nov08f-review/`, with the three-draft generation plan in
+`.data/creative-videos/nov08f-batch.json`.
