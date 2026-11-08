@@ -9,6 +9,7 @@ never costs a batch its item.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from collections.abc import Sequence
@@ -23,7 +24,22 @@ class EncoderProfile:
     name: str
     hardware: bool
 
-    def arguments(self, *, quality: int, preset: str) -> list[str]:
+    def arguments(
+        self, *, quality: int, preset: str, max_bitrate: int | None = None
+    ) -> list[str]:
+        """Encoder arguments for a constant-quality target, optionally capped.
+
+        The cap is a ceiling on bitrate, not a target: quality still decides the
+        size of anything simpler than the cap allows. libx264 and NVENC hold to
+        it. The other hardware encoders take the flags but their constant-quality
+        modes may ignore them, so a cap is best-effort there.
+        """
+        arguments = self._quality_arguments(quality=quality, preset=preset)
+        if max_bitrate:
+            arguments += ["-maxrate", str(max_bitrate), "-bufsize", str(max_bitrate * 2)]
+        return arguments
+
+    def _quality_arguments(self, *, quality: int, preset: str) -> list[str]:
         if self.name == "h264_nvenc":
             return [
                 "-c:v", self.name, "-preset", "p4", "-tune", "hq",
@@ -95,6 +111,77 @@ def preferred_encoder(ffmpeg_value: str) -> EncoderProfile:
     return SOFTWARE
 
 
+#: Lowest ceiling worth setting: below this a clip looks starved whatever its
+#: source was.
+CEILING_FLOOR_BPS = 1_500_000
+#: How much a source's bitrate an H.264 re-encode may use. HEVC packs the same
+#: picture into fewer bits, so matching it in H.264 needs more headroom.
+CEILING_FACTORS = {"hevc": 1.6, "h265": 1.6, "av1": 1.8, "vp9": 1.5}
+CEILING_DEFAULT_FACTOR = 1.15
+_AUDIO_ALLOWANCE_BPS = 160_000
+
+
+@lru_cache(maxsize=256)
+def _probed_video_bitrate(path: str, mtime_ns: int, size: int) -> tuple[str | None, int | None]:
+    from trendrelay_api.integrations.openmontage_runtime import FFPROBE
+
+    if not FFPROBE.is_file():
+        return None, None
+    try:
+        completed = subprocess.run(
+            [
+                str(FFPROBE), "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=codec_name,bit_rate:format=bit_rate,duration",
+                "-of", "json", path,
+            ],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60, check=False, stdin=subprocess.DEVNULL,
+        )
+        payload = json.loads(completed.stdout or "{}")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None, None
+    streams = payload.get("streams") or [{}]
+    codec = streams[0].get("codec_name")
+    try:
+        stream_rate = int(streams[0].get("bit_rate") or 0)
+    except (TypeError, ValueError):
+        stream_rate = 0
+    if stream_rate:
+        return codec, stream_rate
+    # Many downloads carry the rate only on the container. Take the audio's share
+    # off it, and fall back to file size over duration when even that is absent.
+    fmt = payload.get("format") or {}
+    try:
+        total = int(fmt.get("bit_rate") or 0)
+        if not total and float(fmt.get("duration") or 0) > 0:
+            total = int(size * 8 / float(fmt["duration"]))
+    except (TypeError, ValueError):
+        total = 0
+    return (codec, max(total - _AUDIO_ALLOWANCE_BPS, 0) or None) if total else (codec, None)
+
+
+def bitrate_ceiling(source: Path) -> int | None:
+    """The most an H.264 re-encode of `source` should spend, in bits per second.
+
+    A constant-quality encode of a low-bitrate download cannot recover detail the
+    source never had, but it will still spend bits on the compression noise. A
+    2 Mbps clip came back at 14 Mbps that way, and 2,274 edited cuts took 176 GB
+    from 24 GB of sources. This bounds the result relative to what went in.
+
+    Returns None when the source cannot be measured; the encode is then left
+    uncapped, as before.
+    """
+    try:
+        stat = Path(source).stat()
+    except OSError:
+        return None
+    codec, rate = _probed_video_bitrate(str(source), stat.st_mtime_ns, stat.st_size)
+    if not rate:
+        return None
+    factor = CEILING_FACTORS.get((codec or "").lower(), CEILING_DEFAULT_FACTOR)
+    return max(CEILING_FLOOR_BPS, int(rate * factor))
+
+
 def encode_h264(
     ffmpeg: Path,
     command_before_encoder: Sequence[str],
@@ -105,9 +192,14 @@ def encode_h264(
     preset: str = "veryfast",
     timeout: int = 1800,
     cwd: Path | None = None,
+    max_bitrate: int | None = None,
     **run_options: Any,
 ) -> tuple[subprocess.CompletedProcess[Any], EncoderProfile]:
-    """Encode with selected hardware, retrying safely in software on failure."""
+    """Encode with selected hardware, retrying safely in software on failure.
+
+    `max_bitrate` (bits per second) keeps the result from costing more than its
+    source did; see `bitrate_ceiling`.
+    """
     selected = preferred_encoder(str(ffmpeg.resolve()))
     profiles = [selected] if not selected.hardware else [selected, SOFTWARE]
     last: subprocess.CompletedProcess[Any] | None = None
@@ -116,7 +208,9 @@ def encode_h264(
         last = subprocess.run(
             [
                 *command_before_encoder,
-                *profile.arguments(quality=quality, preset=preset),
+                *profile.arguments(
+                    quality=quality, preset=preset, max_bitrate=max_bitrate
+                ),
                 *command_after_encoder,
                 str(destination),
             ],

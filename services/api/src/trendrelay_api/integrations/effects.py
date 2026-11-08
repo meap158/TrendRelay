@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from trendrelay_api.tool_registry import PROJECT_ROOT
-from trendrelay_api.video_encoding import encode_h264
+from trendrelay_api.video_encoding import bitrate_ceiling, encode_h264
 
 FFMPEG = (
     PROJECT_ROOT
@@ -1164,6 +1164,7 @@ def render_stream(
         destination,
         quality=20,
         preset="veryfast",
+        max_bitrate=bitrate_ceiling(source),
         capture_output=True,
         text=True,
         # Decoded explicitly, as everywhere else that runs a media tool here.

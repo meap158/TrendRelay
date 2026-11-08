@@ -41,7 +41,7 @@ from trendrelay_api.jobs import (
     report_progress,
 )
 from trendrelay_api.tool_registry import PROJECT_ROOT
-from trendrelay_api.video_encoding import encode_h264
+from trendrelay_api.video_encoding import bitrate_ceiling, encode_h264
 
 Box = tuple[int, int, int, int]  # x, y, width, height
 
@@ -524,6 +524,7 @@ def _remux_audio(silent_video: Path, original: Path, destination: Path) -> bool:
         destination,
         quality=20,
         preset="veryfast",
+        max_bitrate=bitrate_ceiling(original),
         capture_output=True,
         text=True,
         encoding="utf-8",
