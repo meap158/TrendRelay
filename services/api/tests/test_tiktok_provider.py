@@ -31,7 +31,10 @@ def _forget_probes():
     """The impersonation probe is cached per install; tests set their own."""
     tiktok._impersonation_target.cache_clear()
     yield
-    tiktok._impersonation_target.cache_clear()
+    # A test may still hold a stand-in here when this runs.
+    clear = getattr(tiktok._impersonation_target, "cache_clear", None)
+    if clear:
+        clear()
 
 
 def test_the_fetch_asks_for_a_browser_fingerprint_by_name(monkeypatch) -> None:

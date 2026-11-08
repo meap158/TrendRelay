@@ -24,8 +24,12 @@ def _fresh_caches():
     video_encoding.preferred_encoder.cache_clear()
     video_encoding._probed_video_bitrate.cache_clear()
     yield
-    video_encoding.preferred_encoder.cache_clear()
-    video_encoding._probed_video_bitrate.cache_clear()
+    # A test may still hold a stand-in here when this runs, so clear only a
+    # real cache.
+    for cached in (video_encoding.preferred_encoder, video_encoding._probed_video_bitrate):
+        clear = getattr(cached, "cache_clear", None)
+        if clear:
+            clear()
 
 
 def test_a_ceiling_adds_maxrate_and_bufsize_to_every_encoder():
