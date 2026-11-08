@@ -156,6 +156,33 @@ def probe_media(path: Path) -> dict[str, Any]:
     }
 
 
+def extract_audio(original: Path, destination: Path) -> Path:
+    """Write the speech track of `original` to `destination` as 16 kHz mono WAV.
+
+    The format transcription wants. Derived on demand into scratch and removed by
+    the caller, never stored under the library, so it costs space only while used.
+    """
+    if not FFMPEG.is_file():
+        raise RuntimeError("The pinned local FFmpeg runtime is missing. Run npm install.")
+    _run(
+        [
+            str(FFMPEG),
+            "-y",
+            "-i",
+            str(original),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-c:a",
+            "pcm_s16le",
+            str(destination),
+        ]
+    )
+    return destination
+
+
 def _link_or_copy(source: Path, destination: Path) -> None:
     """Give the library its own name for an original without storing it twice.
 
@@ -285,27 +312,9 @@ def process_media(source: Path, workspace_id: str, digest: str) -> dict[str, Any
             )
         versions.append(_version(proxy, "proxy", probe_media(proxy)))
 
-    if kind in {"video", "audio"} and metadata["has_audio"]:
-        audio = output_root / "audio.wav"
-        if not audio.is_file():
-            _run(
-                [
-                    str(FFMPEG),
-                    "-y",
-                    "-i",
-                    str(original),
-                    "-vn",
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "16000",
-                    "-c:a",
-                    "pcm_s16le",
-                    str(audio),
-                ]
-            )
-        versions.append(_version(audio, "audio", probe_media(audio)))
-
+    # No stored speech track: it is 16 kHz mono PCM, rebuilt from the original in
+    # seconds by `extract_audio`, and only 77 of ~10,000 assets were ever
+    # transcribed. Keeping one per asset cost 17 GB.
     return {
         "original": str(original),
         "media_kind": kind,

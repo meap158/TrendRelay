@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import re
+import shutil
+import tempfile
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from contextlib import suppress
@@ -30,6 +32,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from trendrelay_api import bulk_actions, music_suggestions
 from trendrelay_api.auth import (
@@ -49,6 +52,7 @@ from trendrelay_api.media_library import (
     approved_media_path,
     approved_source_path,
     create_ingest_job,
+    extract_audio,
     list_ingest_jobs,
 )
 from trendrelay_api.media_models import (
@@ -1811,6 +1815,41 @@ def get_asset(
     return {"asset": view, "transcripts": view.get("transcripts", [])}
 
 
+def _stored_file(version: MediaAssetVersion | None) -> Path | None:
+    if version is None:
+        return None
+    try:
+        return Path(version.path).resolve(strict=True)
+    except OSError:
+        return None
+
+
+def _derived_audio_response(session: Session, asset_id: str) -> FileResponse:
+    """The speech track of an asset, extracted for this request and then removed.
+
+    The Library no longer stores one per asset. Anything that asks for the
+    `audio` version still gets it; it is built into scratch from the original
+    and deleted once the response has been sent.
+    """
+    original = _preferred_version(session, asset_id, ("original",))
+    source = _stored_file(original)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Media file is unavailable.")
+    folder = Path(tempfile.mkdtemp(prefix="speech-"))
+    try:
+        track = extract_audio(source, folder / "audio.wav")
+    except Exception as error:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise HTTPException(status_code=404, detail="Media audio is unavailable.") from error
+    return FileResponse(
+        track,
+        media_type="audio/wav",
+        filename="audio.wav",
+        content_disposition_type="inline",
+        background=BackgroundTask(shutil.rmtree, folder, True),
+    )
+
+
 @router.get("/assets/{asset_id}/content/{version_kind}")
 def asset_content(
     workspace_id: str,
@@ -1837,6 +1876,8 @@ def asset_content(
         .order_by(MediaAssetVersion.created_at.desc())
         .limit(1)
     )
+    if version_kind == "audio" and _stored_file(version) is None:
+        return _derived_audio_response(session, asset_id)
     if not version:
         raise HTTPException(status_code=404, detail="Media version not found.")
     try:
