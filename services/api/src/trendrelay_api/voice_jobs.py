@@ -187,7 +187,14 @@ def queue(
         model_id = str(request.get("model_id") or "microsoft-edge")
         cost = 0
     else:
-        model_id = str(request.get("model_id") or configured["model_id"])
+        # Chosen for the language: the saved default cannot read every one
+        # (Vietnamese is not in its list), and a request that names a model
+        # that cannot is refused here rather than failing at the service.
+        model_id = elevenlabs.model_for_language(
+            request.get("language_code") or configured.get("language_code") or language,
+            requested=request.get("model_id") or None,
+            configured=str(configured["model_id"]),
+        )
 
         # Looked up whichever way the model was arrived at. This used to run only
         # when the request named one, so falling back to the configured default

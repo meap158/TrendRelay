@@ -4614,7 +4614,11 @@ def preview_voice(
         }
 
     try:
-        model_id = body.model_id or str(elevenlabs.defaults().get("model_id") or "")
+        model_id = elevenlabs.model_for_language(
+            body.language_code,
+            requested=body.model_id or None,
+            configured=str(elevenlabs.defaults().get("model_id") or ""),
+        )
         selected_model = next(
             (item for item in elevenlabs.models() if item["model_id"] == model_id), None
         )

@@ -573,6 +573,87 @@ def transcribe(
     }
 
 
+#: Models to try, in order, when the default cannot read a language. Flash v2.5
+#: is first because it is cheap and covers Vietnamese, Hungarian and Norwegian
+#: beyond the default's list; v3 reads far more but costs more per character.
+FALLBACK_MODELS = ("eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_v3")
+
+#: What each model is documented to speak, used only when the live catalogue
+#: cannot be read. The catalogue (`models()`) is the authority and wins.
+_KNOWN_LANGUAGES: dict[str, frozenset[str]] = {
+    "eleven_multilingual_v2": frozenset(
+        "en ja zh de hi fr ko pt it es id nl tr fil pl sv bg ro ar cs el fi hr ms sk da ta uk ru".split()
+    ),
+}
+_KNOWN_LANGUAGES["eleven_flash_v2_5"] = _KNOWN_LANGUAGES["eleven_multilingual_v2"] | {
+    "hu", "no", "vi",
+}
+_KNOWN_LANGUAGES["eleven_turbo_v2_5"] = _KNOWN_LANGUAGES["eleven_flash_v2_5"]
+
+
+def primary_language(code: str | None) -> str:
+    """`vi-VN`, `VI` and `vi_vn` all read as `vi`; blank stays blank."""
+    return (code or "").strip().replace("_", "-").split("-")[0].casefold()
+
+
+def model_speaks(model_id: str, language: str | None, catalogue: list[dict[str, Any]] | None) -> bool:
+    """Whether this model can read the language.
+
+    Asks the live catalogue first. A model with an empty language list there
+    is taken to be language-agnostic (v3 style listings), which is not a
+    refusal. Without a catalogue, the documented table stands in, and a model
+    it does not know is given the benefit of the doubt.
+    """
+    wanted = primary_language(language)
+    if not wanted:
+        return True
+    for item in catalogue or []:
+        if item.get("model_id") == model_id:
+            listed = {primary_language(row.get("language_id")) for row in item.get("languages") or []}
+            return not listed or wanted in listed
+    known = _KNOWN_LANGUAGES.get(model_id)
+    return True if known is None else wanted in known
+
+
+def model_for_language(
+    language: str | None, *, requested: str | None = None, configured: str | None = None
+) -> str:
+    """The model to synthesise `language` with.
+
+    The default model reads 29 languages and Vietnamese is not one of them, so
+    sending a Vietnamese script with it fails or is read with the wrong sounds.
+
+    - A model somebody asked for by name is honoured, or refused in a sentence
+      that says so when it cannot read the language.
+    - Otherwise the saved default is used when it can read the language, and
+      the first fallback that can is used when it cannot.
+    """
+    try:
+        catalogue: list[dict[str, Any]] | None = models()
+    except ElevenLabsUnavailable:
+        catalogue = None
+    if requested:
+        if not model_speaks(requested, language, catalogue):
+            raise ValueError(
+                f"The model {requested} cannot read {primary_language(language)!r}. "
+                "Choose a model that lists the language, such as eleven_flash_v2_5."
+            )
+        return requested
+    default = (configured or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    if model_speaks(default, language, catalogue):
+        return default
+    available = {item["model_id"] for item in catalogue} if catalogue is not None else None
+    for candidate in FALLBACK_MODELS:
+        if (available is None or candidate in available) and model_speaks(
+            candidate, language, catalogue
+        ):
+            return candidate
+    raise ValueError(
+        f"No available ElevenLabs model reads {primary_language(language)!r}. "
+        "Pick a model that lists it in Setup."
+    )
+
+
 class AllowanceExceeded(ElevenLabsUnavailable):
     """This generation would cost more characters than the plan has left."""
 

@@ -245,6 +245,30 @@ def test_model_language_and_voice_controls_are_part_of_the_take(monkeypatch) -> 
     assert first["payload"]["characters"] == (len(REVIEWED) + 1) // 2
 
 
+def test_a_vietnamese_take_leaves_a_default_model_that_cannot_read_it(monkeypatch) -> None:
+    """The saved default reads 29 languages and Vietnamese is not one."""
+    monkeypatch.setattr(
+        elevenlabs,
+        "models",
+        lambda: [
+            {"model_id": "eleven_multilingual_v2", "languages": [{"language_id": "en"}]},
+            {"model_id": "eleven_flash_v2_5", "languages": [{"language_id": "vi"}]},
+        ],
+    )
+    monkeypatch.setattr(elevenlabs, "defaults", lambda: {
+        "model_id": "eleven_multilingual_v2", "voice_settings": {},
+        "language_code": None, "voice_id": "voice-abc",
+    })
+    item = asset()
+
+    job = queue(item, language_code="vi")
+
+    assert job["payload"]["model_id"] == "eleven_flash_v2_5"
+    assert job["payload"]["language_code"] == "vi"
+    with pytest.raises(ValueError, match="cannot read 'vi'"):
+        queue(item, language_code="vi", model_id="eleven_multilingual_v2")
+
+
 def test_setup_defaults_are_snapshotted_when_a_client_uses_them(monkeypatch) -> None:
     monkeypatch.setattr(
         elevenlabs,
