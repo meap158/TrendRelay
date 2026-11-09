@@ -1646,7 +1646,10 @@ function LibraryContent() {
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
   const [clearingHistory, setClearingHistory] = useState(false);
 
-  const selected = assets.find((asset) => asset.id === selectedId);
+  const selected = useMemo(
+    () => assets.find((asset) => asset.id === selectedId),
+    [assets, selectedId],
+  );
   const selectedSourceLinks = selected
     ? selected.platform === "douyin" && selected.source_url
       ? [selected.source_url]
