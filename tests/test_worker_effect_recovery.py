@@ -120,7 +120,7 @@ def test_the_worker_drains_voice_jobs_in_a_bounded_paid_lane(monkeypatch) -> Non
     )
     monkeypatch.setattr(worker, "run_voice_job", lambda job_id: voiced.append(job_id))
 
-    def run_batch(ids, runner, *, label, workers=None):
+    def run_batch(ids, runner, *, label, workers=None, **_options):
         batches.append((label, workers))
         for job_id in ids:
             runner(job_id)
