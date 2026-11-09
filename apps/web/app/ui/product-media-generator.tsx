@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 
 import { useAuth } from "../auth-provider";
@@ -338,6 +338,12 @@ export function ProductMediaGenerator({
   const [prompt, setPrompt] = useState("");
   const [draft, setDraft] = useState<DraftView | null>(null);
   const [error, setError] = useState("");
+  // Told by the picker when nothing fits the products; the prompt is already
+  // cleared in that case, so a stale error goes with it.
+  const noneFit = useCallback((none: boolean) => {
+    setNoRecipeFits(none);
+    if (none) setError("");
+  }, []);
   const [notice, setNotice] = useState("");
   // A review opens loading its draft; nothing else is in flight at first.
   const [busy, setBusy] = useState(draftId ? "load" : "");
@@ -609,10 +615,7 @@ export function ProductMediaGenerator({
 
   useEffect(() => {
     // Not ready is part of the shape, so the prompt was already cleared.
-    if (noRecipeFits) {
-      setError("");
-      return;
-    }
+    if (noRecipeFits) return;
     if (!open || reviewing || products.length === 0 || !workspaceId || draft || !backgroundReady || !characterReady || tooManyTogether) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -1710,7 +1713,7 @@ export function ProductMediaGenerator({
             cardCount={cardCount}
             value={recipe}
             onChange={chooseRecipe}
-            onNoneFit={setNoRecipeFits}
+            onNoneFit={noneFit}
             productTypes={productTypes}
             locked={locked}
             recipes={library}
