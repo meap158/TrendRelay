@@ -357,7 +357,9 @@ def test_runner_passes_its_backend_url_to_browser_and_desktop() -> None:
     frontend = next(service for service in services if service.name == "Frontend")
     desktop = next(service for service in services if service.name == "Desktop")
 
-    assert frontend.environment == {"NEXT_PUBLIC_API_URL": "http://127.0.0.1:8011"}
+    assert frontend.environment["NEXT_PUBLIC_API_URL"] == "http://127.0.0.1:8011"
+    # The dev server also carries its preload; a production build does not.
+    assert set(frontend.environment) == {"NEXT_PUBLIC_API_URL", "NODE_OPTIONS"}
     assert desktop.environment == {
         "TRENDRELAY_API_URL": "http://127.0.0.1:8011",
         "TRENDRELAY_WEB_URL": "http://localhost:3001",
