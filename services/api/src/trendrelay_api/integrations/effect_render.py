@@ -323,6 +323,7 @@ GEMINI_WATERMARK = Effect(
         ),
     ),
     availability=gemini_watermark_tool.status,
+    unpreviewable_reason="The tool cleans the finished picture, so the result is the picture itself.",
     media_kinds=frozenset({"image"}),
     render_still=_gemini_watermark_still,
 )

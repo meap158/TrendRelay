@@ -2009,6 +2009,13 @@ export const en = {
       ml: "Intensity assist",
       mlHelp: "Lets a small on-device model tune the strength on clips where it varies. It can over-correct, so it is off unless a clip needs it.",
     },
+    gemini_watermark: {
+      label: "Remove Gemini watermark",
+      tag: "Watermark removed",
+      summary: "Take the visible Gemini sparkle mark off a generated picture, leaving every other pixel alone.",
+      legacy: "Older, larger text",
+      legacyHelp: "Only for pictures from before Gemini 3.5, which carry a bigger text mark.",
+    },
     face_swap: {
       label: "Replace a face",
       summary: "Put a different face on one person, tracked across the clip.",

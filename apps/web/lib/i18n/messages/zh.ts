@@ -1980,6 +1980,13 @@ export const zh: Messages = {
       ml: "强度辅助",
       mlHelp: "让本机的小模型在强度变化的片段上自动调整力度。可能修正过度，所以默认关闭。",
     },
+    gemini_watermark: {
+      label: "去除 Gemini 水印",
+      tag: "已去除水印",
+      summary: "从生成的图片中去掉可见的 Gemini 星形标记，其余像素保持不变。",
+      legacy: "旧版大号文字",
+      legacyHelp: "仅适用于 Gemini 3.5 之前、带有较大文字标记的图片。",
+    },
     face_swap: {
       label: "替换人脸",
       summary: "把某个人的脸换成另一张，并在整段片段中持续跟踪。",

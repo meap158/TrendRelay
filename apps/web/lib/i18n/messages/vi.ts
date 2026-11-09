@@ -2006,6 +2006,13 @@ export const vi: Messages = {
       ml: "Hỗ trợ cường độ",
       mlHelp: "Cho một mô hình nhỏ chạy trên máy tự chỉnh độ mạnh ở những clip có cường độ thay đổi. Có thể chỉnh quá tay nên mặc định tắt.",
     },
+    gemini_watermark: {
+      label: "Xóa watermark Gemini",
+      tag: "Đã xóa watermark",
+      summary: "Gỡ dấu sao Gemini hiển thị khỏi ảnh do AI tạo, giữ nguyên mọi điểm ảnh khác.",
+      legacy: "Chữ cũ, lớn hơn",
+      legacyHelp: "Chỉ dùng cho ảnh trước Gemini 3.5, có dấu chữ lớn hơn.",
+    },
     face_swap: {
       label: "Thay khuôn mặt",
       summary: "Đặt một khuôn mặt khác lên một người, bám theo suốt clip.",

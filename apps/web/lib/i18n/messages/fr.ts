@@ -2026,6 +2026,13 @@ export const fr: Messages = {
       ml: "Aide à l'intensité",
       mlHelp: "Laisse un petit modèle local ajuster la force sur les clips où elle varie. Il peut trop corriger, donc il reste désactivé sauf besoin.",
     },
+    gemini_watermark: {
+      label: "Retirer le filigrane Gemini",
+      tag: "Filigrane retiré",
+      summary: "Retire l'étoile Gemini visible d'une image générée, sans toucher aux autres pixels.",
+      legacy: "Ancien texte, plus grand",
+      legacyHelp: "Uniquement pour les images d'avant Gemini 3.5, qui portent une marque de texte plus grande.",
+    },
     face_swap: {
       label: "Remplacer un visage",
       summary: "Pose un autre visage sur une personne, suivie tout au long du clip.",
