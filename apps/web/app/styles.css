@@ -1422,6 +1422,21 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .capability-table th, .capability-table td { padding: 5px 8px; }
 .capability-table > tbody > tr > th, .capability-table > tbody > tr > td { block-size: auto; vertical-align: middle; }
 .capability-narrow { inline-size: 1%; white-space: nowrap; }
+/* Download platforms: the table uses the room the dialog has. The header row
+   and the platform column stay put while the rest scrolls under them. */
+.download-platforms { gap: 8px; }
+.download-platforms-lead { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.download-platforms-scroll { max-height: min(72vh, 680px); }
+.download-platforms-table { inline-size: 100%; }
+.download-platforms-table td, .download-platforms-table th { vertical-align: top; }
+.download-platforms-table td p { margin: 3px 0 0; }
+.download-platforms-table code { display: block; overflow: hidden; max-inline-size: 38ch; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.download-platforms-table tbody th.download-platforms-name { position: sticky; inset-inline-start: 0; z-index: 1; background: var(--panel); white-space: nowrap; }
+.download-platforms-table thead th:first-child { inset-inline-start: 0; z-index: 2; }
+.download-platforms-name > span { display: inline-flex; gap: 7px; align-items: center; }
+.download-sites { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 0; list-style: none; }
+.download-sites li { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+.download-sites .download-sites-more { color: var(--muted); font-size: 11px; }
 .capability-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 .capability-table th[scope="row"] { min-width: 150px; }
 .capability-table th[scope="row"] small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; }
