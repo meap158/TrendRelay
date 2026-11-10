@@ -21,6 +21,7 @@ import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted
 const isDownloadMode = oneOf("post", "like", "mix", "music");
 import { useJobs } from "./jobs-provider";
 import { useWorkspace } from "./workspace-provider";
+import { DownloadPlatformsButton } from "./download-platforms";
 import {
   FALLBACK_PROVIDERS,
   describeConflict,
@@ -1143,7 +1144,7 @@ export default function Dashboard() {
           <div className="download-card-heading">
             <div>
               <p className="step-kicker">{t("downloads.step", { number: 1 })}</p>
-              <h2>{t("downloads.addLinks")}</h2>
+              <h2>{t("downloads.addLinks")} <DownloadPlatformsButton providers={providers} /></h2>
               <p>{t("downloads.addLinksHelp")}</p>
             </div>
             {/* The badge reports the service in the box, not Douyin's session
