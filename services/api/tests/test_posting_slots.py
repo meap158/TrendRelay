@@ -30,6 +30,20 @@ def test_presets_are_offered_but_never_applied_on_their_own(slots) -> None:
     assert posting_slots.list_slots("w1", factory=slots) == []
 
 
+def test_the_reach_preset_gives_every_weekday_its_own_three_times() -> None:
+    reach = next(item for item in posting_slots.preset_payload() if item["id"] == "reach")
+
+    by_day: dict[int, list[str]] = {}
+    for slot in reach["slots"]:
+        by_day.setdefault(slot["weekday"], []).append(slot["time"])
+    assert sorted(by_day) == [0, 1, 2, 3, 4, 5, 6]
+    assert all(len(times) == 3 for times in by_day.values())
+    # Shaped by the day: the weekend starts later than midweek.
+    assert min(by_day[5]) > min(by_day[1])
+    # The slots can be saved as they are.
+    assert posting_slots._normalise_entries(reach["slots"])
+
+
 def test_saving_slots_replaces_rather_than_merges(slots) -> None:
     """Replacing is what makes removing a slot in the interface actually remove it."""
     posting_slots.replace_slots("w1", [{"time": "09:00"}, {"time": "18:30"}], factory=slots)

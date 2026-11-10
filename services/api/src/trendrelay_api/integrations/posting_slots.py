@@ -38,9 +38,32 @@ class SlotPreset:
     label: str
     summary: str
     times: tuple[tuple[int, int], ...]
+    #: Monday to Sunday, each with its own times. When set, it replaces `times`,
+    #: so a preset can follow the rhythm of the week instead of repeating one
+    #: day seven times.
+    by_day: tuple[tuple[tuple[int, int], ...], ...] | None = None
 
 
 PRESETS: tuple[SlotPreset, ...] = (
+    SlotPreset(
+        id="reach",
+        label="Most reach in a week",
+        summary=(
+            "Three posts a day, shaped by the day: midweek leans on the morning and "
+            "lunch break, weekends start later. Studies disagree on exact hours, so "
+            "treat it as a starting point and compare it with your own results."
+        ),
+        times=(),
+        by_day=(
+            ((12, 0), (18, 30), (20, 30)),  # Monday
+            ((9, 30), (12, 0), (20, 0)),    # Tuesday
+            ((9, 30), (12, 0), (20, 0)),    # Wednesday
+            ((9, 30), (12, 0), (20, 0)),    # Thursday
+            ((12, 0), (18, 30), (21, 0)),   # Friday
+            ((10, 0), (15, 0), (20, 30)),   # Saturday
+            ((10, 0), (15, 0), (20, 0)),    # Sunday
+        ),
+    ),
     SlotPreset(
         id="commute",
         label="Commute hours",
@@ -97,6 +120,19 @@ def _normalise_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _preset_slots(preset: SlotPreset) -> list[dict[str, Any]]:
+    if preset.by_day:
+        return [
+            {"weekday": weekday, "time": f"{hour:02d}:{minute:02d}"}
+            for weekday, times in enumerate(preset.by_day)
+            for hour, minute in times
+        ]
+    return [
+        {"weekday": EVERY_DAY, "time": f"{hour:02d}:{minute:02d}"}
+        for hour, minute in preset.times
+    ]
+
+
 def _builtin_payload() -> list[dict[str, Any]]:
     return [
         {
@@ -105,10 +141,7 @@ def _builtin_payload() -> list[dict[str, Any]]:
             "summary": preset.summary,
             "kind": "builtin",
             "times": [f"{hour:02d}:{minute:02d}" for hour, minute in preset.times],
-            "slots": [
-                {"weekday": EVERY_DAY, "time": f"{hour:02d}:{minute:02d}"}
-                for hour, minute in preset.times
-            ],
+            "slots": _preset_slots(preset),
         }
         for preset in PRESETS
     ]
