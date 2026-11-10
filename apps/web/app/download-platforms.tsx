@@ -18,15 +18,31 @@ const MODES: Record<string, string> = {
  * colour. Support for a particular link is still checked when it is submitted;
  * this is a guide to what usually works, not a promise.
  */
-type Site = { id: string; label: string; icon?: PublishingPlatform; tint?: string; letter?: string };
+type Site = {
+  id: string; label: string; icon?: PublishingPlatform; tint?: string; letter?: string;
+  /** Set for the sites large enough to have a row of their own. */
+  links?: string; example?: string; note?: string;
+};
 
-const SITES: Site[] = [
-  { id: "youtube", label: "YouTube", icon: "youtube" },
-  { id: "instagram", label: "Instagram", icon: "instagram" },
-  { id: "facebook", label: "Facebook", icon: "facebook" },
-  { id: "x", label: "X", icon: "twitter" },
-  { id: "reddit", label: "Reddit", icon: "reddit" },
-  { id: "vimeo", label: "Vimeo", tint: "#1ab7ea", letter: "V" },
+/** The sites that get their own row. Every one is downloaded by "Other sites". */
+const MAJOR_SITES: Site[] = [
+  { id: "youtube", label: "YouTube", icon: "youtube",
+    links: "Video, Short, Playlist, Channel", example: "https://www.youtube.com/watch?v=…" },
+  { id: "facebook", label: "Facebook", icon: "facebook",
+    links: "Video, Reel", example: "https://www.facebook.com/watch/?v=…",
+    note: "Public videos only. Many need a sign-in." },
+  { id: "instagram", label: "Instagram", icon: "instagram",
+    links: "Reel, Post", example: "https://www.instagram.com/reel/…",
+    note: "Public posts only. Many need a sign-in." },
+  { id: "x", label: "X", icon: "twitter",
+    links: "Post with video", example: "https://x.com/handle/status/…" },
+  { id: "reddit", label: "Reddit", icon: "reddit",
+    links: "Video post", example: "https://www.reddit.com/r/…/comments/…" },
+  { id: "vimeo", label: "Vimeo", tint: "#1ab7ea", letter: "V",
+    links: "Video", example: "https://vimeo.com/…" },
+];
+
+const MINOR_SITES: Site[] = [
   { id: "twitch", label: "Twitch", tint: "#9146ff", letter: "T" },
   { id: "dailymotion", label: "Dailymotion", tint: "#0066dc", letter: "d" },
   { id: "bilibili", label: "Bilibili", tint: "#00a1d6", letter: "B" },
@@ -69,6 +85,43 @@ function SiteMark({ site, size = 16 }: { site: Site; size?: number }) {
   return <Tile tint={site.tint ?? "#555"} size={size}><Letter text={site.letter ?? site.label[0]} /></Tile>;
 }
 
+/** One row of the table: a service, or one large site inside "Other sites". */
+type Row = {
+  key: string; label: string; mark: React.ReactNode; links: React.ReactNode;
+  example: string; modes: string; media: string; provider: DownloadProvider; note?: string;
+};
+
+function rowsFor(provider: DownloadProvider): Row[] {
+  const media = provider.media_kinds.join(", ");
+  if (!provider.fallback) {
+    return [{
+      key: provider.id, label: provider.label, mark: <ProviderMark provider={provider} />,
+      links: <>
+        {provider.kinds.map((kind) => kind.label).join(", ")}
+        {provider.short_hosts.length > 0 && <small> · short share links work</small>}
+      </>,
+      example: provider.example,
+      modes: provider.modes.map((mode) => MODES[mode] ?? mode).join(", "),
+      media, provider,
+    }];
+  }
+  const rows: Row[] = MAJOR_SITES.map((site) => ({
+    key: site.id, label: site.label, mark: <SiteMark site={site} size={20} />,
+    links: site.links, example: site.example ?? "",
+    modes: site.id === "youtube" ? "Videos and playlists" : "Single posts",
+    media, provider, note: site.note,
+  }));
+  rows.push({
+    key: provider.id, label: "Other sites", mark: <ProviderMark provider={provider} />,
+    links: <ul className="download-sites" aria-label="More sites it usually works with">
+      {MINOR_SITES.map((site) => <li key={site.id}><SiteMark site={site} />{site.label}</li>)}
+      <li className="download-sites-more">and any other site the downloader supports</li>
+    </ul>,
+    example: "", modes: "Single posts", media, provider,
+  });
+  return rows;
+}
+
 /** The mark for a service row. */
 function ProviderMark({ provider }: { provider: DownloadProvider }) {
   if (provider.id === "douyin") return <DouyinTile size={20} />;
@@ -106,30 +159,19 @@ export function DownloadPlatformsButton({ providers }: { providers: DownloadProv
               <th scope="col">Options</th><th scope="col">Media</th>
               <th scope="col">Status</th>
             </tr></thead>
-            <tbody>{providers.map((provider) => <tr key={provider.id}>
+            <tbody>{providers.flatMap(rowsFor).map((row) => <tr key={row.key}>
               <th scope="row" className="download-platforms-name">
-                <span><ProviderMark provider={provider} />{provider.label}</span>
+                <span>{row.mark}{row.label}</span>
               </th>
               <td>
-                {provider.fallback ? (
-                  <ul className="download-sites" aria-label="Sites it usually works with">
-                    {SITES.map((site) => <li key={site.id} title={site.label}>
-                      <SiteMark site={site} />{site.label}
-                    </li>)}
-                    <li className="download-sites-more">and other sites the downloader supports</li>
-                  </ul>
-                ) : (
-                  <>
-                    {provider.kinds.map((kind) => kind.label).join(", ")}
-                    {provider.short_hosts.length > 0 && <small> · short share links work</small>}
-                  </>
-                )}
-                <p><code>{provider.example}</code></p>
+                {row.links}
+                {row.example && <p><code>{row.example}</code></p>}
+                {row.note && <p><small>{row.note}</small></p>}
               </td>
-              <td>{provider.modes.map((mode) => MODES[mode] ?? mode).join(", ")}</td>
-              <td>{provider.media_kinds.join(", ")}</td>
-              <td>{provider.ready === undefined ? "Checking…" : provider.ready ? "Ready" : "Setup needed"}
-                {provider.reason && <p>{provider.reason}</p>}
+              <td>{row.modes}</td>
+              <td>{row.media}</td>
+              <td>{row.provider.ready === undefined ? "Checking…" : row.provider.ready ? "Ready" : "Setup needed"}
+                {row.provider.reason && <p>{row.provider.reason}</p>}
               </td>
             </tr>)}</tbody>
           </table>
